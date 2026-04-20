@@ -41,3 +41,23 @@ skills-lock.json
 .local-tests/
 service/relayconvert/chat_responses_live_local_test.go
 service/openaicompat/chat_responses_live_local_test.go
+
+# Credentials & secrets
+*.env.local
+*.env.production
+*.env.*.local
+*service-account*.json
+*service_account*.json
+*credentials*.json
+*-key.json
+*-secret.json
+*.p12
+*.pem
+*.pfx
+*.key
+application_default_credentials.json
+gcloud/
+*.jks
+*keystore*
+*secret*.yaml
+*secret*.yml

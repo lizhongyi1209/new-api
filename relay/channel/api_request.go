@@ -388,7 +388,7 @@ func DoWssRequest(a Adaptor, c *gin.Context, info *common.RelayInfo, requestBody
 	targetHeader.Set("Content-Type", c.Request.Header.Get("Content-Type"))
 	targetConn, _, err := websocket.DefaultDialer.Dial(fullRequestURL, targetHeader)
 	if err != nil {
-		return nil, fmt.Errorf("dial failed to %s: %w", fullRequestURL, err)
+		return nil, fmt.Errorf("dial failed: %w", err)
 	}
 	// send request body
 	//all, err := io.ReadAll(requestBody)
