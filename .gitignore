@@ -35,3 +35,23 @@ data/
 .test
 token_estimator_test.go
 skills-lock.json
+
+# Credentials & secrets
+*.env.local
+*.env.production
+*.env.*.local
+*service-account*.json
+*service_account*.json
+*credentials*.json
+*-key.json
+*-secret.json
+*.p12
+*.pem
+*.pfx
+*.key
+application_default_credentials.json
+gcloud/
+*.jks
+*keystore*
+*secret*.yaml
+*secret*.yml
