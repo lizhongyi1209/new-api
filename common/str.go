@@ -252,3 +252,23 @@ func MaskSensitiveInfo(str string) string {
 
 	return str
 }
+
+func SanitizeURLForLog(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "***"
+	}
+	if u.RawQuery == "" {
+		return rawURL
+	}
+	values, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		u.RawQuery = "***"
+		return u.String()
+	}
+	for key := range values {
+		values.Set(key, "***")
+	}
+	u.RawQuery = values.Encode()
+	return u.String()
+}

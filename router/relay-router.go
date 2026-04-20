@@ -19,6 +19,11 @@ func SetRelayRouter(router *gin.Engine) {
 	modelsRouter := router.Group("/v1/models")
 	modelsRouter.Use(middleware.RouteTag("relay"))
 	modelsRouter.Use(middleware.TokenAuth())
+
+	storageRouter := router.Group("/v1/storage")
+	storageRouter.Use(middleware.RouteTag("relay"))
+	storageRouter.Use(middleware.TokenAuth())
+	storageRouter.POST("/presign", controller.GetPresignedURL)
 	{
 		modelsRouter.GET("", func(c *gin.Context) {
 			switch {
