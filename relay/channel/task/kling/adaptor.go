@@ -66,6 +66,7 @@ type requestPayload struct {
 	ModelName      string         `json:"model_name,omitempty"`
 	Model          string         `json:"model,omitempty"` // Compatible with upstreams that only recognize "model"
 	CfgScale       float64        `json:"cfg_scale,omitempty"`
+	Sound          string         `json:"sound,omitempty"`
 	StaticMask     string         `json:"static_mask,omitempty"`
 	DynamicMasks   []DynamicMask  `json:"dynamic_masks,omitempty"`
 	CameraControl  *CameraControl `json:"camera_control,omitempty"`
@@ -252,7 +253,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
-	return []string{"kling-v1", "kling-v1-6", "kling-v2-master"}
+	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3"}
 }
 
 func (a *TaskAdaptor) GetChannelName() string {
@@ -264,8 +265,17 @@ func (a *TaskAdaptor) GetChannelName() string {
 // ============================
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*requestPayload, error) {
+	// Extract negative_prompt from metadata if provided at top level
+	var negativePrompt string
+	if v, ok := req.Metadata["negative_prompt"]; ok {
+		if s, ok := v.(string); ok {
+			negativePrompt = s
+		}
+	}
+
 	r := requestPayload{
 		Prompt:         req.Prompt,
+		NegativePrompt: negativePrompt,
 		Image:          req.Image,
 		Mode:           taskcommon.DefaultString(req.Mode, "std"),
 		Duration:       fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
@@ -273,16 +283,13 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		ModelName:      info.UpstreamModelName,
 		Model:          info.UpstreamModelName,
 		CfgScale:       0.5,
-		StaticMask:     "",
 		DynamicMasks:   []DynamicMask{},
-		CameraControl:  nil,
-		CallbackUrl:    "",
-		ExternalTaskId: "",
 	}
 	if r.ModelName == "" {
 		r.ModelName = "kling-v1"
 		r.Model = "kling-v1"
 	}
+	// metadata can override any field (e.g. sound, camera_control, negative_prompt)
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
