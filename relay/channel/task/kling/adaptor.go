@@ -41,6 +41,12 @@ type DynamicMask struct {
 	Trajectories []TrajectoryPoint `json:"trajectories,omitempty"`
 }
 
+type MultiPromptItem struct {
+	Index    int    `json:"index"`
+	Prompt   string `json:"prompt"`
+	Duration string `json:"duration"`
+}
+
 type CameraConfig struct {
 	Horizontal float64 `json:"horizontal,omitempty"`
 	Vertical   float64 `json:"vertical,omitempty"`
@@ -66,8 +72,11 @@ type requestPayload struct {
 	ModelName      string         `json:"model_name,omitempty"`
 	Model          string         `json:"model,omitempty"` // Compatible with upstreams that only recognize "model"
 	CfgScale       float64        `json:"cfg_scale,omitempty"`
-	Sound          string         `json:"sound,omitempty"`
-	StaticMask     string         `json:"static_mask,omitempty"`
+	Sound          string            `json:"sound,omitempty"`
+	MultiShot      string            `json:"multi_shot,omitempty"`
+	ShotType       string            `json:"shot_type,omitempty"`
+	MultiPrompt    []MultiPromptItem `json:"multi_prompt,omitempty"`
+	StaticMask     string            `json:"static_mask,omitempty"`
 	DynamicMasks   []DynamicMask  `json:"dynamic_masks,omitempty"`
 	CameraControl  *CameraControl `json:"camera_control,omitempty"`
 	CallbackUrl    string         `json:"callback_url,omitempty"`
