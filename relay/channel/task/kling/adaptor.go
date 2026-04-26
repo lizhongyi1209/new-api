@@ -323,6 +323,10 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 			return nil, errors.Wrap(err, "unmarshal metadata failed")
 		}
+		// Re-apply the channel-mapped model name; metadata may have overwritten it
+		// with the raw client-side compound name (e.g. "kling-v2-6-motion-std-5s").
+		r.ModelName = modelName
+		r.Model = modelName
 		return &r, nil
 	}
 
@@ -342,6 +346,9 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
+	// Re-apply the channel-mapped model name after metadata unmarshal.
+	r.ModelName = modelName
+	r.Model = modelName
 	return &r, nil
 }
 
