@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -44,9 +45,47 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 	// 计算使用量（基于 UsageMetadata）
 	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
+	// When the client requests URL format, upload inline_data images to R2 and replace them with fileData URLs.
+	if strings.EqualFold(c.Query("image_format"), "url") {
+		if err := replaceInlineDataWithR2URLs(c, &geminiResponse); err != nil {
+			logger.LogError(c, "r2 upload failed, falling back to raw response: "+err.Error())
+			service.IOCopyBytesGracefully(c, resp, responseBody)
+			return &usage, nil
+		}
+		modifiedBody, err := common.Marshal(geminiResponse)
+		if err != nil {
+			service.IOCopyBytesGracefully(c, resp, responseBody)
+			return &usage, nil
+		}
+		service.IOCopyBytesGracefully(c, resp, modifiedBody)
+		return &usage, nil
+	}
+
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 
 	return &usage, nil
+}
+
+// replaceInlineDataWithR2URLs uploads every image inline_data part to R2 and replaces it with a fileData URL.
+func replaceInlineDataWithR2URLs(c *gin.Context, resp *dto.GeminiChatResponse) error {
+	for ci := range resp.Candidates {
+		for pi := range resp.Candidates[ci].Content.Parts {
+			part := &resp.Candidates[ci].Content.Parts[pi]
+			if part.InlineData == nil || !strings.HasPrefix(part.InlineData.MimeType, "image/") {
+				continue
+			}
+			url, err := service.UploadBase64ImageToR2(part.InlineData.MimeType, part.InlineData.Data)
+			if err != nil {
+				return err
+			}
+			part.FileData = &dto.GeminiFileData{
+				MimeType: part.InlineData.MimeType,
+				FileUri:  url,
+			}
+			part.InlineData = nil
+		}
+	}
+	return nil
 }
 
 func NativeGeminiEmbeddingHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
