@@ -45,7 +45,11 @@ func KlingRequestConvert() func(c *gin.Context) {
 			c.Set("action", constant.TaskActionTextGenerate)
 		}
 
-		// We have to reset the request body for the next handlers
+		// Overwrite both caches so all subsequent UnmarshalBodyReusable calls see the converted body.
+		// KeyBodyStorage takes priority over KeyRequestBody in GetRequestBody, so both must be updated.
+		if bs, err := common.CreateBodyStorage(jsonData); err == nil {
+			c.Set(common.KeyBodyStorage, bs)
+		}
 		c.Set(common.KeyRequestBody, jsonData)
 		c.Next()
 	}
@@ -81,6 +85,9 @@ func KlingMotionControlConvert() func(c *gin.Context) {
 		}
 
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+		if bs, err := common.CreateBodyStorage(jsonData); err == nil {
+			c.Set(common.KeyBodyStorage, bs)
+		}
 		c.Set(common.KeyRequestBody, jsonData)
 		// Do NOT rewrite URL path — ValidateRequestAndSetAction relies on it to detect motion-control.
 		// Do NOT set action — let ValidateRequestAndSetAction set TaskActionMotionControl.
