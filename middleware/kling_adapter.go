@@ -50,3 +50,41 @@ func KlingRequestConvert() func(c *gin.Context) {
 		c.Next()
 	}
 }
+
+// KlingMotionControlConvert converts Kling-native motion-control requests to the unified
+// TaskSubmitReq format (model/prompt/metadata) without rewriting the URL path or
+// pre-setting the action, so that ValidateRequestAndSetAction can detect the route correctly.
+func KlingMotionControlConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		var originalReq map[string]interface{}
+		if err := common.UnmarshalBodyReusable(c, &originalReq); err != nil {
+			c.Next()
+			return
+		}
+
+		model, _ := originalReq["model_name"].(string)
+		if model == "" {
+			model, _ = originalReq["model"].(string)
+		}
+		prompt, _ := originalReq["prompt"].(string)
+
+		unifiedReq := map[string]interface{}{
+			"model":    model,
+			"prompt":   prompt,
+			"metadata": originalReq,
+		}
+
+		jsonData, err := json.Marshal(unifiedReq)
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+		c.Set(common.KeyRequestBody, jsonData)
+		// Do NOT rewrite URL path — ValidateRequestAndSetAction relies on it to detect motion-control.
+		// Do NOT set action — let ValidateRequestAndSetAction set TaskActionMotionControl.
+		c.Next()
+	}
+}
+
