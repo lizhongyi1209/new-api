@@ -13,8 +13,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
-	"github.com/samber/lo"
-
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pkg/errors"
@@ -61,9 +59,14 @@ type CameraControl struct {
 	Config *CameraConfig `json:"config,omitempty"`
 }
 
+type ElementItem struct {
+	ElementId int64 `json:"element_id"`
+}
+
 type requestPayload struct {
 	Prompt         string         `json:"prompt,omitempty"`
 	Image          string         `json:"image,omitempty"`
+	ImageUrl       string         `json:"image_url,omitempty"`
 	ImageTail      string         `json:"image_tail,omitempty"`
 	NegativePrompt string         `json:"negative_prompt,omitempty"`
 	Mode           string         `json:"mode,omitempty"`
@@ -79,6 +82,11 @@ type requestPayload struct {
 	StaticMask     string            `json:"static_mask,omitempty"`
 	DynamicMasks   []DynamicMask  `json:"dynamic_masks,omitempty"`
 	CameraControl  *CameraControl `json:"camera_control,omitempty"`
+	// motion-control specific fields
+	VideoUrl             string        `json:"video_url,omitempty"`
+	CharacterOrientation string        `json:"character_orientation,omitempty"`
+	KeepOriginalSound    string        `json:"keep_original_sound,omitempty"`
+	ElementList          []ElementItem `json:"element_list,omitempty"`
 	CallbackUrl    string         `json:"callback_url,omitempty"`
 	ExternalTaskId string         `json:"external_task_id,omitempty"`
 }
@@ -138,13 +146,23 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	// Use the standard validation method for TaskSubmitReq
+	if strings.Contains(c.Request.URL.Path, "motion-control") {
+		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionMotionControl)
+	}
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
 }
 
 // BuildRequestURL constructs the upstream URL.
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	path := lo.Ternary(info.Action == constant.TaskActionGenerate, "/v1/videos/image2video", "/v1/videos/text2video")
+	var path string
+	switch info.Action {
+	case constant.TaskActionMotionControl:
+		path = "/v1/videos/motion-control"
+	case constant.TaskActionGenerate:
+		path = "/v1/videos/image2video"
+	default:
+		path = "/v1/videos/text2video"
+	}
 
 	if isNewAPIRelay(info.ApiKey) {
 		return fmt.Sprintf("%s/kling%s", a.baseURL, path), nil
@@ -179,7 +197,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
-	if body.Image == "" && body.ImageTail == "" {
+	if info.Action != constant.TaskActionMotionControl && body.Image == "" && body.ImageTail == "" {
 		c.Set("action", constant.TaskActionTextGenerate)
 	}
 	data, err := common.Marshal(body)
@@ -234,7 +252,15 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	if !ok {
 		return nil, fmt.Errorf("invalid action")
 	}
-	path := lo.Ternary(action == constant.TaskActionGenerate, "/v1/videos/image2video", "/v1/videos/text2video")
+	var path string
+	switch action {
+	case constant.TaskActionMotionControl:
+		path = "/v1/videos/motion-control"
+	case constant.TaskActionGenerate:
+		path = "/v1/videos/image2video"
+	default:
+		path = "/v1/videos/text2video"
+	}
 	url := fmt.Sprintf("%s%s/%s", baseUrl, path, taskID)
 	if isNewAPIRelay(key) {
 		url = fmt.Sprintf("%s/kling%s/%s", baseUrl, path, taskID)
@@ -282,6 +308,24 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		}
 	}
 
+	modelName := info.UpstreamModelName
+	if modelName == "" {
+		modelName = "kling-v1"
+	}
+
+	if info.Action == constant.TaskActionMotionControl {
+		r := requestPayload{
+			Prompt:    req.Prompt,
+			ModelName: modelName,
+			Model:     modelName,
+		}
+		// motion-control fields come from metadata (image_url, video_url, character_orientation, etc.)
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
+			return nil, errors.Wrap(err, "unmarshal metadata failed")
+		}
+		return &r, nil
+	}
+
 	r := requestPayload{
 		Prompt:         req.Prompt,
 		NegativePrompt: negativePrompt,
@@ -289,14 +333,10 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		Mode:           taskcommon.DefaultString(req.Mode, "std"),
 		Duration:       fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
 		AspectRatio:    a.getAspectRatio(req.Size),
-		ModelName:      info.UpstreamModelName,
-		Model:          info.UpstreamModelName,
+		ModelName:      modelName,
+		Model:          modelName,
 		CfgScale:       0.5,
 		DynamicMasks:   []DynamicMask{},
-	}
-	if r.ModelName == "" {
-		r.ModelName = "kling-v1"
-		r.Model = "kling-v1"
 	}
 	// metadata can override any field (e.g. sound, camera_control, negative_prompt)
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
