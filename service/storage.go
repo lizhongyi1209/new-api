@@ -1,9 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
+	"mime"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -65,4 +69,36 @@ func GeneratePresignedUploadURL(filename, contentType string) (*PresignResult, e
 		UploadURL: req.URL,
 		PublicURL: fmt.Sprintf("%s/%s", publicBase, objectKey),
 	}, nil
+}
+
+// UploadBase64ImageToR2 decodes a base64 image, uploads it to R2, and returns the public URL.
+func UploadBase64ImageToR2(mimeType, base64Data string) (string, error) {
+	client, _ := getR2Client()
+	bucket := os.Getenv("R2_BUCKET")
+	baseURL := strings.TrimRight(os.Getenv("R2_PUBLIC_BASE_URL"), "/")
+
+	imgBytes, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", fmt.Errorf("base64 decode failed: %w", err)
+	}
+
+	exts, err := mime.ExtensionsByType(mimeType)
+	ext := ".bin"
+	if err == nil && len(exts) > 0 {
+		ext = exts[len(exts)-1]
+	}
+
+	key := fmt.Sprintf("images/%s%s", uuid.New().String(), ext)
+
+	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(imgBytes),
+		ContentType: aws.String(mimeType),
+	})
+	if err != nil {
+		return "", fmt.Errorf("r2 upload failed: %w", err)
+	}
+
+	return fmt.Sprintf("%s/%s", baseURL, key), nil
 }
