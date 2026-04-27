@@ -285,6 +285,15 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	// Apply Gemini request normalization (set default role for first content)
+	if contents, ok := requestBody["contents"].([]interface{}); ok && len(contents) > 0 {
+		if firstContent, ok := contents[0].(map[string]interface{}); ok {
+			if _, hasRole := firstContent["role"]; !hasRole {
+				firstContent["role"] = "user"
+			}
+		}
+	}
+
 	jsonData, err := common.Marshal(requestBody)
 	if err != nil {
 		task.Status = model.TaskStatusFailure
