@@ -157,6 +157,12 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *mode
 	}
 	other["request_path"] = "/async/v1beta/models/" + task.Properties.OriginModelName + ":generateContent"
 	other["async_task_id"] = task.TaskID
+	other["billing_source"] = "wallet"
+	other["cache_ratio"] = 0
+	other["cache_tokens"] = 0
+	other["completion_ratio"] = 0
+	other["frt"] = -1000
+	other["request_conversion"] = []string{"Google Gemini"}
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
@@ -252,16 +258,19 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	}
 
 	upstreamModelName := applyModelMapping(imageReq.Model, channel.ModelMapping)
+	isModelMapped := upstreamModelName != imageReq.Model
 
 	relayInfo := &relaycommon.RelayInfo{
-		UserId:     task.UserId,
-		UsingGroup: task.Group,
-		Request:    imageReq,
-		RelayMode:  relayconstant.RelayModeImagesGenerations,
-		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+		UserId:            task.UserId,
+		UsingGroup:        task.Group,
+		Request:           imageReq,
+		RelayMode:         relayconstant.RelayModeImagesGenerations,
+		TaskRelayInfo:     &relaycommon.TaskRelayInfo{
 			PublicTaskID: task.TaskID,
 		},
-		OriginModelName: imageReq.Model,
+		OriginModelName:   imageReq.Model,
+		UpstreamModelName: upstreamModelName,
+		IsModelMapped:     isModelMapped,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          channel.Type,
 			ChannelId:            channel.Id,
@@ -512,12 +521,15 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	}
 
 	upstreamModelName := applyModelMapping(task.Properties.OriginModelName, channel.ModelMapping)
+	isModelMapped := upstreamModelName != task.Properties.OriginModelName
 
 	relayInfo := &relaycommon.RelayInfo{
-		UserId:          task.UserId,
-		UsingGroup:      task.Group,
-		RelayMode:       relayconstant.RelayModeGemini,
-		OriginModelName: task.Properties.OriginModelName,
+		UserId:            task.UserId,
+		UsingGroup:        task.Group,
+		RelayMode:         relayconstant.RelayModeGemini,
+		OriginModelName:   task.Properties.OriginModelName,
+		UpstreamModelName: upstreamModelName,
+		IsModelMapped:     isModelMapped,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          channel.Type,
 			ChannelId:            channel.Id,
