@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -31,6 +32,7 @@ type GeminiAdaptor interface {
 
 var GetImageAdaptorFunc func(apiType int) ImageAdaptor
 var GetGeminiAdaptorFunc func(apiType int) GeminiAdaptor
+var CalculatePriceFunc func(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error)
 
 func applyModelMapping(originModelName string, modelMappingJSON *string) string {
 	if modelMappingJSON == nil || *modelMappingJSON == "" || *modelMappingJSON == "{}" {
@@ -286,6 +288,13 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	}
 	adaptor.Init(relayInfo)
 
+	// Calculate price for billing
+	if CalculatePriceFunc != nil {
+		if priceData, err := CalculatePriceFunc(c, relayInfo); err == nil {
+			relayInfo.PriceData = priceData
+		}
+	}
+
 	convertedRequest, err := adaptor.ConvertImageRequest(c, relayInfo, *imageReq)
 	if err != nil {
 		task.Status = model.TaskStatusFailure
@@ -523,6 +532,13 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 	adaptor.Init(relayInfo)
+
+	// Calculate price for billing
+	if CalculatePriceFunc != nil {
+		if priceData, err := CalculatePriceFunc(c, relayInfo); err == nil {
+			relayInfo.PriceData = priceData
+		}
+	}
 
 	// Debug: log request details
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: calling upstream with model=%s, baseUrl=%s, apiType=%d",
