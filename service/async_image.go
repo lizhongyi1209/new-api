@@ -95,6 +95,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{
 			PublicTaskID: task.TaskID,
 		},
+		OriginModelName: imageReq.Model,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          channel.Type,
 			ChannelId:            channel.Id,
@@ -103,6 +104,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			ChannelBaseUrl:       channel.GetBaseURL(),
 			ApiType:              apiType,
 			ApiKey:               key,
+			UpstreamModelName:    imageReq.Model,
 		},
 	}
 
@@ -296,14 +298,15 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		RelayMode:       relayconstant.RelayModeGemini,
 		OriginModelName: task.Properties.OriginModelName,
 		ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelType:       channel.Type,
-			ChannelId:         channel.Id,
-			ChannelIsMultiKey: channel.ChannelInfo.IsMultiKey,
+			ChannelType:          channel.Type,
+			ChannelId:            channel.Id,
+			ChannelIsMultiKey:    channel.ChannelInfo.IsMultiKey,
 			ChannelMultiKeyIndex: keyIndex,
-			ChannelBaseUrl:    channel.GetBaseURL(),
-			ApiType:           apiType,
-			ApiVersion:        channel.Other,
-			ApiKey:            key,
+			ChannelBaseUrl:       channel.GetBaseURL(),
+			ApiType:              apiType,
+			ApiVersion:           channel.Other,
+			ApiKey:               key,
+			UpstreamModelName:    task.Properties.OriginModelName,
 		},
 	}
 
