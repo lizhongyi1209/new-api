@@ -143,6 +143,7 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, task *model.Task, relayInf
 
 	// Build log content
 	logContent := fmt.Sprintf("Gemini 图片生成，异步任务 %s", task.TaskID)
+	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: recording log with quota=%d, content=%s", quota, logContent))
 
 	// Build other info
 	other := make(map[string]interface{})
