@@ -59,6 +59,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		Request: &http.Request{
 			Method: "POST",
 			Header: make(http.Header),
+			Body:   http.NoBody,
 		},
 	}
 
@@ -237,6 +238,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		Request: &http.Request{
 			Method: "POST",
 			Header: make(http.Header),
+			Body:   http.NoBody,
 		},
 	}
 
