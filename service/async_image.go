@@ -133,7 +133,7 @@ func recordAsyncImageConsumeLog(ctx context.Context, c *gin.Context, task *model
 	})
 }
 
-func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *model.Task, relayInfo *relaycommon.RelayInfo) {
+func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *model.Task, relayInfo *relaycommon.RelayInfo, promptTokens, completionTokens int) {
 	// Get quota from PriceData (already calculated during request processing)
 	quota := relayInfo.PriceData.Quota
 
@@ -173,8 +173,8 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *mode
 	// Record consume log
 	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
-		PromptTokens:     1,
-		CompletionTokens: 1,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
 		ModelName:        task.Properties.OriginModelName,
 		TokenName:        tokenName,
 		Quota:            quota,
@@ -211,7 +211,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		User:           asyncReq.User,
 	}
 
-	// Create a new gin context for async execution instead of reusing the submit context
+	// Create a new gin context for async execution
 	c := &gin.Context{
 		Request: &http.Request{
 			Method: "POST",
@@ -219,6 +219,13 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			Body:   http.NoBody,
 		},
 	}
+
+	// Get username for logging
+	username := ""
+	if user, err := model.GetUserById(task.UserId, false); err == nil {
+		username = user.Username
+	}
+	c.Set("username", username)
 
 	channel, err := model.CacheGetChannel(task.ChannelId)
 	if err != nil {
@@ -424,7 +431,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 }
 
 func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
-	// Create a new gin context for async execution instead of reusing the submit context
+	// Create a new gin context for async execution
 	c := &gin.Context{
 		Request: &http.Request{
 			Method: "POST",
@@ -434,6 +441,13 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 			Body: http.NoBody,
 		},
 	}
+
+	// Get username for logging
+	username := ""
+	if user, err := model.GetUserById(task.UserId, false); err == nil {
+		username = user.Username
+	}
+	c.Set("username", username)
 
 	task.Status = model.TaskStatusInProgress
 	task.StartTime = time.Now().Unix()
@@ -596,6 +610,18 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	// Extract token usage from response
+	promptTokens := 1
+	completionTokens := 1
+	if usageMetadata, ok := geminiResp["usageMetadata"].(map[string]interface{}); ok {
+		if pt, ok := usageMetadata["promptTokenCount"].(float64); ok {
+			promptTokens = int(pt)
+		}
+		if ct, ok := usageMetadata["candidatesTokenCount"].(float64); ok {
+			completionTokens = int(ct)
+		}
+	}
+
 	task.SetData(geminiResp)
 	task.Status = model.TaskStatusSuccess
 	task.Progress = "100%"
@@ -603,7 +629,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	_ = task.Update()
 
 	// Record consume log
-	recordAsyncGeminiConsumeLog(ctx, c, task, relayInfo)
+	recordAsyncGeminiConsumeLog(ctx, c, task, relayInfo, promptTokens, completionTokens)
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed", task.TaskID))
 }
