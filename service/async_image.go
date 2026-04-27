@@ -57,6 +57,152 @@ func applyModelMapping(originModelName string, modelMappingJSON *string) string 
 	return currentModel
 }
 
+func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo, imageCount int) {
+	// Calculate quota based on image generation pricing
+	imageN := uint(1)
+	if imageReq.N != nil {
+		imageN = *imageReq.N
+	}
+
+	quality := "standard"
+	if imageReq.Quality == "hd" {
+		quality = "hd"
+	}
+
+	// Add N ratio to PriceData if using price model
+	if relayInfo.PriceData.UsePrice {
+		if _, hasN := relayInfo.PriceData.OtherRatios["n"]; !hasN {
+			relayInfo.PriceData.AddOtherRatio("n", float64(imageN))
+		}
+	}
+
+	// Build usage for quota calculation
+	usage := &dto.Usage{
+		PromptTokens: 1,
+		TotalTokens:  1,
+	}
+
+	// Calculate quota using existing quota calculation logic
+	quota := CalculateQuota(relayInfo, usage)
+
+	// Update user and channel quota
+	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, quota)
+
+	// Build log content
+	var logContent []string
+	if len(imageReq.Size) > 0 {
+		logContent = append(logContent, fmt.Sprintf("大小 %s", imageReq.Size))
+	}
+	if len(quality) > 0 {
+		logContent = append(logContent, fmt.Sprintf("品质 %s", quality))
+	}
+	if imageN > 0 {
+		logContent = append(logContent, fmt.Sprintf("生成数量 %d", imageN))
+	}
+	logContent = append(logContent, fmt.Sprintf("异步任务 %s", task.TaskID))
+
+	// Build other info
+	other := make(map[string]interface{})
+	other["model_ratio"] = relayInfo.PriceData.ModelRatio
+	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	other["model_price"] = relayInfo.PriceData.ModelPrice
+	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
+	other["is_model_mapped"] = relayInfo.IsModelMapped
+	if relayInfo.IsModelMapped {
+		other["upstream_model_name"] = relayInfo.UpstreamModelName
+	}
+	other["request_path"] = "/async/v1/images/generations"
+	other["async_task_id"] = task.TaskID
+
+	adminInfo := make(map[string]interface{})
+	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
+	other["admin_info"] = adminInfo
+
+	// Get token name
+	tokenName := ""
+	if task.Properties.TokenId > 0 {
+		if token, err := model.GetTokenById(task.Properties.TokenId); err == nil {
+			tokenName = token.Name
+		}
+	}
+
+	// Record consume log
+	model.RecordConsumeLog(nil, task.UserId, model.RecordConsumeLogParams{
+		ChannelId:        task.ChannelId,
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		ModelName:        imageReq.Model,
+		TokenName:        tokenName,
+		Quota:            quota,
+		Content:          strings.Join(logContent, ", "),
+		TokenId:          task.Properties.TokenId,
+		UseTimeSeconds:   int(task.FinishTime - task.StartTime),
+		IsStream:         false,
+		Group:            task.Group,
+		Other:            other,
+	})
+}
+
+func recordAsyncGeminiConsumeLog(ctx context.Context, task *model.Task, relayInfo *relaycommon.RelayInfo) {
+	// For Gemini image generation, use similar pricing logic
+	usage := &dto.Usage{
+		PromptTokens: 1,
+		TotalTokens:  1,
+	}
+
+	// Calculate quota using existing quota calculation logic
+	quota := CalculateQuota(relayInfo, usage)
+
+	// Update user and channel quota
+	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, quota)
+
+	// Build log content
+	logContent := fmt.Sprintf("Gemini 图片生成，异步任务 %s", task.TaskID)
+
+	// Build other info
+	other := make(map[string]interface{})
+	other["model_ratio"] = relayInfo.PriceData.ModelRatio
+	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	other["model_price"] = relayInfo.PriceData.ModelPrice
+	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
+	other["is_model_mapped"] = relayInfo.IsModelMapped
+	if relayInfo.IsModelMapped {
+		other["upstream_model_name"] = relayInfo.UpstreamModelName
+	}
+	other["request_path"] = "/async/v1beta/models/" + task.Properties.OriginModelName + ":generateContent"
+	other["async_task_id"] = task.TaskID
+
+	adminInfo := make(map[string]interface{})
+	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
+	other["admin_info"] = adminInfo
+
+	// Get token name
+	tokenName := ""
+	if task.Properties.TokenId > 0 {
+		if token, err := model.GetTokenById(task.Properties.TokenId); err == nil {
+			tokenName = token.Name
+		}
+	}
+
+	// Record consume log
+	model.RecordConsumeLog(nil, task.UserId, model.RecordConsumeLogParams{
+		ChannelId:        task.ChannelId,
+		PromptTokens:     usage.PromptTokens,
+		CompletionTokens: usage.CompletionTokens,
+		ModelName:        task.Properties.OriginModelName,
+		TokenName:        tokenName,
+		Quota:            quota,
+		Content:          logContent,
+		TokenId:          task.Properties.TokenId,
+		UseTimeSeconds:   int(task.FinishTime - task.StartTime),
+		IsStream:         false,
+		Group:            task.Group,
+		Other:            other,
+	})
+}
+
 func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	var asyncReq dto.AsyncImageRequest
 	if err := task.GetData(&asyncReq); err != nil {
@@ -229,35 +375,60 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	// Process response based on response_format
+	responseFormat := imageReq.ResponseFormat
+	if responseFormat == "" {
+		responseFormat = "url" // default
+	}
+
 	var uploadedURLs []string
-	for _, imgData := range imageResp.Data {
-		if imgData.B64Json != "" {
-			publicURL, err := UploadBase64ImageToR2("image/png", imgData.B64Json)
-			if err != nil {
-				logger.LogError(ctx, fmt.Sprintf("async_image: R2 upload failed: %v", err))
-				task.Status = model.TaskStatusFailure
-				task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
-				task.Progress = "100%"
-				task.FinishTime = time.Now().Unix()
-				_ = task.Update()
-				return
+	var resultData map[string]interface{}
+
+	if responseFormat == "b64_json" {
+		// Return base64 directly
+		b64List := []string{}
+		for _, imgData := range imageResp.Data {
+			if imgData.B64Json != "" {
+				b64List = append(b64List, imgData.B64Json)
 			}
-			uploadedURLs = append(uploadedURLs, publicURL)
-		} else if imgData.Url != "" {
-			uploadedURLs = append(uploadedURLs, imgData.Url)
+		}
+		resultData = map[string]interface{}{
+			"data": b64List,
+		}
+	} else {
+		// Upload to R2 and return URLs
+		for _, imgData := range imageResp.Data {
+			if imgData.B64Json != "" {
+				publicURL, err := UploadBase64ImageToR2("image/png", imgData.B64Json)
+				if err != nil {
+					logger.LogError(ctx, fmt.Sprintf("async_image: R2 upload failed: %v", err))
+					task.Status = model.TaskStatusFailure
+					task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+					task.Progress = "100%"
+					task.FinishTime = time.Now().Unix()
+					_ = task.Update()
+					return
+				}
+				uploadedURLs = append(uploadedURLs, publicURL)
+			} else if imgData.Url != "" {
+				uploadedURLs = append(uploadedURLs, imgData.Url)
+			}
+		}
+		resultData = map[string]interface{}{
+			"urls": uploadedURLs,
 		}
 	}
 
-	resultData := map[string]interface{}{
-		"urls": uploadedURLs,
-	}
 	task.SetData(resultData)
 	task.Status = model.TaskStatusSuccess
 	task.Progress = "100%"
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
-	logger.LogInfo(ctx, fmt.Sprintf("async_image: task %s completed, uploaded %d images", task.TaskID, len(uploadedURLs)))
+	// Record consume log
+	recordAsyncImageConsumeLog(ctx, task, imageReq, relayInfo, len(imageResp.Data))
+
+	logger.LogInfo(ctx, fmt.Sprintf("async_image: task %s completed, generated %d images", task.TaskID, len(imageResp.Data)))
 }
 
 func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
@@ -431,6 +602,9 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	task.Progress = "100%"
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
+
+	// Record consume log
+	recordAsyncGeminiConsumeLog(ctx, task, relayInfo)
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed", task.TaskID))
 }

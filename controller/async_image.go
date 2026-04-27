@@ -31,6 +31,7 @@ func AsyncImageSubmit(c *gin.Context) {
 	userId := c.GetInt("id")
 	group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	channelId := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+	tokenId := c.GetInt("token_id")
 
 	task := &model.Task{
 		TaskID:     model.GenerateTaskID(),
@@ -45,6 +46,7 @@ func AsyncImageSubmit(c *gin.Context) {
 		Properties: model.Properties{
 			Input:           req.Prompt,
 			OriginModelName: req.Model,
+			TokenId:         tokenId,
 		},
 	}
 	task.SetData(req)
@@ -85,6 +87,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 	userId := c.GetInt("id")
 	group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	channelId := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
+	tokenId := c.GetInt("token_id")
 
 	path := c.Param("path")
 	modelName := ""
@@ -110,6 +113,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		SubmitTime: time.Now().Unix(),
 		Properties: model.Properties{
 			OriginModelName: modelName,
+			TokenId:         tokenId,
 		},
 	}
 	task.SetData(req)
