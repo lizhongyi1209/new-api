@@ -146,6 +146,9 @@ func main() {
 		return a
 	}
 
+	// Wire price calculation function (breaks service -> relay import cycle)
+	service.CalculatePriceFunc = helper.ModelPriceHelperPerCall
+
 	// Channel upstream model update check task
 	controller.StartChannelUpstreamModelUpdateTask()
 
