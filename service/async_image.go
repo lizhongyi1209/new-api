@@ -97,9 +97,9 @@ func recordAsyncImageConsumeLog(ctx context.Context, c *gin.Context, task *model
 	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
 	other["model_price"] = relayInfo.PriceData.ModelPrice
 	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
-	other["is_model_mapped"] = relayInfo.IsModelMapped
-	if relayInfo.IsModelMapped {
-		other["upstream_model_name"] = relayInfo.UpstreamModelName
+	other["is_model_mapped"] = relayInfo.ChannelMeta.IsModelMapped
+	if relayInfo.ChannelMeta.IsModelMapped {
+		other["upstream_model_name"] = relayInfo.ChannelMeta.UpstreamModelName
 	}
 	other["request_path"] = "/async/v1/images/generations"
 	other["async_task_id"] = task.TaskID
@@ -151,9 +151,9 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *mode
 	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
 	other["model_price"] = relayInfo.PriceData.ModelPrice
 	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
-	other["is_model_mapped"] = relayInfo.IsModelMapped
-	if relayInfo.IsModelMapped {
-		other["upstream_model_name"] = relayInfo.UpstreamModelName
+	other["is_model_mapped"] = relayInfo.ChannelMeta.IsModelMapped
+	if relayInfo.ChannelMeta.IsModelMapped {
+		other["upstream_model_name"] = relayInfo.ChannelMeta.UpstreamModelName
 	}
 	other["request_path"] = "/async/v1beta/models/" + task.Properties.OriginModelName + ":generateContent"
 	other["async_task_id"] = task.TaskID
@@ -261,16 +261,14 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	isModelMapped := upstreamModelName != imageReq.Model
 
 	relayInfo := &relaycommon.RelayInfo{
-		UserId:            task.UserId,
-		UsingGroup:        task.Group,
-		Request:           imageReq,
-		RelayMode:         relayconstant.RelayModeImagesGenerations,
-		TaskRelayInfo:     &relaycommon.TaskRelayInfo{
+		UserId:     task.UserId,
+		UsingGroup: task.Group,
+		Request:    imageReq,
+		RelayMode:  relayconstant.RelayModeImagesGenerations,
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
 			PublicTaskID: task.TaskID,
 		},
-		OriginModelName:   imageReq.Model,
-		UpstreamModelName: upstreamModelName,
-		IsModelMapped:     isModelMapped,
+		OriginModelName: imageReq.Model,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          channel.Type,
 			ChannelId:            channel.Id,
@@ -280,6 +278,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			ApiType:              apiType,
 			ApiKey:               key,
 			UpstreamModelName:    upstreamModelName,
+			IsModelMapped:        isModelMapped,
 		},
 	}
 
@@ -524,12 +523,10 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	isModelMapped := upstreamModelName != task.Properties.OriginModelName
 
 	relayInfo := &relaycommon.RelayInfo{
-		UserId:            task.UserId,
-		UsingGroup:        task.Group,
-		RelayMode:         relayconstant.RelayModeGemini,
-		OriginModelName:   task.Properties.OriginModelName,
-		UpstreamModelName: upstreamModelName,
-		IsModelMapped:     isModelMapped,
+		UserId:          task.UserId,
+		UsingGroup:      task.Group,
+		RelayMode:       relayconstant.RelayModeGemini,
+		OriginModelName: task.Properties.OriginModelName,
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          channel.Type,
 			ChannelId:            channel.Id,
@@ -540,6 +537,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 			ApiVersion:           channel.Other,
 			ApiKey:               key,
 			UpstreamModelName:    upstreamModelName,
+			IsModelMapped:        isModelMapped,
 		},
 	}
 
