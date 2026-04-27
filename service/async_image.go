@@ -54,15 +54,12 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		User:           asyncReq.User,
 	}
 
-	c, exists := ctx.Value("gin_context").(*gin.Context)
-	if !exists {
-		logger.LogError(ctx, "async_image: gin context not found")
-		task.Status = model.TaskStatusFailure
-		task.FailReason = "内部错误：缺少请求上下文"
-		task.Progress = "100%"
-		task.FinishTime = time.Now().Unix()
-		_ = task.Update()
-		return
+	// Create a new gin context for async execution instead of reusing the submit context
+	c := &gin.Context{
+		Request: &http.Request{
+			Method: "POST",
+			Header: make(http.Header),
+		},
 	}
 
 	channel, err := model.CacheGetChannel(task.ChannelId)
@@ -235,15 +232,12 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 }
 
 func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
-	c, exists := ctx.Value("gin_context").(*gin.Context)
-	if !exists {
-		logger.LogError(ctx, "async_gemini: gin context not found")
-		task.Status = model.TaskStatusFailure
-		task.FailReason = "内部错误：缺少请求上下文"
-		task.Progress = "100%"
-		task.FinishTime = time.Now().Unix()
-		_ = task.Update()
-		return
+	// Create a new gin context for async execution instead of reusing the submit context
+	c := &gin.Context{
+		Request: &http.Request{
+			Method: "POST",
+			Header: make(http.Header),
+		},
 	}
 
 	task.Status = model.TaskStatusInProgress
