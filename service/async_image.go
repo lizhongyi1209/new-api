@@ -65,6 +65,28 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	channel, err := model.CacheGetChannel(task.ChannelId)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("async_image: failed to get channel: %v", err))
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("获取渠道信息失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	apiType, _ := common.ChannelType2APIType(channel.Type)
+	key, keyIndex, keyErr := channel.GetNextEnabledKey()
+	if keyErr != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("获取渠道密钥失败: %v", keyErr.Error())
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:     task.UserId,
 		UsingGroup: task.Group,
@@ -74,7 +96,13 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			PublicTaskID: task.TaskID,
 		},
 		ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelId: task.ChannelId,
+			ChannelType:          channel.Type,
+			ChannelId:            channel.Id,
+			ChannelIsMultiKey:    channel.ChannelInfo.IsMultiKey,
+			ChannelMultiKeyIndex: keyIndex,
+			ChannelBaseUrl:       channel.GetBaseURL(),
+			ApiType:              apiType,
+			ApiKey:               key,
 		},
 	}
 
@@ -82,8 +110,6 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	task.StartTime = time.Now().Unix()
 	task.Progress = "50%"
 	_ = task.Update()
-
-	relayInfo.InitChannelMeta(c)
 
 	if GetImageAdaptorFunc == nil {
 		task.Status = model.TaskStatusFailure
@@ -243,16 +269,43 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	relayInfo := &relaycommon.RelayInfo{
-		UserId:     task.UserId,
-		UsingGroup: task.Group,
-		RelayMode:  relayconstant.RelayModeGemini,
-		ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelId: task.ChannelId,
-		},
-		OriginModelName: task.Properties.OriginModelName,
+	channel, err := model.CacheGetChannel(task.ChannelId)
+	if err != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("获取渠道信息失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
 	}
-	relayInfo.InitChannelMeta(c)
+
+	apiType, _ := common.ChannelType2APIType(channel.Type)
+	key, keyIndex, keyErr := channel.GetNextEnabledKey()
+	if keyErr != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("获取渠道密钥失败: %v", keyErr.Error())
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	relayInfo := &relaycommon.RelayInfo{
+		UserId:          task.UserId,
+		UsingGroup:      task.Group,
+		RelayMode:       relayconstant.RelayModeGemini,
+		OriginModelName: task.Properties.OriginModelName,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType:       channel.Type,
+			ChannelId:         channel.Id,
+			ChannelIsMultiKey: channel.ChannelInfo.IsMultiKey,
+			ChannelMultiKeyIndex: keyIndex,
+			ChannelBaseUrl:    channel.GetBaseURL(),
+			ApiType:           apiType,
+			ApiVersion:        channel.Other,
+			ApiKey:            key,
+		},
+	}
 
 	if GetGeminiAdaptorFunc == nil {
 		task.Status = model.TaskStatusFailure
