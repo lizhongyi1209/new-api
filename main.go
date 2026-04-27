@@ -140,6 +140,24 @@ func main() {
 		return a
 	}
 
+	// Wire image adaptor factory (breaks service -> relay import cycle)
+	service.GetImageAdaptorFunc = func(apiType int) service.ImageAdaptor {
+		a := relay.GetAdaptor(apiType)
+		if a == nil {
+			return nil
+		}
+		return a
+	}
+
+	// Wire gemini adaptor factory (breaks service -> relay import cycle)
+	service.GetGeminiAdaptorFunc = func(apiType int) service.GeminiAdaptor {
+		a := relay.GetAdaptor(apiType)
+		if a == nil {
+			return nil
+		}
+		return a
+	}
+
 	// Register the periodic channel test, upstream model update, and async task
 	// polling (Midjourney / Suno / video) jobs as scheduled system tasks
 	// (DB-lease dedup across masters + run history), then start the runner that
@@ -147,6 +165,7 @@ func main() {
 	// switch are enforced inside the runner and each handler's Enabled().
 	controller.RegisterScheduledSystemTasks()
 	service.StartSystemTaskRunner()
+
 
 	if os.Getenv("BATCH_UPDATE_ENABLED") == "true" {
 		common.BatchUpdateEnabled = true
