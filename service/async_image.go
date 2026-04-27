@@ -31,6 +31,32 @@ type GeminiAdaptor interface {
 var GetImageAdaptorFunc func(apiType int) ImageAdaptor
 var GetGeminiAdaptorFunc func(apiType int) GeminiAdaptor
 
+func applyModelMapping(originModelName string, modelMappingJSON *string) string {
+	if modelMappingJSON == nil || *modelMappingJSON == "" || *modelMappingJSON == "{}" {
+		return originModelName
+	}
+
+	var modelMap map[string]string
+	if err := common.Unmarshal([]byte(*modelMappingJSON), &modelMap); err != nil {
+		return originModelName
+	}
+
+	currentModel := originModelName
+	visited := map[string]bool{currentModel: true}
+	for {
+		if mappedModel, exists := modelMap[currentModel]; exists && mappedModel != "" {
+			if visited[mappedModel] {
+				break
+			}
+			visited[mappedModel] = true
+			currentModel = mappedModel
+		} else {
+			break
+		}
+	}
+	return currentModel
+}
+
 func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	var asyncReq dto.AsyncImageRequest
 	if err := task.GetData(&asyncReq); err != nil {
@@ -85,6 +111,8 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	upstreamModelName := applyModelMapping(imageReq.Model, channel.ModelMapping)
+
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:     task.UserId,
 		UsingGroup: task.Group,
@@ -102,7 +130,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			ChannelBaseUrl:       channel.GetBaseURL(),
 			ApiType:              apiType,
 			ApiKey:               key,
-			UpstreamModelName:    imageReq.Model,
+			UpstreamModelName:    upstreamModelName,
 		},
 	}
 
@@ -288,6 +316,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	upstreamModelName := applyModelMapping(task.Properties.OriginModelName, channel.ModelMapping)
+
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          task.UserId,
 		UsingGroup:      task.Group,
@@ -302,7 +332,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 			ApiType:              apiType,
 			ApiVersion:           channel.Other,
 			ApiKey:               key,
-			UpstreamModelName:    task.Properties.OriginModelName,
+			UpstreamModelName:    upstreamModelName,
 		},
 	}
 
@@ -326,6 +356,10 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	}
 	adaptor.Init(relayInfo)
 
+	// Debug: log request details
+	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: calling upstream with model=%s, baseUrl=%s, apiType=%d",
+		relayInfo.ChannelMeta.UpstreamModelName, relayInfo.ChannelMeta.ChannelBaseUrl, relayInfo.ChannelMeta.ApiType))
+
 	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
 	if err != nil {
 		task.Status = model.TaskStatusFailure
@@ -340,6 +374,11 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	defer httpResp.Body.Close()
 
 	if httpResp.StatusCode != http.StatusOK {
+		// Debug: log response details
+		bodyPreview, _ := io.ReadAll(httpResp.Body)
+		httpResp.Body = io.NopCloser(bytes.NewReader(bodyPreview))
+		logger.LogError(ctx, fmt.Sprintf("async_gemini: upstream error status=%d, body=%s", httpResp.StatusCode, string(bodyPreview)))
+
 		relayErr := RelayErrorHandler(ctx, httpResp, false)
 		task.Status = model.TaskStatusFailure
 		task.FailReason = fmt.Sprintf("上游返回错误: %s", relayErr.Error())
