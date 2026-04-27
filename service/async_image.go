@@ -171,7 +171,7 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *mode
 	}
 
 	// Record consume log
-	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
+	params := model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
 		PromptTokens:     promptTokens,
 		CompletionTokens: completionTokens,
@@ -184,7 +184,9 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *mode
 		IsStream:         false,
 		Group:            task.Group,
 		Other:            other,
-	})
+	}
+	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: calling RecordConsumeLog with Content='%s'", params.Content))
+	model.RecordConsumeLog(c, task.UserId, params)
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: RecordConsumeLog called successfully"))
 }
 
