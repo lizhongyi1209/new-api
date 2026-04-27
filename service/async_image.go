@@ -58,7 +58,14 @@ func applyModelMapping(originModelName string, modelMappingJSON *string) string 
 }
 
 func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo, imageCount int) {
-	// Calculate quota based on image generation pricing
+	// Get quota from PriceData (already calculated during request processing)
+	quota := relayInfo.PriceData.Quota
+
+	// Update user and channel quota
+	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, quota)
+
+	// Build log content
 	imageN := uint(1)
 	if imageReq.N != nil {
 		imageN = *imageReq.N
@@ -69,27 +76,6 @@ func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq 
 		quality = "hd"
 	}
 
-	// Add N ratio to PriceData if using price model
-	if relayInfo.PriceData.UsePrice {
-		if _, hasN := relayInfo.PriceData.OtherRatios["n"]; !hasN {
-			relayInfo.PriceData.AddOtherRatio("n", float64(imageN))
-		}
-	}
-
-	// Build usage for quota calculation
-	usage := &dto.Usage{
-		PromptTokens: 1,
-		TotalTokens:  1,
-	}
-
-	// Calculate quota using existing quota calculation logic
-	quota := CalculateQuota(relayInfo, usage)
-
-	// Update user and channel quota
-	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
-	model.UpdateChannelUsedQuota(task.ChannelId, quota)
-
-	// Build log content
 	var logContent []string
 	if len(imageReq.Size) > 0 {
 		logContent = append(logContent, fmt.Sprintf("大小 %s", imageReq.Size))
@@ -130,8 +116,8 @@ func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq 
 	// Record consume log
 	model.RecordConsumeLog(nil, task.UserId, model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
+		PromptTokens:     1,
+		CompletionTokens: 1,
 		ModelName:        imageReq.Model,
 		TokenName:        tokenName,
 		Quota:            quota,
@@ -145,14 +131,8 @@ func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq 
 }
 
 func recordAsyncGeminiConsumeLog(ctx context.Context, task *model.Task, relayInfo *relaycommon.RelayInfo) {
-	// For Gemini image generation, use similar pricing logic
-	usage := &dto.Usage{
-		PromptTokens: 1,
-		TotalTokens:  1,
-	}
-
-	// Calculate quota using existing quota calculation logic
-	quota := CalculateQuota(relayInfo, usage)
+	// Get quota from PriceData (already calculated during request processing)
+	quota := relayInfo.PriceData.Quota
 
 	// Update user and channel quota
 	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
@@ -189,8 +169,8 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, task *model.Task, relayInf
 	// Record consume log
 	model.RecordConsumeLog(nil, task.UserId, model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
-		PromptTokens:     usage.PromptTokens,
-		CompletionTokens: usage.CompletionTokens,
+		PromptTokens:     1,
+		CompletionTokens: 1,
 		ModelName:        task.Properties.OriginModelName,
 		TokenName:        tokenName,
 		Quota:            quota,
