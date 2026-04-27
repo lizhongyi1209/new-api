@@ -634,6 +634,43 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		}
 	}
 
+	// Extract and upload images to R2
+	if candidates, ok := geminiResp["candidates"].([]interface{}); ok && len(candidates) > 0 {
+		for _, candidate := range candidates {
+			if candidateMap, ok := candidate.(map[string]interface{}); ok {
+				if content, ok := candidateMap["content"].(map[string]interface{}); ok {
+					if parts, ok := content["parts"].([]interface{}); ok {
+						for _, part := range parts {
+							if partMap, ok := part.(map[string]interface{}); ok {
+								if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
+									if base64Data, ok := inlineData["data"].(string); ok {
+										mimeType := "image/png"
+										if mt, ok := inlineData["mimeType"].(string); ok {
+											mimeType = mt
+										}
+										publicURL, err := UploadBase64ImageToR2(mimeType, base64Data)
+										if err != nil {
+											logger.LogError(ctx, fmt.Sprintf("async_gemini: R2 upload failed: %v", err))
+											task.Status = model.TaskStatusFailure
+											task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+											task.Progress = "100%"
+											task.FinishTime = time.Now().Unix()
+											_ = task.Update()
+											return
+										}
+										// Replace inline data with URL
+										delete(partMap, "inlineData")
+										partMap["imageUrl"] = publicURL
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	task.SetData(geminiResp)
 	task.Status = model.TaskStatusSuccess
 	task.Progress = "100%"
