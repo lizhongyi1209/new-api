@@ -128,6 +128,24 @@ func main() {
 		return a
 	}
 
+	// Wire image adaptor factory (breaks service -> relay import cycle)
+	service.GetImageAdaptorFunc = func(apiType int) service.ImageAdaptor {
+		a := relay.GetAdaptor(apiType)
+		if a == nil {
+			return nil
+		}
+		return a
+	}
+
+	// Wire gemini adaptor factory (breaks service -> relay import cycle)
+	service.GetGeminiAdaptorFunc = func(apiType int) service.GeminiAdaptor {
+		a := relay.GetAdaptor(apiType)
+		if a == nil {
+			return nil
+		}
+		return a
+	}
+
 	// Channel upstream model update check task
 	controller.StartChannelUpstreamModelUpdateTask()
 

@@ -203,6 +203,36 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatGemini)
 		})
 	}
+
+	// Async task fetch — no Distribute() needed (no model/channel selection)
+	asyncTaskRouter := router.Group("/async/v1")
+	asyncTaskRouter.Use(middleware.RouteTag("relay"))
+	asyncTaskRouter.Use(middleware.SystemPerformanceCheck())
+	asyncTaskRouter.Use(middleware.TokenAuth())
+	{
+		asyncTaskRouter.GET("/tasks/:id", controller.AsyncTaskFetch)
+		asyncTaskRouter.POST("/tasks/fetch", controller.AsyncTaskFetch)
+	}
+
+	// Async image submit — needs Distribute() for channel selection
+	asyncImageRouter := router.Group("/async/v1")
+	asyncImageRouter.Use(middleware.RouteTag("relay"))
+	asyncImageRouter.Use(middleware.SystemPerformanceCheck())
+	asyncImageRouter.Use(middleware.TokenAuth())
+	asyncImageRouter.Use(middleware.Distribute())
+	{
+		asyncImageRouter.POST("/images/generations", controller.AsyncImageSubmit)
+	}
+
+	// Async Gemini submit — needs Distribute() for channel selection
+	asyncGeminiRouter := router.Group("/async/v1beta")
+	asyncGeminiRouter.Use(middleware.RouteTag("relay"))
+	asyncGeminiRouter.Use(middleware.SystemPerformanceCheck())
+	asyncGeminiRouter.Use(middleware.TokenAuth())
+	asyncGeminiRouter.Use(middleware.Distribute())
+	{
+		asyncGeminiRouter.POST("/models/*path", controller.AsyncGeminiSubmit)
+	}
 }
 
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {
