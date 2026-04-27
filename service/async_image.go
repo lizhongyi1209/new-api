@@ -60,7 +60,7 @@ func applyModelMapping(originModelName string, modelMappingJSON *string) string 
 	return currentModel
 }
 
-func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo, imageCount int) {
+func recordAsyncImageConsumeLog(ctx context.Context, c *gin.Context, task *model.Task, imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo, imageCount int) {
 	// Get quota from PriceData (already calculated during request processing)
 	quota := relayInfo.PriceData.Quota
 
@@ -117,7 +117,7 @@ func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq 
 	}
 
 	// Record consume log
-	model.RecordConsumeLog(nil, task.UserId, model.RecordConsumeLogParams{
+	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
 		PromptTokens:     1,
 		CompletionTokens: 1,
@@ -133,7 +133,7 @@ func recordAsyncImageConsumeLog(ctx context.Context, task *model.Task, imageReq 
 	})
 }
 
-func recordAsyncGeminiConsumeLog(ctx context.Context, task *model.Task, relayInfo *relaycommon.RelayInfo) {
+func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *model.Task, relayInfo *relaycommon.RelayInfo) {
 	// Get quota from PriceData (already calculated during request processing)
 	quota := relayInfo.PriceData.Quota
 
@@ -171,7 +171,7 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, task *model.Task, relayInf
 	}
 
 	// Record consume log
-	model.RecordConsumeLog(nil, task.UserId, model.RecordConsumeLogParams{
+	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
 		PromptTokens:     1,
 		CompletionTokens: 1,
@@ -185,6 +185,7 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, task *model.Task, relayInf
 		Group:            task.Group,
 		Other:            other,
 	})
+	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: RecordConsumeLog called successfully"))
 }
 
 func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
@@ -417,7 +418,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	_ = task.Update()
 
 	// Record consume log
-	recordAsyncImageConsumeLog(ctx, task, imageReq, relayInfo, len(imageResp.Data))
+	recordAsyncImageConsumeLog(ctx, c, task, imageReq, relayInfo, len(imageResp.Data))
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_image: task %s completed, generated %d images", task.TaskID, len(imageResp.Data)))
 }
@@ -602,7 +603,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	_ = task.Update()
 
 	// Record consume log
-	recordAsyncGeminiConsumeLog(ctx, task, relayInfo)
+	recordAsyncGeminiConsumeLog(ctx, c, task, relayInfo)
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed", task.TaskID))
 }
