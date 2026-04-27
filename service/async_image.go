@@ -265,8 +265,10 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	c := &gin.Context{
 		Request: &http.Request{
 			Method: "POST",
-			Header: make(http.Header),
-			Body:   http.NoBody,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: http.NoBody,
 		},
 	}
 
@@ -290,8 +292,11 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		if firstContent, ok := contents[0].(map[string]interface{}); ok {
 			if _, hasRole := firstContent["role"]; !hasRole {
 				firstContent["role"] = "user"
+				logger.LogInfo(ctx, fmt.Sprintf("async_gemini: set default role=user for first content"))
 			}
 		}
+	} else {
+		logger.LogError(ctx, fmt.Sprintf("async_gemini: failed to normalize contents, type=%T", requestBody["contents"]))
 	}
 
 	jsonData, err := common.Marshal(requestBody)
@@ -303,6 +308,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		_ = task.Update()
 		return
 	}
+
+	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: request body after normalization: %s", string(jsonData)))
 
 	channel, err := model.CacheGetChannel(task.ChannelId)
 	if err != nil {
@@ -368,9 +375,11 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	// Debug: log request details
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: calling upstream with model=%s, baseUrl=%s, apiType=%d",
 		relayInfo.ChannelMeta.UpstreamModelName, relayInfo.ChannelMeta.ChannelBaseUrl, relayInfo.ChannelMeta.ApiType))
+	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: request body length=%d bytes", len(jsonData)))
 
 	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
 	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("async_gemini: DoRequest failed: %v", err))
 		task.Status = model.TaskStatusFailure
 		task.FailReason = fmt.Sprintf("请求上游失败: %v", err)
 		task.Progress = "100%"
