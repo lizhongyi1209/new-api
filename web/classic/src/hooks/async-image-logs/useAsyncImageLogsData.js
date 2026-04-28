@@ -110,7 +110,7 @@ export const useAsyncImageLogsData = () => {
   const getDefaultColumnVisibility = () => {
     return {
       [COLUMN_KEYS.SUBMIT_TIME]: true,
-      [COLUMN_KEYS.FINISH_TIME]: true,
+      [COLUMN_KEYS.FINISH_TIME]: false,
       [COLUMN_KEYS.DURATION]: true,
       [COLUMN_KEYS.CHANNEL]: isAdminUser,
       [COLUMN_KEYS.USERNAME]: isAdminUser,
