@@ -133,6 +133,114 @@ func recordAsyncImageConsumeLog(ctx context.Context, c *gin.Context, task *model
 	})
 }
 
+// RecordAsyncImageSubmitLog records a usage log at task submission time.
+func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.AsyncImageRequest, relayInfo *relaycommon.RelayInfo) {
+	quota := relayInfo.PriceData.Quota
+
+	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, quota)
+
+	imageN := uint(1)
+	if imageReq.N != nil {
+		imageN = *imageReq.N
+	}
+
+	quality := "standard"
+	if imageReq.Quality == "hd" {
+		quality = "hd"
+	}
+
+	var logContent []string
+	if len(imageReq.Size) > 0 {
+		logContent = append(logContent, fmt.Sprintf("大小 %s", imageReq.Size))
+	}
+	if len(quality) > 0 {
+		logContent = append(logContent, fmt.Sprintf("品质 %s", quality))
+	}
+	if imageN > 0 {
+		logContent = append(logContent, fmt.Sprintf("生成数量 %d", imageN))
+	}
+	logContent = append(logContent, fmt.Sprintf("异步任务 %s（已提交）", task.TaskID))
+
+	other := make(map[string]interface{})
+	other["model_ratio"] = relayInfo.PriceData.ModelRatio
+	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	other["model_price"] = relayInfo.PriceData.ModelPrice
+	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
+	other["async_task_id"] = task.TaskID
+	other["request_path"] = "/async/v1/images/generations"
+
+	adminInfo := make(map[string]interface{})
+	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
+	other["admin_info"] = adminInfo
+
+	tokenName := ""
+	if task.Properties.TokenId > 0 {
+		if token, err := model.GetTokenById(task.Properties.TokenId); err == nil {
+			tokenName = token.Name
+		}
+	}
+
+	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
+		ChannelId:        task.ChannelId,
+		PromptTokens:     1,
+		CompletionTokens: 1,
+		ModelName:        imageReq.Model,
+		TokenName:        tokenName,
+		Quota:            quota,
+		Content:          strings.Join(logContent, ", "),
+		TokenId:          task.Properties.TokenId,
+		UseTimeSeconds:   0,
+		IsStream:         false,
+		Group:            task.Group,
+		Other:            other,
+	})
+}
+
+// RecordAsyncGeminiSubmitLog records a usage log at Gemini task submission time.
+func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName string, relayInfo *relaycommon.RelayInfo) {
+	quota := relayInfo.PriceData.Quota
+
+	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
+	model.UpdateChannelUsedQuota(task.ChannelId, quota)
+
+	logContent := fmt.Sprintf("Gemini 图片生成，异步任务 %s（已提交）", task.TaskID)
+
+	other := make(map[string]interface{})
+	other["model_ratio"] = relayInfo.PriceData.ModelRatio
+	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	other["model_price"] = relayInfo.PriceData.ModelPrice
+	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
+	other["async_task_id"] = task.TaskID
+	other["request_path"] = "/async/v1beta/models/" + modelName + ":generateContent"
+
+	adminInfo := make(map[string]interface{})
+	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
+	other["admin_info"] = adminInfo
+
+	tokenName := ""
+	if task.Properties.TokenId > 0 {
+		if token, err := model.GetTokenById(task.Properties.TokenId); err == nil {
+			tokenName = token.Name
+		}
+	}
+
+	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
+		ChannelId:        task.ChannelId,
+		PromptTokens:     1,
+		CompletionTokens: 1,
+		ModelName:        modelName,
+		TokenName:        tokenName,
+		Quota:            quota,
+		Content:          logContent,
+		TokenId:          task.Properties.TokenId,
+		UseTimeSeconds:   0,
+		IsStream:         false,
+		Group:            task.Group,
+		Other:            other,
+	})
+}
+
 func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *model.Task, relayInfo *relaycommon.RelayInfo, promptTokens, completionTokens int) {
 	// Get quota from PriceData (already calculated during request processing)
 	quota := relayInfo.PriceData.Quota
@@ -197,6 +305,13 @@ func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *mode
 }
 
 func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
+	// Refund pre-consumed quota if task ends in failure
+	defer func() {
+		if task.Status == model.TaskStatusFailure {
+			RefundTaskQuota(ctx, task, task.FailReason)
+		}
+	}()
+
 	var asyncReq dto.AsyncImageRequest
 	if err := task.GetData(&asyncReq); err != nil {
 		logger.LogError(ctx, fmt.Sprintf("async_image: failed to parse task data: %v", err))
@@ -437,13 +552,17 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
-	// Record consume log
-	recordAsyncImageConsumeLog(ctx, c, task, imageReq, relayInfo, len(imageResp.Data))
-
 	logger.LogInfo(ctx, fmt.Sprintf("async_image: task %s completed, generated %d images", task.TaskID, len(imageResp.Data)))
 }
 
 func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
+	// Refund pre-consumed quota if task ends in failure
+	defer func() {
+		if task.Status == model.TaskStatusFailure {
+			RefundTaskQuota(ctx, task, task.FailReason)
+		}
+	}()
+
 	// Create a new gin context for async execution
 	c := &gin.Context{
 		Request: &http.Request{
@@ -686,9 +805,6 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	task.Progress = "100%"
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
-
-	// Record consume log
-	recordAsyncGeminiConsumeLog(ctx, c, task, relayInfo, promptTokens, completionTokens)
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed", task.TaskID))
 }
