@@ -426,6 +426,9 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		resultData = map[string]interface{}{
 			"urls": uploadedURLs,
 		}
+		if len(uploadedURLs) > 0 {
+			task.PrivateData.ResultURL = uploadedURLs[0]
+		}
 	}
 
 	task.SetData(resultData)
@@ -635,6 +638,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	}
 
 	// Extract and upload images to R2
+	var firstImageURL string
 	if candidates, ok := geminiResp["candidates"].([]interface{}); ok && len(candidates) > 0 {
 		for _, candidate := range candidates {
 			if candidateMap, ok := candidate.(map[string]interface{}); ok {
@@ -661,6 +665,9 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 										// Replace inline data with URL
 										delete(partMap, "inlineData")
 										partMap["imageUrl"] = publicURL
+										if firstImageURL == "" {
+											firstImageURL = publicURL
+										}
 									}
 								}
 							}
@@ -672,6 +679,9 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	}
 
 	task.SetData(geminiResp)
+	if firstImageURL != "" {
+		task.PrivateData.ResultURL = firstImageURL
+	}
 	task.Status = model.TaskStatusSuccess
 	task.Progress = "100%"
 	task.FinishTime = time.Now().Unix()
