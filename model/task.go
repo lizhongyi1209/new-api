@@ -161,15 +161,16 @@ func (p TaskPrivateData) Value() (driver.Value, error) {
 
 // SyncTaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段
 type SyncTaskQueryParams struct {
-	Platform       constant.TaskPlatform
-	ChannelID      string
-	TaskID         string
-	UserID         string
-	Action         string
-	Status         string
-	StartTimestamp int64
-	EndTimestamp   int64
-	UserIDs        []int
+	Platform        constant.TaskPlatform
+	ExcludePlatform constant.TaskPlatform
+	ChannelID       string
+	TaskID          string
+	UserID          string
+	Action          string
+	Status          string
+	StartTimestamp  int64
+	EndTimestamp    int64
+	UserIDs         []int
 }
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
@@ -229,6 +230,9 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 	}
 	if queryParams.Platform != "" {
 		query = query.Where("platform = ?", queryParams.Platform)
+		if queryParams.ExcludePlatform != "" {
+			query = query.Where("platform != ?", queryParams.ExcludePlatform)
+		}
 	}
 	if queryParams.StartTimestamp != 0 {
 		// 假设您已将前端传来的时间戳转换为数据库所需的时间格式，并处理了时间戳的验证和解析
@@ -260,6 +264,9 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	}
 	if queryParams.Platform != "" {
 		query = query.Where("platform = ?", queryParams.Platform)
+	}
+	if queryParams.ExcludePlatform != "" {
+		query = query.Where("platform != ?", queryParams.ExcludePlatform)
 	}
 	if queryParams.UserID != "" {
 		query = query.Where("user_id = ?", queryParams.UserID)
@@ -498,6 +505,9 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	if queryParams.ExcludePlatform != "" {
+		query = query.Where("platform != ?", queryParams.ExcludePlatform)
+	}
 	_ = query.Count(&total).Error
 	return total
 }
@@ -523,6 +533,9 @@ func TaskCountAllUserTask(userId int, queryParams SyncTaskQueryParams) int64 {
 	}
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
+	}
+	if queryParams.ExcludePlatform != "" {
+		query = query.Where("platform != ?", queryParams.ExcludePlatform)
 	}
 	_ = query.Count(&total).Error
 	return total
