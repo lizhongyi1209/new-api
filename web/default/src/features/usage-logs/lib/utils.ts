@@ -26,6 +26,8 @@ import {
   getUserMidjourneyLogs,
   getAllTaskLogs,
   getUserTaskLogs,
+  getAllAsyncImageLogs,
+  getUserAsyncImageLogs,
 } from '../api'
 import {
   LOG_TYPES,
@@ -265,7 +267,7 @@ export async function fetchLogsByCategory(
     return isAdmin ? await getAllLogs(params) : await getUserLogs(params)
   }
 
-  // For drawing and task logs
+  // For drawing, task, and async_image logs
   const baseParams = buildBaseParams({
     page,
     pageSize,
@@ -281,12 +283,24 @@ export async function fetchLogsByCategory(
     ...(logCategory === 'task'
       ? { task_id: searchParams.filter as string | undefined }
       : {}),
+    ...(logCategory === 'async_image'
+      ? {
+          task_id: searchParams.filter as string | undefined,
+          platform: 'async_image',
+        }
+      : {}),
   }
 
   if (logCategory === 'drawing') {
     return isAdmin
       ? await getAllMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
       : await getUserMidjourneyLogs(paramsWithFilter as GetMidjourneyLogsParams)
+  }
+
+  if (logCategory === 'async_image') {
+    return isAdmin
+      ? await getAllAsyncImageLogs(paramsWithFilter as GetTaskLogsParams)
+      : await getUserAsyncImageLogs(paramsWithFilter as GetTaskLogsParams)
   }
 
   // task logs

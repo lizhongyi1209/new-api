@@ -28,7 +28,7 @@ import type { UsageLog } from './data/schema'
 /**
  * Log category for different log types
  */
-export type LogCategory = 'common' | 'drawing' | 'task'
+export type LogCategory = 'common' | 'drawing' | 'task' | 'async_image'
 
 // ============================================================================
 // Filter Types
@@ -70,9 +70,16 @@ export interface TaskLogFilters extends CommonFilters {
 }
 
 /**
+ * Async image logs specific filters
+ */
+export interface AsyncImageLogFilters extends CommonFilters {
+  taskId?: string
+}
+
+/**
  * Union type for all log filters
  */
-export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters
+export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters | AsyncImageLogFilters
 
 // ============================================================================
 // Common Logs Additional Types
@@ -246,6 +253,7 @@ export interface TaskLog {
   progress_message_en?: string
   data?: string // JSON string
   fail_reason?: string
+  result_url?: string // Async result URL (image, video, etc.)
   status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, QUEUED, UNKNOWN
   other?: string
   created_at?: number
@@ -323,6 +331,7 @@ export interface GetTaskLogsParams {
   page_size?: number
   channel_id?: string
   task_id?: string
+  platform?: string
   start_timestamp?: number
   end_timestamp?: number
 }

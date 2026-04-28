@@ -311,6 +311,28 @@ export const TASK_PLATFORM_MAPPINGS: Record<string, StatusMapping> = {
 }
 
 // ============================================================================
+// Async Image Logs Constants
+// ============================================================================
+
+export const ASYNC_IMAGE_PLATFORMS = {
+  ASYNC_IMAGE: 'async_image',
+}
+
+export const ASYNC_IMAGE_ACTIONS = {
+  GENERATE: 'generate',
+  GENERATE_CONTENT: 'generateContent',
+}
+
+export const ASYNC_IMAGE_PLATFORM_MAPPINGS: Record<string, StatusMapping> = {
+  [ASYNC_IMAGE_PLATFORMS.ASYNC_IMAGE]: { label: 'Async Image', variant: 'cyan' },
+}
+
+export const ASYNC_IMAGE_ACTION_MAPPINGS: Record<string, StatusMapping> = {
+  [ASYNC_IMAGE_ACTIONS.GENERATE]: { label: 'Generate Image', variant: 'blue' },
+  [ASYNC_IMAGE_ACTIONS.GENERATE_CONTENT]: { label: 'Generate Content', variant: 'violet' },
+}
+
+// ============================================================================
 // Log Category Labels
 // ============================================================================
 
@@ -321,6 +343,7 @@ export const LOG_CATEGORY_LABELS: Record<LogCategory, string> = {
   common: 'Common',
   drawing: 'Drawing',
   task: 'Task',
+  async_image: 'Async Image',
 }
 
 // ============================================================================

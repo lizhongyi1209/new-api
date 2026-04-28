@@ -109,3 +109,13 @@ export const getAllTaskLogs = (params: GetTaskLogsParams) =>
 
 export const getUserTaskLogs = (params: GetTaskLogsParams) =>
   fetchLogs('/api/task', params, false)
+
+// ============================================================================
+// Async Image Log APIs (uses /api/task with platform=async_image filter)
+// ============================================================================
+
+export const getAllAsyncImageLogs = (params: GetTaskLogsParams) =>
+  fetchLogs('/api/task', params, true)
+
+export const getUserAsyncImageLogs = (params: GetTaskLogsParams) =>
+  fetchLogs('/api/task', params, false)
