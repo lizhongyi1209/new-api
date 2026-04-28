@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"mime"
 	"os"
 	"strings"
 	"time"
@@ -82,13 +81,7 @@ func UploadBase64ImageToR2(mimeType, base64Data string) (string, error) {
 		return "", fmt.Errorf("base64 decode failed: %w", err)
 	}
 
-	exts, err := mime.ExtensionsByType(mimeType)
-	ext := ".bin"
-	if err == nil && len(exts) > 0 {
-		ext = exts[len(exts)-1]
-	}
-
-	key := fmt.Sprintf("images/%s%s", uuid.New().String(), ext)
+	key := fmt.Sprintf("images/%s.png", uuid.New().String())
 
 	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
