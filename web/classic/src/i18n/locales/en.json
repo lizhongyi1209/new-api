@@ -471,6 +471,8 @@
     "任务日志": "Task Logs",
     "任务状态": "Status",
     "任务记录": "Task Records",
+    "异步日志": "Async Logs",
+    "异步绘图记录": "Async Image Records",
     "企业账户为特殊返回格式，需要特殊处理，如果非企业账户，请勿勾选": "Enterprise accounts have special return format and require special handling. If not an enterprise account, do not check this option",
     "优先级": "Priority",
     "优先订阅": "Subscription first",
