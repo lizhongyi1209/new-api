@@ -417,16 +417,26 @@ export const getTaskLogsColumns = ({
         const isSuccess = record.status === 'SUCCESS';
         const resultUrl = record.result_url;
         const hasResultUrl = typeof resultUrl === 'string' && /^https?:\/\//.test(resultUrl);
-        if (isSuccess && isVideoTask && hasResultUrl) {
+
+        // 图片预览：检查是否为图片生成任务
+        const isImageTask = record.action === 'generate' && record.platform === 'async_image';
+        const isGeminiImageTask = record.action === 'generateContent' && record.platform === 'async_image';
+
+        if (isSuccess && (isVideoTask || isImageTask || isGeminiImageTask) && hasResultUrl) {
+          const linkText = isVideoTask ? t('点击预览视频') : t('点击预览图片');
           return (
             <a
               href='#'
               onClick={(e) => {
                 e.preventDefault();
-                openVideoModal(resultUrl);
+                if (isVideoTask) {
+                  openVideoModal(resultUrl);
+                } else {
+                  window.open(resultUrl, '_blank');
+                }
               }}
             >
-              {t('点击预览视频')}
+              {linkText}
             </a>
           );
         }
