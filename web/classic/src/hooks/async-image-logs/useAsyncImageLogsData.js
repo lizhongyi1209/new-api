@@ -57,8 +57,8 @@ export const useAsyncImageLogsData = () => {
 
   const isAdminUser = isAdmin();
   const STORAGE_KEY = isAdminUser
-    ? 'async-image-logs-table-columns-admin'
-    : 'async-image-logs-table-columns-user';
+    ? 'async-image-logs-table-columns-admin-v2'
+    : 'async-image-logs-table-columns-user-v2';
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalContent, setModalContent] = useState('');
