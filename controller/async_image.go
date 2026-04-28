@@ -184,7 +184,15 @@ func AsyncTaskFetch(c *gin.Context) {
 	}
 
 	if task.Status == model.TaskStatusSuccess {
-		resp.Data = task.Data
+		if task.Platform == constant.TaskPlatformAsyncImage && task.PrivateData.ResultURL != "" {
+			data := map[string]interface{}{
+				"image_url": task.PrivateData.ResultURL,
+			}
+			dataBytes, _ := common.Marshal(data)
+			resp.Data = dataBytes
+		} else {
+			resp.Data = task.Data
+		}
 	} else if task.Status == model.TaskStatusFailure {
 		resp.Error = task.FailReason
 	}
