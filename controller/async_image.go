@@ -11,7 +11,9 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
 )
@@ -33,6 +35,18 @@ func AsyncImageSubmit(c *gin.Context) {
 	channelId := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
 	tokenId := c.GetInt("token_id")
 
+	// Build relay info for billing
+	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, req.Model)
+	if billingErr != nil {
+		c.JSON(billingErr.StatusCode, gin.H{
+			"error": gin.H{
+				"message": billingErr.Error(),
+				"type":    "billing_error",
+			},
+		})
+		return
+	}
+
 	task := &model.Task{
 		TaskID:     model.GenerateTaskID(),
 		UserId:     userId,
@@ -43,6 +57,7 @@ func AsyncImageSubmit(c *gin.Context) {
 		Status:     model.TaskStatusSubmitted,
 		Progress:   "0%",
 		SubmitTime: time.Now().Unix(),
+		Quota:      priceData.Quota,
 		Properties: model.Properties{
 			Input:           req.Prompt,
 			OriginModelName: req.Model,
@@ -51,7 +66,26 @@ func AsyncImageSubmit(c *gin.Context) {
 	}
 	task.SetData(req)
 
+	// Store billing context for later refund/settlement
+	if relayInfo != nil && priceData.Quota > 0 {
+		task.PrivateData.BillingSource = relayInfo.BillingSource
+		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
+		task.PrivateData.TokenId = tokenId
+		task.PrivateData.BillingContext = &model.TaskBillingContext{
+			ModelPrice:      priceData.ModelPrice,
+			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
+			ModelRatio:      priceData.ModelRatio,
+			OtherRatios:     priceData.OtherRatios,
+			OriginModelName: req.Model,
+			PerCallBilling:  true,
+		}
+	}
+
 	if err := task.Insert(); err != nil {
+		// Refund pre-consumed quota on insert failure
+		if relayInfo != nil && relayInfo.Billing != nil {
+			relayInfo.Billing.Refund(c)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"message": fmt.Sprintf("创建任务失败: %v", err),
@@ -60,6 +94,9 @@ func AsyncImageSubmit(c *gin.Context) {
 		})
 		return
 	}
+
+	// Record usage log at submission time
+	service.RecordAsyncImageSubmitLog(c, task, &req, relayInfo)
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)
 	gopool.Go(func() {
@@ -101,6 +138,18 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		modelName = fmt.Sprintf("%v", req["model"])
 	}
 
+	// Build relay info for billing
+	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, modelName)
+	if billingErr != nil {
+		c.JSON(billingErr.StatusCode, gin.H{
+			"error": gin.H{
+				"message": billingErr.Error(),
+				"type":    "billing_error",
+			},
+		})
+		return
+	}
+
 	task := &model.Task{
 		TaskID:     model.GenerateTaskID(),
 		UserId:     userId,
@@ -111,6 +160,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		Status:     model.TaskStatusSubmitted,
 		Progress:   "0%",
 		SubmitTime: time.Now().Unix(),
+		Quota:      priceData.Quota,
 		Properties: model.Properties{
 			OriginModelName: modelName,
 			TokenId:         tokenId,
@@ -118,7 +168,26 @@ func AsyncGeminiSubmit(c *gin.Context) {
 	}
 	task.SetData(req)
 
+	// Store billing context for later refund/settlement
+	if relayInfo != nil && priceData.Quota > 0 {
+		task.PrivateData.BillingSource = relayInfo.BillingSource
+		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
+		task.PrivateData.TokenId = tokenId
+		task.PrivateData.BillingContext = &model.TaskBillingContext{
+			ModelPrice:      priceData.ModelPrice,
+			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
+			ModelRatio:      priceData.ModelRatio,
+			OtherRatios:     priceData.OtherRatios,
+			OriginModelName: modelName,
+			PerCallBilling:  true,
+		}
+	}
+
 	if err := task.Insert(); err != nil {
+		// Refund pre-consumed quota on insert failure
+		if relayInfo != nil && relayInfo.Billing != nil {
+			relayInfo.Billing.Refund(c)
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
 				"message": fmt.Sprintf("创建任务失败: %v", err),
@@ -127,6 +196,9 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		})
 		return
 	}
+
+	// Record usage log at submission time
+	service.RecordAsyncGeminiSubmitLog(c, task, modelName, relayInfo)
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)
 	gopool.Go(func() {
@@ -137,6 +209,66 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		TaskID: task.TaskID,
 		Status: string(task.Status),
 	})
+}
+
+// prepareAsyncBilling builds a RelayInfo, calculates price, and pre-consumes quota.
+// Returns the relayInfo (with billing session attached) and priceData.
+// Returns nil relayInfo and a NewAPIError if billing fails.
+func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int, tokenId int, modelName string) (*relaycommon.RelayInfo, types.PriceData, *types.NewAPIError) {
+	channel, err := model.CacheGetChannel(channelId)
+	if err != nil {
+		return nil, types.PriceData{}, types.NewError(
+			fmt.Errorf("获取渠道信息失败: %v", err),
+			types.ErrorCodeQueryDataError,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
+
+	apiType, _ := common.ChannelType2APIType(channel.Type)
+
+	relayInfo := &relaycommon.RelayInfo{
+		UserId:          userId,
+		UsingGroup:      group,
+		OriginModelName: modelName,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: channel.Type,
+			ChannelId:   channel.Id,
+			ApiType:     apiType,
+		},
+		TokenId: tokenId,
+	}
+
+	// Populate user settings for billing preference
+	if userSetting, ok := common.GetContextKeyType[dto.UserSetting](c, constant.ContextKeyUserSetting); ok {
+		relayInfo.UserSetting = userSetting
+	}
+
+	if service.CalculatePriceFunc == nil {
+		return nil, types.PriceData{}, types.NewError(
+			fmt.Errorf("计费函数未初始化"),
+			types.ErrorCodeInvalidApiType,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
+
+	priceData, err := service.CalculatePriceFunc(c, relayInfo)
+	if err != nil {
+		return nil, types.PriceData{}, types.NewError(
+			fmt.Errorf("计算价格失败: %v", err),
+			types.ErrorCodeModelPriceError,
+			types.ErrOptionWithStatusCode(http.StatusBadRequest),
+		)
+	}
+	relayInfo.PriceData = priceData
+
+	// Pre-consume billing
+	if !priceData.FreeModel && priceData.Quota > 0 {
+		if apiErr := service.PreConsumeBilling(c, priceData.Quota, relayInfo); apiErr != nil {
+			return nil, priceData, apiErr
+		}
+	}
+
+	return relayInfo, priceData, nil
 }
 
 func AsyncTaskFetch(c *gin.Context) {
