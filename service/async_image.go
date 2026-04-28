@@ -744,16 +744,9 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	// Extract token usage from response
-	promptTokens := 1
-	completionTokens := 1
+	// Extract token usage from response (for future use)
 	if usageMetadata, ok := geminiResp["usageMetadata"].(map[string]interface{}); ok {
-		if pt, ok := usageMetadata["promptTokenCount"].(float64); ok {
-			promptTokens = int(pt)
-		}
-		if ct, ok := usageMetadata["candidatesTokenCount"].(float64); ok {
-			completionTokens = int(ct)
-		}
+		_, _ = usageMetadata["promptTokenCount"], usageMetadata["candidatesTokenCount"]
 	}
 
 	// Extract and upload images to R2
