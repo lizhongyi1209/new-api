@@ -19,7 +19,7 @@ import {
 } from './section-registry'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
-const TASK_LOG_SECTIONS = ['drawing', 'task'] as const
+const TASK_LOG_SECTIONS = ['drawing', 'task', 'async_image'] as const
 
 const SECTION_META: Record<
   UsageLogsSectionId,
@@ -36,6 +36,10 @@ const SECTION_META: Record<
   task: {
     titleKey: 'Task Logs',
     descriptionKey: 'View and manage your task logs',
+  },
+  async_image: {
+    titleKey: 'Async Image Logs',
+    descriptionKey: 'View and manage your async image generation logs',
   },
 }
 
@@ -91,8 +95,7 @@ function UsageLogsContent() {
     [navigate]
   )
 
-  const pageMeta =
-    activeCategory === 'common' ? SECTION_META.common : SECTION_META.task
+  const pageMeta = SECTION_META[activeCategory] ?? SECTION_META.common
   const showTaskSwitcher =
     activeCategory !== 'common' && visibleSections.length > 1
 
