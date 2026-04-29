@@ -77,7 +77,7 @@ func AsyncImageSubmit(c *gin.Context) {
 			ModelRatio:      priceData.ModelRatio,
 			OtherRatios:     priceData.OtherRatios,
 			OriginModelName: req.Model,
-			PerCallBilling:  true,
+			PerCallBilling:  priceData.UsePrice,
 		}
 	}
 
@@ -180,7 +180,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 			ModelRatio:      priceData.ModelRatio,
 			OtherRatios:     priceData.OtherRatios,
 			OriginModelName: modelName,
-			PerCallBilling:  true,
+			PerCallBilling:  priceData.UsePrice,
 		}
 	}
 
