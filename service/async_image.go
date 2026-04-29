@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -98,6 +99,7 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 	other["async_task_id"] = task.TaskID
 	other["request_path"] = "/async/v1/images/generations"
 	other["per_call_billing"] = relayInfo.PriceData.UsePrice
+	other["completion_ratio"] = ratio_setting.GetCompletionRatio(imageReq.Model)
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
@@ -147,6 +149,7 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 	other["async_task_id"] = task.TaskID
 	other["request_path"] = "/async/v1beta/models/" + modelName + ":generateContent"
 	other["per_call_billing"] = relayInfo.PriceData.UsePrice
+	other["completion_ratio"] = ratio_setting.GetCompletionRatio(modelName)
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
