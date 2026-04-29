@@ -761,11 +761,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 
 	// Settle billing: per-token models need post-completion recalculation with actual token counts
 	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		totalTokens := promptTokens + completionTokens
-		if tt, ok := tokenDetails["total_tokens"].(int); ok && tt > totalTokens {
-			totalTokens = tt
-		}
-		RecalculateTaskQuotaByTokens(ctx, task, totalTokens)
+		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
 	}
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed, generated %d images, tokens: p=%d c=%d", task.TaskID, imageCount, promptTokens, completionTokens))
