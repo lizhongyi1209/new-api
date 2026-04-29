@@ -60,81 +60,9 @@ func applyModelMapping(originModelName string, modelMappingJSON *string) string 
 	return currentModel
 }
 
-func recordAsyncImageConsumeLog(ctx context.Context, c *gin.Context, task *model.Task, imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo, imageCount int) {
-	// Get quota from PriceData (already calculated during request processing)
-	quota := relayInfo.PriceData.Quota
-
-	// Update user and channel quota
-	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
-	model.UpdateChannelUsedQuota(task.ChannelId, quota)
-
-	// Build log content
-	imageN := uint(1)
-	if imageReq.N != nil {
-		imageN = *imageReq.N
-	}
-
-	quality := "standard"
-	if imageReq.Quality == "hd" {
-		quality = "hd"
-	}
-
-	var logContent []string
-	if len(imageReq.Size) > 0 {
-		logContent = append(logContent, fmt.Sprintf("大小 %s", imageReq.Size))
-	}
-	if len(quality) > 0 {
-		logContent = append(logContent, fmt.Sprintf("品质 %s", quality))
-	}
-	if imageN > 0 {
-		logContent = append(logContent, fmt.Sprintf("生成数量 %d", imageN))
-	}
-	logContent = append(logContent, fmt.Sprintf("异步任务 %s", task.TaskID))
-
-	// Build other info
-	other := make(map[string]interface{})
-	other["model_ratio"] = relayInfo.PriceData.ModelRatio
-	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
-	other["model_price"] = relayInfo.PriceData.ModelPrice
-	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
-	other["is_model_mapped"] = relayInfo.ChannelMeta.IsModelMapped
-	if relayInfo.ChannelMeta.IsModelMapped {
-		other["upstream_model_name"] = relayInfo.ChannelMeta.UpstreamModelName
-	}
-	other["request_path"] = "/async/v1/images/generations"
-	other["async_task_id"] = task.TaskID
-
-	adminInfo := make(map[string]interface{})
-	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
-	other["admin_info"] = adminInfo
-
-	// Get token name
-	tokenName := ""
-	if task.Properties.TokenId > 0 {
-		if token, err := model.GetTokenById(task.Properties.TokenId); err == nil {
-			tokenName = token.Name
-		}
-	}
-
-	// Record consume log
-	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
-		ChannelId:        task.ChannelId,
-		PromptTokens:     1,
-		CompletionTokens: 1,
-		ModelName:        imageReq.Model,
-		TokenName:        tokenName,
-		Quota:            quota,
-		Content:          strings.Join(logContent, ", "),
-		TokenId:          task.Properties.TokenId,
-		UseTimeSeconds:   int(task.FinishTime - task.StartTime),
-		IsStream:         false,
-		Group:            task.Group,
-		Other:            other,
-	})
-}
-
 // RecordAsyncImageSubmitLog records a usage log at task submission time.
-func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.AsyncImageRequest, relayInfo *relaycommon.RelayInfo) {
+// It returns the log ID so the task can update the log with actual data on completion.
+func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.AsyncImageRequest, relayInfo *relaycommon.RelayInfo) int {
 	quota := relayInfo.PriceData.Quota
 
 	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
@@ -181,10 +109,10 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 		}
 	}
 
-	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
+	logId := model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
-		PromptTokens:     1,
-		CompletionTokens: 1,
+		PromptTokens:     0,
+		CompletionTokens: 0,
 		ModelName:        imageReq.Model,
 		TokenName:        tokenName,
 		Quota:            quota,
@@ -195,10 +123,14 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 		Group:            task.Group,
 		Other:            other,
 	})
+
+	task.PrivateData.SubmitLogID = logId
+	return logId
 }
 
 // RecordAsyncGeminiSubmitLog records a usage log at Gemini task submission time.
-func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName string, relayInfo *relaycommon.RelayInfo) {
+// It returns the log ID so the task can update the log with actual data on completion.
+func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName string, relayInfo *relaycommon.RelayInfo) int {
 	quota := relayInfo.PriceData.Quota
 
 	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
@@ -225,10 +157,10 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 		}
 	}
 
-	model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
+	logId := model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
 		ChannelId:        task.ChannelId,
-		PromptTokens:     1,
-		CompletionTokens: 1,
+		PromptTokens:     0,
+		CompletionTokens: 0,
 		ModelName:        modelName,
 		TokenName:        tokenName,
 		Quota:            quota,
@@ -239,69 +171,9 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 		Group:            task.Group,
 		Other:            other,
 	})
-}
 
-func recordAsyncGeminiConsumeLog(ctx context.Context, c *gin.Context, task *model.Task, relayInfo *relaycommon.RelayInfo, promptTokens, completionTokens int) {
-	// Get quota from PriceData (already calculated during request processing)
-	quota := relayInfo.PriceData.Quota
-
-	// Update user and channel quota
-	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quota)
-	model.UpdateChannelUsedQuota(task.ChannelId, quota)
-
-	// Build log content
-	logContent := fmt.Sprintf("Gemini 图片生成，异步任务 %s", task.TaskID)
-	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: recording log with quota=%d, content=%s", quota, logContent))
-
-	// Build other info
-	other := make(map[string]interface{})
-	other["model_ratio"] = relayInfo.PriceData.ModelRatio
-	other["group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupRatio
-	other["model_price"] = relayInfo.PriceData.ModelPrice
-	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
-	other["is_model_mapped"] = relayInfo.ChannelMeta.IsModelMapped
-	if relayInfo.ChannelMeta.IsModelMapped {
-		other["upstream_model_name"] = relayInfo.ChannelMeta.UpstreamModelName
-	}
-	other["request_path"] = "/async/v1beta/models/" + task.Properties.OriginModelName + ":generateContent"
-	other["async_task_id"] = task.TaskID
-	other["billing_source"] = "wallet"
-	other["cache_ratio"] = 0
-	other["cache_tokens"] = 0
-	other["completion_ratio"] = 0
-	other["frt"] = -1000
-	other["request_conversion"] = []string{"Google Gemini"}
-
-	adminInfo := make(map[string]interface{})
-	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
-	other["admin_info"] = adminInfo
-
-	// Get token name
-	tokenName := ""
-	if task.Properties.TokenId > 0 {
-		if token, err := model.GetTokenById(task.Properties.TokenId); err == nil {
-			tokenName = token.Name
-		}
-	}
-
-	// Record consume log
-	params := model.RecordConsumeLogParams{
-		ChannelId:        task.ChannelId,
-		PromptTokens:     promptTokens,
-		CompletionTokens: completionTokens,
-		ModelName:        task.Properties.OriginModelName,
-		TokenName:        tokenName,
-		Quota:            quota,
-		Content:          logContent,
-		TokenId:          task.Properties.TokenId,
-		UseTimeSeconds:   int(task.FinishTime - task.StartTime),
-		IsStream:         false,
-		Group:            task.Group,
-		Other:            other,
-	}
-	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: calling RecordConsumeLog with Content='%s'", params.Content))
-	model.RecordConsumeLog(c, task.UserId, params)
-	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: RecordConsumeLog called successfully"))
+	task.PrivateData.SubmitLogID = logId
+	return logId
 }
 
 func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
@@ -552,7 +424,61 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
-	logger.LogInfo(ctx, fmt.Sprintf("async_image: task %s completed, generated %d images", task.TaskID, len(imageResp.Data)))
+	// Update submission-time log with actual completion data
+	useTime := int(task.FinishTime - task.StartTime)
+	actualImageCount := len(imageResp.Data)
+	updateContent := buildAsyncImageCompleteContent(imageReq, actualImageCount, task.TaskID)
+	otherUpdates := map[string]interface{}{
+		"task_status":          "SUCCESS",
+		"generated_image_count": actualImageCount,
+	}
+	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, 0, 0, updateContent, otherUpdates)
+
+	logger.LogInfo(ctx, fmt.Sprintf("async_image: task %s completed, generated %d images", task.TaskID, actualImageCount))
+}
+
+// stripThoughtSignature removes thoughtSignature from all parts in a Gemini response.
+// Gemini thinking models include a massive base64-encoded thoughtSignature in each part,
+// which can be several megabytes and bloats the stored task data.
+func stripThoughtSignature(geminiResp map[string]interface{}) {
+	candidates, ok := geminiResp["candidates"].([]interface{})
+	if !ok {
+		return
+	}
+	for _, candidate := range candidates {
+		candidateMap, ok := candidate.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		content, ok := candidateMap["content"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		parts, ok := content["parts"].([]interface{})
+		if !ok {
+			continue
+		}
+		for _, part := range parts {
+			if partMap, ok := part.(map[string]interface{}); ok {
+				delete(partMap, "thoughtSignature")
+			}
+		}
+	}
+}
+
+func buildAsyncImageCompleteContent(imageReq *dto.ImageRequest, actualImageCount int, taskID string) string {
+	quality := "standard"
+	if imageReq.Quality == "hd" {
+		quality = "hd"
+	}
+	var parts []string
+	if len(imageReq.Size) > 0 {
+		parts = append(parts, fmt.Sprintf("大小 %s", imageReq.Size))
+	}
+	parts = append(parts, fmt.Sprintf("品质 %s", quality))
+	parts = append(parts, fmt.Sprintf("生成 %d 张图片", actualImageCount))
+	parts = append(parts, fmt.Sprintf("异步任务 %s（已完成）", taskID))
+	return strings.Join(parts, ", ")
 }
 
 func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
@@ -744,13 +670,32 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	// Extract token usage from response (for future use)
+	// Extract token usage from response
+	promptTokens := 0
+	completionTokens := 0
+	var tokenDetails map[string]interface{}
 	if usageMetadata, ok := geminiResp["usageMetadata"].(map[string]interface{}); ok {
-		_, _ = usageMetadata["promptTokenCount"], usageMetadata["candidatesTokenCount"]
+		if pt, ok := usageMetadata["promptTokenCount"].(float64); ok {
+			promptTokens = int(pt)
+		}
+		if ct, ok := usageMetadata["candidatesTokenCount"].(float64); ok {
+			completionTokens = int(ct)
+		}
+		tokenDetails = map[string]interface{}{}
+		if tt, ok := usageMetadata["totalTokenCount"].(float64); ok {
+			tokenDetails["total_tokens"] = int(tt)
+		}
+		if tt, ok := usageMetadata["thoughtsTokenCount"].(float64); ok {
+			tokenDetails["thought_tokens"] = int(tt)
+		}
 	}
+
+	// Strip thoughtSignature from parts before storing (it can be megabytes of base64)
+	stripThoughtSignature(geminiResp)
 
 	// Extract and upload images to R2
 	var firstImageURL string
+	imageCount := 0
 	if candidates, ok := geminiResp["candidates"].([]interface{}); ok && len(candidates) > 0 {
 		for _, candidate := range candidates {
 			if candidateMap, ok := candidate.(map[string]interface{}); ok {
@@ -774,6 +719,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 											_ = task.Update()
 											return
 										}
+										imageCount++
 										// Replace inline data with URL
 										delete(partMap, "inlineData")
 										partMap["imageUrl"] = publicURL
@@ -799,5 +745,17 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
-	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed", task.TaskID))
+	// Update submission-time log with actual completion data
+	useTime := int(task.FinishTime - task.StartTime)
+	updateContent := fmt.Sprintf("Gemini 图片生成，生成 %d 张图片，异步任务 %s（已完成）", imageCount, task.TaskID)
+	otherUpdates := map[string]interface{}{
+		"task_status":           "SUCCESS",
+		"generated_image_count": imageCount,
+	}
+	for k, v := range tokenDetails {
+		otherUpdates[k] = v
+	}
+	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, promptTokens, completionTokens, updateContent, otherUpdates)
+
+	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed, generated %d images, tokens: p=%d c=%d", task.TaskID, imageCount, promptTokens, completionTokens))
 }
