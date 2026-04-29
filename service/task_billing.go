@@ -246,10 +246,13 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 }
 
 // RecalculateTaskQuotaByTokens 根据实际 token 消耗重新计费（异步差额结算）。
-// 当任务成功且返回了 totalTokens 时，根据模型倍率和分组倍率重新计算实际扣费额度，
-// 与预扣费的差额进行补扣或退还。支持钱包和订阅计费来源。
-func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) {
-	if totalTokens <= 0 {
+// 使用与同步接口相同的计费公式：
+//
+//	quota = (promptTokens + completionTokens * completionRatio) * modelRatio * groupRatio * otherMultiplier
+//
+// 当任务成功且返回了 token 信息时，与预扣费的差额进行补扣或退还。支持钱包和订阅计费来源。
+func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, promptTokens int, completionTokens int) {
+	if promptTokens <= 0 && completionTokens <= 0 {
 		return
 	}
 
@@ -260,6 +263,11 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	// 只有配置了倍率(非固定价格)时才按 token 重新计费
 	if !hasRatioSetting || modelRatio <= 0 {
 		return
+	}
+
+	completionRatio := ratio_setting.GetCompletionRatio(modelName)
+	if completionRatio <= 0 {
+		completionRatio = 1.0
 	}
 
 	// 获取用户和组的倍率信息
@@ -294,9 +302,12 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		}
 	}
 
-	// 计算实际应扣费额度: totalTokens * modelRatio * groupRatio * otherMultiplier
-	actualQuota := int(float64(totalTokens) * modelRatio * finalGroupRatio * otherMultiplier)
+	// 使用与同步接口相同的计费公式：
+	// quota = (promptTokens + completionTokens * completionRatio) * modelRatio * groupRatio * otherMultiplier
+	quotaFloat := (float64(promptTokens) + float64(completionTokens)*completionRatio) * modelRatio * finalGroupRatio * otherMultiplier
+	actualQuota := int(quotaFloat)
 
-	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f", totalTokens, modelRatio, finalGroupRatio, otherMultiplier)
+	reason := fmt.Sprintf("token重算：p=%d, c=%d, completionRatio=%.2f, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f",
+		promptTokens, completionTokens, completionRatio, modelRatio, finalGroupRatio, otherMultiplier)
 	RecalculateTaskQuota(ctx, task, actualQuota, reason)
 }
