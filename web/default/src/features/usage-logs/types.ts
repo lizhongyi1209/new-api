@@ -146,6 +146,7 @@ export interface LogOtherData {
   audio_input_price?: number
   image_generation_call?: boolean
   image_generation_call_price?: number
+  per_call_billing?: boolean
   is_system_prompt_overwritten?: boolean
   po?: string[]
   billing_source?: string

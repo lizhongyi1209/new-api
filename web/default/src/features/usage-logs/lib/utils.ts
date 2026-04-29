@@ -50,9 +50,12 @@ export function getLogTypeConfig(type: number) {
 }
 
 /**
- * Check if log uses per-call billing
+ * Check if log uses per-call billing.
+ * Either model_price > 0 (fixed price configured) or the log explicitly
+ * signals per-call billing via the `per_call_billing` field (async tasks).
  */
-export function isPerCallBilling(modelPrice?: number): boolean {
+export function isPerCallBilling(modelPrice?: number, perCallBilling?: boolean): boolean {
+  if (perCallBilling) return true
   return (modelPrice ?? 0) > 0
 }
 

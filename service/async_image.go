@@ -97,6 +97,7 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
 	other["async_task_id"] = task.TaskID
 	other["request_path"] = "/async/v1/images/generations"
+	other["per_call_billing"] = true
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
@@ -145,6 +146,7 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
 	other["async_task_id"] = task.TaskID
 	other["request_path"] = "/async/v1beta/models/" + modelName + ":generateContent"
+	other["per_call_billing"] = true
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}

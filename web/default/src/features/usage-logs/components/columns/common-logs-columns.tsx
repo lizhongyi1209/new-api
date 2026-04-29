@@ -167,11 +167,15 @@ function buildDetailSegments(
       })
     }
   } else {
-    const isPerCall = isPerCallBilling(other.model_price)
+    const isPerCall = isPerCallBilling(other.model_price, other.per_call_billing)
     if (isPerCall) {
-      segments.push({
-        text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(other.model_price!, priceOpts)}`,
-      })
+      if (other.model_price != null && other.model_price > 0) {
+        segments.push({
+          text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(other.model_price!, priceOpts)}`,
+        })
+      } else {
+        segments.push({ text: t('Per-call') })
+      }
     } else if (other.model_ratio != null) {
       const inputPriceUSD = other.model_ratio * 2.0
       const baseEntries = [formatPriceCompact(inputPriceUSD)]
