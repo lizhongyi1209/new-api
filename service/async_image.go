@@ -698,7 +698,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	// Strip thoughtSignature from parts before storing (it can be megabytes of base64)
 	stripThoughtSignature(geminiResp)
 
-	// Extract and upload images to R2
+	// Strip thought parts and upload final images to R2.
+	// Thought parts (text + images) are internal model artifacts — discard them.
 	var firstImageURL string
 	imageCount := 0
 	if candidates, ok := geminiResp["candidates"].([]interface{}); ok && len(candidates) > 0 {
@@ -706,39 +707,46 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 			if candidateMap, ok := candidate.(map[string]interface{}); ok {
 				if content, ok := candidateMap["content"].(map[string]interface{}); ok {
 					if parts, ok := content["parts"].([]interface{}); ok {
+						filteredParts := make([]interface{}, 0, len(parts))
 						for _, part := range parts {
-							if partMap, ok := part.(map[string]interface{}); ok {
-								if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
-									if base64Data, ok := inlineData["data"].(string); ok {
-										mimeType := "image/png"
-										if mt, ok := inlineData["mimeType"].(string); ok {
-											mimeType = mt
-										}
-										publicURL, err := UploadBase64ImageToR2(mimeType, base64Data)
-										if err != nil {
-											logger.LogError(ctx, fmt.Sprintf("async_gemini: R2 upload failed: %v", err))
-											task.Status = model.TaskStatusFailure
-											task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
-											task.Progress = "100%"
-											task.FinishTime = time.Now().Unix()
-											_ = task.Update()
-											return
-										}
-										// Skip thought images (intermediate model refinements, not final output)
-										isThought, _ := partMap["thought"].(bool)
-										if !isThought {
-											imageCount++
-										}
-										// Replace inline data with URL
-										delete(partMap, "inlineData")
-										partMap["imageUrl"] = publicURL
-										if firstImageURL == "" && !isThought {
-											firstImageURL = publicURL
-										}
+							partMap, _ := part.(map[string]interface{})
+							if partMap == nil {
+								filteredParts = append(filteredParts, part)
+								continue
+							}
+							// Discard all thought parts (text and images)
+							isThought, _ := partMap["thought"].(bool)
+							if isThought {
+								continue
+							}
+							// Upload final image to R2
+							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
+								if base64Data, ok := inlineData["data"].(string); ok {
+									mimeType := "image/png"
+									if mt, ok := inlineData["mimeType"].(string); ok {
+										mimeType = mt
+									}
+									publicURL, err := UploadBase64ImageToR2(mimeType, base64Data)
+									if err != nil {
+										logger.LogError(ctx, fmt.Sprintf("async_gemini: R2 upload failed: %v", err))
+										task.Status = model.TaskStatusFailure
+										task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+										task.Progress = "100%"
+										task.FinishTime = time.Now().Unix()
+										_ = task.Update()
+										return
+									}
+									imageCount++
+									delete(partMap, "inlineData")
+									partMap["imageUrl"] = publicURL
+									if firstImageURL == "" {
+										firstImageURL = publicURL
 									}
 								}
 							}
+							filteredParts = append(filteredParts, part)
 						}
+						content["parts"] = filteredParts
 					}
 				}
 			}
