@@ -95,8 +95,9 @@ func AsyncImageSubmit(c *gin.Context) {
 		return
 	}
 
-	// Record usage log at submission time
+	// Record usage log at submission time and persist the log ID for later update
 	service.RecordAsyncImageSubmitLog(c, task, &req, relayInfo)
+	_ = task.Update()
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)
 	gopool.Go(func() {
@@ -197,8 +198,9 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		return
 	}
 
-	// Record usage log at submission time
+	// Record usage log at submission time and persist the log ID for later update
 	service.RecordAsyncGeminiSubmitLog(c, task, modelName, relayInfo)
+	_ = task.Update()
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)
 	gopool.Go(func() {

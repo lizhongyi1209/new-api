@@ -204,9 +204,9 @@ type RecordConsumeLogParams struct {
 	Other            map[string]interface{} `json:"other"`
 }
 
-func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
+func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) int {
 	if !common.LogConsumeEnabled {
-		return
+		return 0
 	}
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
@@ -249,11 +249,51 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
+		return 0
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {
 			LogQuotaData(userId, username, params.ModelName, params.Quota, common.GetTimestamp(), params.PromptTokens+params.CompletionTokens)
 		})
+	}
+	return log.Id
+}
+
+// UpdateConsumeLogOnComplete updates a consume log entry after an async task completes.
+// It fills in fields that were unknown at submission time: use_time, content, token counts, and additional other info.
+func UpdateConsumeLogOnComplete(logId int, useTimeSeconds int, promptTokens int, completionTokens int, content string, otherUpdates map[string]interface{}) {
+	if logId == 0 {
+		return
+	}
+
+	// Read existing log to merge Other
+	var log Log
+	if err := LOG_DB.Where("id = ?", logId).First(&log).Error; err != nil {
+		common.SysLog(fmt.Sprintf("UpdateConsumeLogOnComplete: log %d not found: %v", logId, err))
+		return
+	}
+
+	updates := map[string]interface{}{
+		"use_time":          useTimeSeconds,
+		"prompt_tokens":     promptTokens,
+		"completion_tokens": completionTokens,
+		"content":           content,
+	}
+
+	// Merge other fields
+	if len(otherUpdates) > 0 {
+		otherMap, _ := common.StrToMap(log.Other)
+		if otherMap == nil {
+			otherMap = make(map[string]interface{})
+		}
+		for k, v := range otherUpdates {
+			otherMap[k] = v
+		}
+		updates["other"] = common.MapToJsonStr(otherMap)
+	}
+
+	if err := LOG_DB.Model(&Log{}).Where("id = ?", logId).Updates(updates).Error; err != nil {
+		common.SysLog(fmt.Sprintf("UpdateConsumeLogOnComplete: failed to update log %d: %v", logId, err))
 	}
 }
 
