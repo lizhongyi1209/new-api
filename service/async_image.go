@@ -724,11 +724,15 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 											_ = task.Update()
 											return
 										}
-										imageCount++
+										// Skip thought images (intermediate model refinements, not final output)
+										isThought, _ := partMap["thought"].(bool)
+										if !isThought {
+											imageCount++
+										}
 										// Replace inline data with URL
 										delete(partMap, "inlineData")
 										partMap["imageUrl"] = publicURL
-										if firstImageURL == "" {
+										if firstImageURL == "" && !isThought {
 											firstImageURL = publicURL
 										}
 									}
