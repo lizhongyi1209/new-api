@@ -150,7 +150,7 @@ function BillingBreakdown(props: {
 }) {
   const { t } = useTranslation()
   const { log, other, isAdmin } = props
-  const isPerCall = isPerCallBilling(other.model_price)
+  const isPerCall = isPerCallBilling(other.model_price, other.per_call_billing)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
   const tieredSummary = getTieredBillingSummary(other)
