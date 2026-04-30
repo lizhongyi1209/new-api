@@ -66,7 +66,14 @@ const AsyncImage = () => {
           })}
           t={asyncImageLogsData.t}
         >
-          <TaskLogsTable {...asyncImageLogsData} />
+          <TaskLogsTable
+            {...asyncImageLogsData}
+            getDurationColor={(durationSec) => {
+              if (durationSec > 300) return 'red';
+              if (durationSec > 100) return 'yellow';
+              return 'green';
+            }}
+          />
         </CardPro>
       </Layout>
     </div>

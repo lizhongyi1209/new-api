@@ -691,6 +691,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 			tokenDetails["total_tokens"] = int(tt)
 		}
 		if tt, ok := usageMetadata["thoughtsTokenCount"].(float64); ok {
+			completionTokens += int(tt)
 			tokenDetails["thought_tokens"] = int(tt)
 		}
 	}
