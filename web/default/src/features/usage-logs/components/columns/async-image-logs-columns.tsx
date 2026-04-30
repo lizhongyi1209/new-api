@@ -41,6 +41,11 @@ export function useAsyncImageLogsColumns(
       finishTimeKey: 'finish_time',
       unit: 'seconds',
       headerLabel: t('Duration'),
+      getVariant: (durationSec) => {
+        if (durationSec > 300) return 'red'
+        if (durationSec > 100) return 'yellow'
+        return 'green'
+      },
     }),
   ]
 
