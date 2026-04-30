@@ -238,6 +238,8 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 			ApiType:     apiType,
 		},
 		TokenId: tokenId,
+		TokenKey: common.GetContextKeyString(c, constant.ContextKeyTokenKey),
+		TokenUnlimited: common.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
 	}
 
 	// Populate user settings for billing preference
