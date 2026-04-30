@@ -77,10 +77,10 @@ const renderTimestamp = (timestampInSeconds) => {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`; // 格式化输出
 };
 
-function renderDuration(submit_time, finishTime) {
+function renderDuration(submit_time, finishTime, getColor) {
   if (!submit_time || !finishTime) return 'N/A';
   const durationSec = finishTime - submit_time;
-  const color = durationSec > 60 ? 'red' : 'green';
+  const color = getColor ? getColor(durationSec) : (durationSec > 60 ? 'red' : 'green');
 
   // 返回带有样式的颜色标签
   return (
@@ -241,6 +241,7 @@ export const getTaskLogsColumns = ({
   isAdminUser,
   openVideoModal,
   openAudioModal,
+  getDurationColor,
 }) => {
   return [
     {
@@ -264,7 +265,7 @@ export const getTaskLogsColumns = ({
       title: t('花费时间'),
       dataIndex: 'finish_time',
       render: (finish, record) => {
-        return <>{finish ? renderDuration(record.submit_time, finish) : '-'}</>;
+        return <>{finish ? renderDuration(record.submit_time, finish, getDurationColor) : '-'}</>;
       },
     },
     {
