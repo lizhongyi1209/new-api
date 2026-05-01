@@ -1,0 +1,95 @@
+# 分销子站 #3 New-API Docker Compose — api-xiaok.o1key.cn(腾讯云全球加速)
+#
+# 与主站、moti、sub2 完全隔离：独立容器、独立端口(6002)、独立网络、独立库。
+# 共享同一份源码/镜像构建 —— rebuild 时一起获得功能更新。
+#
+# 启动： docker compose -p new-api-sub3 -f docker-compose.sub3.yml --env-file .env.sub3 up --build -d
+#
+# 关键差异：
+#   - 端口 6002（主站 3000 / moti 子站 6000 / sub2 子站 6001）
+#   - LOCK_CHANNEL_TO_ROOT=true —— 渠道增删改仅 root(站主)可操作
+#   - 独立 postgres-sub3 / redis-sub3 容器与数据卷
+
+version: '3.4'
+
+services:
+  new-api-sub3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: new-api-sub3
+    restart: always
+    command: --log-dir /app/logs
+    ports:
+      - "6002:3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    volumes:
+      - ./data-sub3:/data
+      - ./logs-sub3:/app/logs
+    environment:
+      - SQL_DSN=postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@postgres-sub3:5432/${POSTGRES_DB:-new-api-sub3}
+      - REDIS_CONN_STRING=redis://:${REDIS_PASSWORD}@redis-sub3:6379
+      - TZ=Asia/Shanghai
+      - ERROR_LOG_ENABLED=true
+      - NODE_NAME=new-api-sub3-node-1
+      - LOCK_CHANNEL_TO_ROOT=true
+      - TASK_TIMEOUT_MINUTES=30
+      - SESSION_SECRET=${SESSION_SECRET}
+      - CRYPTO_SECRET=${CRYPTO_SECRET}
+      - R2_ACCOUNT_ID=3b918f80852289d9879e7f73bccc2e22
+      - R2_ACCESS_KEY_ID=4343befbc1949bcffabeefea95037224
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
+      - R2_BUCKET=api-o1key
+      - R2_PUBLIC_BASE_URL=https://assetcache.o1key.com
+      - R2_STORAGE_HOSTS=${R2_STORAGE_HOSTS:-cf-api.o1key.cn,cf-api.o1key.com}
+      # 高并发优化（按子站负载，与 moti / sub2 子站一致）
+      - SQL_MAX_IDLE_CONNS=50
+      - SQL_MAX_OPEN_CONNS=500
+      - SQL_MAX_LIFETIME=120
+      - MEMORY_CACHE_ENABLED=true
+      - BATCH_UPDATE_ENABLED=true
+      - BATCH_UPDATE_INTERVAL=3
+      - SYNC_FREQUENCY=30
+      - REDIS_POOL_SIZE=20
+    depends_on:
+      - redis-sub3
+      - postgres-sub3
+    networks:
+      - new-api-sub3-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis-sub3:
+    image: redis:latest
+    container_name: redis-sub3
+    restart: always
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "1gb", "--maxmemory-policy", "allkeys-lru"]
+    networks:
+      - new-api-sub3-network
+
+  postgres-sub3:
+    image: postgres:15
+    container_name: postgres-sub3
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-new-api-sub3}
+    volumes:
+      - pg_data_sub3:/var/lib/postgresql/data
+    networks:
+      - new-api-sub3-network
+
+volumes:
+  pg_data_sub3:
+
+networks:
+  new-api-sub3-network:
+    driver: bridge

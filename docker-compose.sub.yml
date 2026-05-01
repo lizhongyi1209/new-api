@@ -1,0 +1,97 @@
+# 分销子站 New-API Docker Compose
+#
+# 与主站(docker-compose.yml)完全隔离：独立容器、独立端口(3001)、独立网络、独立库。
+# 共享的是同一份源码/镜像构建 —— rebuild 时与主站一起获得功能更新。
+#
+# 启动： docker compose -f docker-compose.sub.yml --env-file .env.sub up --build -d
+#
+# 关键差异：
+#   - 端口 6000（主站 3000）
+#   - LOCK_CHANNEL_TO_ROOT=true —— 渠道增删改仅 root(站主)可操作，下级 admin 只能查看/测试
+#   - 独立 postgres-sub / redis-sub 容器与数据卷（用户数据不与主站共享）
+
+version: '3.4'
+
+services:
+  new-api-sub:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: new-api-sub
+    restart: always
+    command: --log-dir /app/logs
+    ports:
+      - "6000:3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    volumes:
+      - ./data-sub:/data
+      - ./logs-sub:/app/logs
+    environment:
+      - SQL_DSN=postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@postgres-sub:5432/${POSTGRES_DB:-new-api-sub}
+      - REDIS_CONN_STRING=redis://:${REDIS_PASSWORD}@redis-sub:6379
+      - TZ=Asia/Shanghai
+      - ERROR_LOG_ENABLED=true
+      - NODE_NAME=new-api-sub-node-1
+      # 分销子站核心开关：渠道写操作收紧到仅 root
+      - LOCK_CHANNEL_TO_ROOT=true
+      # 异步任务超时兜底（与主站一致）
+      - TASK_TIMEOUT_MINUTES=30
+      - SESSION_SECRET=${SESSION_SECRET}
+      - CRYPTO_SECRET=${CRYPTO_SECRET}
+      # ===== 对象存储（子站如需生图落地，可复用主站同一套，或留空走主站直链）=====
+      - R2_ACCOUNT_ID=${R2_ACCOUNT_ID:-}
+      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID:-}
+      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY:-}
+      - R2_BUCKET=${R2_BUCKET:-}
+      - R2_PUBLIC_BASE_URL=${R2_PUBLIC_BASE_URL:-}
+      # ===== 高并发优化（按子站负载调小，默认沿用主站思路）=====
+      - SQL_MAX_IDLE_CONNS=50
+      - SQL_MAX_OPEN_CONNS=500
+      - SQL_MAX_LIFETIME=120
+      - MEMORY_CACHE_ENABLED=true
+      - BATCH_UPDATE_ENABLED=true
+      - BATCH_UPDATE_INTERVAL=3
+      - SYNC_FREQUENCY=30
+      - REDIS_POOL_SIZE=20
+    depends_on:
+      - redis-sub
+      - postgres-sub
+    networks:
+      - new-api-sub-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis-sub:
+    image: redis:latest
+    container_name: redis-sub
+    restart: always
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--maxmemory", "1gb", "--maxmemory-policy", "allkeys-lru"]
+    networks:
+      - new-api-sub-network
+
+  postgres-sub:
+    image: postgres:15
+    container_name: postgres-sub
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-new-api-sub}
+    volumes:
+      - pg_data_sub:/var/lib/postgresql/data
+    networks:
+      - new-api-sub-network
+
+volumes:
+  pg_data_sub:
+
+networks:
+  new-api-sub-network:
+    driver: bridge

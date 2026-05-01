@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 interface ImageDialogProps {
   imageUrl: string
   taskId?: string
+  prompt?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -33,6 +34,7 @@ interface ImageDialogProps {
 export function ImageDialog({
   imageUrl,
   taskId,
+  prompt,
   open,
   onOpenChange,
 }: ImageDialogProps) {
@@ -100,6 +102,18 @@ export function ImageDialog({
               </div>
             )}
           </div>
+
+          {/* Prompt */}
+          {prompt && (
+            <div className='mt-4 space-y-1'>
+              <p className='text-muted-foreground text-xs font-medium'>{t('Prompt')}</p>
+              <div className='bg-muted rounded-md p-3'>
+                <p className='text-foreground text-sm whitespace-pre-wrap break-all'>
+                  {prompt}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Image URL */}
           <div className='bg-muted mt-4 rounded-md p-3'>

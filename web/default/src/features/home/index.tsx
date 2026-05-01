@@ -89,7 +89,6 @@ export function Home() {
     <PublicLayout showMainContainer={false}>
       <Hero isAuthenticated={isAuthenticated} />
       <Stats />
-      <Features />
       <HowItWorks />
       <CTA isAuthenticated={isAuthenticated} />
       <Footer />
