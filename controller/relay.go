@@ -318,6 +318,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	if newAPIError != nil {
 		return nil, newAPIError
 	}
+	// 同步 relayInfo.UsingGroup：SetupContextForSelectedChannel 已将渠道分组写入 Gin context，
+	// 但 relayInfo 是在此之前创建的，需同步更新，否则后续 HandleGroupRatio 会使用错误的倍率。
+	info.UsingGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	return channel, nil
 }
 
