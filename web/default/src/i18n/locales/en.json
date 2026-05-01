@@ -4454,6 +4454,15 @@
     "operation and charging behavior": "operation and charging behavior",
     "，": ", ",
     "，and ": ", and ",
-    "、": ", "
+    "、": ", ",
+    "Legacy Format Template": "Legacy Format Template",
+    "Video Preview": "Video Preview",
+    "View the generated video": "View the generated video",
+    "Failed to load video": "Failed to load video",
+    "Your browser does not support video playback.": "Your browser does not support video playback.",
+    "Click to view result": "Click to view result",
+    "Prompt": "Prompt",
+    "Task Detail": "Task Detail",
+    "Full request and response data for this task": "Full request and response data for this task"
   }
 }

@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -28,26 +10,25 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
 
-interface ImageDialogProps {
-  imageUrl: string
+interface VideoDialogProps {
+  videoUrl: string
   taskId?: string
   prompt?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
-export function ImageDialog({
-  imageUrl,
+export function VideoDialog({
+  videoUrl,
   taskId,
   prompt,
   open,
   onOpenChange,
-}: ImageDialogProps) {
+}: VideoDialogProps) {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
 
-  // Reset loading state when dialog opens or image URL changes
   const handleOpenChange = (newOpen: boolean) => {
     if (newOpen) {
       setIsLoading(true)
@@ -56,12 +37,12 @@ export function ImageDialog({
     onOpenChange(newOpen)
   }
 
-  const handleImageLoad = () => {
+  const handleLoadedData = () => {
     setIsLoading(false)
     setHasError(false)
   }
 
-  const handleImageError = () => {
+  const handleVideoError = () => {
     setIsLoading(false)
     setHasError(true)
   }
@@ -70,39 +51,38 @@ export function ImageDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className='sm:max-w-3xl'>
         <DialogHeader>
-          <DialogTitle>{t('Image Preview')}</DialogTitle>
+          <DialogTitle>{t('Video Preview')}</DialogTitle>
           <DialogDescription>
             {taskId
               ? `${t('Task ID:')} ${taskId}`
-              : t('View the generated image')}
+              : t('View the generated video')}
           </DialogDescription>
         </DialogHeader>
 
         <ScrollArea className='max-h-[600px]'>
           <div className='py-4'>
             <div className='bg-muted/50 relative flex min-h-[300px] items-center justify-center rounded-lg border'>
-              {/* Skeleton - show when loading or error */}
               {(isLoading || hasError) && (
                 <Skeleton className='absolute inset-0 h-full w-full rounded-lg' />
               )}
 
-              {/* Actual Image */}
-              <img
-                src={imageUrl}
-                alt={t('Generated image')}
-                className={`max-h-[550px] w-full rounded-lg object-contain ${
+              <video
+                src={videoUrl}
+                controls
+                className={`max-h-[550px] w-full rounded-lg ${
                   isLoading || hasError ? 'opacity-0' : 'opacity-100'
                 }`}
-                onLoad={handleImageLoad}
-                onError={handleImageError}
-                loading='lazy'
-              />
+                onLoadedData={handleLoadedData}
+                onError={handleVideoError}
+                preload='metadata'
+              >
+                {t('Your browser does not support video playback.')}
+              </video>
 
-              {/* Error text overlay (shown on skeleton) */}
               {hasError && (
                 <div className='absolute inset-0 flex items-center justify-center'>
                   <p className='text-muted-foreground text-sm'>
-                    {t('Failed to load image')}
+                    {t('Failed to load video')}
                   </p>
                 </div>
               )}
@@ -120,10 +100,10 @@ export function ImageDialog({
               </div>
             )}
 
-            {/* Image URL */}
+            {/* Video URL */}
             <div className='bg-muted mt-4 rounded-md p-3'>
               <p className='text-muted-foreground font-mono text-xs break-all'>
-                {imageUrl}
+                {videoUrl}
               </p>
             </div>
           </div>

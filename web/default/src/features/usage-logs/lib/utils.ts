@@ -284,7 +284,10 @@ export async function fetchLogsByCategory(
       ? { mj_id: searchParams.filter as string | undefined }
       : {}),
     ...(logCategory === 'task'
-      ? { task_id: searchParams.filter as string | undefined }
+      ? {
+          task_id: searchParams.filter as string | undefined,
+          exclude_platform: 'async_image',
+        }
       : {}),
     ...(logCategory === 'async_image'
       ? {
@@ -310,4 +313,42 @@ export async function fetchLogsByCategory(
   return isAdmin
     ? await getAllTaskLogs(paramsWithFilter as GetTaskLogsParams)
     : await getUserTaskLogs(paramsWithFilter as GetTaskLogsParams)
+}
+
+/**
+ * Extract user prompt from task log record.
+ * Checks multiple fields: properties.input → data.contents → data prompt
+ */
+export function extractPrompt(record: Record<string, unknown>): string | undefined {
+  // 1. properties.input
+  const props = record.properties as Record<string, unknown> | undefined
+  if (props?.input && typeof props.input === 'string' && props.input.trim()) {
+    return props.input.trim()
+  }
+
+  // 2. data.contents (Gemini format)
+  const data = record.data
+  if (data && typeof data === 'object') {
+    const dataObj = data as Record<string, unknown>
+    // Check data.contents for user role text
+    const contents = dataObj.contents
+    if (Array.isArray(contents)) {
+      for (const c of contents) {
+        if (c && typeof c === 'object' && (c as Record<string, unknown>).role === 'user') {
+          const parts = (c as Record<string, unknown>).parts as Array<Record<string, unknown>> | undefined
+          if (parts) {
+            const texts = parts
+              .map((p) => (typeof p.text === 'string' ? p.text : ''))
+              .filter(Boolean)
+            if (texts.length > 0) return texts.join('\n')
+          }
+        }
+      }
+    }
+    // Check data.prompt or data.input (other formats)
+    if (typeof dataObj.prompt === 'string' && dataObj.prompt.trim()) return dataObj.prompt.trim()
+    if (typeof dataObj.input === 'string' && dataObj.input.trim()) return dataObj.input.trim()
+  }
+
+  return undefined
 }

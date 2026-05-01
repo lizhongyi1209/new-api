@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import i18n from 'i18next'
-import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
@@ -35,22 +34,44 @@ export const resources = {
   vi,
 } as const
 
+// Simple language detector without Chrome Built-in AI dependency
+const storageKey = 'i18nextLng'
+const customLanguageDetector = {
+  name: 'customDetector',
+  lookup() {
+    try {
+      const stored = localStorage.getItem(storageKey)
+      if (stored) return stored
+    } catch { /* empty */ }
+    if (typeof navigator !== 'undefined' && navigator.language) {
+      const lang = navigator.language.split('-')[0]
+      if (lang && ['en', 'zh', 'fr', 'ru', 'ja', 'vi'].includes(lang)) return lang
+    }
+    return undefined
+  },
+  cacheUserLanguage(lng: string) {
+    try { localStorage.setItem(storageKey, lng) } catch { /* empty */ }
+  },
+}
+
 i18n
-  .use(LanguageDetector)
+  .use({
+    type: 'languageDetector' as const,
+    init: () => {},
+    detect: () => customLanguageDetector.lookup(),
+    cacheUserLanguage: (lng: string) => customLanguageDetector.cacheUserLanguage(lng),
+  })
   .use(initReactI18next)
   .init({
     resources,
     fallbackLng: 'en',
     supportedLngs: ['en', 'zh', 'fr', 'ru', 'ja', 'vi'],
-    load: 'languageOnly', // Convert zh-CN -> zh
-    nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
+    load: 'languageOnly',
+    nsSeparator: false,
+    showSupportNotice: false,
     debug: import.meta.env.DEV,
     interpolation: {
-      escapeValue: false, // not needed for react as it escapes by default
-    },
-    detection: {
-      order: ['localStorage', 'navigator'],
-      caches: ['localStorage'],
+      escapeValue: false,
     },
   })
 
