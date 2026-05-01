@@ -4399,6 +4399,15 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
-  }
+    "Zoom": "缩放",
+    "Legacy Format Template": "旧格式模板"
+  },
+  "Video Preview": "视频预览",
+  "View the generated video": "查看生成的视频",
+  "Failed to load video": "视频加载失败",
+  "Your browser does not support video playback.": "您的浏览器不支持视频播放。",
+  "Click to view result": "点击查看结果",
+  "Prompt": "提示词",
+  "Task Detail": "任务详情",
+  "Full request and response data for this task": "该任务的完整请求和响应数据"
 }

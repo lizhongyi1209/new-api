@@ -5,6 +5,7 @@ import { Image } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/status-badge'
+import { extractPrompt } from '../../lib/utils'
 import { TASK_STATUS } from '../../constants'
 import {
   asyncImageActionMapper,
@@ -156,6 +157,7 @@ export function useAsyncImageLogsColumns(
               <ImageDialog
                 imageUrl={resultUrl}
                 taskId={log.task_id}
+                prompt={extractPrompt(log as unknown as Record<string, unknown>)}
                 open={dialogOpen}
                 onOpenChange={setDialogOpen}
               />

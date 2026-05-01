@@ -236,6 +236,12 @@ export interface TaskLog {
   data?: string // JSON string
   fail_reason?: string
   result_url?: string // Async result URL (image, video, etc.)
+  properties?: {
+    input?: string
+    upstream_model_name?: string
+    origin_model_name?: string
+    token_id?: number
+  }
   status: string // NOT_START, SUBMITTED, IN_PROGRESS, SUCCESS, FAILURE, QUEUED, UNKNOWN
   other?: string
   created_at?: number
@@ -312,6 +318,7 @@ export interface GetTaskLogsParams {
   channel_id?: string
   task_id?: string
   platform?: string
+  exclude_platform?: string
   start_timestamp?: number
   end_timestamp?: number
 }
