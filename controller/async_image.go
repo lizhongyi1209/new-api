@@ -266,6 +266,8 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 	relayInfo.PriceData = priceData
 
 	// Pre-consume billing
+	// 异步任务必须强制预扣，禁用信任额度旁路，确保余额实际扣除
+	relayInfo.ForcePreConsume = true
 	if !priceData.FreeModel && priceData.Quota > 0 {
 		if apiErr := service.PreConsumeBilling(c, priceData.Quota, relayInfo); apiErr != nil {
 			return nil, priceData, apiErr
