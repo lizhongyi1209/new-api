@@ -231,9 +231,9 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 	}
 	if queryParams.Platform != "" {
 		query = query.Where("platform = ?", queryParams.Platform)
-		if queryParams.ExcludePlatform != "" {
-			query = query.Where("platform != ?", queryParams.ExcludePlatform)
-		}
+	}
+	if queryParams.ExcludePlatform != "" {
+		query = query.Where("platform != ?", queryParams.ExcludePlatform)
 	}
 	if queryParams.StartTimestamp != 0 {
 		// 假设您已将前端传来的时间戳转换为数据库所需的时间格式，并处理了时间戳的验证和解析
