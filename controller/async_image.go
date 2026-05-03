@@ -228,14 +228,20 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 
 	apiType, _ := common.ChannelType2APIType(channel.Type)
 
+	upstreamModelName := service.ApplyModelMapping(modelName, channel.ModelMapping)
+	isModelMapped := upstreamModelName != modelName
+
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          userId,
+		UserGroup:       common.GetContextKeyString(c, constant.ContextKeyUserGroup),
 		UsingGroup:      group,
 		OriginModelName: modelName,
 		ChannelMeta: &relaycommon.ChannelMeta{
-			ChannelType: channel.Type,
-			ChannelId:   channel.Id,
-			ApiType:     apiType,
+			ChannelType:       channel.Type,
+			ChannelId:         channel.Id,
+			ApiType:           apiType,
+			UpstreamModelName: upstreamModelName,
+			IsModelMapped:     isModelMapped,
 		},
 		TokenId: tokenId,
 		TokenKey: common.GetContextKeyString(c, constant.ContextKeyTokenKey),

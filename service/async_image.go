@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -35,7 +36,7 @@ var GetImageAdaptorFunc func(apiType int) ImageAdaptor
 var GetGeminiAdaptorFunc func(apiType int) GeminiAdaptor
 var CalculatePriceFunc func(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error)
 
-func applyModelMapping(originModelName string, modelMappingJSON *string) string {
+func ApplyModelMapping(originModelName string, modelMappingJSON *string) string {
 	if modelMappingJSON == nil || *modelMappingJSON == "" || *modelMappingJSON == "{}" {
 		return originModelName
 	}
@@ -100,6 +101,10 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 	other["request_path"] = "/async/v1/images/generations"
 	other["per_call_billing"] = relayInfo.PriceData.UsePrice
 	other["completion_ratio"] = ratio_setting.GetCompletionRatio(imageReq.Model)
+	if relayInfo.IsModelMapped {
+		other["is_model_mapped"] = true
+		other["upstream_model_name"] = relayInfo.UpstreamModelName
+	}
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
@@ -150,6 +155,10 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 	other["request_path"] = "/async/v1beta/models/" + modelName + ":generateContent"
 	other["per_call_billing"] = relayInfo.PriceData.UsePrice
 	other["completion_ratio"] = ratio_setting.GetCompletionRatio(modelName)
+	if relayInfo.IsModelMapped {
+		other["is_model_mapped"] = true
+		other["upstream_model_name"] = relayInfo.UpstreamModelName
+	}
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
@@ -249,11 +258,12 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	upstreamModelName := applyModelMapping(imageReq.Model, channel.ModelMapping)
+	upstreamModelName := ApplyModelMapping(imageReq.Model, channel.ModelMapping)
 	isModelMapped := upstreamModelName != imageReq.Model
 
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:     task.UserId,
+		UserGroup:  common.GetContextKeyString(c, constant.ContextKeyUserGroup),
 		UsingGroup: task.Group,
 		Request:    imageReq,
 		RelayMode:  relayconstant.RelayModeImagesGenerations,
@@ -434,10 +444,18 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	actualImageCount := len(imageResp.Data)
 	updateContent := buildAsyncImageCompleteContent(imageReq, actualImageCount, task.TaskID)
 	otherUpdates := map[string]interface{}{
-		"task_status":          "SUCCESS",
+		"task_status":           "SUCCESS",
 		"generated_image_count": actualImageCount,
 	}
+	if isModelMapped {
+		otherUpdates["is_model_mapped"] = true
+		otherUpdates["upstream_model_name"] = upstreamModelName
+	}
 	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, 0, 0, updateContent, otherUpdates)
+
+	// Persist upstream model name on task properties
+	task.Properties.UpstreamModelName = upstreamModelName
+	_ = task.Update()
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_image: task %s completed, generated %d images", task.TaskID, actualImageCount))
 }
@@ -572,11 +590,12 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	upstreamModelName := applyModelMapping(task.Properties.OriginModelName, channel.ModelMapping)
+	upstreamModelName := ApplyModelMapping(task.Properties.OriginModelName, channel.ModelMapping)
 	isModelMapped := upstreamModelName != task.Properties.OriginModelName
 
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          task.UserId,
+		UserGroup:       common.GetContextKeyString(c, constant.ContextKeyUserGroup),
 		UsingGroup:      task.Group,
 		RelayMode:       relayconstant.RelayModeGemini,
 		OriginModelName: task.Properties.OriginModelName,
@@ -773,7 +792,19 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	for k, v := range tokenDetails {
 		otherUpdates[k] = v
 	}
+	if isModelMapped {
+		otherUpdates["is_model_mapped"] = true
+		otherUpdates["upstream_model_name"] = upstreamModelName
+	}
+	// Record actual model version from upstream Gemini response
+	if modelVersion, ok := geminiResp["modelVersion"].(string); ok && modelVersion != "" {
+		otherUpdates["upstream_model_version"] = modelVersion
+	}
 	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, promptTokens, completionTokens, updateContent, otherUpdates)
+
+	// Persist upstream model name on task properties
+	task.Properties.UpstreamModelName = upstreamModelName
+	_ = task.Update()
 
 	// Settle billing: per-token models need post-completion recalculation with actual token counts
 	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
