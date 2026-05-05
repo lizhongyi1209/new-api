@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -88,6 +90,66 @@ func UploadBase64ImageToR2(mimeType, base64Data string) (string, error) {
 		Key:         aws.String(key),
 		Body:        bytes.NewReader(imgBytes),
 		ContentType: aws.String(mimeType),
+	})
+	if err != nil {
+		return "", fmt.Errorf("r2 upload failed: %w", err)
+	}
+
+	return fmt.Sprintf("%s/%s", baseURL, key), nil
+}
+
+// convertPNGToWebP converts PNG bytes to WebP using the cwebp CLI tool.
+// quality is 0-100, 85 is recommended for visually lossless results.
+func convertPNGToWebP(pngBytes []byte, quality int) ([]byte, error) {
+	cmd := exec.Command("cwebp", "-q", strconv.Itoa(quality), "-o", "-", "--")
+	cmd.Stdin = bytes.NewReader(pngBytes)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("cwebp: %w: %s", err, stderr.String())
+	}
+	return stdout.Bytes(), nil
+}
+
+const ImageCompressionWebP = "webp"
+
+// UploadBase64ImageToR2Compressed is like UploadBase64ImageToR2 but converts to WebP when
+// compression is ImageCompressionWebP. Other values or empty string upload as PNG.
+func UploadBase64ImageToR2Compressed(mimeType, base64Data, compression string) (string, error) {
+	client, _ := getR2Client()
+	bucket := os.Getenv("R2_BUCKET")
+	baseURL := strings.TrimRight(os.Getenv("R2_PUBLIC_BASE_URL"), "/")
+
+	imgBytes, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", fmt.Errorf("base64 decode failed: %w", err)
+	}
+
+	var uploadBytes []byte
+	var ext, contentType string
+
+	if compression == ImageCompressionWebP {
+		webpBytes, err := convertPNGToWebP(imgBytes, 85)
+		if err != nil {
+			return "", fmt.Errorf("webp conversion failed: %w", err)
+		}
+		uploadBytes = webpBytes
+		ext = "webp"
+		contentType = "image/webp"
+	} else {
+		uploadBytes = imgBytes
+		ext = "png"
+		contentType = mimeType
+	}
+
+	key := fmt.Sprintf("images/%s.%s", uuid.New().String(), ext)
+
+	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(uploadBytes),
+		ContentType: aws.String(contentType),
 	})
 	if err != nil {
 		return "", fmt.Errorf("r2 upload failed: %w", err)
