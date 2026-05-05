@@ -80,8 +80,12 @@ func replaceInlineDataWithR2URLs(c *gin.Context, resp *dto.GeminiChatResponse, c
 			if err != nil {
 				return err
 			}
+			mimeType := part.InlineData.MimeType
+			if compression == service.ImageCompressionWebP {
+				mimeType = "image/webp"
+			}
 			part.FileData = &dto.GeminiFileData{
-				MimeType: part.InlineData.MimeType,
+				MimeType: mimeType,
 				FileUri:  url,
 			}
 			part.InlineData = nil
