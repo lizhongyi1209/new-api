@@ -47,7 +47,8 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 
 	// When the client requests URL format, upload inline_data images to R2 and replace them with fileData URLs.
 	if strings.EqualFold(c.Query("image_format"), "url") {
-		if err := replaceInlineDataWithR2URLs(c, &geminiResponse); err != nil {
+		compression := c.Query("image_compression")
+		if err := replaceInlineDataWithR2URLs(c, &geminiResponse, compression); err != nil {
 			logger.LogError(c, "r2 upload failed, falling back to raw response: "+err.Error())
 			service.IOCopyBytesGracefully(c, resp, responseBody)
 			return &usage, nil
@@ -67,14 +68,15 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 }
 
 // replaceInlineDataWithR2URLs uploads every image inline_data part to R2 and replaces it with a fileData URL.
-func replaceInlineDataWithR2URLs(c *gin.Context, resp *dto.GeminiChatResponse) error {
+// When compression is "webp", images are converted to WebP before upload.
+func replaceInlineDataWithR2URLs(c *gin.Context, resp *dto.GeminiChatResponse, compression string) error {
 	for ci := range resp.Candidates {
 		for pi := range resp.Candidates[ci].Content.Parts {
 			part := &resp.Candidates[ci].Content.Parts[pi]
 			if part.InlineData == nil || !strings.HasPrefix(part.InlineData.MimeType, "image/") {
 				continue
 			}
-			url, err := service.UploadBase64ImageToR2(part.InlineData.MimeType, part.InlineData.Data)
+			url, err := service.UploadBase64ImageToR2Compressed(part.InlineData.MimeType, part.InlineData.Data, compression)
 			if err != nil {
 				return err
 			}

@@ -408,9 +408,10 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		}
 	} else {
 		// Upload to R2 and return URLs
+		compression := asyncReq.ImageCompression
 		for _, imgData := range imageResp.Data {
 			if imgData.B64Json != "" {
-				publicURL, err := UploadBase64ImageToR2("image/png", imgData.B64Json)
+				publicURL, err := UploadBase64ImageToR2Compressed("image/png", imgData.B64Json, compression)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: R2 upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -544,6 +545,10 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		_ = task.Update()
 		return
 	}
+
+	// Extract client-side params before forwarding to upstream
+	geminiCompression, _ := requestBody["image_compression"].(string)
+	delete(requestBody, "image_compression")
 
 	// Apply Gemini request normalization (set default role for first content)
 	if contents, ok := requestBody["contents"].([]interface{}); ok && len(contents) > 0 {
@@ -746,7 +751,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 									if mt, ok := inlineData["mimeType"].(string); ok {
 										mimeType = mt
 									}
-									publicURL, err := UploadBase64ImageToR2(mimeType, base64Data)
+									publicURL, err := UploadBase64ImageToR2Compressed(mimeType, base64Data, geminiCompression)
 									if err != nil {
 										logger.LogError(ctx, fmt.Sprintf("async_gemini: R2 upload failed: %v", err))
 										task.Status = model.TaskStatusFailure
