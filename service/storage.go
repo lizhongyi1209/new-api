@@ -101,15 +101,38 @@ func UploadBase64ImageToR2(mimeType, base64Data string) (string, error) {
 // convertPNGToWebP converts PNG bytes to WebP using the cwebp CLI tool.
 // quality is 0-100, 85 is recommended for visually lossless results.
 func convertPNGToWebP(pngBytes []byte, quality int) ([]byte, error) {
-	cmd := exec.Command("cwebp", "-q", strconv.Itoa(quality), "-o", "-", "--")
-	cmd.Stdin = bytes.NewReader(pngBytes)
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
+	inFile, err := os.CreateTemp("", "r2upload_*.png")
+	if err != nil {
+		return nil, fmt.Errorf("create temp input: %w", err)
+	}
+	defer os.Remove(inFile.Name())
+
+	outFile, err := os.CreateTemp("", "r2upload_*.webp")
+	if err != nil {
+		return nil, fmt.Errorf("create temp output: %w", err)
+	}
+	outPath := outFile.Name()
+	outFile.Close()
+	defer os.Remove(outPath)
+
+	if _, err := inFile.Write(pngBytes); err != nil {
+		inFile.Close()
+		return nil, fmt.Errorf("write temp input: %w", err)
+	}
+	inFile.Close()
+
+	cmd := exec.Command("cwebp", "-q", strconv.Itoa(quality), inFile.Name(), "-o", outPath)
+	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("cwebp: %w: %s", err, stderr.String())
 	}
-	return stdout.Bytes(), nil
+
+	webpBytes, err := os.ReadFile(outPath)
+	if err != nil {
+		return nil, fmt.Errorf("read temp output: %w", err)
+	}
+	return webpBytes, nil
 }
 
 const ImageCompressionWebP = "webp"
