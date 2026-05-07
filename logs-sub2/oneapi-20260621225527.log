@@ -155137,3 +155137,15 @@
 [SYS] 2026/07/03 - 23:46:01 | syncing channels from database 
 [SYS] 2026/07/03 - 23:46:01 | channels synced from database 
 [GIN] 2026/07/03 - 23:46:08 | api | 202607031546089020179548268d9d6innTyszf | 200 |     290.081µs |             ::1 |     GET /api/status
+[SYS] 2026/07/03 - 23:46:31 | syncing channels from database 
+[SYS] 2026/07/03 - 23:46:31 | syncing options from database 
+[SYS] 2026/07/03 - 23:46:31 | channels synced from database 
+[GIN] 2026/07/03 - 23:46:35 | web | 202607031546352112636748268d9d6BwAe0IjO | 200 |     852.351µs |  66.132.186.181 |     GET /robots.txt
+[GIN] 2026/07/03 - 23:46:38 | api | 202607031546389266100018268d9d6TYaQ4R3f | 200 |     327.401µs |             ::1 |     GET /api/status
+[GIN] 2026/07/03 - 23:46:44 | web | 202607031546447765147528268d9d6ZuGziLJ8 | 200 |     446.364µs |  66.132.186.181 |     GET /6z3va6020
+[GIN] 2026/07/03 - 23:46:50 | web | 20260703154650523193368268d9d6OtsOe2eg | 200 |     689.607µs |  66.132.186.181 |     GET /logo.png
+[GIN] 2026/07/03 - 23:46:50 | web | 202607031546506407130358268d9d6MliHMcSm | 200 |    1.296771ms |  66.132.186.181 |     GET /favicon.ico
+[SYS] 2026/07/03 - 23:47:01 | syncing options from database 
+[SYS] 2026/07/03 - 23:47:01 | syncing channels from database 
+[SYS] 2026/07/03 - 23:47:01 | channels synced from database 
+[GIN] 2026/07/03 - 23:47:08 | api | 202607031547089509404058268d9d6rXmVmlDq | 200 |     356.365µs |             ::1 |     GET /api/status

@@ -572,7 +572,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: request body after normalization: %s", string(jsonData)))
+	logger.LogDebug(ctx, fmt.Sprintf("async_gemini: request body after normalization: %s", string(jsonData)))
 
 	channel, err := model.CacheGetChannel(task.ChannelId)
 	if err != nil {

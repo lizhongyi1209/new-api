@@ -348,6 +348,7 @@ git commit -m "feat: describe what you did"
 git push origin custom
 
 docker compose up --build -d
+docker builder prune -f          # clean old build cache
 docker compose logs -f new-api   # Ctrl+C to exit
 ```
 
@@ -364,6 +365,7 @@ git rebase upstream/main
 ```bash
 git push origin custom --force-with-lease
 docker compose up --build -d
+docker builder prune -f
 ```
 
 **Case 2 — Conflicts** (git will show which files conflict):
@@ -375,6 +377,7 @@ git add .
 git rebase --continue
 git push origin custom --force-with-lease
 docker compose up --build -d
+docker builder prune -f
 ```
 
 ### Common Operations Commands

@@ -324,6 +324,7 @@ func InitResources() error {
 	common.InitEnv()
 
 	logger.SetupLogger()
+		logger.StartLogCleanupCron()
 
 	// Initialize model settings
 	ratio_setting.InitRatioSettings()

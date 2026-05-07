@@ -18,6 +18,11 @@ services:
     command: --log-dir /app/logs
     ports:
       - "3000:3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
     volumes:
       - ./data:/data
       - ./logs:/app/logs
