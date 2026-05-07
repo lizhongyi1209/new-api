@@ -100,7 +100,9 @@ export function transformApiKeyToFormDefaults(
 ): ApiKeyFormValues {
   return {
     name: apiKey.name,
-    remain_quota_dollars: quotaUnitsToDollars(apiKey.remain_quota),
+    remain_quota_dollars: apiKey.unlimited_quota
+      ? API_KEY_FORM_DEFAULT_VALUES.remain_quota_dollars
+      : Math.max(0, quotaUnitsToDollars(apiKey.remain_quota)),
     expired_time:
       apiKey.expired_time > 0
         ? new Date(apiKey.expired_time * 1000)
