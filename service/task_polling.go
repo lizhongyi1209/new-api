@@ -91,7 +91,6 @@ func sweepTimedOutTasks(ctx context.Context) {
 func TaskPollingLoop() {
 	for {
 		time.Sleep(time.Duration(15) * time.Second)
-		common.SysLog("任务进度轮询开始")
 		ctx := context.TODO()
 		sweepTimedOutTasks(ctx)
 		allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
@@ -133,7 +132,6 @@ func TaskPollingLoop() {
 
 			DispatchPlatformUpdate(platform, taskChannelM, taskM)
 		}
-		common.SysLog("任务进度轮询完成")
 	}
 }
 
@@ -145,6 +143,10 @@ func DispatchPlatformUpdate(platform constant.TaskPlatform, taskChannelM map[int
 	case constant.TaskPlatformSuno:
 		_ = UpdateSunoTasks(context.Background(), taskChannelM, taskM)
 	default:
+		if GetTaskAdaptorFunc != nil && GetTaskAdaptorFunc(platform) == nil {
+			logger.LogDebug(context.Background(), fmt.Sprintf("Platform %s has no registered task adaptor, skipping polling", platform))
+			return
+		}
 		if err := UpdateVideoTasks(context.Background(), platform, taskChannelM, taskM); err != nil {
 			common.SysLog(fmt.Sprintf("UpdateVideoTasks fail: %s", err))
 		}
@@ -298,7 +300,7 @@ func UpdateVideoTasks(ctx context.Context, platform constant.TaskPlatform, taskC
 }
 
 func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, channelId int, taskIds []string, taskM map[string]*model.Task) error {
-	logger.LogInfo(ctx, fmt.Sprintf("Channel #%d pending video tasks: %d", channelId, len(taskIds)))
+	logger.LogDebug(ctx, fmt.Sprintf("Channel #%d pending video tasks: %d", channelId, len(taskIds)))
 	if len(taskIds) == 0 {
 		return nil
 	}

@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,9 +26,14 @@ const (
 	loggerDebug = "DEBUG"
 )
 
-const maxLogCount = 1000000
+const (
+	maxLogCount = 1000000
+	maxLogAge   = 72 * time.Hour // auto-delete log files older than 3 days
+	maxLogSize  = 500 * 1024 * 1024 // rotate when file exceeds 500MB
+)
 
 var logCount int
+var logSizeBytes int64
 var setupLogLock sync.Mutex
 var setupLogWorking bool
 var currentLogPath string
@@ -44,6 +51,7 @@ func SetupLogger() {
 		setupLogWorking = false
 	}()
 	if *common.LogDir != "" {
+		CleanupOldLogFiles()
 		ok := setupLogLock.TryLock()
 		if !ok {
 			log.Println("setup log is already working")
@@ -63,6 +71,10 @@ func SetupLogger() {
 		currentLogFile = fd
 		currentLogPathMu.Unlock()
 
+		// If re-opening an existing oversized file, record current size to trigger rotation
+		if info, err := fd.Stat(); err == nil && info.Size() > maxLogSize {
+			logSizeBytes = info.Size()
+		}
 		common.LogWriterMu.Lock()
 		gin.DefaultWriter = io.MultiWriter(os.Stdout, fd)
 		gin.DefaultErrorWriter = io.MultiWriter(os.Stderr, fd)
@@ -105,16 +117,83 @@ func logHelper(ctx context.Context, level string, msg string) {
 	if level == loggerINFO {
 		writer = gin.DefaultWriter
 	}
-	_, _ = fmt.Fprintf(writer, "[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
+	line := fmt.Sprintf("[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
+	_, _ = io.WriteString(writer, line)
 	common.LogWriterMu.RUnlock()
-	logCount++ // we don't need accurate count, so no lock here
-	if logCount > maxLogCount && !setupLogWorking {
+	logCount++
+	logSizeBytes += int64(len(line))
+	shouldRotate := logCount > maxLogCount || logSizeBytes > maxLogSize
+	if shouldRotate && !setupLogWorking {
 		logCount = 0
+		logSizeBytes = 0
 		setupLogWorking = true
 		gopool.Go(func() {
 			SetupLogger()
 		})
 	}
+}
+
+func CleanupOldLogFiles() {
+	logDir := *common.LogDir
+	if logDir == "" {
+		return
+	}
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		return
+	}
+
+	type logEntry struct {
+		path    string
+		modTime time.Time
+	}
+	var logFiles []logEntry
+	cutoff := time.Now().Add(-maxLogAge)
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".log") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		fullPath := filepath.Join(logDir, e.Name())
+		// Skip the currently active log file
+		currentLogPathMu.RLock()
+		active := currentLogPath
+		currentLogPathMu.RUnlock()
+		if fullPath == active {
+			continue
+		}
+		logFiles = append(logFiles, logEntry{path: fullPath, modTime: info.ModTime()})
+	}
+
+	if len(logFiles) == 0 {
+		return
+	}
+
+	sort.Slice(logFiles, func(i, j int) bool {
+		return logFiles[i].modTime.Before(logFiles[j].modTime)
+	})
+
+	const maxLogFiles = 50
+
+	for i, lf := range logFiles {
+		// Delete if older than cutoff OR we have too many files
+		if lf.modTime.Before(cutoff) || len(logFiles)-i > maxLogFiles {
+			_ = os.Remove(lf.path)
+		}
+	}
+}
+
+func StartLogCleanupCron() {
+	gopool.Go(func() {
+		for {
+			time.Sleep(1 * time.Hour)
+			CleanupOldLogFiles()
+		}
+	})
 }
 
 func LogQuota(quota int) string {
