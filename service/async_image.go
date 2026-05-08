@@ -1014,31 +1014,26 @@ func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncIma
 
 	// Build generationConfig
 	imageConfig := map[string]interface{}{}
-	aspectRatio := ""
-	imageSize := ""
 	if asyncReq.AspectRatio != "" {
-		aspectRatio = asyncReq.AspectRatio
-	} else if asyncReq.Size != "" {
+		imageConfig["aspectRatio"] = asyncReq.AspectRatio
+	}
+	if asyncReq.Size != "" {
 		size := strings.ToUpper(strings.TrimSpace(asyncReq.Size))
 		switch size {
 		case "1K", "2K", "4K":
-			imageSize = size
+			imageConfig["imageSize"] = size
 		default:
-			if strings.Contains(size, ":") {
-				aspectRatio = size
-			} else {
-				aspectRatio = sizeToAspectRatio(size)
+			if strings.Contains(size, ":") && asyncReq.AspectRatio == "" {
+				imageConfig["aspectRatio"] = size
 			}
 		}
 	}
-	if aspectRatio != "" {
-		imageConfig["aspectRatio"] = aspectRatio
-	}
-	if imageSize != "" {
-		imageConfig["imageSize"] = imageSize
+	modalities := asyncReq.ResponseModalities
+	if len(modalities) == 0 {
+		modalities = []string{"TEXT", "IMAGE"}
 	}
 	generationConfig := map[string]interface{}{
-		"responseModalities": []string{"TEXT", "IMAGE"},
+		"responseModalities": modalities,
 	}
 	if len(imageConfig) > 0 {
 		generationConfig["imageConfig"] = imageConfig
