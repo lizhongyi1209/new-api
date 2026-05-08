@@ -64,6 +64,81 @@ func ApplyModelMapping(originModelName string, modelMappingJSON *string) string 
 	return currentModel
 }
 
+const (
+	// AsyncImageMaxBase64SizeMB is the maximum size for base64-encoded images in async image requests
+	AsyncImageMaxBase64SizeMB = 10
+	// AsyncImageMaxURLSizeMB is the maximum size for URL-referenced images in async image requests
+	AsyncImageMaxURLSizeMB = 50
+)
+
+// ValidateAsyncImageSize validates image size limits for async image requests
+func ValidateAsyncImageSize(req *dto.AsyncImageRequest) error {
+	// Validate single image field
+	if len(req.Image) > 0 {
+		if err := validateSingleImageSize(req.Image); err != nil {
+			return fmt.Errorf("image 字段验证失败: %w", err)
+		}
+	}
+
+	// Validate images array
+	for i, img := range req.Images {
+		if err := validateSingleImageSize([]byte(img)); err != nil {
+			return fmt.Errorf("images[%d] 验证失败: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// validateSingleImageSize checks if a single image (base64 or URL) meets size limits
+func validateSingleImageSize(imageData []byte) error {
+	if len(imageData) == 0 {
+		return nil
+	}
+
+	imageStr := string(imageData)
+
+	// Check if it's a URL
+	if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
+		// For URLs, we'll validate size when downloading
+		// Pre-check: try to get Content-Length from HEAD request
+		resp, err := http.Head(imageStr)
+		if err != nil {
+			// If HEAD fails, we'll let the actual download handle it
+			return nil
+		}
+		defer resp.Body.Close()
+
+		if resp.ContentLength > 0 {
+			maxBytes := int64(AsyncImageMaxURLSizeMB * 1024 * 1024)
+			if resp.ContentLength > maxBytes {
+				return fmt.Errorf("URL 图片大小 %d 字节超过限制 %d MB", resp.ContentLength, AsyncImageMaxURLSizeMB)
+			}
+		}
+		return nil
+	}
+
+	// It's base64 data
+	base64Str := imageStr
+	// Remove data URL prefix if present
+	if idx := strings.Index(base64Str, ","); idx != -1 {
+		base64Str = base64Str[idx+1:]
+	}
+
+	// Decode to get actual size
+	decodedData, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		return fmt.Errorf("base64 解码失败: %w", err)
+	}
+
+	maxBytes := AsyncImageMaxBase64SizeMB * 1024 * 1024
+	if len(decodedData) > maxBytes {
+		return fmt.Errorf("base64 图片大小 %.2f MB 超过限制 %d MB", float64(len(decodedData))/1024/1024, AsyncImageMaxBase64SizeMB)
+	}
+
+	return nil
+}
+
 // RecordAsyncImageSubmitLog records a usage log at task submission time.
 // It returns the log ID so the task can update the log with actual data on completion.
 func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.AsyncImageRequest, relayInfo *relaycommon.RelayInfo) int {
@@ -217,7 +292,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		var imageStr string
 		if err := common.Unmarshal(asyncReq.Image, &imageStr); err == nil {
 			if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
-				mimeType, base64Data, err := GetImageFromUrl(imageStr)
+				mimeType, base64Data, err := GetImageFromUrlWithLimit(imageStr, AsyncImageMaxURLSizeMB)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: download reference image failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -242,7 +317,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		resolvedImages := make([]string, 0, len(asyncReq.Images))
 		for _, imgURL := range asyncReq.Images {
 			if strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://") {
-				mimeType, base64Data, err := GetImageFromUrl(imgURL)
+				mimeType, base64Data, err := GetImageFromUrlWithLimit(imgURL, AsyncImageMaxURLSizeMB)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: download reference image failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -509,6 +584,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 				uploadedURLs = append(uploadedURLs, publicURL)
 			} else if imgData.Url != "" {
 				// Download from upstream URL and re-upload to R2 for durable storage
+				// Note: This downloads the generated image from upstream, not user input, so we use default limit
 				mimeType, b64Data, err := GetImageFromUrl(imgData.Url)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: download upstream image failed: %v", err))
@@ -959,7 +1035,7 @@ func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncIma
 			var mimeType, b64Data string
 			if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
 				var err error
-				mimeType, b64Data, err = GetImageFromUrl(imageStr)
+				mimeType, b64Data, err = GetImageFromUrlWithLimit(imageStr, AsyncImageMaxURLSizeMB)
 				if err != nil {
 					return nil, fmt.Errorf("download reference image failed: %w", err)
 				}
@@ -999,9 +1075,22 @@ func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncIma
 	// Add multiple reference images
 	if len(asyncReq.Images) > 0 {
 		for _, imgURL := range asyncReq.Images {
-			mimeType, b64Data, err := GetImageFromUrl(imgURL)
+			var mimeType, b64Data string
+			var err error
+			if strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://") {
+				mimeType, b64Data, err = GetImageFromUrlWithLimit(imgURL, AsyncImageMaxURLSizeMB)
+			} else if strings.HasPrefix(imgURL, "data:") {
+				mimeType, b64Data = parseDataURI(imgURL)
+				if mimeType == "" {
+					err = fmt.Errorf("failed to parse data URI")
+				}
+			} else {
+				// Assume raw base64
+				b64Data = imgURL
+				mimeType = "image/png"
+			}
 			if err != nil {
-				return nil, fmt.Errorf("download reference image %s failed: %w", imgURL, err)
+				return nil, fmt.Errorf("process reference image %s failed: %w", imgURL, err)
 			}
 			parts = append(parts, map[string]interface{}{
 				"inlineData": map[string]interface{}{

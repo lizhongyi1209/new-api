@@ -30,6 +30,17 @@ func AsyncImageSubmit(c *gin.Context) {
 		return
 	}
 
+	// Validate image size limits
+	if err := service.ValidateAsyncImageSize(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": err.Error(),
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+
 	userId := c.GetInt("id")
 	group := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	channelId := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
