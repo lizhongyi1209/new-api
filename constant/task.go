@@ -6,6 +6,7 @@ const (
 	TaskPlatformSuno       TaskPlatform = "suno"
 	TaskPlatformMidjourney              = "mj"
 	TaskPlatformAsyncImage              = "async_image"
+	TaskPlatformUnifiedImage            = "unified_image"
 )
 
 const (
