@@ -3,6 +3,8 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -209,15 +211,67 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	// Resolve reference image: download URL → base64 data URI for upstream
+	var resolvedImage json.RawMessage
+	if len(asyncReq.Image) > 0 {
+		var imageStr string
+		if err := common.Unmarshal(asyncReq.Image, &imageStr); err == nil {
+			if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
+				mimeType, base64Data, err := GetImageFromUrl(imageStr)
+				if err != nil {
+					logger.LogError(ctx, fmt.Sprintf("async_image: download reference image failed: %v", err))
+					task.Status = model.TaskStatusFailure
+					task.FailReason = fmt.Sprintf("下载参考图片失败: %v", err)
+					task.Progress = "100%"
+					task.FinishTime = time.Now().Unix()
+					_ = task.Update()
+					return
+				}
+				resolved := fmt.Sprintf("data:%s;base64,%s", mimeType, base64Data)
+				resolvedImage, _ = common.Marshal(resolved)
+			} else {
+				resolvedImage = asyncReq.Image
+			}
+		} else {
+			resolvedImage = asyncReq.Image
+		}
+	}
+
+	var resolvedImagesJSON json.RawMessage
+	if len(asyncReq.Images) > 0 {
+		resolvedImages := make([]string, 0, len(asyncReq.Images))
+		for _, imgURL := range asyncReq.Images {
+			if strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://") {
+				mimeType, base64Data, err := GetImageFromUrl(imgURL)
+				if err != nil {
+					logger.LogError(ctx, fmt.Sprintf("async_image: download reference image failed: %v", err))
+					task.Status = model.TaskStatusFailure
+					task.FailReason = fmt.Sprintf("下载参考图片失败: %v", err)
+					task.Progress = "100%"
+					task.FinishTime = time.Now().Unix()
+					_ = task.Update()
+					return
+				}
+				resolvedImages = append(resolvedImages, fmt.Sprintf("data:%s;base64,%s", mimeType, base64Data))
+			} else {
+				resolvedImages = append(resolvedImages, imgURL)
+			}
+		}
+		resolvedImagesJSON, _ = common.Marshal(resolvedImages)
+	}
+
 	imageReq := &dto.ImageRequest{
 		Model:          asyncReq.Model,
 		Prompt:         asyncReq.Prompt,
 		N:              asyncReq.N,
 		Size:           asyncReq.Size,
+		AspectRatio:    asyncReq.AspectRatio,
 		Quality:        asyncReq.Quality,
 		ResponseFormat: asyncReq.ResponseFormat,
 		Style:          asyncReq.Style,
 		User:           asyncReq.User,
+		Image:          resolvedImage,
+		Images:         resolvedImagesJSON,
 	}
 
 	// Create a new gin context for async execution
@@ -278,6 +332,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			ChannelMultiKeyIndex: keyIndex,
 			ChannelBaseUrl:       channel.GetBaseURL(),
 			ApiType:              apiType,
+			ApiVersion:           channel.Other,
 			ApiKey:               key,
 			UpstreamModelName:    upstreamModelName,
 			IsModelMapped:        isModelMapped,
@@ -336,6 +391,10 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	logger.LogInfo(ctx, fmt.Sprintf("async_image: calling upstream with model=%s, baseUrl=%s, apiType=%d",
+		relayInfo.ChannelMeta.UpstreamModelName, relayInfo.ChannelMeta.ChannelBaseUrl, relayInfo.ChannelMeta.ApiType))
+	logger.LogInfo(ctx, fmt.Sprintf("async_image: request body length=%d bytes", len(jsonData)))
+
 	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
 	if err != nil {
 		task.Status = model.TaskStatusFailure
@@ -377,6 +436,30 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
+	// Extract upstream model version and token usage from raw response
+	var upstreamModelVersion string
+	promptTokens := 0
+	completionTokens := 0
+	var tokenDetails map[string]interface{}
+	var rawResp map[string]interface{}
+	if err := common.Unmarshal(bodyBytes, &rawResp); err == nil {
+		if mv, ok := rawResp["modelVersion"].(string); ok {
+			upstreamModelVersion = mv
+		}
+		if usage, ok := rawResp["usage"].(map[string]interface{}); ok {
+			if pt, ok := usage["prompt_tokens"].(float64); ok {
+				promptTokens = int(pt)
+			}
+			if ct, ok := usage["completion_tokens"].(float64); ok {
+				completionTokens = int(ct)
+			}
+			tokenDetails = map[string]interface{}{}
+			if tt, ok := usage["total_tokens"].(float64); ok {
+				tokenDetails["total_tokens"] = int(tt)
+			}
+		}
+	}
+
 	if len(imageResp.Data) == 0 {
 		task.Status = model.TaskStatusFailure
 		task.FailReason = "上游未返回图片数据"
@@ -411,7 +494,9 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		compression := asyncReq.ImageCompression
 		for _, imgData := range imageResp.Data {
 			if imgData.B64Json != "" {
-				publicURL, err := UploadBase64ImageToR2Compressed("image/png", imgData.B64Json, compression)
+				// Detect actual mime type from base64 data
+				mimeType := detectImageMimeType(imgData.B64Json)
+				publicURL, err := UploadBase64ImageToR2Compressed(mimeType, imgData.B64Json, compression)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: R2 upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -423,7 +508,28 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 				}
 				uploadedURLs = append(uploadedURLs, publicURL)
 			} else if imgData.Url != "" {
-				uploadedURLs = append(uploadedURLs, imgData.Url)
+				// Download from upstream URL and re-upload to R2 for durable storage
+				mimeType, b64Data, err := GetImageFromUrl(imgData.Url)
+				if err != nil {
+					logger.LogError(ctx, fmt.Sprintf("async_image: download upstream image failed: %v", err))
+					task.Status = model.TaskStatusFailure
+					task.FailReason = fmt.Sprintf("下载上游图片失败: %v", err)
+					task.Progress = "100%"
+					task.FinishTime = time.Now().Unix()
+					_ = task.Update()
+					return
+				}
+				publicURL, err := UploadBase64ImageToR2Compressed(mimeType, b64Data, compression)
+				if err != nil {
+					logger.LogError(ctx, fmt.Sprintf("async_image: R2 upload failed: %v", err))
+					task.Status = model.TaskStatusFailure
+					task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+					task.Progress = "100%"
+					task.FinishTime = time.Now().Unix()
+					_ = task.Update()
+					return
+				}
+				uploadedURLs = append(uploadedURLs, publicURL)
 			}
 		}
 		resultData = map[string]interface{}{
@@ -440,6 +546,11 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
+	// Settle billing: per-token models need post-completion recalculation with actual usage
+	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
+		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+	}
+
 	// Update submission-time log with actual completion data
 	useTime := int(task.FinishTime - task.StartTime)
 	actualImageCount := len(imageResp.Data)
@@ -452,7 +563,13 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		otherUpdates["is_model_mapped"] = true
 		otherUpdates["upstream_model_name"] = upstreamModelName
 	}
-	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, 0, 0, updateContent, otherUpdates)
+	if upstreamModelVersion != "" {
+		otherUpdates["upstream_model_version"] = upstreamModelVersion
+	}
+	for k, v := range tokenDetails {
+		otherUpdates[k] = v
+	}
+	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, promptTokens, completionTokens, updateContent, otherUpdates)
 
 	// Persist upstream model name on task properties
 	task.Properties.UpstreamModelName = upstreamModelName
@@ -487,6 +604,179 @@ func stripThoughtSignature(geminiResp map[string]interface{}) {
 				delete(partMap, "thoughtSignature")
 			}
 		}
+	}
+}
+
+// detectImageMimeType decodes a prefix of the base64 string and uses
+// http.DetectContentType to determine the actual image format. Falls back
+// to "image/png" if detection fails or the data is too short.
+func detectImageMimeType(b64 string) string {
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil || len(decoded) < 12 {
+		return "image/png"
+	}
+	ct := http.DetectContentType(decoded[:512])
+	if ct == "application/octet-stream" {
+		return "image/png"
+	}
+	return ct
+}
+
+// ConvertAsyncImageToGeminiNative converts an OpenAI-format AsyncImageRequest to Gemini
+// native generateContent format. Reference image URLs are downloaded and converted to base64
+// inlineData format. Returns the native request ready for ProcessAsyncGeminiTask.
+func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncImageRequest) (map[string]interface{}, error) {
+	// Build parts array: text prompt + optional reference image
+	parts := []interface{}{
+		map[string]interface{}{
+			"text": asyncReq.Prompt,
+		},
+	}
+
+	// Add reference image as inlineData part
+	if len(asyncReq.Image) > 0 {
+		var imageStr string
+		if err := common.Unmarshal(asyncReq.Image, &imageStr); err == nil {
+			var mimeType, b64Data string
+			if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
+				var err error
+				mimeType, b64Data, err = GetImageFromUrl(imageStr)
+				if err != nil {
+					return nil, fmt.Errorf("download reference image failed: %w", err)
+				}
+			} else if strings.HasPrefix(imageStr, "data:") {
+				// Parse data URI: data:image/png;base64,xxxx
+				mimeType, b64Data = parseDataURI(imageStr)
+				if mimeType == "" {
+					return nil, fmt.Errorf("failed to parse data URI")
+				}
+			} else {
+				// Assume raw base64
+				b64Data = imageStr
+				mimeType = "image/png"
+			}
+			parts = append(parts, map[string]interface{}{
+				"inlineData": map[string]interface{}{
+					"mimeType": mimeType,
+					"data":     b64Data,
+				},
+			})
+		} else {
+			// Non-string format (object with b64_json), pass as-is via task data
+			var imgObj map[string]interface{}
+			if err := common.Unmarshal(asyncReq.Image, &imgObj); err == nil {
+				if b64, ok := imgObj["b64_json"].(string); ok {
+					parts = append(parts, map[string]interface{}{
+						"inlineData": map[string]interface{}{
+							"mimeType": "image/png",
+							"data":     b64,
+						},
+					})
+				}
+			}
+		}
+	}
+
+	// Add multiple reference images
+	if len(asyncReq.Images) > 0 {
+		for _, imgURL := range asyncReq.Images {
+			mimeType, b64Data, err := GetImageFromUrl(imgURL)
+			if err != nil {
+				return nil, fmt.Errorf("download reference image %s failed: %w", imgURL, err)
+			}
+			parts = append(parts, map[string]interface{}{
+				"inlineData": map[string]interface{}{
+					"mimeType": mimeType,
+					"data":     b64Data,
+				},
+			})
+		}
+	}
+
+	// Build generationConfig
+	imageConfig := map[string]interface{}{}
+	aspectRatio := ""
+	imageSize := ""
+	if asyncReq.AspectRatio != "" {
+		aspectRatio = asyncReq.AspectRatio
+	} else if asyncReq.Size != "" {
+		size := strings.ToUpper(strings.TrimSpace(asyncReq.Size))
+		switch size {
+		case "1K", "2K", "4K":
+			imageSize = size
+		default:
+			if strings.Contains(size, ":") {
+				aspectRatio = size
+			} else {
+				aspectRatio = sizeToAspectRatio(size)
+			}
+		}
+	}
+	if aspectRatio != "" {
+		imageConfig["aspectRatio"] = aspectRatio
+	}
+	if imageSize != "" {
+		imageConfig["imageSize"] = imageSize
+	}
+	generationConfig := map[string]interface{}{
+		"responseModalities": []string{"TEXT", "IMAGE"},
+	}
+	if len(imageConfig) > 0 {
+		generationConfig["imageConfig"] = imageConfig
+	}
+
+	geminiReq := map[string]interface{}{
+		"contents": []interface{}{
+			map[string]interface{}{
+				"role":  "user",
+				"parts": parts,
+			},
+		},
+		"generationConfig": generationConfig,
+	}
+
+	// Preserve image_compression for ProcessAsyncGeminiTask
+	if asyncReq.ImageCompression != "" {
+		geminiReq["image_compression"] = asyncReq.ImageCompression
+	}
+
+	return geminiReq, nil
+}
+
+// parseDataURI extracts mimeType and base64 data from a data URI string.
+func parseDataURI(uri string) (mimeType, data string) {
+	if !strings.HasPrefix(uri, "data:") {
+		return "", ""
+	}
+	uri = uri[5:]
+	sepIdx := strings.Index(uri, ";")
+	if sepIdx < 0 {
+		return "", ""
+	}
+	mimeType = uri[:sepIdx]
+	rest := uri[sepIdx+1:]
+	if !strings.HasPrefix(rest, "base64,") {
+		return "", ""
+	}
+	data = rest[7:]
+	return
+}
+
+// sizeToAspectRatio converts OpenAI size strings to Gemini aspectRatio format.
+func sizeToAspectRatio(size string) string {
+	switch size {
+	case "1024x1024", "512x512", "256x256":
+		return "1:1"
+	case "1536x1024":
+		return "3:2"
+	case "1024x1536":
+		return "2:3"
+	case "1024x1792":
+		return "9:16"
+	case "1792x1024":
+		return "16:9"
+	default:
+		return ""
 	}
 }
 
