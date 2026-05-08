@@ -67,6 +67,12 @@ func DecodeBase64FileData(base64String string) (string, string, error) {
 
 // GetImageFromUrl 获取图片的类型和base64编码的数据
 func GetImageFromUrl(url string) (mimeType string, data string, err error) {
+	return GetImageFromUrlWithLimit(url, 0)
+}
+
+// GetImageFromUrlWithLimit 获取图片的类型和base64编码的数据，支持自定义大小限制
+// maxSizeMB: 最大文件大小（MB），0 表示使用默认限制
+func GetImageFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data string, err error) {
 	resp, err := DoDownloadRequest(url)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to download image: %w", err)
@@ -82,7 +88,14 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 	if contentType != "application/octet-stream" && !strings.HasPrefix(contentType, "image/") {
 		return "", "", fmt.Errorf("invalid content type: %s, required image/*", contentType)
 	}
-	maxImageSize := int64(constant.MaxFileDownloadMB * 1024 * 1024)
+
+	// Use custom limit or default
+	var maxImageSize int64
+	if maxSizeMB > 0 {
+		maxImageSize = int64(maxSizeMB * 1024 * 1024)
+	} else {
+		maxImageSize = int64(constant.MaxFileDownloadMB * 1024 * 1024)
+	}
 
 	// Check Content-Length if available
 	if resp.ContentLength > maxImageSize {

@@ -344,12 +344,34 @@ func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 	}
 	var task *Task
 	var err error
-	err = DB.Where("user_id = ? and task_id = ?", userId, taskId).
+
+	// First query: fetch lightweight fields without the heavy 'data' column
+	// This is critical for polling performance when tasks contain large base64 images in data
+	err = DB.Select("id, created_at, updated_at, task_id, platform, user_id, "+
+		commonGroupCol+", channel_id, quota, action, status, fail_reason, "+
+		"submit_time, start_time, finish_time, progress, properties, private_data").
+		Where("user_id = ? and task_id = ?", userId, taskId).
 		First(&task).Error
+
 	exist, err := RecordExist(err)
 	if err != nil {
 		return nil, false, err
 	}
+	if !exist {
+		return nil, false, nil
+	}
+
+	// Only load the 'data' column when the task is in a terminal state
+	// IN_PROGRESS/SUBMITTED/QUEUED tasks don't need data for polling responses
+	if task.Status == TaskStatusSuccess || task.Status == TaskStatusFailure {
+		var fullTask Task
+		err = DB.Where("id = ?", task.ID).First(&fullTask).Error
+		if err != nil {
+			return nil, false, err
+		}
+		task.Data = fullTask.Data
+	}
+
 	if task != nil {
 		task.ResultURL = task.GetResultURL()
 	}
