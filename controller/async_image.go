@@ -95,52 +95,14 @@ func AsyncImageSubmit(c *gin.Context) {
 		return
 	}
 
-	// Check if this should use Gemini native processing
-	// Models with nano-banana prefix or specific Gemini image models use native format
-	channelType := relayInfo.ChannelMeta.ChannelType
-	isGeminiChannel := channelType == constant.ChannelTypeGemini || channelType == constant.ChannelTypeVertexAi
-	isGeminiImageModel := strings.HasPrefix(req.Model, "nano-banana") ||
-		req.Model == "gemini-3-pro-image" ||
-		req.Model == "gemini-3.1-flash-image-preview"
-	useGeminiNative := isGeminiChannel && isGeminiImageModel
+	// Record usage log at submission time and persist the log ID for later update
+	service.RecordAsyncImageSubmitLog(c, task, &req, relayInfo)
+	_ = task.Update()
 
-	if useGeminiNative {
-		// Convert OpenAI-format request to Gemini native format
-		nativeReq, convertErr := service.ConvertAsyncImageToGeminiNative(context.Background(), &req)
-		if convertErr != nil {
-			// Refund on conversion failure
-			if relayInfo.Billing != nil {
-				relayInfo.Billing.Refund(c)
-			}
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": gin.H{
-					"message": fmt.Sprintf("转换请求格式失败: %v", convertErr),
-					"type":    "invalid_request_error",
-				},
-			})
-			return
-		}
-		task.Action = "generateContent"
-		task.SetData(nativeReq)
-		_ = task.Update()
-
-		service.RecordAsyncGeminiSubmitLog(c, task, req.Model, relayInfo)
-		_ = task.Update()
-
-		ctx := context.WithValue(context.Background(), "gin_context", c)
-		gopool.Go(func() {
-			service.ProcessAsyncGeminiTask(ctx, task)
-		})
-	} else {
-		// Record usage log at submission time and persist the log ID for later update
-		service.RecordAsyncImageSubmitLog(c, task, &req, relayInfo)
-		_ = task.Update()
-
-		ctx := context.WithValue(context.Background(), "gin_context", c)
-		gopool.Go(func() {
-			service.ProcessAsyncImageTask(ctx, task)
-		})
-	}
+	ctx := context.WithValue(context.Background(), "gin_context", c)
+	gopool.Go(func() {
+		service.ProcessAsyncImageTask(ctx, task)
+	})
 
 	c.JSON(http.StatusOK, dto.AsyncTaskResponse{
 		TaskID: task.TaskID,
@@ -366,28 +328,11 @@ func AsyncTaskFetch(c *gin.Context) {
 	}
 
 	if task.Status == model.TaskStatusSuccess {
-		if task.Platform == constant.TaskPlatformAsyncImage {
-			// Return standard OpenAI ImageResponse format
-			imageResp := dto.ImageResponse{
-				Created: task.FinishTime,
+		if task.Platform == constant.TaskPlatformAsyncImage && task.PrivateData.ResultURL != "" {
+			data := map[string]interface{}{
+				"image_url": task.PrivateData.ResultURL,
 			}
-			var storedData map[string]interface{}
-			if err := task.GetData(&storedData); err == nil {
-				if urls, ok := storedData["urls"].([]interface{}); ok {
-					for _, u := range urls {
-						if urlStr, ok := u.(string); ok {
-							imageResp.Data = append(imageResp.Data, dto.ImageData{Url: urlStr})
-						}
-					}
-				} else if dataList, ok := storedData["data"].([]interface{}); ok {
-					for _, d := range dataList {
-						if b64Str, ok := d.(string); ok {
-							imageResp.Data = append(imageResp.Data, dto.ImageData{B64Json: b64Str})
-						}
-					}
-				}
-			}
-			dataBytes, _ := common.Marshal(imageResp)
+			dataBytes, _ := common.Marshal(data)
 			resp.Data = dataBytes
 		} else {
 			resp.Data = task.Data
