@@ -19,8 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
 	"golang.org/x/image/webp"
-
-	"golang.org/x/image/webp"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 )
