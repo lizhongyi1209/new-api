@@ -72,7 +72,7 @@ func (t *Task) SetData(data any) {
 }
 
 func (t *Task) GetData(v any) error {
-	return common.Unmarshal(t.Data, &v)
+	return common.Unmarshal(t.Data, v)
 }
 
 type Properties struct {
