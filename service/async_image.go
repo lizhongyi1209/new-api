@@ -622,6 +622,318 @@ func detectImageMimeType(b64 string) string {
 	return ct
 }
 
+
+// ProcessUnifiedImageTask is the standalone async processor for the unified
+// /async/v1/images/generations endpoint. It handles Gemini native image models
+// independently from the legacy /async/v1beta path.
+func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
+	// Refund pre-consumed quota if task ends in failure
+	defer func() {
+		if task.Status == model.TaskStatusFailure {
+			RefundTaskQuota(ctx, task, task.FailReason)
+		}
+	}()
+
+	// Create a new gin context for async execution
+	c := &gin.Context{
+		Request: &http.Request{
+			Method: "POST",
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: http.NoBody,
+		},
+	}
+
+	username := ""
+	if user, err := model.GetUserById(task.UserId, false); err == nil {
+		username = user.Username
+	}
+	c.Set("username", username)
+
+	task.Status = model.TaskStatusInProgress
+	task.StartTime = time.Now().Unix()
+	task.Progress = "50%"
+	_ = task.Update()
+
+	var requestBody map[string]interface{}
+	if err := task.GetData(&requestBody); err != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("解析请求数据失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	// Extract client-side params before forwarding to upstream
+	geminiCompression, _ := requestBody["image_compression"].(string)
+	delete(requestBody, "image_compression")
+
+	// Apply Gemini request normalization (set default role for first content)
+	if contents, ok := requestBody["contents"].([]interface{}); ok && len(contents) > 0 {
+		if firstContent, ok := contents[0].(map[string]interface{}); ok {
+			if _, hasRole := firstContent["role"]; !hasRole {
+				firstContent["role"] = "user"
+			}
+		}
+	}
+
+	jsonData, err := common.Marshal(requestBody)
+	if err != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("序列化请求失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	channel, err := model.CacheGetChannel(task.ChannelId)
+	if err != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("获取渠道信息失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	apiType, _ := common.ChannelType2APIType(channel.Type)
+	key, keyIndex, keyErr := channel.GetNextEnabledKey()
+	if keyErr != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("获取渠道密钥失败: %v", keyErr.Error())
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	upstreamModelName := ApplyModelMapping(task.Properties.OriginModelName, channel.ModelMapping)
+	isModelMapped := upstreamModelName != task.Properties.OriginModelName
+
+	relayInfo := &relaycommon.RelayInfo{
+		UserId:          task.UserId,
+		UserGroup:       common.GetContextKeyString(c, constant.ContextKeyUserGroup),
+		UsingGroup:      task.Group,
+		RelayMode:       relayconstant.RelayModeGemini,
+		OriginModelName: task.Properties.OriginModelName,
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType:          channel.Type,
+			ChannelId:            channel.Id,
+			ChannelIsMultiKey:    channel.ChannelInfo.IsMultiKey,
+			ChannelMultiKeyIndex: keyIndex,
+			ChannelBaseUrl:       channel.GetBaseURL(),
+			ApiType:              apiType,
+			ApiVersion:           channel.Other,
+			ApiKey:               key,
+			UpstreamModelName:    upstreamModelName,
+			IsModelMapped:        isModelMapped,
+		},
+	}
+
+	if GetGeminiAdaptorFunc == nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = "内部错误：Gemini 适配器未初始化"
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	adaptor := GetGeminiAdaptorFunc(relayInfo.ApiType)
+	if adaptor == nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("不支持的 API 类型: %d", relayInfo.ApiType)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+	adaptor.Init(relayInfo)
+
+	// Calculate price for billing
+	if CalculatePriceFunc != nil {
+		if priceData, err := CalculatePriceFunc(c, relayInfo); err == nil {
+			relayInfo.PriceData = priceData
+		}
+	}
+
+	logger.LogInfo(ctx, fmt.Sprintf("unified_image: calling upstream model=%s, baseUrl=%s, apiType=%d",
+		relayInfo.ChannelMeta.UpstreamModelName, relayInfo.ChannelMeta.ChannelBaseUrl, relayInfo.ChannelMeta.ApiType))
+	logger.LogInfo(ctx, fmt.Sprintf("unified_image: request body length=%d bytes", len(jsonData)))
+
+	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("unified_image: upstream request failed: %v", err))
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("请求上游失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	httpResp := resp.(*http.Response)
+	defer httpResp.Body.Close()
+
+	if httpResp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(httpResp.Body)
+		logger.LogError(ctx, fmt.Sprintf("unified_image: upstream error status=%d, body=%s", httpResp.StatusCode, string(bodyBytes)))
+		relayErr := RelayErrorHandler(ctx, httpResp, false)
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("上游返回错误: %s", relayErr.Error())
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	bodyBytes, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("读取响应失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	var geminiResp map[string]interface{}
+	if err := common.Unmarshal(bodyBytes, &geminiResp); err != nil {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = fmt.Sprintf("解析响应失败: %v", err)
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	// Extract token usage from response
+	promptTokens := 0
+	completionTokens := 0
+	var tokenDetails map[string]interface{}
+	if usageMetadata, ok := geminiResp["usageMetadata"].(map[string]interface{}); ok {
+		if pt, ok := usageMetadata["promptTokenCount"].(float64); ok {
+			promptTokens = int(pt)
+		}
+		if ct, ok := usageMetadata["candidatesTokenCount"].(float64); ok {
+			completionTokens = int(ct)
+		}
+		tokenDetails = map[string]interface{}{}
+		if tt, ok := usageMetadata["totalTokenCount"].(float64); ok {
+			tokenDetails["total_tokens"] = int(tt)
+		}
+		if tt, ok := usageMetadata["thoughtsTokenCount"].(float64); ok {
+			completionTokens += int(tt)
+			tokenDetails["thought_tokens"] = int(tt)
+		}
+	}
+
+	// Strip thoughtSignature before storing
+	stripThoughtSignature(geminiResp)
+
+	// Extract images from Gemini response and upload to R2
+	var uploadedURLs []string
+	imageCount := 0
+	if candidates, ok := geminiResp["candidates"].([]interface{}); ok && len(candidates) > 0 {
+		for _, candidate := range candidates {
+			if candidateMap, ok := candidate.(map[string]interface{}); ok {
+				if content, ok := candidateMap["content"].(map[string]interface{}); ok {
+					if parts, ok := content["parts"].([]interface{}); ok {
+						filteredParts := make([]interface{}, 0, len(parts))
+						for _, part := range parts {
+							partMap, _ := part.(map[string]interface{})
+							if partMap == nil {
+								filteredParts = append(filteredParts, part)
+								continue
+							}
+							isThought, _ := partMap["thought"].(bool)
+							if isThought {
+								continue
+							}
+							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
+								if base64Data, ok := inlineData["data"].(string); ok {
+									mimeType := "image/png"
+									if mt, ok := inlineData["mimeType"].(string); ok {
+										mimeType = mt
+									}
+									publicURL, err := UploadBase64ImageToR2Compressed(mimeType, base64Data, geminiCompression)
+									if err != nil {
+										logger.LogError(ctx, fmt.Sprintf("unified_image: R2 upload failed: %v", err))
+										task.Status = model.TaskStatusFailure
+										task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+										task.Progress = "100%"
+										task.FinishTime = time.Now().Unix()
+										_ = task.Update()
+										return
+									}
+									imageCount++
+									uploadedURLs = append(uploadedURLs, publicURL)
+									delete(partMap, "inlineData")
+									partMap["imageUrl"] = publicURL
+								}
+							}
+							filteredParts = append(filteredParts, part)
+						}
+						content["parts"] = filteredParts
+					}
+				}
+			}
+		}
+	}
+
+	if imageCount == 0 {
+		task.Status = model.TaskStatusFailure
+		task.FailReason = "上游未返回图片数据"
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
+	// Store result with standard urls format for fetch
+	resultData := map[string]interface{}{
+		"urls": uploadedURLs,
+	}
+	task.SetData(resultData)
+	if len(uploadedURLs) > 0 {
+		task.PrivateData.ResultURL = uploadedURLs[0]
+	}
+	task.Status = model.TaskStatusSuccess
+	task.Progress = "100%"
+	task.FinishTime = time.Now().Unix()
+	_ = task.Update()
+
+	// Settle billing: per-token models need post-completion recalculation
+	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
+		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+	}
+
+	// Update submission-time log with actual completion data
+	useTime := int(task.FinishTime - task.StartTime)
+	updateContent := fmt.Sprintf("统一图片生成，生成 %d 张图片，异步任务 %s（已完成）", imageCount, task.TaskID)
+	otherUpdates := map[string]interface{}{
+		"task_status":           "SUCCESS",
+		"generated_image_count": imageCount,
+	}
+	for k, v := range tokenDetails {
+		otherUpdates[k] = v
+	}
+	if isModelMapped {
+		otherUpdates["is_model_mapped"] = true
+		otherUpdates["upstream_model_name"] = upstreamModelName
+	}
+	if modelVersion, ok := geminiResp["modelVersion"].(string); ok && modelVersion != "" {
+		otherUpdates["upstream_model_version"] = modelVersion
+	}
+	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, promptTokens, completionTokens, updateContent, otherUpdates)
+
+	// Persist upstream model info on task properties
+	task.Properties.UpstreamModelName = upstreamModelName
+	_ = task.Update()
+}
 // ConvertAsyncImageToGeminiNative converts an OpenAI-format AsyncImageRequest to Gemini
 // native generateContent format. Reference image URLs are downloaded and converted to base64
 // inlineData format. Returns the native request ready for ProcessAsyncGeminiTask.

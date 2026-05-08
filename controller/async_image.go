@@ -52,7 +52,7 @@ func AsyncImageSubmit(c *gin.Context) {
 		UserId:     userId,
 		Group:      group,
 		ChannelId:  channelId,
-		Platform:   constant.TaskPlatformAsyncImage,
+		Platform:   constant.TaskPlatformUnifiedImage,
 		Action:     "generate",
 		Status:     model.TaskStatusSubmitted,
 		Progress:   "0%",
@@ -129,7 +129,7 @@ func AsyncImageSubmit(c *gin.Context) {
 
 		ctx := context.WithValue(context.Background(), "gin_context", c)
 		gopool.Go(func() {
-			service.ProcessAsyncGeminiTask(ctx, task)
+			service.ProcessUnifiedImageTask(ctx, task)
 		})
 	} else {
 		// Record usage log at submission time and persist the log ID for later update
@@ -366,7 +366,37 @@ func AsyncTaskFetch(c *gin.Context) {
 	}
 
 	if task.Status == model.TaskStatusSuccess {
-		if task.Platform == constant.TaskPlatformAsyncImage && task.PrivateData.ResultURL != "" {
+		if task.Platform == constant.TaskPlatformUnifiedImage {
+			// Return standard OpenAI ImageResponse format
+			imageResp := dto.ImageResponse{Created: task.FinishTime}
+			var storedData map[string]interface{}
+			if err := task.GetData(&storedData); err == nil {
+				if urls, ok := storedData["urls"].([]interface{}); ok {
+					for _, u := range urls {
+						if urlStr, ok := u.(string); ok {
+							imageResp.Data = append(imageResp.Data, dto.ImageData{Url: urlStr})
+						}
+					}
+				} else if dataList, ok := storedData["data"].([]interface{}); ok {
+					for _, d := range dataList {
+						if b64Str, ok := d.(string); ok {
+							imageResp.Data = append(imageResp.Data, dto.ImageData{B64Json: b64Str})
+						}
+					}
+				}
+			}
+			// Fallback: single image via legacy ResultURL
+			if len(imageResp.Data) == 0 && task.PrivateData.ResultURL != "" {
+				imageResp.Data = append(imageResp.Data, dto.ImageData{Url: task.PrivateData.ResultURL})
+			}
+			if len(imageResp.Data) > 0 {
+				dataBytes, _ := common.Marshal(imageResp)
+				resp.Data = dataBytes
+			} else {
+				resp.Data = task.Data
+			}
+		} else if task.Platform == constant.TaskPlatformAsyncImage && task.PrivateData.ResultURL != "" {
+			// Legacy format for old async_image tasks
 			data := map[string]interface{}{
 				"image_url": task.PrivateData.ResultURL,
 			}
