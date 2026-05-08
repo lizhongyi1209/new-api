@@ -7,9 +7,8 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
-	"image/png"
-	_ "image/gif"
-	"io"
+	_ "image/png" // register PNG decoder
+	_ "image/gif"  // register GIF decoder
 	"os"
 	"os/exec"
 	"strconv"
@@ -18,6 +17,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+
+	"golang.org/x/image/webp"
 
 	"golang.org/x/image/webp"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
