@@ -12,6 +12,9 @@ type AsyncImageRequest struct {
 	Style            json.RawMessage `json:"style,omitempty"`
 	User             json.RawMessage `json:"user,omitempty"`
 	ImageCompression string          `json:"image_compression,omitempty"`
+	AspectRatio      string          `json:"aspect_ratio,omitempty"`
+	Image            json.RawMessage `json:"image,omitempty"`
+	Images           []string        `json:"images,omitempty"`
 }
 
 const ImageCompressionWebP = "webp"
@@ -22,11 +25,11 @@ type AsyncTaskResponse struct {
 }
 
 type AsyncTaskFetchResponse struct {
-	TaskID   string          `json:"task_id"`
-	Status   string          `json:"status"`
-	Progress string          `json:"progress,omitempty"`
-	Data     json.RawMessage `json:"data,omitempty"`
-	Error    string          `json:"error,omitempty"`
+	TaskID           string          `json:"task_id"`
+	Status           string          `json:"status"`
+	Progress         string          `json:"progress,omitempty"`
+	Data             json.RawMessage `json:"data,omitempty"`
+	Error            string          `json:"error,omitempty"`
 }
 
 type AsyncImageResponseData struct {

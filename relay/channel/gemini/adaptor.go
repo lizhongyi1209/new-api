@@ -63,10 +63,19 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		return nil, errors.New("not supported model for image generation, only imagen models are supported")
 	}
 
-	// convert size to aspect ratio but allow user to specify aspect ratio
-	aspectRatio := "1:1" // default aspect ratio
-	size := strings.TrimSpace(request.Size)
-	if size != "" {
+	// Imagen does not support reference images. For img2img with Gemini,
+	// use the native endpoint: POST /async/v1beta/models/{model}:generateContent
+	if len(request.Image) > 0 || len(request.Images) > 0 {
+		return nil, errors.New("gemini imagen does not support reference images; use the gemini native async endpoint /v1beta/models/*path for img2img")
+	}
+
+	// Determine aspect ratio: explicit aspect_ratio takes priority, then size
+	aspectRatio := strings.TrimSpace(request.AspectRatio)
+	if aspectRatio == "" {
+		aspectRatio = "1:1" // default
+	}
+	if request.Size != "" {
+		size := strings.TrimSpace(request.Size)
 		if strings.Contains(size, ":") {
 			aspectRatio = size
 		} else {
