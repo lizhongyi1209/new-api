@@ -19,6 +19,8 @@ type AsyncImageRequest struct {
 }
 
 const ImageCompressionWebP = "webp"
+const ImageCompressionJPG = "jpg"
+const ImageCompressionOrigin = "origin"
 
 type AsyncTaskResponse struct {
 	TaskID string `json:"task_id"`

@@ -5,6 +5,11 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"image/png"
+	_ "image/gif"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -13,6 +18,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+
+	"golang.org/x/image/webp"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 )
@@ -98,9 +105,9 @@ func UploadBase64ImageToR2(mimeType, base64Data string) (string, error) {
 	return fmt.Sprintf("%s/%s", baseURL, key), nil
 }
 
-// convertPNGToWebP converts PNG bytes to WebP using the cwebp CLI tool.
+// convertToWebP converts image bytes to WebP using the cwebp CLI tool.
 // quality is 0-100, 85 is recommended for visually lossless results.
-func convertPNGToWebP(pngBytes []byte, quality int) ([]byte, error) {
+func convertToWebP(imgBytes []byte, quality int) ([]byte, error) {
 	inFile, err := os.CreateTemp("", "r2upload_*.png")
 	if err != nil {
 		return nil, fmt.Errorf("create temp input: %w", err)
@@ -115,7 +122,7 @@ func convertPNGToWebP(pngBytes []byte, quality int) ([]byte, error) {
 	outFile.Close()
 	defer os.Remove(outPath)
 
-	if _, err := inFile.Write(pngBytes); err != nil {
+	if _, err := inFile.Write(imgBytes); err != nil {
 		inFile.Close()
 		return nil, fmt.Errorf("write temp input: %w", err)
 	}
@@ -136,9 +143,40 @@ func convertPNGToWebP(pngBytes []byte, quality int) ([]byte, error) {
 }
 
 const ImageCompressionWebP = "webp"
+const ImageCompressionJPG = "jpg"
+const ImageCompressionOrigin = "origin"
 
-// UploadBase64ImageToR2Compressed is like UploadBase64ImageToR2 but converts to WebP when
-// compression is ImageCompressionWebP. Other values or empty string upload as PNG.
+// convertToJPEG decodes image bytes in any supported format (PNG, JPEG, GIF, WebP)
+// and re-encodes as JPEG with the given quality (1-100). Returns original bytes
+// if decoding fails, to avoid data loss.
+func convertToJPEG(imgBytes []byte, quality int) ([]byte, error) {
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	if err != nil {
+		// Try WebP decoder for webp source images
+		img, err = webp.Decode(bytes.NewReader(imgBytes))
+		if err != nil {
+			return imgBytes, nil // Return original bytes if unable to decode
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+		return imgBytes, nil // Return original bytes if encode fails
+	}
+	// Only use JPEG result if it's smaller or comparable to original
+	result := buf.Bytes()
+	if len(result) > len(imgBytes)*3 {
+		return imgBytes, nil // Don't replace if JPEG is >3x larger (avoid size blowup)
+	}
+	return result, nil
+}
+
+// UploadBase64ImageToR2Compressed uploads a base64 image to R2 with optional compression.
+// compression modes:
+//
+//	"webp"  - convert to WebP (cwebp, quality 85)
+//	"jpg"   - convert to JPEG (quality 85, fallback to original if decode fails)
+//	"origin" - keep original format, detect extension
+//	default  - store as-is with PNG extension
 func UploadBase64ImageToR2Compressed(mimeType, base64Data, compression string) (string, error) {
 	client, _ := getR2Client()
 	bucket := os.Getenv("R2_BUCKET")
@@ -152,15 +190,38 @@ func UploadBase64ImageToR2Compressed(mimeType, base64Data, compression string) (
 	var uploadBytes []byte
 	var ext, contentType string
 
-	if compression == ImageCompressionWebP {
-		webpBytes, err := convertPNGToWebP(imgBytes, 85)
+	switch compression {
+	case ImageCompressionWebP:
+		webpBytes, err := convertToWebP(imgBytes, 85)
 		if err != nil {
 			return "", fmt.Errorf("webp conversion failed: %w", err)
 		}
 		uploadBytes = webpBytes
 		ext = "webp"
 		contentType = "image/webp"
-	} else {
+	case ImageCompressionJPG:
+		jpgBytes, err := convertToJPEG(imgBytes, 85)
+		if err != nil {
+			return "", fmt.Errorf("jpeg conversion failed: %w", err)
+		}
+		uploadBytes = jpgBytes
+		ext = "jpg"
+		contentType = "image/jpeg"
+	case ImageCompressionOrigin:
+		// Detect actual format from binary header
+		_, format, _ := image.DecodeConfig(bytes.NewReader(imgBytes))
+		if format == "" {
+			if _, err := webp.DecodeConfig(bytes.NewReader(imgBytes)); err == nil {
+				format = "webp"
+			}
+		}
+		if format == "" {
+			format = "png" // fallback
+		}
+		uploadBytes = imgBytes
+		ext = format
+		contentType = mimeType
+	default:
 		uploadBytes = imgBytes
 		ext = "png"
 		contentType = mimeType
