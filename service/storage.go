@@ -50,9 +50,10 @@ func getR2Client() (*s3.Client, *s3.PresignClient) {
 type PresignResult struct {
 	UploadURL string `json:"upload_url"`
 	PublicURL string `json:"public_url"`
+	ExpiresAt int64  `json:"expires_at"` // Unix timestamp
 }
 
-func GeneratePresignedUploadURL(filename, contentType string) (*PresignResult, error) {
+func GeneratePresignedUploadURL(filename, contentType string, maxSize int64) (*PresignResult, error) {
 	_, presignClient := getR2Client()
 
 	bucket := os.Getenv("R2_BUCKET")
@@ -61,12 +62,20 @@ func GeneratePresignedUploadURL(filename, contentType string) (*PresignResult, e
 	id := uuid.New().String()
 	objectKey := fmt.Sprintf("uploads/%s_%s", id, filename)
 
-	req, err := presignClient.PresignPutObject(context.Background(), &s3.PutObjectInput{
+	putInput := &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(objectKey),
 		ContentType: aws.String(contentType),
-	}, func(o *s3.PresignOptions) {
-		o.Expires = 5 * time.Minute
+	}
+
+	// Add size limit if specified
+	if maxSize > 0 {
+		putInput.ContentLength = aws.Int64(maxSize)
+	}
+
+	expiresIn := 15 * time.Minute
+	req, err := presignClient.PresignPutObject(context.Background(), putInput, func(o *s3.PresignOptions) {
+		o.Expires = expiresIn
 	})
 	if err != nil {
 		return nil, err
@@ -75,6 +84,7 @@ func GeneratePresignedUploadURL(filename, contentType string) (*PresignResult, e
 	return &PresignResult{
 		UploadURL: req.URL,
 		PublicURL: fmt.Sprintf("%s/%s", publicBase, objectKey),
+		ExpiresAt: time.Now().Add(expiresIn).Unix(),
 	}, nil
 }
 
