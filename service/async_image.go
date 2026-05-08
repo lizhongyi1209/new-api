@@ -627,8 +627,15 @@ func detectImageMimeType(b64 string) string {
 // /async/v1/images/generations endpoint. It handles Gemini native image models
 // independently from the legacy /async/v1beta path.
 func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
-	// Refund pre-consumed quota if task ends in failure
 	defer func() {
+		if r := recover(); r != nil {
+			logger.LogError(ctx, fmt.Sprintf("unified_image: panic recovered: %v", r))
+			task.Status = model.TaskStatusFailure
+			task.FailReason = fmt.Sprintf("内部错误 (panic): %v", r)
+			task.Progress = "100%"
+			task.FinishTime = time.Now().Unix()
+			_ = task.Update()
+		}
 		if task.Status == model.TaskStatusFailure {
 			RefundTaskQuota(ctx, task, task.FailReason)
 		}
