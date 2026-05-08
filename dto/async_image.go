@@ -12,9 +12,10 @@ type AsyncImageRequest struct {
 	Style            json.RawMessage `json:"style,omitempty"`
 	User             json.RawMessage `json:"user,omitempty"`
 	ImageCompression string          `json:"image_compression,omitempty"`
-	AspectRatio      string          `json:"aspect_ratio,omitempty"`
-	Image            json.RawMessage `json:"image,omitempty"`
-	Images           []string        `json:"images,omitempty"`
+	AspectRatio        string   `json:"aspect_ratio,omitempty"`
+	ResponseModalities []string `json:"response_modalities,omitempty"`
+	Image              json.RawMessage `json:"image,omitempty"`
+	Images             []string        `json:"images,omitempty"`
 }
 
 const ImageCompressionWebP = "webp"
