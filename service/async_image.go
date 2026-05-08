@@ -154,7 +154,7 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 	other["model_price"] = relayInfo.PriceData.ModelPrice
 	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
 	other["async_task_id"] = task.TaskID
-	other["request_path"] = "/async/v1beta/models/" + modelName + ":generateContent"
+	other["request_path"] = "/v1beta/models/" + modelName + ":generateContent"
 	other["per_call_billing"] = relayInfo.PriceData.UsePrice
 	other["completion_ratio"] = ratio_setting.GetCompletionRatio(modelName)
 	if relayInfo.IsModelMapped {
