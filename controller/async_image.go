@@ -366,12 +366,35 @@ func AsyncTaskFetch(c *gin.Context) {
 	}
 
 	if task.Status == model.TaskStatusSuccess {
-		if task.Platform == constant.TaskPlatformAsyncImage && task.PrivateData.ResultURL != "" {
-			data := map[string]interface{}{
-				"image_url": task.PrivateData.ResultURL,
+		if task.Platform == constant.TaskPlatformAsyncImage {
+			// Return standard OpenAI ImageResponse format
+			imageResp := dto.ImageResponse{Created: task.FinishTime}
+			var storedData map[string]interface{}
+			if err := task.GetData(&storedData); err == nil {
+				if urls, ok := storedData["urls"].([]interface{}); ok {
+					for _, u := range urls {
+						if urlStr, ok := u.(string); ok {
+							imageResp.Data = append(imageResp.Data, dto.ImageData{Url: urlStr})
+						}
+					}
+				} else if dataList, ok := storedData["data"].([]interface{}); ok {
+					for _, d := range dataList {
+						if b64Str, ok := d.(string); ok {
+							imageResp.Data = append(imageResp.Data, dto.ImageData{B64Json: b64Str})
+						}
+					}
+				}
 			}
-			dataBytes, _ := common.Marshal(data)
-			resp.Data = dataBytes
+			// Fallback: single image via legacy ResultURL
+			if len(imageResp.Data) == 0 && task.PrivateData.ResultURL != "" {
+				imageResp.Data = append(imageResp.Data, dto.ImageData{Url: task.PrivateData.ResultURL})
+			}
+			if len(imageResp.Data) > 0 {
+				dataBytes, _ := common.Marshal(imageResp)
+				resp.Data = dataBytes
+			} else {
+				resp.Data = task.Data
+			}
 		} else {
 			resp.Data = task.Data
 		}
