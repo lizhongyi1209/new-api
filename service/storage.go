@@ -182,8 +182,8 @@ func convertToJPEG(imgBytes []byte, quality int) ([]byte, error) {
 // UploadBase64ImageToR2Compressed uploads a base64 image to R2 with optional compression.
 // compression modes:
 //
-//	"webp"  - convert to WebP (cwebp, quality 85)
-//	"jpg"   - convert to JPEG (quality 85, fallback to original if decode fails)
+//	"webp"  - convert to JPEG (quality 95, same as "jpg" mode)
+//	"jpg"   - convert to JPEG (quality 95, fallback to original if decode fails)
 //	"origin" - keep original format, detect extension
 //	default  - store as-is with PNG extension
 func UploadBase64ImageToR2Compressed(mimeType, base64Data, compression string) (string, error) {
@@ -201,15 +201,16 @@ func UploadBase64ImageToR2Compressed(mimeType, base64Data, compression string) (
 
 	switch compression {
 	case ImageCompressionWebP:
-		webpBytes, err := convertToWebP(imgBytes, 85)
+		// Changed: webp mode now uses JPEG quality 95 instead of WebP conversion
+		jpgBytes, err := convertToJPEG(imgBytes, 95)
 		if err != nil {
-			return "", fmt.Errorf("webp conversion failed: %w", err)
+			return "", fmt.Errorf("jpeg conversion failed: %w", err)
 		}
-		uploadBytes = webpBytes
-		ext = "webp"
-		contentType = "image/webp"
+		uploadBytes = jpgBytes
+		ext = "jpg"
+		contentType = "image/jpeg"
 	case ImageCompressionJPG:
-		jpgBytes, err := convertToJPEG(imgBytes, 85)
+		jpgBytes, err := convertToJPEG(imgBytes, 95)
 		if err != nil {
 			return "", fmt.Errorf("jpeg conversion failed: %w", err)
 		}
