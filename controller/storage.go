@@ -22,10 +22,11 @@ func GetPresignedURL(c *gin.Context) {
 		return
 	}
 
-	// Validate content type (only allow images)
-	if !strings.HasPrefix(req.ContentType, "image/") {
+	// Validate content type (allow images and videos)
+	if !strings.HasPrefix(req.ContentType, "image/") &&
+	   !strings.HasPrefix(req.ContentType, "video/") {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "只支持图片类型 (image/*)",
+			"error": "只支持图片或视频类型 (image/*, video/*)",
 		})
 		return
 	}
