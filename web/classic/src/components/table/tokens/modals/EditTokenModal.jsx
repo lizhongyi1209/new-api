@@ -74,6 +74,7 @@ const EditTokenModal = (props) => {
   const [showQuotaInput, setShowQuotaInput] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState([]);
   const [dragIndex, setDragIndex] = useState(null);
+  const pendingTokenGroupRef = useRef(null); // 编辑时暂存令牌分组数据，等 groups 加载完成后初始化
   const isEdit = props.editingToken.id !== undefined;
 
   const getInitValues = () => ({
@@ -205,8 +206,16 @@ const EditTokenModal = (props) => {
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
       }
-      // 初始化多选分组
-      initSelectedGroups(data.group, data.auto_group_priority || '');
+      // 初始化多选分组：groups 可能尚未加载完成，先暂存，等 groups 就绪后再初始化
+      if (groups.length > 0) {
+        initSelectedGroups(data.group, data.auto_group_priority || '');
+        pendingTokenGroupRef.current = null;
+      } else {
+        pendingTokenGroupRef.current = {
+          group: data.group,
+          auto_group_priority: data.auto_group_priority || '',
+        };
+      }
     } else {
       showError(message);
     }
@@ -241,18 +250,27 @@ const EditTokenModal = (props) => {
     } else {
       formApiRef.current?.reset();
       setSelectedGroups([]);
+      pendingTokenGroupRef.current = null;
     }
   }, [props.visiable, props.editingToken.id]);
 
-  // 当 groups 加载完成后，如果是新建且启用了默认 auto
+  // 当 groups 加载完成后，处理编辑模式的延迟初始化 或 新建模式的默认 auto
   useEffect(() => {
-    if (props.visiable && !isEdit && groups.length > 0) {
-      if (statusState?.status?.default_use_auto_group) {
-        const systemAuto = (statusState?.status?.auto_groups || ['default'])
-          .filter((g) => groups.some((gr) => gr.value === g));
-        if (systemAuto.length > 0 && selectedGroups.length === 0) {
-          setSelectedGroups(systemAuto);
-        }
+    if (!props.visiable || groups.length === 0) return;
+
+    if (isEdit && pendingTokenGroupRef.current) {
+      // 编辑模式：loadToken 时 groups 未就绪，现在初始化
+      initSelectedGroups(
+        pendingTokenGroupRef.current.group,
+        pendingTokenGroupRef.current.auto_group_priority,
+      );
+      pendingTokenGroupRef.current = null;
+    } else if (!isEdit && statusState?.status?.default_use_auto_group) {
+      // 新建模式：系统启用了默认 auto 分组
+      const systemAuto = (statusState?.status?.auto_groups || ['default'])
+        .filter((g) => groups.some((gr) => gr.value === g));
+      if (systemAuto.length > 0 && selectedGroups.length === 0) {
+        setSelectedGroups(systemAuto);
       }
     }
   }, [groups, props.visiable]);
