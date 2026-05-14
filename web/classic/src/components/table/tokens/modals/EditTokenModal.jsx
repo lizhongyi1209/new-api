@@ -53,6 +53,9 @@ import {
   IconSave,
   IconClose,
   IconKey,
+  IconChevronUp,
+  IconChevronDown,
+  IconRefresh,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../../../context/Status';
@@ -68,6 +71,7 @@ const EditTokenModal = (props) => {
   const [models, setModels] = useState([]);
   const [groups, setGroups] = useState([]);
   const [showQuotaInput, setShowQuotaInput] = useState(false);
+  const [autoGroupPriority, setAutoGroupPriority] = useState([]);
   const isEdit = props.editingToken.id !== undefined;
 
   const getInitValues = () => ({
@@ -81,6 +85,7 @@ const EditTokenModal = (props) => {
     allow_ips: '',
     group: '',
     cross_group_retry: false,
+    auto_group_priority: '',
     tokenCount: 1,
   });
 
@@ -175,6 +180,10 @@ const EditTokenModal = (props) => {
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
       }
+      // 初始化自动分组优先级
+      if (data.group === 'auto' && groups.length > 0) {
+        initAutoGroupPriority(groups, data.auto_group_priority || '');
+      }
     } else {
       showError(message);
     }
@@ -200,8 +209,28 @@ const EditTokenModal = (props) => {
       }
     } else {
       formApiRef.current?.reset();
+      setAutoGroupPriority([]);
     }
   }, [props.visiable, props.editingToken.id]);
+
+  // 当 groups 加载完成且 modal 可见时，初始化自动分组优先级
+  useEffect(() => {
+    if (props.visiable && groups.length > 0) {
+      if (isEdit) {
+        // 编辑模式：loadToken 后会通过 form 的 group 值和已保存的 auto_group_priority 初始化
+        const formValues = formApiRef.current?.getValues();
+        if (formValues && formValues.group === 'auto') {
+          initAutoGroupPriority(groups, formValues.auto_group_priority);
+        }
+      } else {
+        // 新建模式：检查默认是否 auto
+        const formValues = formApiRef.current?.getValues();
+        if (formValues && formValues.group === 'auto') {
+          initAutoGroupPriority(groups, null);
+        }
+      }
+    }
+  }, [groups, props.visiable]);
 
   const generateRandomSuffix = () => {
     const characters =
@@ -213,6 +242,68 @@ const EditTokenModal = (props) => {
       );
     }
     return result;
+  };
+
+  const initAutoGroupPriority = (currentGroups, existingPriority) => {
+    if (existingPriority) {
+      try {
+        const parsed = JSON.parse(existingPriority);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // 合并：已有的优先级排前面，当前可用分组中未出现的追加在后面
+          const existingSet = new Set(parsed);
+          const merged = [...parsed];
+          currentGroups.forEach((g) => {
+            if (!existingSet.has(g.value)) {
+              merged.push(g.value);
+            }
+          });
+          setAutoGroupPriority(merged);
+          return;
+        }
+      } catch (e) {
+        // 解析失败，使用默认
+      }
+    }
+    // 默认：按 groups 现有顺序
+    setAutoGroupPriority(currentGroups.map((g) => g.value));
+  };
+
+  const moveGroupUp = (index) => {
+    if (index <= 0) return;
+    setAutoGroupPriority((prev) => {
+      const next = [...prev];
+      [next[index - 1], next[index]] = [next[index], next[index - 1]];
+      return next;
+    });
+  };
+
+  const moveGroupDown = (index) => {
+    setAutoGroupPriority((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const next = [...prev];
+      [next[index], next[index + 1]] = [next[index + 1], next[index]];
+      return next;
+    });
+  };
+
+  const resetAutoGroupPriority = () => {
+    setAutoGroupPriority(groups.map((g) => g.value));
+  };
+
+  const handleFormValueChange = (changedValues) => {
+    if (changedValues.group === 'auto' && groups.length > 0) {
+      if (autoGroupPriority.length === 0) {
+        initAutoGroupPriority(groups, null);
+      }
+    } else if (changedValues.group && changedValues.group !== 'auto') {
+      setAutoGroupPriority([]);
+    }
+  };
+
+  const getGroupLabel = (groupValue) => {
+    const found = groups.find((g) => g.value === groupValue);
+    if (!found) return groupValue;
+    return `${found.label} (${found.value})`;
   };
 
   const submit = async (values) => {
@@ -238,6 +329,10 @@ const EditTokenModal = (props) => {
       }
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+      localInputs.auto_group_priority =
+        localInputs.group === 'auto' && autoGroupPriority.length > 0
+          ? JSON.stringify(autoGroupPriority)
+          : '';
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -282,6 +377,10 @@ const EditTokenModal = (props) => {
         }
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+        localInputs.auto_group_priority =
+          localInputs.group === 'auto' && autoGroupPriority.length > 0
+            ? JSON.stringify(autoGroupPriority)
+            : '';
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
@@ -356,6 +455,7 @@ const EditTokenModal = (props) => {
           initValues={getInitValues()}
           getFormApi={(api) => (formApiRef.current = api)}
           onSubmit={submit}
+          onValueChange={handleFormValueChange}
         >
           {({ values }) => (
             <div className='p-2'>
@@ -424,6 +524,97 @@ const EditTokenModal = (props) => {
                         '开启后，当前分组渠道失败时会按顺序尝试下一个分组的渠道',
                       )}
                     />
+                  </Col>
+                  <Col
+                    span={24}
+                    style={{
+                      display: values.group === 'auto' ? 'block' : 'none',
+                    }}
+                  >
+                    <div className='mb-2'>
+                      <div className='flex items-center justify-between mb-2'>
+                        <Typography.Text strong className='text-sm'>
+                          {t('自动分组优先级')}
+                        </Typography.Text>
+                        <Button
+                          theme='light'
+                          size='small'
+                          onClick={resetAutoGroupPriority}
+                          icon={<IconRefresh />}
+                        >
+                          {t('恢复默认')}
+                        </Button>
+                      </div>
+                      <Typography.Text type='tertiary' size='small' className='block mb-2'>
+                        {t(
+                          '拖拽调整分组尝试顺序，排在上方的分组优先被使用',
+                        )}
+                      </Typography.Text>
+                      <div
+                        style={{
+                          border: '1px solid var(--semi-color-border)',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        {autoGroupPriority.length === 0 && (
+                          <div className='p-4 text-center'>
+                            <Typography.Text type='tertiary'>
+                              {t('暂无可用分组')}
+                            </Typography.Text>
+                          </div>
+                        )}
+                        {autoGroupPriority.map((groupValue, index) => (
+                          <div
+                            key={groupValue}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 12px',
+                              borderBottom:
+                                index < autoGroupPriority.length - 1
+                                  ? '1px solid var(--semi-color-border)'
+                                  : 'none',
+                              backgroundColor:
+                                index % 2 === 0
+                                  ? 'var(--semi-color-fill-0)'
+                                  : 'transparent',
+                            }}
+                          >
+                            <div className='flex items-center gap-2'>
+                              <Tag
+                                size='small'
+                                color={
+                                  index === 0 ? 'blue' : 'grey'
+                                }
+                              >
+                                #{index + 1}
+                              </Tag>
+                              <Typography.Text>
+                                {getGroupLabel(groupValue)}
+                              </Typography.Text>
+                            </div>
+                            <Space spacing={4}>
+                              <Button
+                                theme='light'
+                                size='small'
+                                disabled={index === 0}
+                                onClick={() => moveGroupUp(index)}
+                                icon={<IconChevronUp />}
+                              />
+                              <Button
+                                theme='light'
+                                size='small'
+                                disabled={index === autoGroupPriority.length - 1}
+                                onClick={() => moveGroupDown(index)}
+                                icon={<IconChevronDown />}
+                              />
+                            </Space>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </Col>
                   <Col xs={24} sm={24} md={24} lg={10} xl={10}>
                     <Form.DatePicker

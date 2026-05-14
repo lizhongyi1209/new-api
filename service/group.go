@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
@@ -51,6 +52,54 @@ func GetUserAutoGroup(userGroup string) []string {
 		}
 	}
 	return autoGroups
+}
+
+// GetUserAutoGroupWithPriority 根据用户分组和令牌自定义优先级获取自动分组设置
+// customPriorityJson: 令牌存储的自定义优先级 JSON 数组，如 `["vip","default"]`
+// 如果 customPriorityJson 为空，返回系统默认顺序
+// 自定义优先级中的分组会排在前面，系统默认中剩余的分组会追加在后面
+func GetUserAutoGroupWithPriority(userGroup string, customPriorityJson string) []string {
+	groups := GetUserUsableGroups(userGroup)
+
+	// 如果令牌没有自定义优先级，直接使用系统默认
+	if customPriorityJson == "" {
+		return GetUserAutoGroup(userGroup)
+	}
+
+	// 解析令牌的自定义优先级
+	var customPriority []string
+	if err := common.Unmarshal([]byte(customPriorityJson), &customPriority); err != nil {
+		// 解析失败时回退到系统默认
+		return GetUserAutoGroup(userGroup)
+	}
+
+	seen := make(map[string]bool)
+	result := make([]string, 0)
+
+	// 先按令牌自定义顺序添加用户可用的分组
+	for _, g := range customPriority {
+		if _, ok := groups[g]; ok {
+			if !seen[g] {
+				seen[g] = true
+				result = append(result, g)
+			}
+		}
+	}
+
+	// 追加系统默认列表中用户可用但未被自定义列表覆盖的分组
+	for _, g := range setting.GetAutoGroups() {
+		if _, ok := groups[g]; ok {
+			if !seen[g] {
+				seen[g] = true
+				result = append(result, g)
+			}
+		}
+	}
+
+	if len(result) == 0 {
+		return GetUserAutoGroup(userGroup)
+	}
+	return result
 }
 
 // GetUserGroupRatio 获取用户使用某个分组的倍率
