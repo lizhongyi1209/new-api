@@ -150,12 +150,14 @@ const EditTokenModal = (props) => {
         value: group,
         ratio: info.ratio,
       }));
-      // 添加 auto 选项（系统默认自动分组，与具体分组互斥）
-      localGroupOptions.unshift({
-        label: t('自动分组（系统默认排序）'),
-        value: 'auto',
-        ratio: undefined,
-      });
+      // 确保 auto 选项存在（后端可能已返回，避免重复）
+      if (!localGroupOptions.some((g) => g.value === 'auto')) {
+        localGroupOptions.unshift({
+          label: t('自动分组（系统默认排序）'),
+          value: 'auto',
+          ratio: undefined,
+        });
+      }
       setGroups(localGroupOptions);
     } else {
       showError(t(message));
