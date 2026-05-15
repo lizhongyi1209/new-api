@@ -150,6 +150,12 @@ const EditTokenModal = (props) => {
         value: group,
         ratio: info.ratio,
       }));
+      // 添加 auto 选项（系统默认自动分组，与具体分组互斥）
+      localGroupOptions.unshift({
+        label: t('自动分组（系统默认排序）'),
+        value: 'auto',
+        ratio: undefined,
+      });
       setGroups(localGroupOptions);
     } else {
       showError(t(message));
@@ -164,7 +170,7 @@ const EditTokenModal = (props) => {
         try {
           const parsed = JSON.parse(savedAutoGroupPriority);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // 仅保留用户仍有权限的分组
+            // 有自定义优先级 → 展示具体选中的分组
             const valid = parsed.filter((g) => groupValues.includes(g));
             if (valid.length > 0) {
               setSelectedGroups(valid);
@@ -175,10 +181,8 @@ const EditTokenModal = (props) => {
           // 解析失败，回退
         }
       }
-      // 没有自定义优先级 → 使用系统默认 AutoGroups
-      const systemAuto = (statusState?.status?.auto_groups || ['default'])
-        .filter((g) => groupValues.includes(g));
-      setSelectedGroups(systemAuto.length > 0 ? systemAuto : []);
+      // 没有自定义优先级 → 展示 "auto"（走系统管理员设置的默认排序）
+      setSelectedGroups(['auto']);
     } else if (savedGroup && groupValues.includes(savedGroup)) {
       // 单选某个具体分组
       setSelectedGroups([savedGroup]);
@@ -238,11 +242,9 @@ const EditTokenModal = (props) => {
         loadToken();
       } else {
         formApiRef.current?.setValues(getInitValues());
-        // 新建模式：如果系统启用了默认 auto 分组，初始化
-        if (statusState?.status?.default_use_auto_group && groups.length > 0) {
-          const systemAuto = (statusState?.status?.auto_groups || ['default'])
-            .filter((g) => groups.some((gr) => gr.value === g));
-          setSelectedGroups(systemAuto.length > 0 ? systemAuto : []);
+        // 新建模式：如果系统启用了默认 auto 分组，默认选中 auto
+        if (statusState?.status?.default_use_auto_group) {
+          setSelectedGroups(['auto']);
         } else {
           setSelectedGroups([]);
         }
@@ -254,24 +256,17 @@ const EditTokenModal = (props) => {
     }
   }, [props.visiable, props.editingToken.id]);
 
-  // 当 groups 加载完成后，处理编辑模式的延迟初始化 或 新建模式的默认 auto
+  // 当 groups 加载完成后，处理编辑模式的延迟初始化
   useEffect(() => {
     if (!props.visiable || groups.length === 0) return;
 
     if (isEdit && pendingTokenGroupRef.current) {
-      // 编辑模式：loadToken 时 groups 未就绪，现在初始化
+      // 编辑模式：loadToken 时 groups 未就绪，现在补初始化
       initSelectedGroups(
         pendingTokenGroupRef.current.group,
         pendingTokenGroupRef.current.auto_group_priority,
       );
       pendingTokenGroupRef.current = null;
-    } else if (!isEdit && statusState?.status?.default_use_auto_group) {
-      // 新建模式：系统启用了默认 auto 分组
-      const systemAuto = (statusState?.status?.auto_groups || ['default'])
-        .filter((g) => groups.some((gr) => gr.value === g));
-      if (systemAuto.length > 0 && selectedGroups.length === 0) {
-        setSelectedGroups(systemAuto);
-      }
     }
   }, [groups, props.visiable]);
 
@@ -287,17 +282,30 @@ const EditTokenModal = (props) => {
     return result;
   };
 
-  // 多选下拉变更
-  const handleGroupSelectChange = (newSelectedValues) => {
-    if (!newSelectedValues || newSelectedValues.length === 0) {
+  // 多选下拉变更：auto 和具体分组互斥
+  const handleGroupSelectChange = (newValues) => {
+    if (!newValues || newValues.length === 0) {
       setSelectedGroups([]);
       return;
     }
-    // 保持已有顺序，新加入的放末尾
-    const newSet = new Set(newSelectedValues);
-    const ordered = selectedGroups.filter((g) => newSet.has(g));
-    newSelectedValues.forEach((g) => {
-      if (!ordered.includes(g)) {
+    const prevHadAuto = selectedGroups.includes('auto');
+    const nowHasAuto = newValues.includes('auto');
+
+    if (nowHasAuto && !prevHadAuto) {
+      // 用户刚选中 auto → 仅保留 auto，移除其他分组
+      setSelectedGroups(['auto']);
+      return;
+    }
+    if (nowHasAuto && prevHadAuto && newValues.length > 1) {
+      // auto 已选中，用户又选了具体分组 → 移除 auto，保留具体分组
+      setSelectedGroups(newValues.filter((g) => g !== 'auto'));
+      return;
+    }
+    // 正常多选（不含 auto）：保持已有顺序，新加入的放末尾
+    const newSet = new Set(newValues);
+    const ordered = selectedGroups.filter((g) => g !== 'auto' && newSet.has(g));
+    newValues.forEach((g) => {
+      if (g !== 'auto' && !ordered.includes(g)) {
         ordered.push(g);
       }
     });
@@ -328,9 +336,7 @@ const EditTokenModal = (props) => {
   };
 
   const resetSelectedGroups = () => {
-    const systemAuto = (statusState?.status?.auto_groups || ['default'])
-      .filter((g) => groups.some((gr) => gr.value === g));
-    setSelectedGroups(systemAuto.length > 0 ? systemAuto : groups.map((g) => g.value));
+    setSelectedGroups(['auto']);
   };
 
   // 拖拽排序
@@ -474,8 +480,15 @@ const EditTokenModal = (props) => {
     formApiRef.current?.setValues(getInitValues());
   };
 
-  // 是否显示优先级面板（>=2 个分组）
-  const showPriorityPanel = selectedGroups.length >= 2;
+  const isAutoMode = selectedGroups.length === 1 && selectedGroups[0] === 'auto';
+  // 仅当多选 ≥2 个具体分组时显示优先级面板（auto 模式不显示）
+  const showPriorityPanel = selectedGroups.length >= 2 && !selectedGroups.includes('auto');
+  const getGroupHint = () => {
+    if (selectedGroups.length === 0) return t('不选 = 继承用户默认分组');
+    if (isAutoMode) return t('自动模式，使用系统默认分组排序');
+    if (selectedGroups.length === 1) return t('单选 = 固定使用该分组');
+    return t(`多选 = 自动模式，按优先级尝试 ${selectedGroups.length} 个分组`);
+  };
 
   return (
     <SideSheet
@@ -581,11 +594,7 @@ const EditTokenModal = (props) => {
                             style={{ width: '100%' }}
                           />
                           <div className='text-xs mt-1' style={{ color: 'var(--semi-color-text-2)' }}>
-                            {selectedGroups.length === 0
-                              ? t('不选 = 继承用户默认分组')
-                              : selectedGroups.length === 1
-                                ? t('单选 = 固定使用该分组')
-                                : t(`多选 = 自动模式，按优先级尝试 ${selectedGroups.length} 个分组`)}
+                            {getGroupHint()}
                           </div>
                         </Form.Slot>
                       </div>
@@ -598,11 +607,11 @@ const EditTokenModal = (props) => {
                       />
                     )}
                   </Col>
-                  {/* 跨分组重试 — 仅多选时显示 */}
+                  {/* 跨分组重试 — auto 或多选时显示 */}
                   <Col
                     span={24}
                     style={{
-                      display: showPriorityPanel ? 'block' : 'none',
+                      display: (isAutoMode || showPriorityPanel) ? 'block' : 'none',
                     }}
                   >
                     <Form.Switch
