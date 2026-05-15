@@ -413,6 +413,35 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     }
   };
 
+  // Batch update tokens group
+  const batchUpdateTokensGroup = async (payload) => {
+    if (selectedKeys.length < 2) {
+      showError(t('请至少选择两个令牌！'));
+      return;
+    }
+    setLoading(true);
+    try {
+      const ids = selectedKeys.map((token) => token.id);
+      const res = await API.post('/api/token/batch/group', {
+        ids,
+        group: payload.group,
+        auto_group_priority: payload.auto_group_priority,
+        cross_group_retry: payload.cross_group_retry,
+      });
+      if (res?.data?.success) {
+        const count = res.data.data || 0;
+        showSuccess(t('已更新 {{count}} 个令牌的分组设置！', { count }));
+        await refresh();
+      } else {
+        showError(res?.data?.message || t('更新失败'));
+      }
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Batch copy tokens
   const batchCopyTokens = async (copyType) => {
     if (selectedKeys.length === 0) {
@@ -514,6 +543,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     handleRow,
     batchDeleteTokens,
     batchCopyTokens,
+    batchUpdateTokensGroup,
     syncPageData,
 
     // Translation

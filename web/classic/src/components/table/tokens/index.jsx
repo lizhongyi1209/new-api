@@ -38,6 +38,7 @@ import TokensActions from './TokensActions';
 import TokensFilters from './TokensFilters';
 import TokensDescription from './TokensDescription';
 import EditTokenModal from './modals/EditTokenModal';
+import BatchEditGroupModal from './modals/BatchEditGroupModal';
 import CCSwitchModal from './modals/CCSwitchModal';
 import { useTokensData } from '../../../hooks/tokens/useTokensData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
@@ -66,6 +67,7 @@ function TokensPage() {
   const [prefillKey, setPrefillKey] = useState('');
   const [ccSwitchVisible, setCCSwitchVisible] = useState(false);
   const [ccSwitchKey, setCCSwitchKey] = useState('');
+  const [batchEditGroupVisible, setBatchEditGroupVisible] = useState(false);
 
   // Keep latest data for handlers inside notifications
   useEffect(() => {
@@ -359,6 +361,7 @@ function TokensPage() {
     setShowEdit,
     batchCopyTokens,
     batchDeleteTokens,
+    batchUpdateTokensGroup,
 
     // Filters state
     formInitValues,
@@ -375,6 +378,19 @@ function TokensPage() {
     t,
   } = tokensData;
 
+  const handleBatchEditGroup = () => {
+    if (selectedKeys.length < 2) {
+      showError(t('请至少选择两个令牌！'));
+      return;
+    }
+    setBatchEditGroupVisible(true);
+  };
+
+  const handleBatchEditGroupSubmit = async (payload) => {
+    await batchUpdateTokensGroup(payload);
+    setBatchEditGroupVisible(false);
+  };
+
   return (
     <>
       <EditTokenModal
@@ -389,6 +405,13 @@ function TokensPage() {
         onClose={() => setCCSwitchVisible(false)}
         tokenKey={ccSwitchKey}
         modelOptions={modelOptions}
+      />
+
+      <BatchEditGroupModal
+        visible={batchEditGroupVisible}
+        selectedCount={selectedKeys.length}
+        onCancel={() => setBatchEditGroupVisible(false)}
+        onSubmit={handleBatchEditGroupSubmit}
       />
 
       <CardPro
@@ -408,6 +431,7 @@ function TokensPage() {
               setShowEdit={setShowEdit}
               batchCopyTokens={batchCopyTokens}
               batchDeleteTokens={batchDeleteTokens}
+              onBatchEditGroup={handleBatchEditGroup}
               t={t}
             />
 

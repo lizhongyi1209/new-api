@@ -29,6 +29,7 @@ const TokensActions = ({
   setShowEdit,
   batchCopyTokens,
   batchDeleteTokens,
+  onBatchEditGroup,
   t,
 }) => {
   // Modal states
@@ -92,6 +93,16 @@ const TokensActions = ({
           size='small'
         >
           {t('删除所选令牌')}
+        </Button>
+
+        <Button
+          type='warning'
+          className='w-full md:w-auto'
+          disabled={selectedKeys.length < 2}
+          onClick={onBatchEditGroup}
+          size='small'
+        >
+          {t('批量编辑分组')}
         </Button>
       </div>
 

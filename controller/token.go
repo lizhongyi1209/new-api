@@ -359,3 +359,32 @@ func GetTokenKeysBatch(c *gin.Context) {
 	}
 	common.ApiSuccess(c, gin.H{"keys": keysMap})
 }
+
+func UpdateTokenBatchGroup(c *gin.Context) {
+	type BatchGroupRequest struct {
+		Ids               []int  `json:"ids"`
+		Group             string `json:"group"`
+		AutoGroupPriority string `json:"auto_group_priority"`
+		CrossGroupRetry   bool   `json:"cross_group_retry"`
+	}
+	req := BatchGroupRequest{}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.Ids) == 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if len(req.Ids) > 100 {
+		common.ApiErrorI18n(c, i18n.MsgBatchTooMany, map[string]any{"Max": 100})
+		return
+	}
+	userId := c.GetInt("id")
+	count, err := model.BatchUpdateTokensGroup(req.Ids, userId, req.Group, req.AutoGroupPriority, req.CrossGroupRetry)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    count,
+	})
+}
