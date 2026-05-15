@@ -477,3 +477,35 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		perfmetrics.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
 	})
 }
+
+// RefundIfZeroCompletionTokens refunds the charged quota when the upstream returns
+// a successful response but with zero completion/output tokens (risk control scenario).
+// This runs after the normal billing path as a separate safety-net refund.
+func RefundIfZeroCompletionTokens(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) {
+	if usage == nil {
+		return
+	}
+	if usage.CompletionTokens > 0 {
+		return
+	}
+	if usage.TotalTokens == 0 {
+		// PostTextConsumeQuota already handled the zero-total-tokens case
+		return
+	}
+	if relayInfo == nil {
+		return
+	}
+
+	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
+	if summary.Quota <= 0 {
+		return
+	}
+
+	logger.LogWarn(ctx, fmt.Sprintf("检测到上游返回0输出token但返回了%d输入token，触发风控退款，退款额度: %s，模型: %s，用户ID: %d",
+		summary.PromptTokens, logger.LogQuota(summary.Quota), summary.ModelName, relayInfo.UserId))
+
+	err := PostConsumeQuota(relayInfo, -summary.Quota, 0, false)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("zero completion token refund failed: %s", err.Error()))
+	}
+}

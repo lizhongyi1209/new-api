@@ -88,6 +88,7 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			service.PostAudioConsumeQuota(c, info, usage, "")
 		} else {
 			service.PostTextConsumeQuota(c, info, usage, nil)
+			service.RefundIfZeroCompletionTokens(c, info, usage)
 		}
 		return nil
 	}
@@ -217,7 +218,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if containAudioTokens && containsAudioRatios {
 		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
 	} else {
-		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
+		usageDto := usage.(*dto.Usage)
+		service.PostTextConsumeQuota(c, info, usageDto, nil)
+		service.RefundIfZeroCompletionTokens(c, info, usageDto)
 	}
 	return nil
 }

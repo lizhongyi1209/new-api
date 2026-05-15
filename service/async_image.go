@@ -994,6 +994,13 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
 		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
 	}
 
+	// Refund if risk control blocked the output (zero completion tokens)
+	if completionTokens == 0 && promptTokens > 0 && task.Quota > 0 {
+		logger.LogWarn(ctx, fmt.Sprintf("unified_image: 上游返回0输出token（疑似风控），退还扣费，任务 %s，模型 %s，额度 %s",
+			task.TaskID, taskModelName(task), logger.LogQuota(task.Quota)))
+		RefundTaskQuota(ctx, task, "上游返回0输出token（疑似风控），退还全部扣费")
+	}
+
 	// Update submission-time log with actual completion data
 	useTime := int(task.FinishTime - task.StartTime)
 	updateContent := fmt.Sprintf("统一图片生成，生成 %d 张图片，异步任务 %s（已完成）", imageCount, task.TaskID)
@@ -1507,6 +1514,13 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	// Settle billing: per-token models need post-completion recalculation with actual token counts
 	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
 		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+	}
+
+	// Refund if risk control blocked the output (zero completion tokens)
+	if completionTokens == 0 && promptTokens > 0 && task.Quota > 0 {
+		logger.LogWarn(ctx, fmt.Sprintf("async_gemini: 上游返回0输出token（疑似风控），退还扣费，任务 %s，模型 %s，额度 %s",
+			task.TaskID, taskModelName(task), logger.LogQuota(task.Quota)))
+		RefundTaskQuota(ctx, task, "上游返回0输出token（疑似风控），退还全部扣费")
 	}
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed, generated %d images, tokens: p=%d c=%d", task.TaskID, imageCount, promptTokens, completionTokens))
