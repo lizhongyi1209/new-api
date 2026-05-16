@@ -290,3 +290,73 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 
 	return &simpleResponse.Usage, nil
 }
+
+// ForwardImageSSEStream relays the upstream SSE stream directly to the client for image generation.
+func ForwardImageSSEStream(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	defer service.CloseResponseBodyGracefully(resp)
+
+	for k, v := range resp.Header {
+		c.Writer.Header()[k] = v
+	}
+	c.Writer.WriteHeader(resp.StatusCode)
+
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		return nil, types.NewOpenAIError(fmt.Errorf("streaming not supported"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
+	}
+
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
+				logger.LogError(c, fmt.Sprintf("image stream write error: %s", writeErr.Error()))
+				break
+			}
+			flusher.Flush()
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				logger.LogError(c, fmt.Sprintf("image stream read error: %s", readErr.Error()))
+			}
+			break
+		}
+	}
+
+	return &dto.Usage{TotalTokens: 1, PromptTokens: 1}, nil
+}
+
+func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
+	defer service.CloseResponseBodyGracefully(resp)
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+
+	var usageResp dto.SimpleResponse
+	err = common.Unmarshal(responseBody, &usageResp)
+	if err != nil {
+		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+	}
+
+	// 写入新的 response body
+	service.IOCopyBytesGracefully(c, resp, responseBody)
+
+	// Once we've written to the client, we should not return errors anymore
+	// because the upstream has already consumed resources and returned content
+	// We should still perform billing even if parsing fails
+	// format
+	if usageResp.InputTokens > 0 {
+		usageResp.PromptTokens += usageResp.InputTokens
+	}
+	if usageResp.OutputTokens > 0 {
+		usageResp.CompletionTokens += usageResp.OutputTokens
+	}
+	if usageResp.InputTokensDetails != nil {
+		usageResp.PromptTokensDetails.ImageTokens += usageResp.InputTokensDetails.ImageTokens
+		usageResp.PromptTokensDetails.TextTokens += usageResp.InputTokensDetails.TextTokens
+	}
+	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
+	return &usageResp.Usage, nil
+}

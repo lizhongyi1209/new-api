@@ -630,9 +630,9 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		err, usage = OpenaiSTTHandler(c, resp, info, a.ResponseFormat)
 	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
 		if info.IsStream {
-			usage, err = OpenaiImageStreamHandler(c, info, resp)
+			usage, err = ForwardImageSSEStream(c, info, resp)
 		} else {
-			usage, err = OpenaiImageHandler(c, info, resp)
+			usage, err = OpenaiHandlerWithUsage(c, info, resp)
 		}
 	case relayconstant.RelayModeRerank:
 		usage, err = common_handler.RerankHandler(c, info, resp)
