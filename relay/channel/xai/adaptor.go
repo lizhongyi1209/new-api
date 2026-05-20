@@ -1,11 +1,15 @@
 package xai
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
@@ -38,13 +42,25 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
-	xaiRequest := ImageRequest{
+	if info.RelayMode == constant.RelayModeImagesEdits {
+		imageField, err := buildImageField(c, request)
+		if err != nil {
+			return nil, err
+		}
+		return ImageEditRequest{
+			Model:          request.Model,
+			Prompt:         request.Prompt,
+			N:              int(lo.FromPtrOr(request.N, uint(1))),
+			ResponseFormat: request.ResponseFormat,
+			Image:          imageField,
+		}, nil
+	}
+	return ImageRequest{
 		Model:          request.Model,
 		Prompt:         request.Prompt,
 		N:              int(lo.FromPtrOr(request.N, uint(1))),
 		ResponseFormat: request.ResponseFormat,
-	}
-	return xaiRequest, nil
+	}, nil
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
@@ -137,4 +153,57 @@ func (a *Adaptor) GetModelList() []string {
 
 func (a *Adaptor) GetChannelName() string {
 	return ChannelName
+}
+
+func buildImageField(c *gin.Context, request dto.ImageRequest) ([]byte, error) {
+	contentType := c.Request.Header.Get("Content-Type")
+	if strings.HasPrefix(contentType, "application/json") {
+		if len(request.Image) == 0 {
+			return nil, errors.New("image field is required for image edit requests")
+		}
+		return request.Image, nil
+	}
+
+	mf := c.Request.MultipartForm
+	if mf == nil || len(mf.File["image"]) == 0 {
+		return nil, errors.New("image file is required for image edit requests")
+	}
+
+	fileHeader := mf.File["image"][0]
+	f, err := fileHeader.Open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open image file: %w", err)
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read image file: %w", err)
+	}
+
+	mimeType := detectMimeType(fileHeader.Filename)
+	b64 := base64.StdEncoding.EncodeToString(data)
+	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
+
+	imageObj := map[string]string{
+		"url":  dataURI,
+		"type": "image_url",
+	}
+	return common.Marshal(imageObj)
+}
+
+func detectMimeType(filename string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	default:
+		return "image/png"
+	}
 }
