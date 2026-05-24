@@ -193,12 +193,21 @@ const FooterBar = () => {
             <Typography.Text className='text-sm !text-semi-color-text-1'>
               © {currentYear} {systemName}. {t('版权所有')} |{' '}
               <a
-                href='https://www.beian.gov.cn'
+                href='https://beian.miit.gov.cn'
                 target='_blank'
                 rel='noopener noreferrer'
                 className='!text-semi-color-text-1'
               >
                 粤ICP备2026055881号-1
+              </a>
+              {' | '}
+              <a
+                href='https://www.beian.gov.cn'
+                target='_blank'
+                rel='noopener noreferrer'
+                className='!text-semi-color-text-1'
+              >
+                粤公网安备粤ICP备2026055881号-1
               </a>
             </Typography.Text>
           </div>

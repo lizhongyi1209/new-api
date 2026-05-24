@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -55,11 +56,17 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 			Image:          imageField,
 		}, nil
 	}
+	var resolution string
+	if raw, ok := request.Extra["resolution"]; ok {
+		_ = common.Unmarshal(raw, &resolution)
+	}
 	return ImageRequest{
 		Model:          request.Model,
 		Prompt:         request.Prompt,
 		N:              int(lo.FromPtrOr(request.N, uint(1))),
 		ResponseFormat: request.ResponseFormat,
+		AspectRatio:    request.AspectRatio,
+		Resolution:     resolution,
 	}, nil
 }
 
@@ -158,38 +165,72 @@ func (a *Adaptor) GetChannelName() string {
 func buildImageField(c *gin.Context, request dto.ImageRequest) ([]byte, error) {
 	contentType := c.Request.Header.Get("Content-Type")
 	if strings.HasPrefix(contentType, "application/json") {
-		if len(request.Image) == 0 {
-			return nil, errors.New("image field is required for image edit requests")
-		}
+		return buildImageFieldFromJSON(request)
+	}
+	return buildImageFieldFromMultipart(c)
+}
+
+func buildImageFieldFromJSON(request dto.ImageRequest) ([]byte, error) {
+	if len(request.Image) == 0 && len(request.Images) == 0 {
+		return nil, errors.New("image field is required for image edit requests")
+	}
+	if len(request.Image) > 0 {
 		return request.Image, nil
 	}
+	var urls []string
+	if err := common.Unmarshal(request.Images, &urls); err != nil {
+		return request.Images, nil
+	}
+	var images []ImageObject
+	for _, url := range urls {
+		images = append(images, ImageObject{Url: url, Type: "image_url"})
+	}
+	return common.Marshal(images)
+}
 
+func buildImageFieldFromMultipart(c *gin.Context) ([]byte, error) {
 	mf := c.Request.MultipartForm
-	if mf == nil || len(mf.File["image"]) == 0 {
+	if mf == nil {
 		return nil, errors.New("image file is required for image edit requests")
 	}
 
-	fileHeader := mf.File["image"][0]
-	f, err := fileHeader.Open()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open image file: %w", err)
+	var fileHeaders []*multipart.FileHeader
+	if files, ok := mf.File["image"]; ok && len(files) > 0 {
+		fileHeaders = files
+	} else if files, ok := mf.File["image[]"]; ok && len(files) > 0 {
+		fileHeaders = files
+	} else {
+		for fieldName, files := range mf.File {
+			if strings.HasPrefix(fieldName, "image[") && len(files) > 0 {
+				fileHeaders = append(fileHeaders, files...)
+			}
+		}
 	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read image file: %w", err)
+	if len(fileHeaders) == 0 {
+		return nil, errors.New("image file is required for image edit requests")
 	}
 
-	mimeType := detectMimeType(fileHeader.Filename)
-	b64 := base64.StdEncoding.EncodeToString(data)
-	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
-
-	imageObj := map[string]string{
-		"url":  dataURI,
-		"type": "image_url",
+	var images []ImageObject
+	for _, fh := range fileHeaders {
+		f, err := fh.Open()
+		if err != nil {
+			return nil, fmt.Errorf("failed to open image file: %w", err)
+		}
+		data, err := io.ReadAll(f)
+		_ = f.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read image file: %w", err)
+		}
+		mimeType := detectMimeType(fh.Filename)
+		b64 := base64.StdEncoding.EncodeToString(data)
+		dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
+		images = append(images, ImageObject{Url: dataURI, Type: "image_url"})
 	}
-	return common.Marshal(imageObj)
+
+	if len(images) == 1 {
+		return common.Marshal(images[0])
+	}
+	return common.Marshal(images)
 }
 
 func detectMimeType(filename string) string {
