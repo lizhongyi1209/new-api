@@ -143,14 +143,14 @@ func UnmarshalBodyReusable(c *gin.Context, v any) error {
 		// skip for now
 		// TODO: someday non json request have variant model, we will need to implementation this
 	}
-	if err != nil {
-		return err
-	}
-	// Reset request body
+	// Always reset request body so downstream handlers can read it
 	if _, seekErr := storage.Seek(0, io.SeekStart); seekErr != nil {
 		return seekErr
 	}
 	c.Request.Body = io.NopCloser(storage)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
