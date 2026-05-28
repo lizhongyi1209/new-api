@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -292,6 +293,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 }
 
 // ForwardImageSSEStream relays the upstream SSE stream directly to the client for image generation.
+// It parses the completed event to extract real usage for billing.
 func ForwardImageSSEStream(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
 	defer service.CloseResponseBodyGracefully(resp)
 
@@ -305,25 +307,55 @@ func ForwardImageSSEStream(c *gin.Context, info *relaycommon.RelayInfo, resp *ht
 		return nil, types.NewOpenAIError(fmt.Errorf("streaming not supported"), types.ErrorCodeBadResponse, http.StatusInternalServerError)
 	}
 
-	buf := make([]byte, 4096)
-	for {
-		n, readErr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
-				logger.LogError(c, fmt.Sprintf("image stream write error: %s", writeErr.Error()))
-				break
-			}
-			flusher.Flush()
-		}
-		if readErr != nil {
-			if readErr != io.EOF {
-				logger.LogError(c, fmt.Sprintf("image stream read error: %s", readErr.Error()))
-			}
+	usage := &dto.Usage{TotalTokens: 1, PromptTokens: 1}
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0), 10*1024*1024)
+	isCompletedEvent := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if _, writeErr := fmt.Fprintf(c.Writer, "%s\n", line); writeErr != nil {
+			logger.LogError(c, fmt.Sprintf("image stream write error: %s", writeErr.Error()))
 			break
 		}
+		flusher.Flush()
+
+		if strings.HasPrefix(line, "event:") {
+			eventType := strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			isCompletedEvent = strings.HasSuffix(eventType, ".completed")
+		} else if isCompletedEvent && strings.HasPrefix(line, "data:") {
+			dataStr := strings.TrimPrefix(line, "data:")
+			dataStr = strings.TrimSpace(dataStr)
+			parsed := parseImageStreamUsage(dataStr)
+			if parsed != nil {
+				usage = parsed
+			}
+			isCompletedEvent = false
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		logger.LogError(c, fmt.Sprintf("image stream scan error: %s", err.Error()))
 	}
 
-	return &dto.Usage{TotalTokens: 1, PromptTokens: 1}, nil
+	return usage, nil
+}
+
+func parseImageStreamUsage(data string) *dto.Usage {
+	var event struct {
+		Usage *struct {
+			TotalTokens  int `json:"total_tokens"`
+			InputTokens  int `json:"input_tokens"`
+			OutputTokens int `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := common.Unmarshal([]byte(data), &event); err != nil || event.Usage == nil {
+		return nil
+	}
+	return &dto.Usage{
+		PromptTokens:     event.Usage.InputTokens,
+		CompletionTokens: event.Usage.OutputTokens,
+		TotalTokens:      event.Usage.TotalTokens,
+	}
 }
 
 func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {

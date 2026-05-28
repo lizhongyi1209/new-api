@@ -219,7 +219,9 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			if imageRequest.Size == "" {
 				imageRequest.Size = "1024x1024"
 			}
-		} else if imageRequest.Model == "gpt-image-1" {
+		} else if imageRequest.Model == "gpt-image-1" || imageRequest.Model == "gpt-image-1.5" ||
+			imageRequest.Model == "gpt-image-1-mini" || imageRequest.Model == "gpt-image-2" ||
+			imageRequest.Model == "chatgpt-image-latest" {
 			if imageRequest.Quality == "" {
 				imageRequest.Quality = "auto"
 			}
