@@ -178,6 +178,11 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 				imageRequest.N = common.GetPointer(uint(1))
 			}
 
+			if formData.Get("stream") == "true" {
+				stream := true
+				imageRequest.Stream = &stream
+			}
+
 			hasWatermark := formData.Has("watermark")
 			if hasWatermark {
 				watermark := formData.Get("watermark") == "true"
