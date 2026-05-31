@@ -159,6 +159,13 @@ func buildGenerateImageRelayInfo(c *gin.Context, task *model.Task, relayMode int
 			IsModelMapped:        upstreamModelName != task.Properties.OriginModelName,
 		},
 	}
+	// 异步 goroutine 没有真实 HTTP 请求,必须显式设置 RequestURLPath 供适配器拼 URL
+	switch relayMode {
+	case relayconstant.RelayModeImagesGenerations:
+		relayInfo.RequestURLPath = "/v1/images/generations"
+	case relayconstant.RelayModeGemini:
+		relayInfo.RequestURLPath = "/v1beta/models/" + upstreamModelName + ":generateContent"
+	}
 	if CalculatePriceFunc != nil {
 		if priceData, err := CalculatePriceFunc(c, relayInfo); err == nil {
 			relayInfo.PriceData = priceData
