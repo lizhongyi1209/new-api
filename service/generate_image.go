@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
@@ -544,7 +545,36 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 
 	// 按 token 计费的模型：完成后用真实用量重新结算差额
 	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+		if len(bc.TieredSnapshot) > 0 {
+			// tiered_expr 模型：用冻结的 BillingSnapshot + 真实 token 重算
+			var snap billingexpr.BillingSnapshot
+			if err := common.Unmarshal(bc.TieredSnapshot, &snap); err == nil {
+				params := billingexpr.TokenParams{
+					P:   float64(promptTokens),
+					C:   float64(completionTokens),
+					Len: float64(promptTokens + completionTokens),
+				}
+				if imgTokens, ok := tokenDetails["image_tokens"]; ok {
+					if v, ok := imgTokens.(int); ok {
+						params.Img = float64(v)
+						params.P -= params.Img
+						if params.P < 0 {
+							params.P = 0
+						}
+					}
+				}
+				tr, err := billingexpr.ComputeTieredQuota(&snap, params)
+				if err == nil {
+					RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
+						fmt.Sprintf("tiered_expr重算：p=%d, c=%d, img=%.0f, tier=%s",
+							promptTokens, completionTokens, params.Img, tr.MatchedTier))
+				} else {
+					logger.LogError(ctx, fmt.Sprintf("generate_image: tiered settle failed: %v", err))
+				}
+			}
+		} else {
+			RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+		}
 	}
 
 	// 0 输出 token（疑似风控）：全额退款

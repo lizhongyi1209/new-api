@@ -67,7 +67,7 @@ func GenerateImageSubmit(c *gin.Context) {
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = tokenId
-		task.PrivateData.BillingContext = &model.TaskBillingContext{
+		bc := &model.TaskBillingContext{
 			ModelPrice:      priceData.ModelPrice,
 			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
 			ModelRatio:      priceData.ModelRatio,
@@ -75,6 +75,12 @@ func GenerateImageSubmit(c *gin.Context) {
 			OriginModelName: req.Model,
 			PerCallBilling:  priceData.UsePrice,
 		}
+		if snapBytes, ok := c.Get("tiered_snapshot_bytes"); ok {
+			if b, ok := snapBytes.([]byte); ok {
+				bc.TieredSnapshot = b
+			}
+		}
+		task.PrivateData.BillingContext = bc
 	}
 
 	// 按 provider 决定任务数据形态：

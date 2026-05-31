@@ -11,8 +11,11 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -308,6 +311,70 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 			types.ErrorCodeInvalidApiType,
 			types.ErrOptionWithSkipRetry(),
 		)
+	}
+
+	// tiered_expr 模型走独立的分级表达式预扣费路径，不经过 CalculatePriceFunc（它不认 tiered）。
+	if billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr {
+		groupRatioInfo := helper.HandleGroupRatio(c, relayInfo)
+		exprStr, ok := billing_setting.GetBillingExpr(modelName)
+		if !ok {
+			return nil, types.PriceData{}, types.NewError(
+				fmt.Errorf("模型 %s 配置为 tiered_expr 但缺少计费表达式", modelName),
+				types.ErrorCodeModelPriceError,
+				types.ErrOptionWithStatusCode(http.StatusBadRequest),
+			)
+		}
+		// 预估 token（异步提交时无法精确知道，用保守估算）
+		estimatedPrompt := common.PreConsumedQuota
+		rawCost, trace, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{
+			P:   float64(estimatedPrompt),
+			C:   0,
+			Len: float64(estimatedPrompt),
+		})
+		if err != nil {
+			return nil, types.PriceData{}, types.NewError(
+				fmt.Errorf("tiered_expr 计算失败: %v", err),
+				types.ErrorCodeModelPriceError,
+				types.ErrOptionWithStatusCode(http.StatusBadRequest),
+			)
+		}
+		quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
+		preConsumedQuota := billingexpr.QuotaRound(quotaBeforeGroup * groupRatioInfo.GroupRatio)
+
+		snapshot := &billingexpr.BillingSnapshot{
+			BillingMode:               billing_setting.BillingModeTieredExpr,
+			ModelName:                 modelName,
+			ExprString:                exprStr,
+			ExprHash:                  billingexpr.ExprHashString(exprStr),
+			GroupRatio:                groupRatioInfo.GroupRatio,
+			EstimatedPromptTokens:     estimatedPrompt,
+			EstimatedCompletionTokens: 0,
+			EstimatedQuotaBeforeGroup: quotaBeforeGroup,
+			EstimatedQuotaAfterGroup:  preConsumedQuota,
+			EstimatedTier:             trace.MatchedTier,
+			QuotaPerUnit:              common.QuotaPerUnit,
+			ExprVersion:               billingexpr.ExprVersion(exprStr),
+		}
+		snapshotBytes, _ := common.Marshal(snapshot)
+
+		priceData := types.PriceData{
+			GroupRatioInfo: groupRatioInfo,
+			Quota:          preConsumedQuota,
+		}
+		relayInfo.PriceData = priceData
+		relayInfo.TieredBillingSnapshot = snapshot
+
+		// 预扣费
+		relayInfo.ForcePreConsume = true
+		if preConsumedQuota > 0 {
+			if apiErr := service.PreConsumeBilling(c, preConsumedQuota, relayInfo); apiErr != nil {
+				return nil, priceData, apiErr
+			}
+		}
+
+		// 把快照存入 relayInfo 的临时字段，供调用方写入 TaskBillingContext
+		c.Set("tiered_snapshot_bytes", snapshotBytes)
+		return relayInfo, priceData, nil
 	}
 
 	priceData, err := service.CalculatePriceFunc(c, relayInfo)
