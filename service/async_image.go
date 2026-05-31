@@ -175,7 +175,7 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 	other["model_price"] = relayInfo.PriceData.ModelPrice
 	other["user_group_ratio"] = relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio
 	other["async_task_id"] = task.TaskID
-	other["request_path"] = "/async/v1/images/generations"
+	other["request_path"] = c.Request.URL.Path
 	other["per_call_billing"] = relayInfo.PriceData.UsePrice
 	other["completion_ratio"] = ratio_setting.GetCompletionRatio(imageReq.Model)
 	if relayInfo.IsModelMapped {
