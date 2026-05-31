@@ -38,7 +38,6 @@ export const DEFAULT_ADMIN_CONFIG = {
     log: true,
     midjourney: true,
     task: true,
-    asyn: true,
   },
   personal: {
     enabled: true,

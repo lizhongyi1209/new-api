@@ -41,7 +41,6 @@ import Chat2Link from './pages/Chat2Link';
 import MjProxy from './pages/Midjourney';
 import Pricing from './pages/Pricing';
 import Task from './pages/Task';
-import AsyncImage from './pages/AsyncImage';
 import ModelPage from './pages/Model';
 import ModelDeploymentPage from './pages/ModelDeployment';
 import Playground from './pages/Playground';
@@ -312,16 +311,6 @@ function App() {
             <PrivateRoute>
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <Task />
-              </Suspense>
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path='/console/asyn'
-          element={
-            <PrivateRoute>
-              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
-                <AsyncImage />
               </Suspense>
             </PrivateRoute>
           }

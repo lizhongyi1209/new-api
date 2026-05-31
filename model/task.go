@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -160,6 +161,19 @@ func (p TaskPrivateData) Value() (driver.Value, error) {
 	return common.Marshal(p)
 }
 
+// splitExcludePlatforms 把逗号分隔的 exclude_platform 查询值拆成切片，供 SQL NOT IN 使用。
+// 兼容单值（如 "async_image"）和多值（如 "async_image,generate_image"）。
+func splitExcludePlatforms(raw constant.TaskPlatform) []string {
+	parts := strings.Split(string(raw), ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
 // SyncTaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段
 type SyncTaskQueryParams struct {
 	Platform        constant.TaskPlatform
@@ -233,7 +247,7 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 		query = query.Where("platform = ?", queryParams.Platform)
 	}
 	if queryParams.ExcludePlatform != "" {
-		query = query.Where("platform != ?", queryParams.ExcludePlatform)
+		query = query.Where("platform NOT IN ?", splitExcludePlatforms(queryParams.ExcludePlatform))
 	}
 	if queryParams.StartTimestamp != 0 {
 		// 假设您已将前端传来的时间戳转换为数据库所需的时间格式，并处理了时间戳的验证和解析
@@ -267,7 +281,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 		query = query.Where("platform = ?", queryParams.Platform)
 	}
 	if queryParams.ExcludePlatform != "" {
-		query = query.Where("platform != ?", queryParams.ExcludePlatform)
+		query = query.Where("platform NOT IN ?", splitExcludePlatforms(queryParams.ExcludePlatform))
 	}
 	if queryParams.UserID != "" {
 		query = query.Where("user_id = ?", queryParams.UserID)
@@ -529,7 +543,7 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
 	if queryParams.ExcludePlatform != "" {
-		query = query.Where("platform != ?", queryParams.ExcludePlatform)
+		query = query.Where("platform NOT IN ?", splitExcludePlatforms(queryParams.ExcludePlatform))
 	}
 	_ = query.Count(&total).Error
 	return total
@@ -558,7 +572,7 @@ func TaskCountAllUserTask(userId int, queryParams SyncTaskQueryParams) int64 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
 	if queryParams.ExcludePlatform != "" {
-		query = query.Where("platform != ?", queryParams.ExcludePlatform)
+		query = query.Where("platform NOT IN ?", splitExcludePlatforms(queryParams.ExcludePlatform))
 	}
 	_ = query.Count(&total).Error
 	return total

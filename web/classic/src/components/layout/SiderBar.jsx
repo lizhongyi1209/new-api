@@ -45,7 +45,6 @@ const routerMap = {
   detail: '/console',
   pricing: '/pricing',
   task: '/console/task',
-  asyn: '/console/asyn',
   models: '/console/models',
   deployment: '/console/deployment',
   playground: '/console/playground',
@@ -105,11 +104,6 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/task',
         className:
           localStorage.getItem('enable_task') === 'true' ? '' : 'tableHiddle',
-      },
-      {
-        text: t('异步日志'),
-        itemKey: 'asyn',
-        to: '/asyn',
       },
     ];
 

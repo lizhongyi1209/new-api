@@ -294,7 +294,7 @@ export async function fetchLogsByCategory(
     ...(logCategory === 'task'
       ? {
           task_id: searchParams.filter as string | undefined,
-          exclude_platform: 'async_image',
+          exclude_platform: 'async_image,generate_image',
         }
       : {}),
     ...(logCategory === 'async_image'

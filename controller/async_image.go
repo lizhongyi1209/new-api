@@ -292,8 +292,8 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 			UpstreamModelName: upstreamModelName,
 			IsModelMapped:     isModelMapped,
 		},
-		TokenId: tokenId,
-		TokenKey: common.GetContextKeyString(c, constant.ContextKeyTokenKey),
+		TokenId:        tokenId,
+		TokenKey:       common.GetContextKeyString(c, constant.ContextKeyTokenKey),
 		TokenUnlimited: common.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
 	}
 
@@ -377,7 +377,10 @@ func AsyncTaskFetch(c *gin.Context) {
 	}
 
 	if task.Status == model.TaskStatusSuccess {
-		if task.Platform == constant.TaskPlatformUnifiedImage {
+		if task.Platform == constant.TaskPlatformGenerateImage {
+			// 统一生图：完成时已存入 GenerateImageResult，原样返回
+			resp.Data = task.Data
+		} else if task.Platform == constant.TaskPlatformUnifiedImage {
 			// Return standard OpenAI ImageResponse format
 			imageResp := dto.ImageResponse{Created: task.FinishTime}
 			var storedData map[string]interface{}

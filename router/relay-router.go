@@ -222,6 +222,7 @@ func SetRelayRouter(router *gin.Engine) {
 	asyncImageRouter.Use(middleware.Distribute())
 	{
 		asyncImageRouter.POST("/images/generations", controller.AsyncImageSubmit)
+		asyncImageRouter.POST("/generateImage", controller.GenerateImageSubmit)
 	}
 
 	// Async Gemini submit — needs Distribute() for channel selection
