@@ -18,6 +18,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 )
 
 // imageProvider 标识一个生图模型应走哪条处理路径。
@@ -394,6 +395,9 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 	httpResp := resp.(*http.Response)
 	defer httpResp.Body.Close()
 	if httpResp.StatusCode != http.StatusOK {
+		bodyBytes, _ := io.ReadAll(httpResp.Body)
+		httpResp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		logger.LogError(ctx, fmt.Sprintf("generate_image(openai): upstream error status=%d body=%s", httpResp.StatusCode, string(bodyBytes)))
 		relayErr := RelayErrorHandler(ctx, httpResp, false)
 		failGenerateImageTask(task, fmt.Sprintf("上游返回错误: %s", relayErr.Error()))
 		return
@@ -433,26 +437,40 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 }
 
 // extractOpenAIImageUsage 从 OpenAI-格式 image 响应原始体提取 token 用量与 modelVersion。
+// gpt-image 系列上游返回 input_tokens/output_tokens（含 input_tokens_details.image_tokens），
+// 而非 prompt_tokens/completion_tokens。这里复用 dto.SimpleResponse 同时兼容两套字段名，
+// 归一逻辑与同步图像路径 OpenaiHandlerWithUsage 保持一致，避免按量计费取到 0 token。
 func extractOpenAIImageUsage(bodyBytes []byte) (promptTokens, completionTokens int, details map[string]interface{}, modelVersion string) {
 	details = map[string]interface{}{}
-	var raw map[string]interface{}
-	if err := common.Unmarshal(bodyBytes, &raw); err != nil {
+
+	var resp dto.SimpleResponse
+	if err := common.Unmarshal(bodyBytes, &resp); err != nil {
 		return 0, 0, details, ""
 	}
-	modelVersion = asString(raw["modelVersion"])
-	usage, ok := raw["usage"].(map[string]interface{})
-	if !ok {
-		return 0, 0, details, modelVersion
+
+	// 归一：把 input_tokens/output_tokens 累加进 prompt/completion（与同步路径一致）。
+	if resp.InputTokens > 0 {
+		resp.PromptTokens += resp.InputTokens
 	}
-	if pt, ok := usage["prompt_tokens"].(float64); ok {
-		promptTokens = int(pt)
+	if resp.OutputTokens > 0 {
+		resp.CompletionTokens += resp.OutputTokens
 	}
-	if ct, ok := usage["completion_tokens"].(float64); ok {
-		completionTokens = int(ct)
+	promptTokens = resp.PromptTokens
+	completionTokens = resp.CompletionTokens
+
+	if resp.TotalTokens > 0 {
+		details["total_tokens"] = resp.TotalTokens
 	}
-	if tt, ok := usage["total_tokens"].(float64); ok {
-		details["total_tokens"] = int(tt)
+	if resp.InputTokensDetails != nil && resp.InputTokensDetails.ImageTokens > 0 {
+		details["image_tokens"] = resp.InputTokensDetails.ImageTokens
 	}
+
+	// modelVersion 在响应顶层，SimpleResponse 不含，单独提取。
+	var raw map[string]interface{}
+	if err := common.Unmarshal(bodyBytes, &raw); err == nil {
+		modelVersion = asString(raw["modelVersion"])
+	}
+
 	return promptTokens, completionTokens, details, modelVersion
 }
 
@@ -480,17 +498,25 @@ func resolveReferenceImagesForUpstream(image json.RawMessage, images []string) (
 
 	var resolvedImages json.RawMessage
 	if len(images) > 0 {
-		out := make([]string, 0, len(images))
-		for _, imgURL := range images {
+		out := make([]string, len(images))
+		var g errgroup.Group
+		for i, imgURL := range images {
+			i, imgURL := i, imgURL // 捕获循环变量
 			if strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://") {
-				mimeType, b64, err := GetImageFromUrlWithLimit(imgURL, AsyncImageMaxURLSizeMB)
-				if err != nil {
-					return nil, nil, err
-				}
-				out = append(out, fmt.Sprintf("data:%s;base64,%s", mimeType, b64))
+				g.Go(func() error {
+					mimeType, b64, err := GetImageFromUrlWithLimit(imgURL, AsyncImageMaxURLSizeMB)
+					if err != nil {
+						return err
+					}
+					out[i] = fmt.Sprintf("data:%s;base64,%s", mimeType, b64)
+					return nil
+				})
 			} else {
-				out = append(out, imgURL)
+				out[i] = imgURL
 			}
+		}
+		if err := g.Wait(); err != nil {
+			return nil, nil, err
 		}
 		resolvedImages, _ = common.Marshal(out)
 	}

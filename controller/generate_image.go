@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GenerateImageSubmit 是统一异步生图端点 POST /async/v1/model/generateImage 的入口。
+// GenerateImageSubmit 是统一异步生图端点 POST /async/v1/generateImage 的入口。
 // 收扁平参数 → 校验 → 预扣费 → 按模型分发 provider → 建任务 → 异步处理 → 返回 task_id。
 func GenerateImageSubmit(c *gin.Context) {
 	var req dto.GenerateImageRequest

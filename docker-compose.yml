@@ -36,6 +36,9 @@ services:
       - TZ=Asia/Shanghai
       - ERROR_LOG_ENABLED=true
       - NODE_NAME=new-api-node-1
+      # 异步任务(含统一生图 generate_image)超时兜底：超时后由清扫机制标记失败并退款。
+      # 生图任务通常秒级完成，30 分钟足够覆盖重试/上游慢；默认 1440(24h)对生图过长。
+      - TASK_TIMEOUT_MINUTES=30
       - SESSION_SECRET=${SESSION_SECRET}
       - CRYPTO_SECRET=${CRYPTO_SECRET}
       # Cloudflare R2 Storage
