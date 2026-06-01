@@ -63,7 +63,8 @@ func GenerateImageSubmit(c *gin.Context) {
 	}
 
 	// 存储计费上下文，供后续退款/结算
-	if relayInfo != nil && priceData.Quota > 0 {
+	// tiered_expr 模型即使预扣为 0（信任用户）也必须存 BillingContext，否则完成时无法结算
+	if relayInfo != nil && (priceData.Quota > 0 || c.GetBool("tiered_billing_active")) {
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = tokenId

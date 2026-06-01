@@ -325,7 +325,10 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 			)
 		}
 		// 预估 token（异步提交时无法精确知道，用保守估算）
-		estimatedPrompt := common.PreConsumedQuota
+		estimatedPrompt := 1000
+		if common.PreConsumedQuota > 0 {
+			estimatedPrompt = common.PreConsumedQuota
+		}
 		rawCost, trace, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{
 			P:   float64(estimatedPrompt),
 			C:   0,
@@ -374,6 +377,7 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 
 		// 把快照存入 relayInfo 的临时字段，供调用方写入 TaskBillingContext
 		c.Set("tiered_snapshot_bytes", snapshotBytes)
+		c.Set("tiered_billing_active", true)
 		return relayInfo, priceData, nil
 	}
 
