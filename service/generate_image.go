@@ -585,7 +585,7 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	}
 
 	// 0 输出 token（疑似风控）：全额退款
-	if completionTokens == 0 && promptTokens > 0 && task.Quota > 0 {
+	if completionTokens == 0 && task.Quota > 0 {
 		logger.LogWarn(ctx, fmt.Sprintf("generate_image: 上游返回0输出token（疑似风控），退还扣费，任务 %s，模型 %s",
 			task.TaskID, task.Properties.OriginModelName))
 		RefundTaskQuota(ctx, task, "上游返回0输出token（疑似风控），退还全部扣费")
