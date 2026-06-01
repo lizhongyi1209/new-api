@@ -178,6 +178,11 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 	other["request_path"] = c.Request.URL.Path
 	other["per_call_billing"] = relayInfo.PriceData.UsePrice
 	other["completion_ratio"] = ratio_setting.GetCompletionRatio(imageReq.Model)
+	if relayInfo.TieredBillingSnapshot != nil {
+		other["billing_mode"] = "tiered_expr"
+		other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(relayInfo.TieredBillingSnapshot.ExprString))
+		other["matched_tier"] = relayInfo.TieredBillingSnapshot.EstimatedTier
+	}
 	if relayInfo.IsModelMapped {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = relayInfo.UpstreamModelName
