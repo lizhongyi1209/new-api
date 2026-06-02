@@ -17,21 +17,48 @@ type presignRequest struct {
 
 func GetPresignedURL(c *gin.Context) {
 	var req presignRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if !bindAndValidatePresignRequest(c, &req) {
 		return
 	}
 
-	// Validate content type (allow images and videos)
+	result, err := service.GeneratePresignedUploadURLForHost(c.Request.Host, req.Filename, req.ContentType, req.Size)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate upload URL"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func GetOSSPresignedURL(c *gin.Context) {
+	var req presignRequest
+	if !bindAndValidatePresignRequest(c, &req) {
+		return
+	}
+
+	result, err := service.GenerateOSSPresignedUploadURL(req.Filename, req.ContentType, req.Size)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate OSS upload URL"})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
+func bindAndValidatePresignRequest(c *gin.Context, req *presignRequest) bool {
+	if err := c.ShouldBindJSON(req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return false
+	}
+
 	if !strings.HasPrefix(req.ContentType, "image/") &&
-	   !strings.HasPrefix(req.ContentType, "video/") {
+		!strings.HasPrefix(req.ContentType, "video/") {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "只支持图片或视频类型 (image/*, video/*)",
 		})
-		return
+		return false
 	}
 
-	// Validate file size if provided
 	if req.Size > 0 {
 		maxSize := int64(service.AsyncImageMaxURLSizeMB * 1024 * 1024)
 		if req.Size > maxSize {
@@ -39,15 +66,9 @@ func GetPresignedURL(c *gin.Context) {
 				"error": fmt.Sprintf("文件大小 %.2f MB 超过限制 %d MB",
 					float64(req.Size)/1024/1024, service.AsyncImageMaxURLSizeMB),
 			})
-			return
+			return false
 		}
 	}
 
-	result, err := service.GeneratePresignedUploadURL(req.Filename, req.ContentType, req.Size)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate upload URL"})
-		return
-	}
-
-	c.JSON(http.StatusOK, result)
+	return true
 }

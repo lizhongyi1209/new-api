@@ -47,6 +47,15 @@ services:
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_BUCKET=api-o1key
       - R2_PUBLIC_BASE_URL=https://assetcache.o1key.com
+      - R2_STORAGE_HOSTS=${R2_STORAGE_HOSTS:-cf-api.o1key.cn,cf-api.o1key.com}
+      # Aliyun OSS Storage (api.o1key.cn)
+      - ALIYUN_OSS_ACCESS_KEY_ID=${ALIYUN_OSS_ACCESS_KEY_ID}
+      - ALIYUN_OSS_ACCESS_KEY_SECRET=${ALIYUN_OSS_ACCESS_KEY_SECRET}
+      - ALIYUN_OSS_BUCKET=${ALIYUN_OSS_BUCKET:-o1key}
+      - ALIYUN_OSS_REGION=${ALIYUN_OSS_REGION:-cn-beijing}
+      - ALIYUN_OSS_ENDPOINT=${ALIYUN_OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
+      - ALIYUN_OSS_PUBLIC_BASE_URL=${ALIYUN_OSS_PUBLIC_BASE_URL:-https://img.o1key.cn}
+      - ALIYUN_OSS_STORAGE_HOSTS=${ALIYUN_OSS_STORAGE_HOSTS:-api.o1key.cn}
 #      - STREAMING_TIMEOUT=300
 #      - RELAY_IDLE_CONN_TIMEOUT=90  # Relay HTTP 客户端空闲连接超时时间，单位秒，默认跟随 Go 标准库，设置为0表示不限制 (Relay HTTP client idle keep-alive timeout in seconds, defaults to Go standard library; set 0 to disable)
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX

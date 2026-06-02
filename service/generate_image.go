@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -29,6 +30,8 @@ const (
 	imageProviderGeminiNative imageProvider = "gemini_native"
 	imageProviderOpenAIImage  imageProvider = "openai_image"
 )
+
+var uploadGenerateImageBase64 = UploadBase64ImageToHostStorageCompressed
 
 // imageRoute 是一条分发规则：模型名匹配 match 时走对应 provider。
 // provider 与 action 一起决定提交时如何构造任务、处理时走哪个分支。
@@ -74,6 +77,105 @@ func resolveImageRoute(modelName string, channelType int) imageRoute {
 func ResolveImageRoute(modelName string, channelType int) (action string, isGeminiNative bool) {
 	r := resolveImageRoute(modelName, channelType)
 	return r.action, r.provider == imageProviderGeminiNative
+}
+
+const generateImageMaskImageURLMaxLength = 20971520
+
+var generateImageQualityValues = map[string]struct{}{
+	"low":      {},
+	"medium":   {},
+	"high":     {},
+	"auto":     {},
+	"standard": {},
+	"hd":       {},
+}
+
+var generateImageOutputFormatValues = map[string]struct{}{
+	"png":  {},
+	"jpeg": {},
+	"webp": {},
+}
+
+// ValidateGenerateImageRequest validates the unified /async/v1/generateImage request.
+func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
+	if strings.TrimSpace(req.Model) == "" {
+		return fmt.Errorf("model is required")
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		return fmt.Errorf("prompt is required")
+	}
+
+	req.Size = strings.TrimSpace(req.Size)
+	if strings.EqualFold(req.Size, "auto") {
+		req.Size = "auto"
+	}
+	if strings.Contains(req.Size, "×") {
+		return fmt.Errorf("size an unexpected error occurred in the parameter, please use 'x' instead of the multiplication sign '×'")
+	}
+
+	req.Quality = strings.ToLower(strings.TrimSpace(req.Quality))
+	if req.Quality != "" {
+		if _, ok := generateImageQualityValues[req.Quality]; !ok {
+			return fmt.Errorf("quality must be one of low, medium, high, auto")
+		}
+	}
+
+	if req.OutputFormat != nil {
+		outputFormat := strings.ToLower(strings.TrimSpace(*req.OutputFormat))
+		if _, ok := generateImageOutputFormatValues[outputFormat]; !ok {
+			return fmt.Errorf("output_format must be one of png, jpeg, webp")
+		}
+		*req.OutputFormat = outputFormat
+	}
+
+	if err := validateGenerateImageMask(req.Mask); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateGenerateImageMask(mask *dto.ImageReference) error {
+	if mask == nil {
+		return nil
+	}
+
+	if (mask.FileID != nil) == (mask.ImageURL != nil) {
+		return fmt.Errorf("mask must provide exactly one of file_id or image_url")
+	}
+
+	if mask.FileID != nil {
+		fileID := strings.TrimSpace(*mask.FileID)
+		if fileID == "" {
+			return fmt.Errorf("mask.file_id is required")
+		}
+		*mask.FileID = fileID
+		return nil
+	}
+
+	imageURL := strings.TrimSpace(*mask.ImageURL)
+	if imageURL == "" {
+		return fmt.Errorf("mask.image_url is required")
+	}
+	if len(imageURL) > generateImageMaskImageURLMaxLength {
+		return fmt.Errorf("mask.image_url length must be <= %d", generateImageMaskImageURLMaxLength)
+	}
+	if !isGenerateImageURLReference(imageURL) {
+		return fmt.Errorf("mask.image_url must be a fully qualified http(s) URL or base64 data URL")
+	}
+	*mask.ImageURL = imageURL
+	return nil
+}
+
+func isGenerateImageURLReference(value string) bool {
+	lowerValue := strings.ToLower(value)
+	if strings.HasPrefix(lowerValue, "data:") {
+		return strings.Contains(lowerValue, ";base64,")
+	}
+	parsedURL, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	return (strings.EqualFold(parsedURL.Scheme, "http") || strings.EqualFold(parsedURL.Scheme, "https")) && parsedURL.Host != ""
 }
 
 // failGenerateImageTask 把任务标记为失败并落库。退款由 ProcessGenerateImageTask 的 defer 统一处理。
@@ -175,13 +277,14 @@ func buildGenerateImageRelayInfo(c *gin.Context, task *model.Task, relayMode int
 }
 
 // processGenerateImageGemini 处理 Gemini 原生 generateContent 路径。
-// 与 ProcessUnifiedImageTask 的区别：不上传 R2，直接把 inlineData(base64) 原样提取返回。
+// 上游 inlineData(base64) 会上传到对象存储后返回 URL。
 func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model.Task) {
 	var requestBody map[string]interface{}
 	if err := task.GetData(&requestBody); err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("解析请求数据失败: %v", err))
 		return
 	}
+	imageCompression, _ := requestBody["image_compression"].(string)
 	delete(requestBody, "image_compression") // 客户端参数，不透传上游
 
 	// 规范化：首个 content 缺 role 时补 user
@@ -250,6 +353,11 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 	images := extractGeminiImages(geminiResp)
 	if len(images) == 0 {
 		failGenerateImageTask(task, "上游未返回图片数据")
+		return
+	}
+	images, err = prepareGenerateImageResults(images, imageCompression, task.Properties.RequestHost)
+	if err != nil {
+		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
 		return
 	}
 
@@ -333,8 +441,7 @@ func asString(v interface{}) string {
 }
 
 // processGenerateImageOpenAI 处理通用 OpenAI image 适配器路径（兜底 provider）。
-// 任务数据存的是 dto.AsyncImageRequest。与 ProcessAsyncImageTask 的区别：不上传 R2，
-// 直接把上游返回的 b64_json / url 原样提取返回。
+// 任务数据存的是 dto.AsyncImageRequest。上游 url 原样保留，b64_json 上传到对象存储后返回 URL。
 func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model.Task) {
 	var asyncReq dto.AsyncImageRequest
 	if err := task.GetData(&asyncReq); err != nil {
@@ -357,10 +464,12 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		AspectRatio:    asyncReq.AspectRatio,
 		Quality:        asyncReq.Quality,
 		ResponseFormat: asyncReq.ResponseFormat,
+		OutputFormat:   stringPtrToRawMessage(asyncReq.OutputFormat),
 		Style:          asyncReq.Style,
 		User:           asyncReq.User,
 		Image:          resolvedImage,
 		Images:         resolvedImages,
+		Mask:           imageReferenceToRawMessage(asyncReq.Mask),
 	}
 
 	relayInfo, err := buildGenerateImageRelayInfo(c, task, relayconstant.RelayModeImagesGenerations)
@@ -438,10 +547,47 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTask(task, "上游未返回图片数据")
 		return
 	}
+	images, err = prepareGenerateImageResults(images, asyncReq.ImageCompression, task.Properties.RequestHost)
+	if err != nil {
+		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
+		return
+	}
 
 	promptTokens, completionTokens, tokenDetails, modelVersion := extractOpenAIImageUsage(bodyBytes)
 	finalizeGenerateImageTask(ctx, task, images, promptTokens, completionTokens, tokenDetails,
 		relayInfo.UpstreamModelName, relayInfo.IsModelMapped, modelVersion)
+}
+
+func prepareGenerateImageResults(images []dto.GenerateImageData, compression, requestHost string) ([]dto.GenerateImageData, error) {
+	out := make([]dto.GenerateImageData, 0, len(images))
+	for _, image := range images {
+		if image.Url != "" {
+			out = append(out, dto.GenerateImageData{
+				Url:      image.Url,
+				MimeType: image.MimeType,
+			})
+			continue
+		}
+		if image.B64Json == "" {
+			continue
+		}
+		mimeType := image.MimeType
+		if mimeType == "" {
+			mimeType = detectImageMimeType(image.B64Json)
+		}
+		url, err := uploadGenerateImageBase64(mimeType, image.B64Json, compression, requestHost)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, dto.GenerateImageData{
+			Url:      url,
+			MimeType: mimeType,
+		})
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("上游未返回图片数据")
+	}
+	return out, nil
 }
 
 // extractOpenAIImageUsage 从 OpenAI-格式 image 响应原始体提取 token 用量与 modelVersion。
@@ -480,6 +626,28 @@ func extractOpenAIImageUsage(bodyBytes []byte) (promptTokens, completionTokens i
 	}
 
 	return promptTokens, completionTokens, details, modelVersion
+}
+
+func stringPtrToRawMessage(value *string) json.RawMessage {
+	if value == nil {
+		return nil
+	}
+	raw, err := common.Marshal(*value)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func imageReferenceToRawMessage(value *dto.ImageReference) json.RawMessage {
+	if value == nil {
+		return nil
+	}
+	raw, err := common.Marshal(value)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 // resolveReferenceImagesForUpstream 把参考图的 http(s) URL 下载并转成 base64 data-uri，

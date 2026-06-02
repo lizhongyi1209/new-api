@@ -76,6 +76,7 @@ func AsyncImageSubmit(c *gin.Context) {
 			Input:           req.Prompt,
 			OriginModelName: req.Model,
 			TokenId:         tokenId,
+			RequestHost:     c.Request.Host,
 		},
 	}
 	task.SetData(req)
@@ -217,6 +218,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		Properties: model.Properties{
 			OriginModelName: modelName,
 			TokenId:         tokenId,
+			RequestHost:     c.Request.Host,
 		},
 	}
 	task.SetData(req)

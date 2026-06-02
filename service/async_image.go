@@ -152,9 +152,9 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 		imageN = *imageReq.N
 	}
 
-	quality := "standard"
-	if imageReq.Quality == "hd" {
-		quality = "hd"
+	quality := strings.TrimSpace(imageReq.Quality)
+	if quality == "" {
+		quality = "standard"
 	}
 
 	var logContent []string
@@ -348,10 +348,12 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		AspectRatio:    asyncReq.AspectRatio,
 		Quality:        asyncReq.Quality,
 		ResponseFormat: asyncReq.ResponseFormat,
+		OutputFormat:   stringPtrToRawMessage(asyncReq.OutputFormat),
 		Style:          asyncReq.Style,
 		User:           asyncReq.User,
 		Image:          resolvedImage,
 		Images:         resolvedImagesJSON,
+		Mask:           imageReferenceToRawMessage(asyncReq.Mask),
 	}
 
 	// Create a new gin context for async execution
@@ -570,17 +572,17 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			"data": b64List,
 		}
 	} else {
-		// Upload to R2 and return URLs
+		// Upload to the storage provider selected by request Host and return URLs.
 		compression := asyncReq.ImageCompression
 		for _, imgData := range imageResp.Data {
 			if imgData.B64Json != "" {
 				// Detect actual mime type from base64 data
 				mimeType := detectImageMimeType(imgData.B64Json)
-				publicURL, err := UploadBase64ImageToR2Compressed(mimeType, imgData.B64Json, compression)
+				publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, imgData.B64Json, compression, task.Properties.RequestHost)
 				if err != nil {
-					logger.LogError(ctx, fmt.Sprintf("async_image: R2 upload failed: %v", err))
+					logger.LogError(ctx, fmt.Sprintf("async_image: storage upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
-					task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+					task.FailReason = fmt.Sprintf("上传图片到对象存储失败: %v", err)
 					task.Progress = "100%"
 					task.FinishTime = time.Now().Unix()
 					_ = task.Update()
@@ -588,7 +590,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 				}
 				uploadedURLs = append(uploadedURLs, publicURL)
 			} else if imgData.Url != "" {
-				// Download from upstream URL and re-upload to R2 for durable storage
+				// Download from upstream URL and re-upload for durable storage.
 				// Note: This downloads the generated image from upstream, not user input, so we use default limit
 				mimeType, b64Data, err := GetImageFromUrl(imgData.Url)
 				if err != nil {
@@ -600,11 +602,11 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 					_ = task.Update()
 					return
 				}
-				publicURL, err := UploadBase64ImageToR2Compressed(mimeType, b64Data, compression)
+				publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, b64Data, compression, task.Properties.RequestHost)
 				if err != nil {
-					logger.LogError(ctx, fmt.Sprintf("async_image: R2 upload failed: %v", err))
+					logger.LogError(ctx, fmt.Sprintf("async_image: storage upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
-					task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+					task.FailReason = fmt.Sprintf("上传图片到对象存储失败: %v", err)
 					task.Progress = "100%"
 					task.FinishTime = time.Now().Unix()
 					_ = task.Update()
@@ -702,7 +704,6 @@ func detectImageMimeType(b64 string) string {
 	}
 	return ct
 }
-
 
 // ProcessUnifiedImageTask is the standalone async processor for the unified
 // /async/v1/images/generations endpoint. It handles Gemini native image models
@@ -922,7 +923,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
 	// Strip thoughtSignature before storing
 	stripThoughtSignature(geminiResp)
 
-	// Extract images from Gemini response and upload to R2
+	// Extract images from Gemini response and upload to the Host-selected storage provider.
 	var uploadedURLs []string
 	imageCount := 0
 	if candidates, ok := geminiResp["candidates"].([]interface{}); ok && len(candidates) > 0 {
@@ -947,11 +948,11 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
 									if mt, ok := inlineData["mimeType"].(string); ok {
 										mimeType = mt
 									}
-									publicURL, err := UploadBase64ImageToR2Compressed(mimeType, base64Data, geminiCompression)
+									publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, geminiCompression, task.Properties.RequestHost)
 									if err != nil {
-										logger.LogError(ctx, fmt.Sprintf("unified_image: R2 upload failed: %v", err))
+										logger.LogError(ctx, fmt.Sprintf("unified_image: storage upload failed: %v", err))
 										task.Status = model.TaskStatusFailure
-										task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+										task.FailReason = fmt.Sprintf("上传图片到对象存储失败: %v", err)
 										task.Progress = "100%"
 										task.FinishTime = time.Now().Unix()
 										_ = task.Update()
@@ -1029,6 +1030,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
 	task.Properties.UpstreamModelName = upstreamModelName
 	_ = task.Update()
 }
+
 // ConvertAsyncImageToGeminiNative converts an OpenAI-format AsyncImageRequest to Gemini
 // native generateContent format. Reference image URLs are downloaded and converted to base64
 // inlineData format. Returns the native request ready for ProcessAsyncGeminiTask.
@@ -1428,7 +1430,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	// Strip thoughtSignature from parts before storing (it can be megabytes of base64)
 	stripThoughtSignature(geminiResp)
 
-	// Strip thought parts and upload final images to R2.
+	// Strip thought parts and upload final images to the Host-selected storage provider.
 	// Thought parts (text + images) are internal model artifacts — discard them.
 	var firstImageURL string
 	imageCount := 0
@@ -1449,18 +1451,18 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 							if isThought {
 								continue
 							}
-							// Upload final image to R2
+							// Upload final image to object storage
 							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
 								if base64Data, ok := inlineData["data"].(string); ok {
 									mimeType := "image/png"
 									if mt, ok := inlineData["mimeType"].(string); ok {
 										mimeType = mt
 									}
-									publicURL, err := UploadBase64ImageToR2Compressed(mimeType, base64Data, geminiCompression)
+									publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, geminiCompression, task.Properties.RequestHost)
 									if err != nil {
-										logger.LogError(ctx, fmt.Sprintf("async_gemini: R2 upload failed: %v", err))
+										logger.LogError(ctx, fmt.Sprintf("async_gemini: storage upload failed: %v", err))
 										task.Status = model.TaskStatusFailure
-										task.FailReason = fmt.Sprintf("上传图片到 R2 失败: %v", err)
+										task.FailReason = fmt.Sprintf("上传图片到对象存储失败: %v", err)
 										task.Progress = "100%"
 										task.FinishTime = time.Now().Unix()
 										_ = task.Update()

@@ -2,7 +2,9 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -18,13 +20,27 @@ import (
 // GenerateImageSubmit 是统一异步生图端点 POST /async/v1/generateImage 的入口。
 // 收扁平参数 → 校验 → 预扣费 → 按模型分发 provider → 建任务 → 异步处理 → 返回 task_id。
 func GenerateImageSubmit(c *gin.Context) {
-	var req dto.GenerateImageRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	var rawReq map[string]json.RawMessage
+	if err := unmarshalGenerateImageBody(c, &rawReq); err != nil {
 		generateImageError(c, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("请求参数错误: %v", err))
 		return
 	}
+	if _, ok := rawReq["image"]; ok {
+		generateImageError(c, http.StatusBadRequest, "invalid_request_error", "image 参数已废弃，请统一使用 images 字段；单张图也传入 images 数组")
+		return
+	}
 
-	// 复用既有的图片大小校验（image / images 字段）
+	var req dto.GenerateImageRequest
+	if err := unmarshalGenerateImageBody(c, &req); err != nil {
+		generateImageError(c, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("请求参数错误: %v", err))
+		return
+	}
+	if err := service.ValidateGenerateImageRequest(&req); err != nil {
+		generateImageError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return
+	}
+
+	// 复用既有的图片大小校验（images 字段）
 	asyncReq := generateImageToAsyncRequest(&req)
 	if err := service.ValidateAsyncImageSize(asyncReq); err != nil {
 		generateImageError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
@@ -59,6 +75,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			Input:           req.Prompt,
 			OriginModelName: req.Model,
 			TokenId:         tokenId,
+			RequestHost:     c.Request.Host,
 		},
 	}
 
@@ -134,11 +151,41 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		Size:               req.Size,
 		Quality:            req.Quality,
 		AspectRatio:        req.AspectRatio,
-		ImageCompression:   req.ImageCompression,
+		OutputFormat:       req.OutputFormat,
 		ResponseModalities: req.ResponseModalities,
-		Image:              req.Image,
 		Images:             req.Images,
+		Mask:               req.Mask,
 	}
+}
+
+func unmarshalGenerateImageBody(c *gin.Context, v any) error {
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return err
+	}
+	if _, err := storage.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
+	if storage.IsDisk() {
+		if err := common.DecodeJson(storage, v); err != nil {
+			return err
+		}
+	} else {
+		requestBody, err := storage.Bytes()
+		if err != nil {
+			return err
+		}
+		if err := common.Unmarshal(requestBody, v); err != nil {
+			return err
+		}
+	}
+
+	if _, err := storage.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	c.Request.Body = io.NopCloser(storage)
+	return nil
 }
 
 // generateImageError 统一错误响应格式。
