@@ -493,10 +493,23 @@ func AsyncTaskFetch(c *gin.Context) {
 			resp.Data = task.Data
 		}
 	} else if task.Status == model.TaskStatusFailure {
-		resp.Error = task.FailReason
+		if isAsyncImageTaskPlatform(task.Platform) {
+			resp.Error, resp.ErrorDetail = service.BuildFriendlyImageError(task.FailReason, c.GetString(common.RequestIdKey), task.TaskID)
+		} else {
+			resp.Error = task.FailReason
+		}
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func isAsyncImageTaskPlatform(platform constant.TaskPlatform) bool {
+	switch platform {
+	case constant.TaskPlatformGenerateImage, constant.TaskPlatformUnifiedImage, constant.TaskPlatformAsyncImage:
+		return true
+	default:
+		return false
+	}
 }
 
 // Deprecated: use AsyncTaskFetch

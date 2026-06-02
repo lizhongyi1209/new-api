@@ -190,10 +190,29 @@ func unmarshalGenerateImageBody(c *gin.Context, v any) error {
 
 // generateImageError 统一错误响应格式。
 func generateImageError(c *gin.Context, status int, errType, message string) {
+	friendlyMessage, detail := service.BuildFriendlyImageError(message, c.GetString(common.RequestIdKey), "")
+	if status == http.StatusBadRequest && errType == "invalid_request_error" && detail != nil && detail.Code == "image_unknown_error" {
+		friendlyMessage = "请求参数格式不正确，请检查 JSON 和字段后重试。"
+		detail.Code = "image_invalid_request"
+		detail.Category = "invalid_request"
+		detail.Retryable = false
+	}
+	errorPayload := gin.H{
+		"message": friendlyMessage,
+		"type":    errType,
+	}
+	if detail != nil {
+		errorPayload["code"] = detail.Code
+		errorPayload["category"] = detail.Category
+		errorPayload["retryable"] = detail.Retryable
+		if detail.RequestID != "" {
+			errorPayload["request_id"] = detail.RequestID
+		}
+		if detail.UpstreamStatus > 0 {
+			errorPayload["upstream_status"] = detail.UpstreamStatus
+		}
+	}
 	c.JSON(status, gin.H{
-		"error": gin.H{
-			"message": message,
-			"type":    errType,
-		},
+		"error": errorPayload,
 	})
 }
