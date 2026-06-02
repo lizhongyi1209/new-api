@@ -52,6 +52,8 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
+  isLegacyTieredRecalcContent,
+  getLegacyTieredRecalcTier,
   getFirstResponseTimeColor,
   getResponseTimeColor,
   renderAuditContent,
@@ -153,6 +155,11 @@ function BillingBreakdown(props: {
   const isPerCall = isPerCallBilling(other.model_price, other.per_call_billing)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
+  const isLegacyTieredRecalc = isLegacyTieredRecalcContent(
+    log.content,
+    other
+  )
+  const legacyTier = getLegacyTieredRecalcTier(log.content)
   const tieredSummary = getTieredBillingSummary(other)
 
   const rows: Array<{ label: string; value: string }> = []
@@ -160,7 +167,7 @@ function BillingBreakdown(props: {
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
   const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
 
-  if (isTieredExpr) {
+  if (isTieredExpr || isLegacyTieredRecalc) {
     rows.push({
       label: t('Billing Mode'),
       value: t('Dynamic Pricing'),
@@ -178,6 +185,11 @@ function BillingBreakdown(props: {
           value: `${fmtPrice(entry.price)}/M`,
         })
       }
+    } else if (isLegacyTieredRecalc) {
+      rows.push({
+        label: t('Matched Tier'),
+        value: legacyTier || '-',
+      })
     } else {
       rows.push({
         label: t('Matched Tier'),

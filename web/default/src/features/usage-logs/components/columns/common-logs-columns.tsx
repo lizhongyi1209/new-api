@@ -54,6 +54,8 @@ import {
   parseLogOther,
   isViolationFeeLog,
   renderAuditContent,
+  isLegacyTieredRecalcContent,
+  getLegacyTieredRecalcTier,
 } from '../../lib/format'
 import {
   isDisplayableLogType,
@@ -152,8 +154,10 @@ function buildDetailSegments(
     return showUnit ? `${text}/M` : text
   }
   const isTieredExpr = other.billing_mode === 'tiered_expr'
+  const isLegacyTieredRecalc = isLegacyTieredRecalcContent(log.content, other)
+  const legacyTier = getLegacyTieredRecalcTier(log.content)
   const tieredSummary = getTieredBillingSummary(other)
-  if (isTieredExpr) {
+  if (isTieredExpr || isLegacyTieredRecalc) {
     if (tieredSummary) {
       const baseEntries = tieredSummary.priceEntries
         .filter((entry) => ['inputPrice', 'outputPrice'].includes(entry.field))
@@ -201,7 +205,9 @@ function buildDetailSegments(
       }
     } else {
       segments.push({
-        text: `${t('Dynamic Pricing')} · ${t('No matching results')}`,
+        text: legacyTier
+          ? `${t('Dynamic Pricing')} · ${legacyTier}`
+          : `${t('Dynamic Pricing')} · ${t('No matching results')}`,
         muted: true,
       })
     }

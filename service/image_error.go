@@ -9,8 +9,10 @@ import (
 )
 
 var imageErrorStatusCodePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`upstream error status=(\d{3})`),
 	regexp.MustCompile(`status_code=(\d{3})`),
 	regexp.MustCompile(`bad response status code (\d{3})`),
+	regexp.MustCompile(`status code[:= ]+(\d{3})`),
 }
 
 func BuildFriendlyImageError(reason, requestID, taskID string) (string, *dto.ImageErrorDetail) {
@@ -28,6 +30,9 @@ func BuildFriendlyImageError(reason, requestID, taskID string) (string, *dto.Ima
 		UpstreamStatus: status,
 	}
 
+	// Gemini/Nano Banana and GPT image providers can reuse the same HTTP status
+	// for different failure causes. Keep reason-specific checks before status-code
+	// fallbacks so 503 timeout and 429 resolution mismatch are not misreported.
 	switch {
 	case containsAny(lower, "image 参数已废弃", "image field is required", "the 'image' field is required"):
 		detail.Code = "image_missing_input"
@@ -44,7 +49,7 @@ func BuildFriendlyImageError(reason, requestID, taskID string) (string, *dto.Ima
 		detail.Category = "invalid_request"
 		detail.Retryable = false
 		message = "缺少提示词，请传入 prompt 参数。"
-	case containsAny(lower, "invalid size", "pixel budget", "divisible by 16", "size an unexpected", "尺寸", "文件大小") || status == 413:
+	case containsAny(lower, "invalid size", "pixel budget", "divisible by 16", "size an unexpected", "resolution mismatch", "尺寸", "文件大小") || status == 413:
 		detail.Code = "image_invalid_size"
 		detail.Category = "invalid_request"
 		detail.Retryable = false
@@ -60,46 +65,51 @@ func BuildFriendlyImageError(reason, requestID, taskID string) (string, *dto.Ima
 		detail.Category = "invalid_request"
 		detail.Retryable = false
 		message = "Mask 图片格式不正确，请使用有效的 mask 图片后重试。"
+	case containsAny(lower, "too many input images", "input images; max is"):
+		detail.Code = "image_too_many_input_images"
+		detail.Category = "invalid_request"
+		detail.Retryable = false
+		message = "参考图片数量超出当前模型限制，请减少图片数量后重试。"
 	case containsAny(lower, "quality must be", "output_format must be", "unrecognized request argument", "partial images", "tool choice", "input_fidelity", "requested operation is unsupported", "转换请求失败"):
 		detail.Code = "image_invalid_parameter"
 		detail.Category = "invalid_request"
 		detail.Retryable = false
 		message = "当前模型不支持部分请求参数，请调整参数后重试。"
-	case containsAny(lower, "policy", "safety", "violat", "rejected"):
+	case status == 451 || containsAny(lower, "content_policy", "image_unsafe", "prompt_unsafe", "policy", "safety", "violat", "rejected"):
 		detail.Code = "image_safety_blocked"
 		detail.Category = "safety"
 		detail.Retryable = false
 		message = "请求内容可能不符合安全策略，请修改提示词或图片后重试。"
-	case containsAny(lower, "rate limit", "too many", "cooling down", "concurrency limit", "pending requests") || status == 429:
-		detail.Code = "image_rate_limited"
-		detail.Category = "rate_limit"
-		detail.Retryable = true
-		message = "当前生图服务请求较多，请稍后重试。"
-	case containsAny(lower, "high load", "负载", "no available compatible accounts", "overloaded", "usage limit", "当前模型") || status == 503:
-		detail.Code = "image_upstream_busy"
-		detail.Category = "upstream_busy"
-		detail.Retryable = true
-		message = "当前模型服务繁忙，请稍后重试。"
-	case containsAny(lower, "timeout", "stream disconnected", "socket hang up", "eof") || status == 408 || status == 504 || status == 524:
+	case isImageTimeoutError(lower, status):
 		detail.Code = "image_timeout"
 		detail.Category = "timeout"
 		detail.Retryable = true
 		message = "图片生成耗时过长或连接中断，请稍后重试。"
-	case containsAny(lower, "billing hard limit", "insufficient credits", "额度", "系统网关次数不足"):
+	case isImageProviderQuotaError(lower):
 		detail.Code = "image_provider_quota_exceeded"
 		detail.Category = "provider_quota"
 		detail.Retryable = false
 		message = "当前模型服务额度不足，请联系管理员处理。"
-	case containsAny(lower, "organization must be verified", "auth_unavailable", "no auth", "api key") || status == 401 || status == 403:
-		detail.Code = "image_provider_permission_required"
-		detail.Category = "provider_permission"
-		detail.Retryable = false
-		message = "当前上游账号暂无该模型权限，请联系管理员处理。"
-	case containsAny(lower, "unknown model", "model was not found", "not found", "only supported on", "no available ai provider") || status == 404 || status == 405:
+	case isImageModelUnavailableError(lower, status):
 		detail.Code = "image_model_unavailable"
 		detail.Category = "model_unavailable"
 		detail.Retryable = false
 		message = "当前模型暂不可用，请稍后重试或切换模型。"
+	case isImagePermissionError(lower, status):
+		detail.Code = "image_provider_permission_required"
+		detail.Category = "provider_permission"
+		detail.Retryable = false
+		message = "当前上游账号暂无该模型权限，请联系管理员处理。"
+	case containsAny(lower, "rate limit", "too many requests", "cooling down", "concurrency limit", "pending requests") || status == 429:
+		detail.Code = "image_rate_limited"
+		detail.Category = "rate_limit"
+		detail.Retryable = true
+		message = "当前生图服务请求较多，请稍后重试。"
+	case containsAny(lower, "high load", "负载", "no available compatible accounts", "overloaded", "usage limit", "当前模型", "系统繁忙") || status == 503:
+		detail.Code = "image_upstream_busy"
+		detail.Category = "upstream_busy"
+		detail.Retryable = true
+		message = "当前模型服务繁忙，请稍后重试。"
 	case containsAny(lower, "对象存储", "storage upload", "oss upload", "r2 upload", "aliyun oss"):
 		detail.Code = "image_storage_failed"
 		detail.Category = "storage"
@@ -140,6 +150,54 @@ func extractImageErrorStatus(reason string) int {
 		}
 	}
 	return 0
+}
+
+func isImageTimeoutError(lower string, status int) bool {
+	return containsAny(lower, "timeout", "timed out", "poll_timeout", "timeout_error", "stream disconnected", "socket hang up", "eof") ||
+		status == 408 || status == 504 || status == 524
+}
+
+func isImageProviderQuotaError(lower string) bool {
+	return containsAny(lower,
+		"billing hard limit",
+		"insufficient credits",
+		"insufficient_user_quota",
+		"用户额度不足",
+		"quota exhausted",
+		"current quota",
+		"token quota",
+		"quota is not enough",
+		"no active tokens available",
+		"token_unavailable",
+		"系统网关次数不足",
+		"额度",
+	)
+}
+
+func isImageModelUnavailableError(lower string, status int) bool {
+	return containsAny(lower,
+		"unknown model",
+		"model was not found",
+		"not found",
+		"only supported on",
+		"no available ai provider",
+		"no available channel for model",
+	) || status == 404 || status == 405
+}
+
+func isImagePermissionError(lower string, status int) bool {
+	return containsAny(lower,
+		"organization must be verified",
+		"auth_unavailable",
+		"authentication_error",
+		"no auth",
+		"api key",
+		"token invalid",
+		"invalid_grant",
+		"failed to exchange jwt",
+		"account not found",
+		"无效的令牌",
+	) || status == 401 || status == 403
 }
 
 func containsAny(value string, needles ...string) bool {

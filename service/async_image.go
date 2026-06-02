@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +65,329 @@ func ApplyModelMapping(originModelName string, modelMappingJSON *string) string 
 		}
 	}
 	return currentModel
+}
+
+func mappedAsyncImageRequest(imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo) *dto.ImageRequest {
+	if imageReq == nil {
+		return nil
+	}
+	mappedReq := *imageReq
+	if relayInfo != nil && relayInfo.ChannelMeta != nil {
+		mappedReq.SetModelName(relayInfo.UpstreamModelName)
+	}
+	return &mappedReq
+}
+
+func asyncImageRequestUsesEdits(imageReq *dto.ImageRequest) bool {
+	if imageReq == nil {
+		return false
+	}
+	return hasJSONRawValue(imageReq.Image) || hasJSONRawValue(imageReq.Images) || hasJSONRawValue(imageReq.Mask)
+}
+
+func asyncOpenAIImageRelayMode(imageReq *dto.ImageRequest) int {
+	if asyncImageRequestUsesEdits(imageReq) {
+		return relayconstant.RelayModeImagesEdits
+	}
+	return relayconstant.RelayModeImagesGenerations
+}
+
+func asyncImageRequestURLPath(relayMode int, upstreamModelName string) string {
+	switch relayMode {
+	case relayconstant.RelayModeImagesGenerations:
+		return "/v1/images/generations"
+	case relayconstant.RelayModeImagesEdits:
+		return "/v1/images/edits"
+	case relayconstant.RelayModeGemini:
+		return "/v1beta/models/" + upstreamModelName + ":generateContent"
+	default:
+		return ""
+	}
+}
+
+func hasJSONRawValue(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return false
+	}
+
+	switch trimmed[0] {
+	case '"':
+		var value string
+		if err := common.Unmarshal(trimmed, &value); err != nil {
+			return true
+		}
+		return strings.TrimSpace(value) != ""
+	case '[':
+		var values []json.RawMessage
+		if err := common.Unmarshal(trimmed, &values); err != nil {
+			return true
+		}
+		return len(values) > 0
+	case '{':
+		var values map[string]json.RawMessage
+		if err := common.Unmarshal(trimmed, &values); err != nil {
+			return true
+		}
+		return len(values) > 0
+	default:
+		return true
+	}
+}
+
+func prepareAsyncOpenAIImageRequest(imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo) *dto.ImageRequest {
+	upstreamReq := mappedAsyncImageRequest(imageReq, relayInfo)
+	if upstreamReq == nil || relayInfo == nil || relayInfo.RelayMode != relayconstant.RelayModeImagesEdits {
+		return upstreamReq
+	}
+	normalizeAsyncImageEditRequest(upstreamReq)
+	return upstreamReq
+}
+
+func normalizeAsyncImageEditRequest(imageReq *dto.ImageRequest) {
+	if imageReq == nil || hasJSONRawValue(imageReq.Image) || !hasJSONRawValue(imageReq.Images) {
+		return
+	}
+
+	var images []json.RawMessage
+	if err := common.Unmarshal(imageReq.Images, &images); err != nil || len(images) == 0 {
+		return
+	}
+	if len(images) == 1 {
+		imageReq.Image = images[0]
+	} else {
+		imageReq.Image = imageReq.Images
+	}
+	imageReq.Images = nil
+}
+
+func buildAsyncOpenAIImageRequestBody(c *gin.Context, adaptor ImageAdaptor, relayInfo *relaycommon.RelayInfo, imageReq *dto.ImageRequest) (io.Reader, int, error) {
+	if relayInfo != nil && relayInfo.RelayMode == relayconstant.RelayModeImagesEdits {
+		body, err := buildAsyncOpenAIImageEditMultipartBody(c, imageReq)
+		if err != nil {
+			return nil, 0, err
+		}
+		return body, body.Len(), nil
+	}
+
+	convertedRequest, err := adaptor.ConvertImageRequest(c, relayInfo, *imageReq)
+	if err != nil {
+		return nil, 0, err
+	}
+	jsonData, err := common.Marshal(convertedRequest)
+	if err != nil {
+		return nil, 0, err
+	}
+	return bytes.NewReader(jsonData), len(jsonData), nil
+}
+
+func buildAsyncOpenAIImageEditMultipartBody(c *gin.Context, imageReq *dto.ImageRequest) (*bytes.Buffer, error) {
+	if imageReq == nil {
+		return nil, fmt.Errorf("image request is nil")
+	}
+
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+	if err := writeAsyncImageEditFields(writer, imageReq); err != nil {
+		return nil, err
+	}
+
+	images, err := asyncImageValuesFromRaw(imageReq.Image)
+	if err != nil {
+		return nil, fmt.Errorf("parse image field failed: %w", err)
+	}
+	if len(images) == 0 {
+		images, err = asyncImageValuesFromRaw(imageReq.Images)
+		if err != nil {
+			return nil, fmt.Errorf("parse images field failed: %w", err)
+		}
+	}
+	if len(images) == 0 {
+		return nil, fmt.Errorf("image is required")
+	}
+	for i, imageValue := range images {
+		fieldName := "image"
+		if len(images) > 1 {
+			fieldName = "image[]"
+		}
+		if err := writeAsyncImageMultipartPart(writer, fieldName, fmt.Sprintf("image_%d", i), imageValue); err != nil {
+			return nil, fmt.Errorf("write image %d failed: %w", i, err)
+		}
+	}
+
+	masks, err := asyncImageValuesFromRaw(imageReq.Mask)
+	if err != nil {
+		return nil, fmt.Errorf("parse mask field failed: %w", err)
+	}
+	if len(masks) > 0 {
+		if err := writeAsyncImageMultipartPart(writer, "mask", "mask", masks[0]); err != nil {
+			return nil, fmt.Errorf("write mask failed: %w", err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	return &requestBody, nil
+}
+
+func writeAsyncImageEditFields(writer *multipart.Writer, imageReq *dto.ImageRequest) error {
+	if err := writer.WriteField("model", imageReq.Model); err != nil {
+		return err
+	}
+	if err := writer.WriteField("prompt", imageReq.Prompt); err != nil {
+		return err
+	}
+	if imageReq.N != nil {
+		if err := writer.WriteField("n", strconv.FormatUint(uint64(*imageReq.N), 10)); err != nil {
+			return err
+		}
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{
+		{name: "size", value: imageReq.Size},
+		{name: "quality", value: imageReq.Quality},
+		{name: "response_format", value: imageReq.ResponseFormat},
+		{name: "aspect_ratio", value: imageReq.AspectRatio},
+	} {
+		if field.value == "" {
+			continue
+		}
+		if err := writer.WriteField(field.name, field.value); err != nil {
+			return err
+		}
+	}
+	for _, field := range []struct {
+		name  string
+		value json.RawMessage
+	}{
+		{name: "style", value: imageReq.Style},
+		{name: "user", value: imageReq.User},
+		{name: "background", value: imageReq.Background},
+		{name: "moderation", value: imageReq.Moderation},
+		{name: "output_format", value: imageReq.OutputFormat},
+		{name: "output_compression", value: imageReq.OutputCompression},
+		{name: "partial_images", value: imageReq.PartialImages},
+		{name: "input_fidelity", value: imageReq.InputFidelity},
+	} {
+		if err := writeAsyncImageRawField(writer, field.name, field.value); err != nil {
+			return err
+		}
+	}
+	if imageReq.Stream != nil {
+		if err := writer.WriteField("stream", strconv.FormatBool(*imageReq.Stream)); err != nil {
+			return err
+		}
+	}
+	if imageReq.Watermark != nil {
+		if err := writer.WriteField("watermark", strconv.FormatBool(*imageReq.Watermark)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeAsyncImageRawField(writer *multipart.Writer, name string, raw json.RawMessage) error {
+	if !hasJSONRawValue(raw) {
+		return nil
+	}
+	var value string
+	if err := common.Unmarshal(raw, &value); err == nil {
+		return writer.WriteField(name, value)
+	}
+	return writer.WriteField(name, string(bytes.TrimSpace(raw)))
+}
+
+func asyncImageValuesFromRaw(raw json.RawMessage) ([]string, error) {
+	trimmed := bytes.TrimSpace(raw)
+	if !hasJSONRawValue(trimmed) {
+		return nil, nil
+	}
+	if trimmed[0] == '[' {
+		var values []string
+		if err := common.Unmarshal(trimmed, &values); err != nil {
+			return nil, err
+		}
+		return values, nil
+	}
+	if trimmed[0] == '"' {
+		var value string
+		if err := common.Unmarshal(trimmed, &value); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(value) == "" {
+			return nil, nil
+		}
+		return []string{value}, nil
+	}
+
+	var ref dto.ImageReference
+	if err := common.Unmarshal(trimmed, &ref); err != nil {
+		return nil, err
+	}
+	if ref.ImageURL != nil && strings.TrimSpace(*ref.ImageURL) != "" {
+		return []string{strings.TrimSpace(*ref.ImageURL)}, nil
+	}
+	return nil, nil
+}
+
+func writeAsyncImageMultipartPart(writer *multipart.Writer, fieldName, filenamePrefix, imageValue string) error {
+	mimeType, data, err := asyncImageBinaryFromValue(imageValue)
+	if err != nil {
+		return err
+	}
+	filename := filenamePrefix + "." + asyncImageExtension(mimeType)
+
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, filename))
+	h.Set("Content-Type", mimeType)
+
+	part, err := writer.CreatePart(h)
+	if err != nil {
+		return err
+	}
+	_, err = part.Write(data)
+	return err
+}
+
+func asyncImageBinaryFromValue(imageValue string) (string, []byte, error) {
+	imageValue = strings.TrimSpace(imageValue)
+	if strings.HasPrefix(imageValue, "http://") || strings.HasPrefix(imageValue, "https://") {
+		mimeType, b64, err := GetImageFromUrlWithLimit(imageValue, AsyncImageMaxURLSizeMB)
+		if err != nil {
+			return "", nil, err
+		}
+		data, err := base64.StdEncoding.DecodeString(b64)
+		return mimeType, data, err
+	}
+
+	mimeType := "image/png"
+	b64Data := imageValue
+	if strings.HasPrefix(imageValue, "data:") {
+		mimeType, b64Data = parseDataURI(imageValue)
+		if mimeType == "" || b64Data == "" {
+			return "", nil, fmt.Errorf("failed to parse data URI")
+		}
+	}
+	data, err := base64.StdEncoding.DecodeString(b64Data)
+	if err != nil {
+		return "", nil, err
+	}
+	return mimeType, data, nil
+}
+
+func asyncImageExtension(mimeType string) string {
+	switch strings.ToLower(mimeType) {
+	case "image/jpeg", "image/jpg":
+		return "jpg"
+	case "image/webp":
+		return "webp"
+	default:
+		return "png"
+	}
 }
 
 const (
@@ -360,8 +686,10 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	c := &gin.Context{
 		Request: &http.Request{
 			Method: "POST",
-			Header: make(http.Header),
-			Body:   http.NoBody,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+			},
+			Body: http.NoBody,
 		},
 	}
 
@@ -397,12 +725,13 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	upstreamModelName := ApplyModelMapping(imageReq.Model, channel.ModelMapping)
 	isModelMapped := upstreamModelName != imageReq.Model
 
+	relayMode := asyncOpenAIImageRelayMode(imageReq)
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:     task.UserId,
 		UserGroup:  common.GetContextKeyString(c, constant.ContextKeyUserGroup),
 		UsingGroup: task.Group,
 		Request:    imageReq,
-		RelayMode:  relayconstant.RelayModeImagesGenerations,
+		RelayMode:  relayMode,
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{
 			PublicTaskID: task.TaskID,
 		},
@@ -420,6 +749,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			IsModelMapped:        isModelMapped,
 		},
 	}
+	relayInfo.RequestURLPath = asyncImageRequestURLPath(relayInfo.RelayMode, upstreamModelName)
 
 	task.Status = model.TaskStatusInProgress
 	task.StartTime = time.Now().Unix()
@@ -453,7 +783,10 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		}
 	}
 
-	convertedRequest, err := adaptor.ConvertImageRequest(c, relayInfo, *imageReq)
+	upstreamImageReq := prepareAsyncOpenAIImageRequest(imageReq, relayInfo)
+	relayInfo.Request = upstreamImageReq
+
+	requestBody, requestBodyLen, err := buildAsyncOpenAIImageRequestBody(c, adaptor, relayInfo, upstreamImageReq)
 	if err != nil {
 		task.Status = model.TaskStatusFailure
 		task.FailReason = fmt.Sprintf("转换请求失败: %v", err)
@@ -463,21 +796,11 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	jsonData, err := common.Marshal(convertedRequest)
-	if err != nil {
-		task.Status = model.TaskStatusFailure
-		task.FailReason = fmt.Sprintf("序列化请求失败: %v", err)
-		task.Progress = "100%"
-		task.FinishTime = time.Now().Unix()
-		_ = task.Update()
-		return
-	}
-
 	logger.LogInfo(ctx, fmt.Sprintf("async_image: calling upstream with model=%s, baseUrl=%s, apiType=%d",
 		relayInfo.ChannelMeta.UpstreamModelName, relayInfo.ChannelMeta.ChannelBaseUrl, relayInfo.ChannelMeta.ApiType))
-	logger.LogInfo(ctx, fmt.Sprintf("async_image: request body length=%d bytes", len(jsonData)))
+	logger.LogInfo(ctx, fmt.Sprintf("async_image: request body length=%d bytes", requestBodyLen))
 
-	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+	resp, err := adaptor.DoRequest(c, relayInfo, requestBody)
 	if err != nil {
 		task.Status = model.TaskStatusFailure
 		task.FailReason = fmt.Sprintf("请求上游失败: %v", err)

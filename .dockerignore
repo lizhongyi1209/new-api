@@ -1,5 +1,9 @@
 .github
 .git
+.agents
+.claude
+data
+logs
 *.md
 .vscode
 .gitignore

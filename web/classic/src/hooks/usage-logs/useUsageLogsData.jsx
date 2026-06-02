@@ -381,6 +381,10 @@ export const useLogsData = () => {
       logs[i].timestamp2string = timestamp2string(logs[i].created_at);
       logs[i].key = logs[i].id;
       let other = getLogOther(logs[i].other);
+      const isLegacyTieredRecalc =
+        other?.billing_mode !== 'tiered_expr' &&
+        typeof logs[i]?.content === 'string' &&
+        logs[i].content.includes('tiered_expr重算');
       let expandDataLocal = [];
 
       if (isAdminUser && (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)) {
@@ -426,7 +430,7 @@ export const useLogsData = () => {
         });
       }
       if (logs[i].type === 2) {
-        if (other?.billing_mode !== 'tiered_expr') {
+        if (other?.billing_mode !== 'tiered_expr' && !isLegacyTieredRecalc) {
           expandDataLocal.push({
             key: t('日志详情'),
             value: other?.claude
@@ -434,7 +438,7 @@ export const useLogsData = () => {
               : renderLogContent({ ...other, displayMode: billingDisplayMode }),
           });
         }
-        if (logs[i]?.content) {
+        if (logs[i]?.content && !isLegacyTieredRecalc) {
           expandDataLocal.push({
             key: t('其他详情'),
             value: logs[i].content,
@@ -469,7 +473,12 @@ export const useLogsData = () => {
           Boolean(other?.violation_fee_marker);
 
         let content = '';
-        if (!isViolationFeeLog && other?.billing_mode !== 'tiered_expr') {
+        if (!isViolationFeeLog && isLegacyTieredRecalc) {
+          expandDataLocal.push({
+            key: t('计费过程'),
+            value: logs[i].content,
+          });
+        } else if (!isViolationFeeLog && other?.billing_mode !== 'tiered_expr') {
           const logOpts = {
             ...other,
             prompt_tokens: logs[i].prompt_tokens,

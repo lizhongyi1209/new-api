@@ -30,3 +30,35 @@ func TestUnmarshalGenerateImageBodyWithoutContentType(t *testing.T) {
 		t.Fatalf("req = %#v, want parsed model and prompt", req)
 	}
 }
+
+func TestApplyGenerateImageGoogleSearchTool(t *testing.T) {
+	enabled := true
+	nativeReq := map[string]interface{}{}
+	applyGenerateImageGoogleSearchTool(nativeReq, &enabled)
+
+	tools, ok := nativeReq["tools"].([]interface{})
+	if !ok || len(tools) != 1 {
+		t.Fatalf("tools = %#v, want one googleSearch tool", nativeReq["tools"])
+	}
+	tool, ok := tools[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("tool = %#v, want object", tools[0])
+	}
+	if _, ok := tool["googleSearch"].(map[string]interface{}); !ok {
+		t.Fatalf("tool = %#v, want googleSearch object", tool)
+	}
+}
+
+func TestApplyGenerateImageGoogleSearchToolOmitted(t *testing.T) {
+	nativeReq := map[string]interface{}{}
+	applyGenerateImageGoogleSearchTool(nativeReq, nil)
+	if _, ok := nativeReq["tools"]; ok {
+		t.Fatalf("tools should be omitted by default, got %#v", nativeReq["tools"])
+	}
+
+	disabled := false
+	applyGenerateImageGoogleSearchTool(nativeReq, &disabled)
+	if _, ok := nativeReq["tools"]; ok {
+		t.Fatalf("tools should be omitted when google_search is false, got %#v", nativeReq["tools"])
+	}
+}

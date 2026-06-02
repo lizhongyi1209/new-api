@@ -443,6 +443,79 @@ func UpdateConsumeLogOnComplete(logId int, useTimeSeconds int, promptTokens int,
 	}
 }
 
+func UpdateConsumeLogQuotaAndOther(logId int, quota int, otherUpdates map[string]interface{}) {
+	if logId == 0 {
+		return
+	}
+
+	var log Log
+	if err := LOG_DB.Where("id = ?", logId).First(&log).Error; err != nil {
+		common.SysLog(fmt.Sprintf("UpdateConsumeLogQuotaAndOther: log %d not found: %v", logId, err))
+		return
+	}
+
+	updates := map[string]interface{}{
+		"quota": quota,
+	}
+
+	if len(otherUpdates) > 0 {
+		otherMap, _ := common.StrToMap(log.Other)
+		if otherMap == nil {
+			otherMap = make(map[string]interface{})
+		}
+		for k, v := range otherUpdates {
+			otherMap[k] = v
+		}
+		updates["other"] = common.MapToJsonStr(otherMap)
+	}
+
+	if err := LOG_DB.Model(&Log{}).Where("id = ?", logId).Updates(updates).Error; err != nil {
+		common.SysLog(fmt.Sprintf("UpdateConsumeLogQuotaAndOther: failed to update log %d: %v", logId, err))
+	}
+}
+
+func FindAsyncTaskSubmitConsumeLogID(userId int, taskID string) int {
+	if taskID == "" {
+		return 0
+	}
+
+	likeTaskID := "%" + taskID + "%"
+	var logs []Log
+	if err := LOG_DB.Where("user_id = ? AND type = ? AND (content LIKE ? OR other LIKE ?)",
+		userId, LogTypeConsume, likeTaskID, likeTaskID).
+		Order("id desc").
+		Limit(20).
+		Find(&logs).Error; err != nil {
+		common.SysLog(fmt.Sprintf("FindAsyncTaskSubmitConsumeLogID: task %s not found: %v", taskID, err))
+		return 0
+	}
+
+	for _, log := range logs {
+		if logOtherHasTaskID(log.Other, taskID) {
+			return log.Id
+		}
+	}
+	for _, log := range logs {
+		if strings.Contains(log.Content, taskID) {
+			return log.Id
+		}
+	}
+	return 0
+}
+
+func logOtherHasTaskID(other string, taskID string) bool {
+	otherMap, err := common.StrToMap(other)
+	if err != nil || otherMap == nil {
+		return false
+	}
+	for _, key := range []string{"async_task_id", "task_id"} {
+		if value, ok := otherMap[key]; ok && fmt.Sprint(value) == taskID {
+			return true
+		}
+	}
+	return false
+}
+
 type RecordTaskBillingLogParams struct {
 	UserId    int
 	LogType   int

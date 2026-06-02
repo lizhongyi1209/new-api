@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -118,6 +120,10 @@ func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
 func taskBillingOther(task *model.Task) map[string]interface{} {
+	return taskBillingOtherWithOverrides(task, nil)
+}
+
+func taskBillingOtherWithOverrides(task *model.Task, overrides map[string]interface{}) map[string]interface{} {
 	other := make(map[string]interface{})
 	if bc := task.PrivateData.BillingContext; bc != nil {
 		other["model_price"] = bc.ModelPrice
@@ -130,6 +136,19 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 				other[k] = v
 			}
 		}
+		if len(bc.TieredSnapshot) > 0 {
+			var snap billingexpr.BillingSnapshot
+			if err := common.Unmarshal(bc.TieredSnapshot, &snap); err == nil && snap.BillingMode == "tiered_expr" {
+				other["billing_mode"] = "tiered_expr"
+				other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
+				if snap.EstimatedTier != "" {
+					other["matched_tier"] = snap.EstimatedTier
+				}
+			}
+		}
+	}
+	for k, v := range overrides {
+		other[k] = v
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {
@@ -185,6 +204,65 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 // actualQuota 是任务完成后的实际应扣额度，与预扣额度 (task.Quota) 做差额结算。
 // reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。
 func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason string) {
+	recalculateTaskQuota(ctx, task, actualQuota, reason, nil)
+}
+
+func RecalculateTaskQuotaWithBillingOther(ctx context.Context, task *model.Task, actualQuota int, reason string, otherOverrides map[string]interface{}) {
+	recalculateTaskQuota(ctx, task, actualQuota, reason, otherOverrides)
+}
+
+func SettleTaskQuotaInSubmitLog(ctx context.Context, task *model.Task, actualQuota int, reason string, otherOverrides map[string]interface{}) {
+	submitLogID := task.PrivateData.SubmitLogID
+	if submitLogID == 0 {
+		submitLogID = model.FindAsyncTaskSubmitConsumeLogID(task.UserId, task.TaskID)
+		if submitLogID != 0 {
+			task.PrivateData.SubmitLogID = submitLogID
+		}
+	}
+	if submitLogID == 0 {
+		recalculateTaskQuota(ctx, task, actualQuota, reason, otherOverrides)
+		return
+	}
+	if actualQuota <= 0 {
+		return
+	}
+
+	preConsumedQuota := task.Quota
+	quotaDelta := actualQuota - preConsumedQuota
+
+	if quotaDelta != 0 {
+		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 单日志差额结算：delta=%s（实际：%s，预扣：%s，%s）",
+			task.TaskID,
+			logger.LogQuota(quotaDelta),
+			logger.LogQuota(actualQuota),
+			logger.LogQuota(preConsumedQuota),
+			reason,
+		))
+
+		if err := taskAdjustFunding(task, quotaDelta); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("单日志差额结算资金调整失败 task %s: %s", task.TaskID, err.Error()))
+			return
+		}
+
+		taskAdjustTokenQuota(ctx, task, quotaDelta)
+		model.UpdateUserUsedQuota(task.UserId, quotaDelta)
+		model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
+	} else {
+		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 预扣费准确，回写提交日志（%s，%s）",
+			task.TaskID, logger.LogQuota(actualQuota), reason))
+	}
+
+	task.Quota = actualQuota
+
+	other := taskBillingOtherWithOverrides(task, otherOverrides)
+	other["task_id"] = task.TaskID
+	other["pre_consumed_quota"] = preConsumedQuota
+	other["actual_quota"] = actualQuota
+	other["settlement_reason"] = reason
+	model.UpdateConsumeLogQuotaAndOther(submitLogID, actualQuota, other)
+}
+
+func recalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason string, otherOverrides map[string]interface{}) {
 	if actualQuota <= 0 {
 		return
 	}
@@ -227,7 +305,7 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		logType = model.LogTypeRefund
 		logQuota = -quotaDelta
 	}
-	other := taskBillingOther(task)
+	other := taskBillingOtherWithOverrides(task, otherOverrides)
 	other["task_id"] = task.TaskID
 	other["pre_consumed_quota"] = preConsumedQuota
 	other["actual_quota"] = actualQuota
@@ -309,5 +387,5 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, promptT
 
 	reason := fmt.Sprintf("token重算：p=%d, c=%d, completionRatio=%.2f, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f",
 		promptTokens, completionTokens, completionRatio, modelRatio, finalGroupRatio, otherMultiplier)
-	RecalculateTaskQuota(ctx, task, actualQuota, reason)
+	SettleTaskQuotaInSubmitLog(ctx, task, actualQuota, reason, nil)
 }

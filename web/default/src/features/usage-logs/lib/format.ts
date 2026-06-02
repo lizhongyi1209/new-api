@@ -106,6 +106,25 @@ export function parseLogOther(other: string): LogOtherData | null {
   }
 }
 
+export function isLegacyTieredRecalcContent(
+  content: string | null | undefined,
+  other?: LogOtherData | null
+): boolean {
+  return (
+    other?.billing_mode !== 'tiered_expr' &&
+    typeof content === 'string' &&
+    content.includes('tiered_expr重算')
+  )
+}
+
+export function getLegacyTieredRecalcTier(
+  content: string | null | undefined
+): string | undefined {
+  if (typeof content !== 'string') return undefined
+  const match = content.match(/(?:^|[,，]\s*)tier=([^,，\s]+)/)
+  return match?.[1]
+}
+
 /**
  * Get time color based on duration (in seconds)
  */

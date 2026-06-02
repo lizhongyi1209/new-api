@@ -113,6 +113,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			generateImageError(c, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("转换请求格式失败: %v", convertErr))
 			return
 		}
+		applyGenerateImageGoogleSearchTool(nativeReq, req.GoogleSearch)
 		task.SetData(nativeReq)
 	} else {
 		task.SetData(asyncReq)
@@ -155,6 +156,17 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		ResponseModalities: req.ResponseModalities,
 		Images:             req.Images,
 		Mask:               req.Mask,
+	}
+}
+
+func applyGenerateImageGoogleSearchTool(nativeReq map[string]interface{}, googleSearch *bool) {
+	if nativeReq == nil || googleSearch == nil || !*googleSearch {
+		return
+	}
+	nativeReq["tools"] = []interface{}{
+		map[string]interface{}{
+			"googleSearch": map[string]interface{}{},
+		},
 	}
 }
 

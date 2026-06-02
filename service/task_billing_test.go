@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -181,6 +183,25 @@ func getLastLog(t *testing.T) *model.Log {
 	return &log
 }
 
+func seedConsumeLog(t *testing.T, task *model.Task, quota int, other map[string]interface{}) int {
+	t.Helper()
+	log := &model.Log{
+		UserId:    task.UserId,
+		Username:  "test_user",
+		CreatedAt: common.GetTimestamp(),
+		Type:      model.LogTypeConsume,
+		Content:   "submitted",
+		ModelName: taskModelName(task),
+		Quota:     quota,
+		ChannelId: task.ChannelId,
+		TokenId:   task.PrivateData.TokenId,
+		Group:     task.Group,
+		Other:     common.MapToJsonStr(other),
+	}
+	require.NoError(t, model.LOG_DB.Create(log).Error)
+	return log.Id
+}
+
 func countLogs(t *testing.T) int64 {
 	t.Helper()
 	var count int64
@@ -328,6 +349,153 @@ func TestRecalculate_PositiveDelta(t *testing.T) {
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeConsume, log.Type)
 	assert.Equal(t, actualQuota-preConsumed, log.Quota)
+}
+
+func TestRecalculate_TieredBillingOther(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 15, 15, 15
+	const initQuota, preConsumed = 10000, 2000
+	const actualQuota = 3000
+	const tokenRemain = 5000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-recalc-tiered", tokenRemain)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	expr := `tier("base", p * 2 + c * 30 + img * 2.5)`
+	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
+		BillingMode:   "tiered_expr",
+		ModelName:     "test-model",
+		ExprString:    expr,
+		EstimatedTier: "estimated",
+		QuotaPerUnit:  common.QuotaPerUnit,
+	})
+	require.NoError(t, err)
+	task.PrivateData.BillingContext.ModelPrice = 0
+	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
+
+	RecalculateTaskQuotaWithBillingOther(ctx, task, actualQuota,
+		"tiered_expr重算：p=1548, c=3568, img=1530, tier=base",
+		map[string]interface{}{"matched_tier": "base"})
+
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	assert.Equal(t, model.LogTypeConsume, log.Type)
+
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "tiered_expr", other["billing_mode"])
+	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(expr)), other["expr_b64"])
+	assert.Equal(t, "base", other["matched_tier"])
+}
+
+func TestSettleTaskQuotaInSubmitLog_TieredUpdatesOriginalLogOnly(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 16, 16, 16
+	const initQuota, preConsumed = 10000, 2000
+	const actualQuota = 3000
+	const tokenRemain = 5000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-settle-tiered", tokenRemain)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	submitLogID := seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+	task.PrivateData.SubmitLogID = submitLogID
+
+	expr := `tier("base", p * 2 + c * 30 + img * 2.5)`
+	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
+		BillingMode:   "tiered_expr",
+		ModelName:     "test-model",
+		ExprString:    expr,
+		EstimatedTier: "estimated",
+		QuotaPerUnit:  common.QuotaPerUnit,
+	})
+	require.NoError(t, err)
+	task.PrivateData.BillingContext.ModelPrice = 0
+	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
+
+	SettleTaskQuotaInSubmitLog(ctx, task, actualQuota,
+		"tiered_expr重算：p=1548, c=3568, img=1530, tier=base",
+		map[string]interface{}{"matched_tier": "base"})
+
+	assert.Equal(t, int64(1), countLogs(t))
+	assert.Equal(t, actualQuota, task.Quota)
+	assert.Equal(t, initQuota-(actualQuota-preConsumed), getUserQuota(t, userID))
+	assert.Equal(t, tokenRemain-(actualQuota-preConsumed), getTokenRemainQuota(t, tokenID))
+
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, submitLogID).Error)
+	assert.Equal(t, actualQuota, log.Quota)
+	assert.Equal(t, "submitted", log.Content)
+
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "tiered_expr", other["billing_mode"])
+	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(expr)), other["expr_b64"])
+	assert.Equal(t, "base", other["matched_tier"])
+	assert.Equal(t, float64(preConsumed), other["pre_consumed_quota"])
+	assert.Equal(t, float64(actualQuota), other["actual_quota"])
+	assert.Equal(t, "tiered_expr重算：p=1548, c=3568, img=1530, tier=base", other["settlement_reason"])
+}
+
+func TestSettleTaskQuotaInSubmitLog_RecoversSubmitLogIDFromLogOther(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 17, 17, 17
+	const initQuota, preConsumed = 10000, 2000
+	const actualQuota = 3000
+	const tokenRemain = 5000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-settle-recover", tokenRemain)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	submitLogID := seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+
+	expr := `tier("base", p * 2 + c * 30 + img * 2.5)`
+	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
+		BillingMode:   "tiered_expr",
+		ModelName:     "test-model",
+		ExprString:    expr,
+		EstimatedTier: "estimated",
+		QuotaPerUnit:  common.QuotaPerUnit,
+	})
+	require.NoError(t, err)
+	task.PrivateData.BillingContext.ModelPrice = 0
+	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
+
+	require.Zero(t, task.PrivateData.SubmitLogID)
+
+	SettleTaskQuotaInSubmitLog(ctx, task, actualQuota,
+		"tiered_expr重算：p=1548, c=3568, img=1530, tier=base",
+		map[string]interface{}{"matched_tier": "base"})
+
+	assert.Equal(t, int64(1), countLogs(t))
+	assert.Equal(t, submitLogID, task.PrivateData.SubmitLogID)
+	assert.Equal(t, actualQuota, task.Quota)
+	assert.Equal(t, initQuota-(actualQuota-preConsumed), getUserQuota(t, userID))
+	assert.Equal(t, tokenRemain-(actualQuota-preConsumed), getTokenRemainQuota(t, tokenID))
+
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, submitLogID).Error)
+	assert.Equal(t, actualQuota, log.Quota)
+
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "tiered_expr", other["billing_mode"])
+	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(expr)), other["expr_b64"])
+	assert.Equal(t, "base", other["matched_tier"])
+	assert.Equal(t, float64(preConsumed), other["pre_consumed_quota"])
+	assert.Equal(t, float64(actualQuota), other["actual_quota"])
 }
 
 func TestRecalculate_NegativeDelta(t *testing.T) {

@@ -49,9 +49,18 @@ var imageRoutes = []imageRoute{
 
 // isGeminiImageModelName 判定模型是否走 Gemini 原生生图路径。
 // 规则与 controller/async_image.go 中既有的 isGeminiImageModel 保持一致。
+//
+// 客户端参数规则（nano-banana* / Gemini image preview 模型）：
+//   - image_compression 不需要；
+//   - response_modalities 可选，默认不传；
+//   - 内嵌图片字节会与文本提示、系统指令一起计入 20MB 总请求大小；
+//   - n 用不到，默认不传，传入视为废弃；
+//   - google_search 可选，只有 true 时启用 Google Search grounding；
+//   - 不需要图片预签名上传。
 func isGeminiImageModelName(modelName string) bool {
 	return strings.HasPrefix(modelName, "nano-banana") ||
 		modelName == "gemini-3-pro-image" ||
+		modelName == "gemini-3-pro-image-preview" ||
 		modelName == "gemini-3.1-flash-image-preview"
 }
 
@@ -262,12 +271,7 @@ func buildGenerateImageRelayInfo(c *gin.Context, task *model.Task, relayMode int
 		},
 	}
 	// 异步 goroutine 没有真实 HTTP 请求,必须显式设置 RequestURLPath 供适配器拼 URL
-	switch relayMode {
-	case relayconstant.RelayModeImagesGenerations:
-		relayInfo.RequestURLPath = "/v1/images/generations"
-	case relayconstant.RelayModeGemini:
-		relayInfo.RequestURLPath = "/v1beta/models/" + upstreamModelName + ":generateContent"
-	}
+	relayInfo.RequestURLPath = asyncImageRequestURLPath(relayMode, upstreamModelName)
 	if CalculatePriceFunc != nil {
 		if priceData, err := CalculatePriceFunc(c, relayInfo); err == nil {
 			relayInfo.PriceData = priceData
@@ -472,7 +476,8 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		Mask:           imageReferenceToRawMessage(asyncReq.Mask),
 	}
 
-	relayInfo, err := buildGenerateImageRelayInfo(c, task, relayconstant.RelayModeImagesGenerations)
+	relayMode := asyncOpenAIImageRelayMode(imageReq)
+	relayInfo, err := buildGenerateImageRelayInfo(c, task, relayMode)
 	if err != nil {
 		failGenerateImageTask(task, err.Error())
 		return
@@ -490,21 +495,19 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 	}
 	adaptor.Init(relayInfo)
 
-	convertedRequest, err := adaptor.ConvertImageRequest(c, relayInfo, *imageReq)
+	upstreamImageReq := prepareAsyncOpenAIImageRequest(imageReq, relayInfo)
+	relayInfo.Request = upstreamImageReq
+
+	requestBody, requestBodyLen, err := buildAsyncOpenAIImageRequestBody(c, adaptor, relayInfo, upstreamImageReq)
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("转换请求失败: %v", err))
 		return
 	}
-	jsonData, err := common.Marshal(convertedRequest)
-	if err != nil {
-		failGenerateImageTask(task, fmt.Sprintf("序列化请求失败: %v", err))
-		return
-	}
 
 	logger.LogInfo(ctx, fmt.Sprintf("generate_image(openai): model=%s, baseUrl=%s, bodyLen=%d",
-		relayInfo.UpstreamModelName, relayInfo.ChannelBaseUrl, len(jsonData)))
+		relayInfo.UpstreamModelName, relayInfo.ChannelBaseUrl, requestBodyLen))
 
-	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+	resp, err := adaptor.DoRequest(c, relayInfo, requestBody)
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("请求上游失败: %v", err))
 		return
@@ -740,9 +743,12 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 				}
 				tr, err := billingexpr.ComputeTieredQuota(&snap, params)
 				if err == nil {
-					RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
+					SettleTaskQuotaInSubmitLog(ctx, task, tr.ActualQuotaAfterGroup,
 						fmt.Sprintf("tiered_expr重算：p=%d, c=%d, img=%.0f, tier=%s",
-							promptTokens, completionTokens, params.Img, tr.MatchedTier))
+							promptTokens, completionTokens, params.Img, tr.MatchedTier),
+						map[string]interface{}{
+							"matched_tier": tr.MatchedTier,
+						})
 				} else {
 					logger.LogError(ctx, fmt.Sprintf("generate_image: tiered settle failed: %v", err))
 				}
