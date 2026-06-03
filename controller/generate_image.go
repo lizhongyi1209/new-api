@@ -154,6 +154,8 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		AspectRatio:        req.AspectRatio,
 		OutputFormat:       req.OutputFormat,
 		ResponseModalities: req.ResponseModalities,
+		ThinkingLevel:      req.ThinkingLevel,
+		IncludeThoughts:    req.IncludeThoughts,
 		Images:             req.Images,
 		Mask:               req.Mask,
 	}

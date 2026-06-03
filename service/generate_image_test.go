@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"mime"
@@ -44,11 +45,12 @@ func TestIsGeminiImageModelName(t *testing.T) {
 
 func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 	req := &dto.GenerateImageRequest{
-		Model:        "gpt-image-1",
-		Prompt:       "draw a cat",
-		Size:         " AUTO ",
-		Quality:      " HIGH ",
-		OutputFormat: testStringPtr(" WEBP "),
+		Model:         "gpt-image-1",
+		Prompt:        "draw a cat",
+		Size:          " AUTO ",
+		Quality:       " HIGH ",
+		OutputFormat:  testStringPtr(" WEBP "),
+		ThinkingLevel: testStringPtr(" High "),
 		Mask: &dto.ImageReference{
 			ImageURL: testStringPtr(" data:image/png;base64,AAAA "),
 		},
@@ -66,6 +68,9 @@ func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 	}
 	if req.OutputFormat == nil || *req.OutputFormat != "webp" {
 		t.Fatalf("OutputFormat = %v, want webp", req.OutputFormat)
+	}
+	if req.ThinkingLevel == nil || *req.ThinkingLevel != "High" {
+		t.Fatalf("ThinkingLevel = %v, want High", req.ThinkingLevel)
 	}
 	if req.Mask == nil || req.Mask.ImageURL == nil || *req.Mask.ImageURL != "data:image/png;base64,AAAA" {
 		t.Fatalf("Mask.ImageURL = %v, want trimmed data URL", req.Mask)
@@ -95,6 +100,15 @@ func TestValidateGenerateImageRequestRejectsInvalidEnums(t *testing.T) {
 				OutputFormat: testStringPtr("gif"),
 			},
 			wantErr: "output_format must be one of",
+		},
+		{
+			name: "empty thinking level",
+			req: &dto.GenerateImageRequest{
+				Model:         "nano-banana-pro",
+				Prompt:        "draw a cat",
+				ThinkingLevel: testStringPtr(" "),
+			},
+			wantErr: "thinking_level must not be empty",
 		},
 	}
 
@@ -262,6 +276,35 @@ func TestAsyncImageRequestURLPath(t *testing.T) {
 	}
 	if got := asyncImageRequestURLPath(relayconstant.RelayModeGemini, "gemini-3-pro-image"); got != "/v1beta/models/gemini-3-pro-image:generateContent" {
 		t.Fatalf("gemini path = %q", got)
+	}
+}
+
+func TestConvertAsyncImageToGeminiNativeMapsThinkingConfig(t *testing.T) {
+	includeThoughts := false
+	nativeReq, err := ConvertAsyncImageToGeminiNative(context.Background(), &dto.AsyncImageRequest{
+		Model:              "nano-banana-pro",
+		Prompt:             "draw a cat",
+		ResponseModalities: []string{"IMAGE"},
+		ThinkingLevel:      testStringPtr(" High "),
+		IncludeThoughts:    &includeThoughts,
+	})
+	if err != nil {
+		t.Fatalf("ConvertAsyncImageToGeminiNative returned error: %v", err)
+	}
+
+	generationConfig, ok := nativeReq["generationConfig"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("generationConfig = %#v, want object", nativeReq["generationConfig"])
+	}
+	thinkingConfig, ok := generationConfig["thinkingConfig"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("thinkingConfig = %#v, want object", generationConfig["thinkingConfig"])
+	}
+	if thinkingConfig["thinkingLevel"] != "High" {
+		t.Fatalf("thinkingLevel = %#v, want High", thinkingConfig["thinkingLevel"])
+	}
+	if includeThoughtsValue, ok := thinkingConfig["includeThoughts"].(bool); !ok || includeThoughtsValue {
+		t.Fatalf("includeThoughts = %#v, want explicit false", thinkingConfig["includeThoughts"])
 	}
 }
 

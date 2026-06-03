@@ -62,3 +62,21 @@ func TestApplyGenerateImageGoogleSearchToolOmitted(t *testing.T) {
 		t.Fatalf("tools should be omitted when google_search is false, got %#v", nativeReq["tools"])
 	}
 }
+
+func TestGenerateImageToAsyncRequestPreservesThinkingConfig(t *testing.T) {
+	thinkingLevel := "High"
+	includeThoughts := false
+	asyncReq := generateImageToAsyncRequest(&dto.GenerateImageRequest{
+		Model:           "nano-banana-pro",
+		Prompt:          "draw",
+		ThinkingLevel:   &thinkingLevel,
+		IncludeThoughts: &includeThoughts,
+	})
+
+	if asyncReq.ThinkingLevel == nil || *asyncReq.ThinkingLevel != "High" {
+		t.Fatalf("ThinkingLevel = %v, want High", asyncReq.ThinkingLevel)
+	}
+	if asyncReq.IncludeThoughts == nil || *asyncReq.IncludeThoughts {
+		t.Fatalf("IncludeThoughts = %v, want explicit false", asyncReq.IncludeThoughts)
+	}
+}

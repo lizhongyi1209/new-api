@@ -1464,6 +1464,19 @@ func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncIma
 	if len(imageConfig) > 0 {
 		generationConfig["imageConfig"] = imageConfig
 	}
+	thinkingConfig := map[string]interface{}{}
+	if asyncReq.ThinkingLevel != nil {
+		thinkingLevel := strings.TrimSpace(*asyncReq.ThinkingLevel)
+		if thinkingLevel != "" {
+			thinkingConfig["thinkingLevel"] = thinkingLevel
+		}
+	}
+	if asyncReq.IncludeThoughts != nil {
+		thinkingConfig["includeThoughts"] = *asyncReq.IncludeThoughts
+	}
+	if len(thinkingConfig) > 0 {
+		generationConfig["thinkingConfig"] = thinkingConfig
+	}
 
 	geminiReq := map[string]interface{}{
 		"contents": []interface{}{

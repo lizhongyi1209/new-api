@@ -137,6 +137,14 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 		*req.OutputFormat = outputFormat
 	}
 
+	if req.ThinkingLevel != nil {
+		thinkingLevel := strings.TrimSpace(*req.ThinkingLevel)
+		if thinkingLevel == "" {
+			return fmt.Errorf("thinking_level must not be empty")
+		}
+		*req.ThinkingLevel = thinkingLevel
+	}
+
 	if err := validateGenerateImageMask(req.Mask); err != nil {
 		return err
 	}

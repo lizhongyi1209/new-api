@@ -15,6 +15,8 @@ type AsyncImageRequest struct {
 	ImageCompression   string          `json:"image_compression,omitempty"`
 	AspectRatio        string          `json:"aspect_ratio,omitempty"`
 	ResponseModalities []string        `json:"response_modalities,omitempty"`
+	ThinkingLevel      *string         `json:"thinking_level,omitempty"`
+	IncludeThoughts    *bool           `json:"include_thoughts,omitempty"`
 	Image              json.RawMessage `json:"image,omitempty"`
 	Images             []string        `json:"images,omitempty"`
 	Mask               *ImageReference `json:"mask,omitempty"`

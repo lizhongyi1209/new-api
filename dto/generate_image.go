@@ -19,6 +19,10 @@ type GenerateImageRequest struct {
 	// Gemini 原生：开启 Google Search grounding。默认不传；仅 true 时启用。
 	GoogleSearch *bool `json:"google_search,omitempty"`
 
+	// Gemini 原生：thinkingConfig.thinkingLevel / includeThoughts。
+	ThinkingLevel   *string `json:"thinking_level,omitempty"`
+	IncludeThoughts *bool   `json:"include_thoughts,omitempty"`
+
 	OutputFormat *string         `json:"output_format,omitempty"` // "png" / "jpeg" / "webp"
 	Mask         *ImageReference `json:"mask,omitempty"`
 
