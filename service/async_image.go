@@ -392,7 +392,7 @@ func asyncImageExtension(mimeType string) string {
 
 const (
 	// AsyncImageMaxBase64SizeMB is the maximum size for base64-encoded images in async image requests
-	AsyncImageMaxBase64SizeMB = 10
+	AsyncImageMaxBase64SizeMB = 20
 	// AsyncImageMaxURLSizeMB is the maximum size for URL-referenced images in async image requests
 	AsyncImageMaxURLSizeMB = 50
 )

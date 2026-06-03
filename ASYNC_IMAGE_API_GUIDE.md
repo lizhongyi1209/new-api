@@ -105,7 +105,7 @@ curl -X POST "https://cf-api.o1key.com/async/v1/images/generations" \
   }'
 ```
 
-### 方式 B：直接传 base64（小图适用，<10MB）
+### 方式 B：直接传 base64（小图适用，<20MB）
 
 ```bash
 curl -X POST "https://cf-api.o1key.com/async/v1/images/generations" \

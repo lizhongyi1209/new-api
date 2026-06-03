@@ -8,7 +8,7 @@
 
 | 上传方式 | 大小限制 | 说明 |
 |---------|---------|------|
-| **Base64 编码** | **10 MB** | 解码后的原始图片大小 |
+| **Base64 编码** | **20 MB** | 解码后的原始图片大小 |
 | **URL 引用** | **50 MB** | 服务器下载的图片大小 |
 
 ## 代码位置
@@ -16,7 +16,7 @@
 - **常量定义**：`service/async_image.go:67-72`
   ```go
   const (
-      AsyncImageMaxBase64SizeMB = 10
+      AsyncImageMaxBase64SizeMB = 20
       AsyncImageMaxURLSizeMB = 50
   )
   ```
@@ -41,7 +41,7 @@
 
 ## 请求示例
 
-### Base64 上传（限制 10 MB）
+### Base64 上传（限制 20 MB）
 
 ```bash
 curl -X POST https://api.example.com/async/v1/images/generations \
@@ -90,7 +90,7 @@ curl -X POST https://api.example.com/async/v1/images/generations \
 ```json
 {
   "error": {
-    "message": "image 字段验证失败: base64 图片大小 12.50 MB 超过限制 10 MB",
+    "message": "image 字段验证失败: base64 图片大小 21.50 MB 超过限制 20 MB",
     "type": "invalid_request_error"
   }
 }
@@ -113,7 +113,7 @@ curl -X POST https://api.example.com/async/v1/images/generations \
 
 ```go
 const (
-    AsyncImageMaxBase64SizeMB = 10  // 改为你需要的值
+    AsyncImageMaxBase64SizeMB = 20  // 改为你需要的值
     AsyncImageMaxURLSizeMB = 50     // 改为你需要的值
 )
 ```
@@ -130,12 +130,12 @@ docker compose up --build -d
 |-------|---------|-------|------|
 | `MAX_REQUEST_BODY_MB` | 所有 HTTP 请求体 | 128 MB | 包括 JSON + base64 |
 | `MAX_FILE_DOWNLOAD_MB` | 其他接口的 URL 下载 | 64 MB | 不影响异步图片接口 |
-| `AsyncImageMaxBase64SizeMB` | 异步图片 base64 | **10 MB** | 独立限制 |
+| `AsyncImageMaxBase64SizeMB` | 异步图片 base64 | **20 MB** | 独立限制 |
 | `AsyncImageMaxURLSizeMB` | 异步图片 URL | **50 MB** | 独立限制 |
 
 ## 注意事项
 
-1. **Base64 编码膨胀**：原始 10 MB 图片编码后约 13.3 MB，仍需满足 `MAX_REQUEST_BODY_MB` 限制
+1. **Base64 编码膨胀**：原始 20 MB 图片编码后约 26.7 MB，仍需满足 `MAX_REQUEST_BODY_MB` 限制
 2. **多图累加**：`images` 数组中每张图片都单独验证，不累加计算
 3. **Nginx 限制**：如果前端有 Nginx，需确保 `client_max_body_size` 足够大
 4. **上游图片不受限**：从上游 provider 返回的生成图片下载使用默认限制（64 MB）
@@ -152,7 +152,7 @@ docker compose up --build -d
 ValidateAsyncImageSize()
   ├─ 检查 image 字段
   │   ├─ URL? → HEAD 请求预检 (50 MB)
-  │   └─ Base64? → 解码验证 (10 MB)
+  │   └─ Base64? → 解码验证 (20 MB)
   └─ 检查 images 数组
       └─ 逐个验证 (同上)
   ↓

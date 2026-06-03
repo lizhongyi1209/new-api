@@ -345,7 +345,7 @@ curl https://api.example.com/async/v1/task/task_abc123 \
 ### 4. 图片过大
 
 **检查**：
-- 输入图片是否超过 50 MB（URL）或 10 MB（base64）
+- 输入图片是否超过 50 MB（URL）或 20 MB（base64）
 - 上游返回的图片是否超过默认限制（64 MB）
 - 考虑使用压缩模式减小体积
 
