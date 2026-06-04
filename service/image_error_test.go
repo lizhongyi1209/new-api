@@ -1,6 +1,10 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/QuantumNous/new-api/model"
+)
 
 func TestBuildFriendlyImageErrorClassifiesCommonErrors(t *testing.T) {
 	tests := []struct {
@@ -138,5 +142,67 @@ func TestBuildFriendlyImageErrorClassifiesCommonErrors(t *testing.T) {
 				t.Fatalf("trace fields = (%q, %q), want req-test/task-test", detail.RequestID, detail.TaskID)
 			}
 		})
+	}
+}
+
+func TestBuildFriendlyImageErrorWithDetailMergesRetryHints(t *testing.T) {
+	message, detail := BuildFriendlyImageErrorWithDetail(
+		"上游返回错误: temporarily unavailable",
+		"req-test",
+		"task-test",
+		&model.TaskErrorDetail{
+			UpstreamStatus:    503,
+			UpstreamCode:      "service_unavailable",
+			UpstreamType:      "server_error",
+			RetryAfterSeconds: 60,
+			RetryAction:       imageRetryActionResubmit,
+		},
+	)
+
+	if message != "当前模型服务繁忙，请稍后重试。" {
+		t.Fatalf("message = %q", message)
+	}
+	if detail == nil {
+		t.Fatalf("detail is nil")
+	}
+	if detail.Code != "image_upstream_busy" || detail.Category != "upstream_busy" || !detail.Retryable {
+		t.Fatalf("detail classification = %#v", detail)
+	}
+	if detail.UpstreamStatus != 503 || detail.UpstreamCode != "service_unavailable" || detail.UpstreamType != "server_error" {
+		t.Fatalf("upstream detail = %#v", detail)
+	}
+	if detail.RetryAfterSeconds != 60 || detail.RetryAction != imageRetryActionResubmit {
+		t.Fatalf("retry detail = %#v", detail)
+	}
+}
+
+func TestBuildFriendlyImageErrorWithDetailSuppressesRetryHintsForNonRetryableError(t *testing.T) {
+	message, detail := BuildFriendlyImageErrorWithDetail(
+		"上游返回错误: resolution mismatch: want 4096x4096, got 2880x5908",
+		"req-test",
+		"task-test",
+		&model.TaskErrorDetail{
+			UpstreamStatus:    429,
+			UpstreamCode:      "429",
+			UpstreamType:      "upstream_error",
+			RetryAfterSeconds: 30,
+			RetryAction:       imageRetryActionResubmit,
+		},
+	)
+
+	if message != "图片尺寸不支持，请调整为常见尺寸或比例后重试。" {
+		t.Fatalf("message = %q", message)
+	}
+	if detail == nil {
+		t.Fatalf("detail is nil")
+	}
+	if detail.Code != "image_invalid_size" || detail.Category != "invalid_request" || detail.Retryable {
+		t.Fatalf("detail classification = %#v", detail)
+	}
+	if detail.UpstreamStatus != 429 || detail.UpstreamCode != "429" || detail.UpstreamType != "upstream_error" {
+		t.Fatalf("upstream detail = %#v", detail)
+	}
+	if detail.RetryAfterSeconds != 0 || detail.RetryAction != "" {
+		t.Fatalf("non-retryable detail should not expose retry hints: %#v", detail)
 	}
 }

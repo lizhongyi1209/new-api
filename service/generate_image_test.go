@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -15,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -489,5 +491,47 @@ func TestPrepareGenerateImageResultsUploadsBase64(t *testing.T) {
 	}
 	if images[0].B64Json != "" {
 		t.Fatalf("B64Json should be empty after upload: %#v", images[0])
+	}
+}
+
+func TestBuildGenerateImageTaskErrorDetailUsesRelayStatusAndRetryAfter(t *testing.T) {
+	relayErr := types.WithOpenAIError(types.OpenAIError{
+		Message: "too many requests",
+		Type:    "rate_limit_error",
+		Code:    "rate_limit_exceeded",
+	}, http.StatusTooManyRequests)
+	headers := http.Header{"Retry-After": []string{"45"}}
+
+	detail := buildGenerateImageTaskErrorDetail(relayErr, headers)
+	if detail == nil {
+		t.Fatalf("detail is nil")
+	}
+	if detail.UpstreamStatus != http.StatusTooManyRequests {
+		t.Fatalf("UpstreamStatus = %d", detail.UpstreamStatus)
+	}
+	if detail.UpstreamCode != "rate_limit_exceeded" || detail.UpstreamType != "rate_limit_error" {
+		t.Fatalf("upstream code/type = (%q, %q)", detail.UpstreamCode, detail.UpstreamType)
+	}
+	if detail.RetryAfterSeconds != 45 || detail.RetryAction != imageRetryActionResubmit {
+		t.Fatalf("retry hint = (%d, %q)", detail.RetryAfterSeconds, detail.RetryAction)
+	}
+}
+
+func TestBuildGenerateImageTaskErrorDetailUsesDefaultRetryAfter(t *testing.T) {
+	relayErr := types.NewOpenAIError(
+		fmt.Errorf("service unavailable"),
+		types.ErrorCodeBadResponseStatusCode,
+		http.StatusServiceUnavailable,
+	)
+
+	detail := buildGenerateImageTaskErrorDetail(relayErr, nil)
+	if detail == nil {
+		t.Fatalf("detail is nil")
+	}
+	if detail.UpstreamStatus != http.StatusServiceUnavailable {
+		t.Fatalf("UpstreamStatus = %d", detail.UpstreamStatus)
+	}
+	if detail.RetryAfterSeconds != 60 || detail.RetryAction != imageRetryActionResubmit {
+		t.Fatalf("retry hint = (%d, %q)", detail.RetryAfterSeconds, detail.RetryAction)
 	}
 }

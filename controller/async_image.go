@@ -494,7 +494,7 @@ func AsyncTaskFetch(c *gin.Context) {
 		}
 	} else if task.Status == model.TaskStatusFailure {
 		if isAsyncImageTaskPlatform(task.Platform) {
-			resp.Error, resp.ErrorDetail = service.BuildFriendlyImageError(task.FailReason, c.GetString(common.RequestIdKey), task.TaskID)
+			resp.Error, resp.ErrorDetail = service.BuildFriendlyImageErrorWithDetail(task.FailReason, c.GetString(common.RequestIdKey), task.TaskID, task.PrivateData.ErrorDetail)
 		} else {
 			resp.Error = task.FailReason
 		}

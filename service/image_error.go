@@ -1,11 +1,13 @@
 package service
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 )
 
 var imageErrorStatusCodePatterns = []*regexp.Regexp{
@@ -138,6 +140,48 @@ func BuildFriendlyImageError(reason, requestID, taskID string) (string, *dto.Ima
 	}
 
 	return message, detail
+}
+
+func BuildFriendlyImageErrorWithDetail(reason, requestID, taskID string, stored *model.TaskErrorDetail) (string, *dto.ImageErrorDetail) {
+	classifyReason := reason
+	if stored != nil {
+		classifyReason = enrichImageErrorReason(classifyReason, stored)
+	}
+	message, detail := BuildFriendlyImageError(classifyReason, requestID, taskID)
+	return message, mergeStoredImageErrorDetail(detail, stored)
+}
+
+func enrichImageErrorReason(reason string, stored *model.TaskErrorDetail) string {
+	parts := make([]string, 0, 4)
+	if reason != "" {
+		parts = append(parts, reason)
+	}
+	if stored.UpstreamStatus > 0 && extractImageErrorStatus(reason) == 0 {
+		parts = append(parts, fmt.Sprintf("status_code=%d", stored.UpstreamStatus))
+	}
+	if stored.UpstreamCode != "" {
+		parts = append(parts, "upstream_code="+stored.UpstreamCode)
+	}
+	if stored.UpstreamType != "" {
+		parts = append(parts, "upstream_type="+stored.UpstreamType)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func mergeStoredImageErrorDetail(detail *dto.ImageErrorDetail, stored *model.TaskErrorDetail) *dto.ImageErrorDetail {
+	if detail == nil || stored == nil {
+		return detail
+	}
+	if stored.UpstreamStatus > 0 {
+		detail.UpstreamStatus = stored.UpstreamStatus
+	}
+	detail.UpstreamCode = stored.UpstreamCode
+	detail.UpstreamType = stored.UpstreamType
+	if detail.Retryable {
+		detail.RetryAfterSeconds = stored.RetryAfterSeconds
+		detail.RetryAction = stored.RetryAction
+	}
+	return detail
 }
 
 func extractImageErrorStatus(reason string) int {
