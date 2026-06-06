@@ -124,6 +124,24 @@ func TestBuildFriendlyImageErrorClassifiesCommonErrors(t *testing.T) {
 			wantStatus:  503,
 			wantMessage: "当前模型服务繁忙，请稍后重试。",
 		},
+		{
+			name:        "payload too large by status 413",
+			reason:      "generate_image(openai): upstream error status=413 body={\"error\":{\"message\":\"request entity too large\"}}",
+			wantCode:    "image_payload_too_large",
+			wantCat:     "payload_too_large",
+			wantRetry:   false,
+			wantStatus:  413,
+			wantMessage: "请求内容过大，请压缩或减少参考图片、精简提示词后重试。",
+		},
+		{
+			name:        "payload too large by message without status",
+			reason:      "上游返回错误: payload too large",
+			wantCode:    "image_payload_too_large",
+			wantCat:     "payload_too_large",
+			wantRetry:   false,
+			wantStatus:  0,
+			wantMessage: "请求内容过大，请压缩或减少参考图片、精简提示词后重试。",
+		},
 	}
 
 	for _, test := range tests {

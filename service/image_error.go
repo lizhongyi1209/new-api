@@ -51,14 +51,17 @@ func BuildFriendlyImageError(reason, requestID, taskID string) (string, *dto.Ima
 		detail.Category = "invalid_request"
 		detail.Retryable = false
 		message = "缺少提示词，请传入 prompt 参数。"
-	case containsAny(lower, "invalid size", "pixel budget", "divisible by 16", "size an unexpected", "resolution mismatch", "尺寸", "文件大小") || status == 413:
+	case containsAny(lower, "invalid size", "pixel budget", "divisible by 16", "size an unexpected", "resolution mismatch", "尺寸", "文件大小", "payload too large", "request entity too large", "body too large", "request body exceeds", "请求体过大", "请求负载过大") || status == 413:
 		detail.Code = "image_invalid_size"
 		detail.Category = "invalid_request"
 		detail.Retryable = false
-		if status == 413 || containsAny(lower, "文件大小") {
+		// 413 = Payload Too Large：客户端请求体超过上游/网关可处理的大小，
+		// 指的是整个请求负载（提示词 + 全部参考图 base64 + 参数），而非单张图片文件，
+		// 也与服务器过载（503/429）无关。文案需如实表达“请求内容过大”。
+		if status == 413 || containsAny(lower, "文件大小", "payload too large", "request entity too large", "body too large", "request body exceeds", "请求体过大", "请求负载过大") {
 			detail.Code = "image_payload_too_large"
 			detail.Category = "payload_too_large"
-			message = "图片文件过大，请压缩后重试。"
+			message = "请求内容过大，请压缩或减少参考图片、精简提示词后重试。"
 		} else {
 			message = "图片尺寸不支持，请调整为常见尺寸或比例后重试。"
 		}
