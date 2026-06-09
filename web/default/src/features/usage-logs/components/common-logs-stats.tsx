@@ -21,7 +21,7 @@ import { getRouteApi } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
-import { useIsAdmin } from '@/hooks/use-admin'
+import { useIsAdmin, useIsSuperAdmin } from '@/hooks/use-admin'
 import { formatLogQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -51,11 +51,12 @@ function StatBadge(props: {
 export function CommonLogsStats() {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
+  const isSuperAdmin = useIsSuperAdmin()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
 
   const { data: stats, isLoading } = useQuery({
-    queryKey: ['usage-logs-stats', isAdmin, searchParams],
+    queryKey: ['usage-logs-stats', isAdmin, isSuperAdmin, searchParams],
     queryFn: async () => {
       const params = buildApiParams({
         page: 1,
@@ -93,6 +94,15 @@ export function CommonLogsStats() {
         value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
         accent='bg-sky-500/70'
       />
+      {isSuperAdmin && (
+        <StatBadge
+          label={t('Refund quota')}
+          value={
+            sensitiveVisible ? formatLogQuota(stats?.refund_quota || 0) : '••••'
+          }
+          accent='bg-blue-500/70'
+        />
+      )}
       <StatBadge
         label={t('RPM')}
         value={stats?.rpm || 0}

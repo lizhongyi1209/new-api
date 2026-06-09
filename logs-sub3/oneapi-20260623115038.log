@@ -128484,3 +128484,11 @@
 [SYS] 2026/07/03 - 23:46:54 | syncing channels from database 
 [SYS] 2026/07/03 - 23:46:54 | channels synced from database 
 [GIN] 2026/07/03 - 23:47:05 | api | 202607031547059172030398268d9d6cfhbMUZf | 200 |     335.056µs |             ::1 |     GET /api/status
+[SYS] 2026/07/03 - 23:47:24 | syncing options from database 
+[SYS] 2026/07/03 - 23:47:24 | syncing channels from database 
+[SYS] 2026/07/03 - 23:47:24 | channels synced from database 
+[GIN] 2026/07/03 - 23:47:35 | api | 202607031547359419993398268d9d6vCTQY3tZ | 200 |     351.757µs |             ::1 |     GET /api/status
+[GIN] 2026/07/03 - 23:47:46 | web | 202607031547464028490488268d9d6rDq1Aifq | 200 |     431.115µs |   199.45.155.82 |     GET /
+[SYS] 2026/07/03 - 23:47:54 | syncing channels from database 
+[SYS] 2026/07/03 - 23:47:54 | syncing options from database 
+[SYS] 2026/07/03 - 23:47:54 | channels synced from database 

@@ -79,7 +79,11 @@ export interface AsyncImageLogFilters extends CommonFilters {
 /**
  * Union type for all log filters
  */
-export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters | AsyncImageLogFilters
+export type LogFilters =
+  | CommonLogFilters
+  | DrawingLogFilters
+  | TaskLogFilters
+  | AsyncImageLogFilters
 
 // ============================================================================
 // Common Logs Additional Types
@@ -226,6 +230,7 @@ export interface LogStatistics {
   quota: number
   rpm: number
   tpm: number
+  refund_quota?: number
 }
 
 // ============================================================================

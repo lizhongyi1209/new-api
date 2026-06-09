@@ -784,6 +784,46 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return stat, nil
 }
 
+func SumQuotaByLogType(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (quota int, err error) {
+	var stat struct {
+		Quota int `json:"quota"`
+	}
+	tx := LOG_DB.Table("logs").Select("COALESCE(sum(quota), 0) quota").Where("type = ?", logType)
+
+	if username != "" {
+		tx = tx.Where("username = ?", username)
+	}
+	if tokenName != "" {
+		tx = tx.Where("token_name = ?", tokenName)
+	}
+	if startTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+	if modelName != "" {
+		modelNamePattern, err := sanitizeLikePattern(modelName)
+		if err != nil {
+			return 0, err
+		}
+		tx = tx.Where("model_name LIKE ? ESCAPE '!'", modelNamePattern)
+	}
+	if channel != 0 {
+		tx = tx.Where("channel_id = ?", channel)
+	}
+	if group != "" {
+		tx = tx.Where(logGroupCol+" = ?", group)
+	}
+
+	if err := tx.Scan(&stat).Error; err != nil {
+		common.SysError("failed to query log quota by type: " + err.Error())
+		return 0, errors.New("查询统计数据失败")
+	}
+
+	return stat.Quota, nil
+}
+
 func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string) (token int) {
 	tx := LOG_DB.Table("logs").Select("COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0)")
 	if username != "" {
