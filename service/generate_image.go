@@ -3,9 +3,15 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -22,6 +28,8 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
+	xdraw "golang.org/x/image/draw"
+	"golang.org/x/image/webp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -36,6 +44,11 @@ const (
 var uploadGenerateImageBase64 = UploadBase64ImageToHostStorageCompressed
 
 const imageRetryActionResubmit = "resubmit"
+
+const (
+	nanoBananaGenerateContentMaxBodyBytes = 20 * 1024 * 1024
+	nanoBananaResizeMaxAttempts           = 8
+)
 
 // imageRoute 是一条分发规则：模型名匹配 match 时走对应 provider。
 // provider 与 action 一起决定提交时如何构造任务、处理时走哪个分支。
@@ -62,10 +75,14 @@ var imageRoutes = []imageRoute{
 //   - google_search 可选，只有 true 时启用 Google Search grounding；
 //   - 不需要图片预签名上传。
 func isGeminiImageModelName(modelName string) bool {
-	return strings.HasPrefix(modelName, "nano-banana") ||
+	return isNanoBananaModelName(modelName) ||
 		modelName == "gemini-3-pro-image" ||
 		modelName == "gemini-3-pro-image-preview" ||
 		modelName == "gemini-3.1-flash-image-preview"
+}
+
+func isNanoBananaModelName(modelName string) bool {
+	return strings.HasPrefix(modelName, "nano-banana")
 }
 
 // resolveImageRoute 根据模型名 + 渠道类型选出处理路径。
@@ -199,12 +216,289 @@ func isGenerateImageURLReference(value string) bool {
 	return (strings.EqualFold(parsedURL.Scheme, "http") || strings.EqualFold(parsedURL.Scheme, "https")) && parsedURL.Host != ""
 }
 
+// SetGenerateContentRequestOmittedData stores a small placeholder instead of
+// persisting generateContent request bodies, which can contain multi-MB inline
+// image base64 payloads.
+func SetGenerateContentRequestOmittedData(task *model.Task, stage string) {
+	if task == nil {
+		return
+	}
+	task.SetData(map[string]interface{}{
+		"object":  "generate_content_request",
+		"omitted": true,
+		"stage":   stage,
+		"reason":  "request payload omitted to avoid storing inline image data",
+	})
+}
+
+type geminiInlineImageRef struct {
+	inline   map[string]interface{}
+	dataKey  string
+	mimeKey  string
+	mimeType string
+	data     string
+}
+
+func fitNanoBananaGenerateContentBody(ctx context.Context, requestBody map[string]interface{}, maxBytes int) ([]byte, bool, error) {
+	jsonData, err := common.Marshal(requestBody)
+	if err != nil {
+		return nil, false, fmt.Errorf("serialize request: %w", err)
+	}
+	if len(jsonData) <= maxBytes {
+		return jsonData, false, nil
+	}
+
+	resized := false
+	targetBytes := nanoBananaTargetBodyBytes(maxBytes)
+	for attempt := 0; attempt < nanoBananaResizeMaxAttempts; attempt++ {
+		refs := collectGeminiInlineImageRefs(requestBody)
+		if len(refs) == 0 {
+			return nil, resized, fmt.Errorf("request body %d bytes exceeds %d bytes and has no inline images to resize", len(jsonData), maxBytes)
+		}
+
+		scale := nanoBananaScaleForBodySize(len(jsonData), targetBytes)
+		changed := false
+		for _, ref := range refs {
+			refChanged, err := resizeGeminiInlineImage(ref, scale)
+			if err != nil {
+				return nil, resized, err
+			}
+			changed = changed || refChanged
+		}
+		if !changed {
+			return nil, resized, fmt.Errorf("request body %d bytes exceeds %d bytes and inline images cannot be resized further", len(jsonData), maxBytes)
+		}
+		resized = true
+
+		jsonData, err = common.Marshal(requestBody)
+		if err != nil {
+			return nil, resized, fmt.Errorf("serialize resized request: %w", err)
+		}
+		logger.LogInfo(ctx, fmt.Sprintf("generate_image(gemini): nano-banana resize attempt=%d scale=%.4f bodyLen=%d max=%d", attempt+1, scale, len(jsonData), maxBytes))
+		if len(jsonData) <= maxBytes {
+			return jsonData, true, nil
+		}
+	}
+
+	return nil, resized, fmt.Errorf("request body remains %d bytes after resizing, max is %d bytes", len(jsonData), maxBytes)
+}
+
+func nanoBananaTargetBodyBytes(maxBytes int) int {
+	if maxBytes <= 0 {
+		return 0
+	}
+	margin := maxBytes / 50 // 2% safety margin for re-encoding variance.
+	if margin < 1024 {
+		margin = 1024
+	}
+	if margin > 128*1024 {
+		margin = 128 * 1024
+	}
+	target := maxBytes - margin
+	if target <= 0 {
+		return maxBytes
+	}
+	return target
+}
+
+func nanoBananaScaleForBodySize(currentBytes, targetBytes int) float64 {
+	if currentBytes <= 0 || targetBytes <= 0 || currentBytes <= targetBytes {
+		return 1
+	}
+	scale := math.Sqrt(float64(targetBytes) / float64(currentBytes))
+	if scale >= 0.98 {
+		return 0.98
+	}
+	if scale < 0.01 {
+		return 0.01
+	}
+	return scale
+}
+
+func collectGeminiInlineImageRefs(value interface{}) []geminiInlineImageRef {
+	var refs []geminiInlineImageRef
+	var walk func(interface{})
+	walk = func(v interface{}) {
+		switch typed := v.(type) {
+		case map[string]interface{}:
+			for _, key := range []string{"inlineData", "inline_data"} {
+				inline, ok := typed[key].(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if ref, ok := geminiInlineImageRefFromMap(inline); ok {
+					refs = append(refs, ref)
+				}
+			}
+			for _, child := range typed {
+				walk(child)
+			}
+		case []interface{}:
+			for _, child := range typed {
+				walk(child)
+			}
+		}
+	}
+	walk(value)
+	return refs
+}
+
+func geminiInlineImageRefFromMap(inline map[string]interface{}) (geminiInlineImageRef, bool) {
+	dataKey, data, ok := stringValueForKeys(inline, "data")
+	if !ok || strings.TrimSpace(data) == "" {
+		return geminiInlineImageRef{}, false
+	}
+	mimeKey, mimeType, _ := stringValueForKeys(inline, "mimeType", "mime_type")
+	if strings.TrimSpace(mimeType) == "" && strings.HasPrefix(strings.TrimSpace(data), "data:") {
+		mimeType, _ = parseDataURI(strings.TrimSpace(data))
+	}
+	if strings.TrimSpace(mimeType) != "" && !strings.HasPrefix(strings.ToLower(strings.TrimSpace(mimeType)), "image/") {
+		return geminiInlineImageRef{}, false
+	}
+	if mimeKey == "" {
+		mimeKey = "mimeType"
+	}
+	return geminiInlineImageRef{
+		inline:   inline,
+		dataKey:  dataKey,
+		mimeKey:  mimeKey,
+		mimeType: strings.TrimSpace(mimeType),
+		data:     strings.TrimSpace(data),
+	}, true
+}
+
+func stringValueForKeys(values map[string]interface{}, keys ...string) (string, string, bool) {
+	for _, key := range keys {
+		value, ok := values[key]
+		if !ok {
+			continue
+		}
+		str, ok := value.(string)
+		if !ok {
+			continue
+		}
+		return key, str, true
+	}
+	return "", "", false
+}
+
+func resizeGeminiInlineImage(ref geminiInlineImageRef, scale float64) (bool, error) {
+	img, mimeType, err := decodeGeminiInlineImage(ref.mimeType, ref.data)
+	if err != nil {
+		return false, fmt.Errorf("decode inline image failed: %w", err)
+	}
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	if width <= 0 || height <= 0 {
+		return false, fmt.Errorf("inline image has invalid dimensions %dx%d", width, height)
+	}
+
+	newWidth := int(math.Floor(float64(width) * scale))
+	newHeight := int(math.Floor(float64(height) * scale))
+	if newWidth < 1 {
+		newWidth = 1
+	}
+	if newHeight < 1 {
+		newHeight = 1
+	}
+	if newWidth >= width && width > 1 {
+		newWidth = width - 1
+	}
+	if newHeight >= height && height > 1 {
+		newHeight = height - 1
+	}
+	if newWidth == width && newHeight == height {
+		return false, nil
+	}
+
+	outMimeType, b64Data, err := encodeScaledGeminiInlineImage(img, mimeType, newWidth, newHeight)
+	if err != nil {
+		return false, err
+	}
+	ref.inline[ref.dataKey] = b64Data
+	ref.inline[ref.mimeKey] = outMimeType
+	return true, nil
+}
+
+func decodeGeminiInlineImage(mimeType, data string) (image.Image, string, error) {
+	if strings.HasPrefix(data, "data:") {
+		parsedMimeType, parsedData := parseDataURI(data)
+		if parsedMimeType == "" || parsedData == "" {
+			return nil, "", fmt.Errorf("invalid data URI")
+		}
+		mimeType = parsedMimeType
+		data = parsedData
+	}
+	raw, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return nil, "", fmt.Errorf("base64 decode failed: %w", err)
+	}
+
+	img, format, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		if webpImg, webpErr := webp.Decode(bytes.NewReader(raw)); webpErr == nil {
+			if strings.TrimSpace(mimeType) == "" {
+				mimeType = "image/webp"
+			}
+			return webpImg, mimeType, nil
+		}
+		return nil, "", err
+	}
+	if strings.TrimSpace(mimeType) == "" && format != "" {
+		if format == "jpeg" {
+			format = "jpg"
+		}
+		mimeType = "image/" + format
+	}
+	if strings.TrimSpace(mimeType) == "" {
+		mimeType = "image/png"
+	}
+	return img, mimeType, nil
+}
+
+func encodeScaledGeminiInlineImage(src image.Image, mimeType string, width, height int) (string, string, error) {
+	outMimeType := nanoBananaScaledImageMimeType(mimeType)
+	dstRect := image.Rect(0, 0, width, height)
+	var buf bytes.Buffer
+
+	if outMimeType == "image/png" {
+		dst := image.NewNRGBA(dstRect)
+		xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), xdraw.Over, nil)
+		encoder := png.Encoder{CompressionLevel: png.BestCompression}
+		if err := encoder.Encode(&buf, dst); err != nil {
+			return "", "", fmt.Errorf("png encode failed: %w", err)
+		}
+	} else {
+		dst := image.NewRGBA(dstRect)
+		xdraw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, xdraw.Src)
+		xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), xdraw.Over, nil)
+		if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 90}); err != nil {
+			return "", "", fmt.Errorf("jpeg encode failed: %w", err)
+		}
+	}
+
+	return outMimeType, base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+func nanoBananaScaledImageMimeType(mimeType string) string {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/png":
+		return "image/png"
+	default:
+		return "image/jpeg"
+	}
+}
+
 // failGenerateImageTask 把任务标记为失败并落库。退款由 ProcessGenerateImageTask 的 defer 统一处理。
 func failGenerateImageTask(task *model.Task, reason string) {
 	task.Status = model.TaskStatusFailure
 	task.FailReason = reason
 	task.Progress = "100%"
 	task.FinishTime = time.Now().Unix()
+	if task.Action == "generateContent" {
+		SetGenerateContentRequestOmittedData(task, "failure")
+	}
 	_ = task.Update()
 }
 
@@ -317,13 +611,17 @@ func newAsyncGinContext(userId int) *gin.Context {
 }
 
 // ProcessGenerateImageTask 是统一生图端点的异步处理入口，按 task.Action 分发到具体 provider。
-func ProcessGenerateImageTask(ctx context.Context, task *model.Task) {
+func ProcessGenerateImageTask(ctx context.Context, task *model.Task, requestData ...any) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.LogError(ctx, fmt.Sprintf("generate_image: panic recovered: %v", r))
 			failGenerateImageTask(task, fmt.Sprintf("内部错误 (panic): %v", r))
 		}
 		if task.Status == model.TaskStatusFailure {
+			if task.Action == "generateContent" {
+				SetGenerateContentRequestOmittedData(task, "failure")
+				_ = task.Update()
+			}
 			RefundTaskQuota(ctx, task, task.FailReason)
 		}
 	}()
@@ -337,9 +635,17 @@ func ProcessGenerateImageTask(ctx context.Context, task *model.Task) {
 
 	switch task.Action {
 	case "generateContent":
-		processGenerateImageGemini(ctx, c, task)
+		var nativeReq map[string]interface{}
+		if len(requestData) > 0 {
+			nativeReq, _ = requestData[0].(map[string]interface{})
+		}
+		processGenerateImageGemini(ctx, c, task, nativeReq)
 	default:
-		processGenerateImageOpenAI(ctx, c, task)
+		var asyncReq *dto.AsyncImageRequest
+		if len(requestData) > 0 {
+			asyncReq, _ = requestData[0].(*dto.AsyncImageRequest)
+		}
+		processGenerateImageOpenAI(ctx, c, task, asyncReq)
 	}
 }
 
@@ -387,10 +693,15 @@ func buildGenerateImageRelayInfo(c *gin.Context, task *model.Task, relayMode int
 
 // processGenerateImageGemini 处理 Gemini 原生 generateContent 路径。
 // 上游 inlineData(base64) 会上传到对象存储后返回 URL。
-func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model.Task) {
-	var requestBody map[string]interface{}
-	if err := task.GetData(&requestBody); err != nil {
-		failGenerateImageTask(task, fmt.Sprintf("解析请求数据失败: %v", err))
+func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model.Task, requestBody map[string]interface{}) {
+	if requestBody == nil {
+		if err := task.GetData(&requestBody); err != nil {
+			failGenerateImageTask(task, fmt.Sprintf("解析请求数据失败: %v", err))
+			return
+		}
+	}
+	if omitted, _ := requestBody["omitted"].(bool); omitted {
+		failGenerateImageTask(task, "任务请求数据已省略，无法重新处理")
 		return
 	}
 	imageCompression, _ := requestBody["image_compression"].(string)
@@ -405,16 +716,29 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		}
 	}
 
-	jsonData, err := common.Marshal(requestBody)
-	if err != nil {
-		failGenerateImageTask(task, fmt.Sprintf("序列化请求失败: %v", err))
-		return
-	}
-
 	relayInfo, err := buildGenerateImageRelayInfo(c, task, relayconstant.RelayModeGemini)
 	if err != nil {
 		failGenerateImageTask(task, err.Error())
 		return
+	}
+
+	var jsonData []byte
+	if isNanoBananaModelName(task.Properties.OriginModelName) || isNanoBananaModelName(relayInfo.UpstreamModelName) {
+		var resized bool
+		jsonData, resized, err = fitNanoBananaGenerateContentBody(ctx, requestBody, nanoBananaGenerateContentMaxBodyBytes)
+		if err != nil {
+			failGenerateImageTask(task, fmt.Sprintf("调整 nano-banana 请求体失败: %v", err))
+			return
+		}
+		if resized {
+			logger.LogInfo(ctx, fmt.Sprintf("generate_image(gemini): resized nano-banana request body to %d bytes", len(jsonData)))
+		}
+	} else {
+		jsonData, err = common.Marshal(requestBody)
+		if err != nil {
+			failGenerateImageTask(task, fmt.Sprintf("序列化请求失败: %v", err))
+			return
+		}
 	}
 
 	if GetGeminiAdaptorFunc == nil {
@@ -551,9 +875,11 @@ func asString(v interface{}) string {
 
 // processGenerateImageOpenAI 处理通用 OpenAI image 适配器路径（兜底 provider）。
 // 任务数据存的是 dto.AsyncImageRequest。上游 url 原样保留，b64_json 上传到对象存储后返回 URL。
-func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model.Task) {
+func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model.Task, asyncReqInput *dto.AsyncImageRequest) {
 	var asyncReq dto.AsyncImageRequest
-	if err := task.GetData(&asyncReq); err != nil {
+	if asyncReqInput != nil {
+		asyncReq = *asyncReqInput
+	} else if err := task.GetData(&asyncReq); err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("解析任务数据失败: %v", err))
 		return
 	}

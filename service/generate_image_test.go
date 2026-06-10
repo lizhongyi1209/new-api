@@ -3,8 +3,12 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -42,6 +46,80 @@ func TestIsGeminiImageModelName(t *testing.T) {
 				t.Fatalf("isGeminiImageModelName(%q) = %v, want %v", test.model, got, test.want)
 			}
 		})
+	}
+}
+
+func TestFitNanoBananaGenerateContentBodyResizesInlineImages(t *testing.T) {
+	const width = 180
+	const height = 180
+
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			img.Set(x, y, color.NRGBA{
+				R: uint8((x*17 + y*31) % 256),
+				G: uint8((x*29 + y*13) % 256),
+				B: uint8((x*7 + y*19) % 256),
+				A: 255,
+			})
+		}
+	}
+
+	var imageBuf bytes.Buffer
+	if err := png.Encode(&imageBuf, img); err != nil {
+		t.Fatalf("encode source image: %v", err)
+	}
+
+	inlineData := map[string]interface{}{
+		"mimeType": "image/png",
+		"data":     base64.StdEncoding.EncodeToString(imageBuf.Bytes()),
+	}
+	requestBody := map[string]interface{}{
+		"contents": []interface{}{
+			map[string]interface{}{
+				"role": "user",
+				"parts": []interface{}{
+					map[string]interface{}{"text": "draw"},
+					map[string]interface{}{"inlineData": inlineData},
+				},
+			},
+		},
+	}
+
+	originalBody, err := common.Marshal(requestBody)
+	if err != nil {
+		t.Fatalf("marshal original body: %v", err)
+	}
+	limit := len(originalBody) / 2
+
+	resizedBody, resized, err := fitNanoBananaGenerateContentBody(context.Background(), requestBody, limit)
+	if err != nil {
+		t.Fatalf("fitNanoBananaGenerateContentBody returned error: %v", err)
+	}
+	if !resized {
+		t.Fatalf("fitNanoBananaGenerateContentBody resized = false, want true")
+	}
+	if len(resizedBody) > limit {
+		t.Fatalf("resized body length = %d, want <= %d", len(resizedBody), limit)
+	}
+
+	resizedB64, ok := inlineData["data"].(string)
+	if !ok || resizedB64 == "" {
+		t.Fatalf("resized inline data missing: %#v", inlineData["data"])
+	}
+	raw, err := base64.StdEncoding.DecodeString(resizedB64)
+	if err != nil {
+		t.Fatalf("decode resized inline data: %v", err)
+	}
+	cfg, format, err := image.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("decode resized image config: %v", err)
+	}
+	if format != "png" {
+		t.Fatalf("resized image format = %q, want png", format)
+	}
+	if cfg.Width >= width || cfg.Height >= height {
+		t.Fatalf("resized image dimensions = %dx%d, want smaller than %dx%d", cfg.Width, cfg.Height, width, height)
 	}
 }
 
