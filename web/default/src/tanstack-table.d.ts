@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import '@tanstack/react-table'
+import type { Cell } from '@tanstack/react-table'
+import type { ReactNode } from 'react'
 
 declare module '@tanstack/react-table' {
   interface ColumnMeta<_TData, _TValue> {
@@ -28,5 +30,9 @@ declare module '@tanstack/react-table' {
     mobileTitle?: boolean // card title area (left, larger text)
     mobileBadge?: boolean // status badge alongside title (right)
     mobileHidden?: boolean // hide this column on mobile entirely
+    // Span this mobile list field across one or two grid columns
+    mobileSpan?: 1 | 2
+    // Optional mobile-specific cell renderer
+    mobileCell?: (cell: Cell<_TData, _TValue>) => ReactNode
   }
 }

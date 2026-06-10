@@ -16,9 +16,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ColumnDef } from '@tanstack/react-table'
-import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useState } from 'react'
+import { type Cell, type ColumnDef } from '@tanstack/react-table'
+import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
@@ -74,6 +74,19 @@ interface DetailSegment {
   danger?: boolean
 }
 
+type TranslateFn = (key: string, opts?: Record<string, unknown>) => string
+
+const timingBgMap: Record<string, string> = {
+  success:
+    'border border-emerald-200/40 bg-emerald-50/35 dark:border-emerald-900/40 dark:bg-emerald-950/15',
+  warning:
+    'border border-amber-200/45 bg-amber-50/35 dark:border-amber-900/40 dark:bg-amber-950/15',
+  danger:
+    'border border-rose-200/50 bg-rose-50/35 dark:border-rose-900/40 dark:bg-rose-950/15',
+  neutral:
+    'border border-border/60 bg-muted/30 dark:border-border/40 dark:bg-muted/20',
+}
+
 function formatRatioCompact(ratio: number | undefined): string {
   if (ratio == null || !Number.isFinite(ratio)) return '-'
   return ratio % 1 === 0
@@ -108,7 +121,7 @@ function splitQuotaDisplay(value: string): { prefix: string; amount: string } {
 function buildDetailSegments(
   log: UsageLog,
   other: LogOtherData | null,
-  t: (key: string, opts?: Record<string, unknown>) => string
+  t: TranslateFn
 ): DetailSegment[] {
   // Audit (type=3) and login (type=7) logs: render localized content from the
   // structured op descriptor instead of the raw (English-fallback) content.
@@ -282,6 +295,65 @@ function buildDetailSegments(
   }
 
   return segments
+}
+
+function DetailsPreviewCell(props: {
+  log: UsageLog
+  isAdmin: boolean
+  t: TranslateFn
+  className?: string
+}) {
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const other = parseLogOther(props.log.other)
+  const segments = buildDetailSegments(props.log, other, props.t)
+  const primary = segments[0]
+  const hasMore = segments.length > 1
+
+  return (
+    <>
+      <button
+        type='button'
+        className={cn(
+          'group flex items-center gap-1 text-left text-xs',
+          props.className
+        )}
+        onClick={() => setDialogOpen(true)}
+        title={props.t('Click to view full details')}
+      >
+        {primary ? (
+          <span
+            className={cn(
+              'truncate leading-snug group-hover:underline',
+              primary.muted
+                ? 'text-muted-foreground/60'
+                : primary.danger
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-foreground'
+            )}
+          >
+            {primary.text}
+            {hasMore && (
+              <span className='text-muted-foreground/40 ml-0.5'>
+                +{segments.length - 1}
+              </span>
+            )}
+          </span>
+        ) : props.log.content ? (
+          <span className='text-muted-foreground truncate group-hover:underline'>
+            {props.log.content}
+          </span>
+        ) : (
+          <span className='text-muted-foreground/40'>—</span>
+        )}
+      </button>
+      <DetailsDialog
+        log={props.log}
+        isAdmin={props.isAdmin}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
+    </>
+  )
 }
 
 export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
@@ -532,6 +604,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </button>
           )
         },
+        meta: { label: t('User') },
       }
     )
   }
@@ -630,17 +703,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           ? getFirstResponseTimeColor(frt / 1000)
           : 'neutral'
 
-        const timingBgMap: Record<string, string> = {
-          success:
-            'border border-emerald-200/40 bg-emerald-50/35 !text-emerald-600 dark:border-emerald-900/40 dark:bg-emerald-950/15 dark:!text-emerald-400',
-          warning:
-            'border border-amber-200/45 bg-amber-50/35 !text-amber-600 dark:border-amber-900/40 dark:bg-amber-950/15 dark:!text-amber-400',
-          danger:
-            'border border-rose-200/50 bg-rose-50/35 !text-red-600 dark:border-rose-900/40 dark:bg-rose-950/15 dark:!text-red-400',
-          neutral:
-            'border border-border/60 bg-muted/30 dark:border-border/40 dark:bg-muted/20',
-        }
-
         return (
           <div className='flex flex-col gap-1'>
             <div className='flex items-center gap-1.5'>
@@ -661,7 +723,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     copyable={false}
                     className={cn(
                       'rounded-md font-mono',
-                      timingBgMap[frtVariant]
+                      timingBgMap[frtVariant ?? 'neutral']
                     )}
                   />
                 ) : (
@@ -716,6 +778,31 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </div>
           </div>
         )
+      },
+      meta: {
+        label: t('Timing'),
+        mobileBadge: true,
+        mobileCell: (cell: Cell<UsageLog, unknown>) => {
+          const log = cell.row.original
+          if (!isTimingLogType(log.type)) return null
+
+          const useTime = log.use_time || 0
+          const timeVariant = getResponseTimeColor(
+            useTime,
+            log.completion_tokens
+          )
+
+          return (
+            <StatusBadge
+              label={`${t('Timing')} ${formatUseTime(useTime)}`}
+              variant={timeVariant as StatusBadgeProps['variant']}
+              size='sm'
+              copyable={false}
+              showDot={false}
+              className={cn('font-mono', timingBgMap[timeVariant])}
+            />
+          )
+        },
       },
     },
 
@@ -822,57 +909,25 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     {
       accessorKey: 'content',
       header: t('Details'),
-      cell: function DetailsCell({ row }) {
-        const [dialogOpen, setDialogOpen] = useState(false)
-        const log = row.original
-        const other = parseLogOther(log.other)
-
-        const segments = buildDetailSegments(log, other, t)
-        const primary = segments[0]
-        const hasMore = segments.length > 1
-
-        return (
-          <>
-            <button
-              type='button'
-              className='group flex max-w-[200px] items-center gap-1 text-left text-xs'
-              onClick={() => setDialogOpen(true)}
-              title={t('Click to view full details')}
-            >
-              {primary ? (
-                <span
-                  className={cn(
-                    'truncate leading-snug group-hover:underline',
-                    primary.muted
-                      ? 'text-muted-foreground/60'
-                      : primary.danger
-                        ? 'text-red-600 dark:text-red-400'
-                        : 'text-foreground'
-                  )}
-                >
-                  {primary.text}
-                  {hasMore && (
-                    <span className='text-muted-foreground/40 ml-0.5'>
-                      +{segments.length - 1}
-                    </span>
-                  )}
-                </span>
-              ) : log.content ? (
-                <span className='text-muted-foreground truncate group-hover:underline'>
-                  {log.content}
-                </span>
-              ) : (
-                <span className='text-muted-foreground/40'>—</span>
-              )}
-            </button>
-            <DetailsDialog
-              log={log}
-              isAdmin={isAdmin}
-              open={dialogOpen}
-              onOpenChange={setDialogOpen}
-            />
-          </>
-        )
+      cell: ({ row }) => (
+        <DetailsPreviewCell
+          log={row.original}
+          isAdmin={isAdmin}
+          t={t}
+          className='max-w-[200px]'
+        />
+      ),
+      meta: {
+        label: t('Details'),
+        mobileSpan: 2,
+        mobileCell: (cell: Cell<UsageLog, unknown>) => (
+          <DetailsPreviewCell
+            log={cell.row.original}
+            isAdmin={isAdmin}
+            t={t}
+            className='max-w-full'
+          />
+        ),
       },
       size: 180,
       maxSize: 200,
