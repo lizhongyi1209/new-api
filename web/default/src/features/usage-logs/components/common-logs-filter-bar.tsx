@@ -244,6 +244,18 @@ export function CommonLogsFilterBar<TData>(
   const hasTypeFilter = logType !== LOG_TYPE_ALL_VALUE
   const hasAdditionalFilters =
     !!filters.model || !!filters.group || hasTypeFilter || hasExpandedFilters
+  const hasAppliedTypeFilter =
+    Array.isArray(searchParams.type) &&
+    searchParams.type.some((type) => type !== LOG_TYPE_ALL_VALUE)
+  const hasAppliedFilters =
+    !!searchParams.model ||
+    !!searchParams.group ||
+    !!searchParams.token ||
+    !!searchParams.username ||
+    !!searchParams.channel ||
+    !!searchParams.requestId ||
+    !!searchParams.upstreamRequestId ||
+    hasAppliedTypeFilter
 
   const expandedFilterCount = [
     filters.token,
@@ -439,7 +451,7 @@ export function CommonLogsFilterBar<TData>(
       }
       hasAdvancedActiveFilters={hasExpandedFilters}
       advancedFilterCount={expandedFilterCount}
-      hasActiveFilters={hasAdditionalFilters}
+      hasActiveFilters={hasAdditionalFilters || hasAppliedFilters}
       onSearch={handleApply}
       searchLoading={fetchingLogs > 0}
       onReset={handleReset}
