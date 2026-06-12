@@ -16,6 +16,9 @@ type GenerateImageRequest struct {
 	// Gemini 原生：响应模态，默认 ["TEXT","IMAGE"]。
 	ResponseModalities []string `json:"response_modalities,omitempty"`
 
+	// Gemini 原生：generationConfig.mediaResolution。
+	MediaResolution string `json:"media_resolution,omitempty"`
+
 	// Gemini 原生：开启 Google Search grounding。默认不传；仅 true 时启用。
 	GoogleSearch *bool `json:"google_search,omitempty"`
 

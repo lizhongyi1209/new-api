@@ -70,6 +70,7 @@ var imageRoutes = []imageRoute{
 // 客户端参数规则（nano-banana* / Gemini image preview 模型）：
 //   - image_compression 不需要；
 //   - response_modalities 可选，默认不传；
+//   - media_resolution 可选，透传到 generationConfig.mediaResolution；
 //   - 内嵌图片字节会与文本提示、系统指令一起计入 20MB 总请求大小；
 //   - n 用不到，默认不传，传入视为废弃；
 //   - google_search 可选，只有 true 时启用 Google Search grounding；
@@ -157,6 +158,8 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 		}
 		*req.OutputFormat = outputFormat
 	}
+
+	req.MediaResolution = strings.TrimSpace(req.MediaResolution)
 
 	if req.ThinkingLevel != nil {
 		thinkingLevel := strings.TrimSpace(*req.ThinkingLevel)

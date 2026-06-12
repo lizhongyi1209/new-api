@@ -69,10 +69,14 @@ func TestGenerateImageToAsyncRequestPreservesThinkingConfig(t *testing.T) {
 	asyncReq := generateImageToAsyncRequest(&dto.GenerateImageRequest{
 		Model:           "nano-banana-pro",
 		Prompt:          "draw",
+		MediaResolution: "MEDIA_RESOLUTION_HIGH",
 		ThinkingLevel:   &thinkingLevel,
 		IncludeThoughts: &includeThoughts,
 	})
 
+	if asyncReq.MediaResolution != "MEDIA_RESOLUTION_HIGH" {
+		t.Fatalf("MediaResolution = %q, want MEDIA_RESOLUTION_HIGH", asyncReq.MediaResolution)
+	}
 	if asyncReq.ThinkingLevel == nil || *asyncReq.ThinkingLevel != "High" {
 		t.Fatalf("ThinkingLevel = %v, want High", asyncReq.ThinkingLevel)
 	}

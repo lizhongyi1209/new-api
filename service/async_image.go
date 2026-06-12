@@ -1461,6 +1461,9 @@ func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncIma
 	generationConfig := map[string]interface{}{
 		"responseModalities": modalities,
 	}
+	if asyncReq.MediaResolution != "" {
+		generationConfig["mediaResolution"] = asyncReq.MediaResolution
+	}
 	if len(imageConfig) > 0 {
 		generationConfig["imageConfig"] = imageConfig
 	}

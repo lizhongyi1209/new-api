@@ -125,12 +125,13 @@ func TestFitNanoBananaGenerateContentBodyResizesInlineImages(t *testing.T) {
 
 func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 	req := &dto.GenerateImageRequest{
-		Model:         "gpt-image-1",
-		Prompt:        "draw a cat",
-		Size:          " AUTO ",
-		Quality:       " HIGH ",
-		OutputFormat:  testStringPtr(" WEBP "),
-		ThinkingLevel: testStringPtr(" High "),
+		Model:           "gpt-image-1",
+		Prompt:          "draw a cat",
+		Size:            " AUTO ",
+		Quality:         " HIGH ",
+		OutputFormat:    testStringPtr(" WEBP "),
+		MediaResolution: " MEDIA_RESOLUTION_HIGH ",
+		ThinkingLevel:   testStringPtr(" High "),
 		Mask: &dto.ImageReference{
 			ImageURL: testStringPtr(" data:image/png;base64,AAAA "),
 		},
@@ -148,6 +149,9 @@ func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 	}
 	if req.OutputFormat == nil || *req.OutputFormat != "webp" {
 		t.Fatalf("OutputFormat = %v, want webp", req.OutputFormat)
+	}
+	if req.MediaResolution != "MEDIA_RESOLUTION_HIGH" {
+		t.Fatalf("MediaResolution = %q, want MEDIA_RESOLUTION_HIGH", req.MediaResolution)
 	}
 	if req.ThinkingLevel == nil || *req.ThinkingLevel != "High" {
 		t.Fatalf("ThinkingLevel = %v, want High", req.ThinkingLevel)
@@ -365,6 +369,7 @@ func TestConvertAsyncImageToGeminiNativeMapsThinkingConfig(t *testing.T) {
 		Model:              "nano-banana-pro",
 		Prompt:             "draw a cat",
 		ResponseModalities: []string{"IMAGE"},
+		MediaResolution:    "MEDIA_RESOLUTION_HIGH",
 		ThinkingLevel:      testStringPtr(" High "),
 		IncludeThoughts:    &includeThoughts,
 	})
@@ -375,6 +380,9 @@ func TestConvertAsyncImageToGeminiNativeMapsThinkingConfig(t *testing.T) {
 	generationConfig, ok := nativeReq["generationConfig"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("generationConfig = %#v, want object", nativeReq["generationConfig"])
+	}
+	if generationConfig["mediaResolution"] != "MEDIA_RESOLUTION_HIGH" {
+		t.Fatalf("mediaResolution = %#v, want MEDIA_RESOLUTION_HIGH", generationConfig["mediaResolution"])
 	}
 	thinkingConfig, ok := generationConfig["thinkingConfig"].(map[string]interface{})
 	if !ok {
