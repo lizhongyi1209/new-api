@@ -140,12 +140,22 @@ export function useApiKeysColumns(): ColumnDef<ApiKey>[] {
         const apiKey = row.original
         if (apiKey.unlimited_quota) {
           return (
-            <StatusBadge
-              label={t('Unlimited')}
-              variant='neutral'
-              copyable={false}
-              className='-ml-1.5'
-            />
+            <Tooltip>
+              <TooltipTrigger render={<span className='inline-flex' />}>
+                <StatusBadge
+                  label={t('Unlimited')}
+                  variant='neutral'
+                  copyable={false}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className='space-y-1 text-xs'>
+                  <div>
+                    {t('Used:')} {formatQuota(apiKey.used_quota)}
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           )
         }
 

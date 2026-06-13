@@ -145,10 +145,74 @@ func (t *Task) GetUpstreamTaskID() string {
 // GetResultURL 获取任务结果 URL（视频地址等）
 // 新数据存在 PrivateData.ResultURL 中；旧数据回退到 FailReason（历史兼容）
 func (t *Task) GetResultURL() string {
-	if t.PrivateData.ResultURL != "" {
-		return t.PrivateData.ResultURL
+	dataURL := t.GetDataResultURL()
+	if dataURL != "" && t.isOwnVideoProxyURL(t.PrivateData.ResultURL) {
+		return dataURL
 	}
-	return t.FailReason
+	if strings.TrimSpace(t.PrivateData.ResultURL) != "" {
+		return strings.TrimSpace(t.PrivateData.ResultURL)
+	}
+	if dataURL != "" {
+		return dataURL
+	}
+	return strings.TrimSpace(t.FailReason)
+}
+
+// GetDataResultURL extracts direct result URLs from provider response payloads.
+func (t *Task) GetDataResultURL() string {
+	if t == nil || len(t.Data) == 0 {
+		return ""
+	}
+	var payload map[string]any
+	if err := common.Unmarshal(t.Data, &payload); err != nil {
+		return ""
+	}
+	return firstDirectURL(
+		nestedString(payload, "output", "url"),
+		stringField(payload, "video_url"),
+		stringField(payload, "url"),
+	)
+}
+
+func (t *Task) isOwnVideoProxyURL(rawURL string) bool {
+	if t == nil || strings.TrimSpace(t.TaskID) == "" {
+		return false
+	}
+	return strings.Contains(strings.TrimSpace(rawURL), "/v1/videos/"+t.TaskID+"/content")
+}
+
+func stringField(payload map[string]any, key string) string {
+	value, ok := payload[key].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func nestedString(payload map[string]any, keys ...string) string {
+	var current any = payload
+	for _, key := range keys {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return ""
+		}
+		current = m[key]
+	}
+	value, ok := current.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
+}
+
+func firstDirectURL(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "data:") {
+			return value
+		}
+	}
+	return ""
 }
 
 // GenerateTaskID 生成对外暴露的 task_xxxx 格式 ID

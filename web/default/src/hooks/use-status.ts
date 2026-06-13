@@ -24,12 +24,33 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import { mapStatusDataToConfig } from './use-system-config'
 
+const VOLATILE_STATUS_FIELDS = ['version', 'start_time'] as const
+
+function omitVolatileStatusFields(status: SystemStatus): SystemStatus {
+  const stableStatus = { ...status }
+
+  for (const field of VOLATILE_STATUS_FIELDS) {
+    delete stableStatus[field]
+  }
+
+  if (stableStatus.data) {
+    stableStatus.data = { ...stableStatus.data }
+    for (const field of VOLATILE_STATUS_FIELDS) {
+      delete stableStatus.data[field]
+    }
+  }
+
+  return stableStatus
+}
+
 // Get initial cache from localStorage
 function getInitialStatus(): SystemStatus | undefined {
   try {
     if (typeof window !== 'undefined') {
       const saved = window.localStorage.getItem('status')
-      return saved ? (JSON.parse(saved) as SystemStatus) : undefined
+      return saved
+        ? omitVolatileStatusFields(JSON.parse(saved) as SystemStatus)
+        : undefined
     }
   } catch {
     /* empty */
@@ -59,7 +80,10 @@ export function useStatus() {
       // Save to localStorage
       try {
         if (typeof window !== 'undefined' && status) {
-          window.localStorage.setItem('status', JSON.stringify(status))
+          window.localStorage.setItem(
+            'status',
+            JSON.stringify(omitVolatileStatusFields(status as SystemStatus))
+          )
         }
       } catch {
         /* empty */

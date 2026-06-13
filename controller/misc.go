@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -19,6 +20,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+const githubLatestReleaseURL = "https://api.github.com/repos/QuantumNous/new-api/releases/latest"
+
+type GitHubReleaseInfo struct {
+	TagName     string `json:"tag_name"`
+	Name        string `json:"name,omitempty"`
+	Body        string `json:"body,omitempty"`
+	HTMLURL     string `json:"html_url,omitempty"`
+	PublishedAt string `json:"published_at,omitempty"`
+}
 
 func TestStatus(c *gin.Context) {
 	err := model.PingDB()
@@ -37,6 +48,42 @@ func TestStatus(c *gin.Context) {
 		"http_stats": httpStats,
 	})
 	return
+}
+
+func GetGitHubLatestRelease(c *gin.Context) {
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, githubLatestReleaseURL, nil)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "new-api-dashboard")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		common.ApiError(c, fmt.Errorf("failed to contact GitHub releases API: %w", err))
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		common.ApiError(c, fmt.Errorf("GitHub releases API returned HTTP %d", resp.StatusCode))
+		return
+	}
+
+	var release GitHubReleaseInfo
+	if err := common.DecodeJson(resp.Body, &release); err != nil {
+		common.ApiError(c, fmt.Errorf("failed to parse GitHub release payload: %w", err))
+		return
+	}
+	if strings.TrimSpace(release.TagName) == "" {
+		common.ApiError(c, fmt.Errorf("unexpected GitHub release payload"))
+		return
+	}
+
+	common.ApiSuccess(c, release)
 }
 
 func GetStatus(c *gin.Context) {

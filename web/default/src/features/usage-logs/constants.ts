@@ -185,6 +185,7 @@ export const TASK_ACTIONS = {
   FIRST_TAIL_GENERATE: 'firstTailGenerate', // 首尾生视频
   REFERENCE_GENERATE: 'referenceGenerate', // 参照生视频
   REMIX_GENERATE: 'remixGenerate', // 视频 Remix
+  MOTION_CONTROL: 'motionControl', // 运动控制视频
 } as const
 
 /**
@@ -340,12 +341,18 @@ export const ASYNC_IMAGE_ACTIONS = {
 }
 
 export const ASYNC_IMAGE_PLATFORM_MAPPINGS: Record<string, StatusMapping> = {
-  [ASYNC_IMAGE_PLATFORMS.ASYNC_IMAGE]: { label: 'Async Image', variant: 'cyan' },
+  [ASYNC_IMAGE_PLATFORMS.ASYNC_IMAGE]: {
+    label: 'Async Image',
+    variant: 'cyan',
+  },
 }
 
 export const ASYNC_IMAGE_ACTION_MAPPINGS: Record<string, StatusMapping> = {
   [ASYNC_IMAGE_ACTIONS.GENERATE]: { label: 'Generate Image', variant: 'blue' },
-  [ASYNC_IMAGE_ACTIONS.GENERATE_CONTENT]: { label: 'Generate Content', variant: 'violet' },
+  [ASYNC_IMAGE_ACTIONS.GENERATE_CONTENT]: {
+    label: 'Generate Content',
+    variant: 'violet',
+  },
 }
 
 // ============================================================================

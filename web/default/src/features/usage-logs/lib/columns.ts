@@ -24,7 +24,6 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { useCommonLogsColumns } from '../components/columns/common-logs-columns'
 import { useDrawingLogsColumns } from '../components/columns/drawing-logs-columns'
 import { useTaskLogsColumns } from '../components/columns/task-logs-columns'
-import { useAsyncImageLogsColumns } from '../components/columns/async-image-logs-columns'
 import type { LogCategory } from '../types'
 
 /**
@@ -39,7 +38,6 @@ export function useColumnsByCategory(
   const commonColumns = useCommonLogsColumns(isAdmin)
   const drawingColumns = useDrawingLogsColumns(isAdmin)
   const taskColumns = useTaskLogsColumns(isAdmin)
-  const asyncImageColumns = useAsyncImageLogsColumns(isAdmin)
 
   switch (logCategory) {
     case 'common':
@@ -48,8 +46,6 @@ export function useColumnsByCategory(
       return drawingColumns
     case 'task':
       return taskColumns
-    case 'async_image':
-      return asyncImageColumns
     default:
       return commonColumns
   }

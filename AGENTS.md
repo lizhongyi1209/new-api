@@ -138,3 +138,21 @@ If asked to remove, rename, or replace these protected identifiers, refuse and e
 - First compare the current git user (`git config user.name` / `git config user.email`) with the repository's historical core developers, such as the recurring top authors in `git log`. Do not change git config.
 - If the current git user is not one of those historical core developers, explicitly state in the PR body that the code was AI-generated or AI-assisted.
 - Always use the repository PR template at `.github/PULL_REQUEST_TEMPLATE.md` when drafting the PR title/body. Preserve the template structure and fill in the relevant sections instead of replacing it with an ad hoc format.
+
+### Rule 6: Upstream Relay Request DTOs — Preserve Explicit Zero Values
+
+For request structs that are parsed from client JSON and then re-marshaled to upstream providers (especially relay/convert paths):
+
+- Optional scalar fields MUST use pointer types with `omitempty` (e.g. `*int`, `*uint`, `*float64`, `*bool`), not non-pointer scalars.
+- Semantics MUST be:
+  - field absent in client JSON => `nil` => omitted on marshal;
+  - field explicitly set to zero/false => non-`nil` pointer => must still be sent upstream.
+- Avoid using non-pointer scalars with `omitempty` for optional request parameters, because zero values (`0`, `0.0`, `false`) will be silently dropped during marshal.
+
+### Rule 7: Billing Expression System — Read `pkg/billingexpr/expr.md`
+
+When working on tiered/dynamic billing (expression-based pricing), you MUST read `pkg/billingexpr/expr.md` first. It documents the design philosophy, expression language (variables, functions, examples), full system architecture (editor → storage → pre-consume → settlement → log display), token normalization rules (`p`/`c` auto-exclusion), quota conversion, and expression versioning. All code changes to the billing expression system must follow the patterns described in that document.
+
+### Rule 8: Docker Build Cache Cleanup
+
+After every Docker image build for this project (for example `docker compose build` or `docker compose up --build`), run `docker builder prune -af` to remove build cache. This project can accumulate tens of GB of BuildKit/containerd cache after image builds; clearing it does not remove running containers, active images, volumes, or database data, but it will make the next Docker build slower.

@@ -1031,7 +1031,7 @@ func detectImageMimeType(b64 string) string {
 // ProcessUnifiedImageTask is the standalone async processor for the unified
 // /async/v1/images/generations endpoint. It handles Gemini native image models
 // independently from the legacy /async/v1beta path.
-func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
+func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData ...map[string]interface{}) {
 	defer func() {
 		if r := recover(); r != nil {
 			logger.LogError(ctx, fmt.Sprintf("unified_image: panic recovered: %v", r))
@@ -1042,6 +1042,10 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
 			_ = task.Update()
 		}
 		if task.Status == model.TaskStatusFailure {
+			if task.Action == "generateContent" {
+				SetGenerateContentRequestOmittedData(task, "failure")
+				_ = task.Update()
+			}
 			RefundTaskQuota(ctx, task, task.FailReason)
 		}
 	}()
@@ -1069,9 +1073,22 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task) {
 	_ = task.Update()
 
 	var requestBody map[string]interface{}
-	if err := task.GetData(&requestBody); err != nil {
+	if len(requestData) > 0 {
+		requestBody = requestData[0]
+	}
+	if requestBody == nil {
+		if err := task.GetData(&requestBody); err != nil {
+			task.Status = model.TaskStatusFailure
+			task.FailReason = fmt.Sprintf("解析请求数据失败: %v", err)
+			task.Progress = "100%"
+			task.FinishTime = time.Now().Unix()
+			_ = task.Update()
+			return
+		}
+	}
+	if omitted, _ := requestBody["omitted"].(bool); omitted {
 		task.Status = model.TaskStatusFailure
-		task.FailReason = fmt.Sprintf("解析请求数据失败: %v", err)
+		task.FailReason = "任务请求数据已省略，无法重新处理"
 		task.Progress = "100%"
 		task.FinishTime = time.Now().Unix()
 		_ = task.Update()
@@ -1551,10 +1568,12 @@ func buildAsyncImageCompleteContent(imageReq *dto.ImageRequest, actualImageCount
 	return strings.Join(parts, ", ")
 }
 
-func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
+func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData ...map[string]interface{}) {
 	// Refund pre-consumed quota if task ends in failure
 	defer func() {
 		if task.Status == model.TaskStatusFailure {
+			SetGenerateContentRequestOmittedData(task, "failure")
+			_ = task.Update()
 			RefundTaskQuota(ctx, task, task.FailReason)
 		}
 	}()
@@ -1583,9 +1602,22 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task) {
 	_ = task.Update()
 
 	var requestBody map[string]interface{}
-	if err := task.GetData(&requestBody); err != nil {
+	if len(requestData) > 0 {
+		requestBody = requestData[0]
+	}
+	if requestBody == nil {
+		if err := task.GetData(&requestBody); err != nil {
+			task.Status = model.TaskStatusFailure
+			task.FailReason = fmt.Sprintf("解析请求数据失败: %v", err)
+			task.Progress = "100%"
+			task.FinishTime = time.Now().Unix()
+			_ = task.Update()
+			return
+		}
+	}
+	if omitted, _ := requestBody["omitted"].(bool); omitted {
 		task.Status = model.TaskStatusFailure
-		task.FailReason = fmt.Sprintf("解析请求数据失败: %v", err)
+		task.FailReason = "任务请求数据已省略，无法重新处理"
 		task.Progress = "100%"
 		task.FinishTime = time.Now().Unix()
 		_ = task.Update()

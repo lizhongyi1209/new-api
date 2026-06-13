@@ -102,8 +102,9 @@ func GenerateImageSubmit(c *gin.Context) {
 	}
 
 	// 按 provider 决定任务数据形态：
-	// - Gemini 原生：转成 generateContent body 存入任务
+	// - Gemini 原生：generateContent body 只在 goroutine 内存中使用，任务里只存省略占位
 	// - 通用 OpenAI image：存扁平的 AsyncImageRequest
+	var processData any
 	if isGeminiNative {
 		nativeReq, convertErr := service.ConvertAsyncImageToGeminiNative(context.Background(), asyncReq)
 		if convertErr != nil {
@@ -114,9 +115,11 @@ func GenerateImageSubmit(c *gin.Context) {
 			return
 		}
 		applyGenerateImageGoogleSearchTool(nativeReq, req.GoogleSearch)
-		task.SetData(nativeReq)
+		service.SetGenerateContentRequestOmittedData(task, "submitted")
+		processData = nativeReq
 	} else {
 		task.SetData(asyncReq)
+		processData = asyncReq
 	}
 
 	if err := task.Insert(); err != nil {
@@ -133,7 +136,7 @@ func GenerateImageSubmit(c *gin.Context) {
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)
 	gopool.Go(func() {
-		service.ProcessGenerateImageTask(ctx, task)
+		service.ProcessGenerateImageTask(ctx, task, processData)
 	})
 
 	c.JSON(http.StatusOK, dto.AsyncTaskResponse{

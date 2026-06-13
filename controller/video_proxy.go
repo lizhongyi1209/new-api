@@ -30,6 +30,29 @@ func videoProxyError(c *gin.Context, status int, errType, message string) {
 	})
 }
 
+func getVideoProxyTask(c *gin.Context, userID int, taskID string) (*model.Task, bool, error) {
+	if !c.GetBool("use_access_token") && c.GetInt("role") >= common.RoleAdminUser {
+		task, exists, err := model.GetByOnlyTaskId(taskID)
+		if task != nil {
+			task.ResultURL = task.GetResultURL()
+		}
+		return task, exists, err
+	}
+	return model.GetByTaskId(userID, taskID)
+}
+
+func shouldAttachVideoBearerAuth(videoURL string, baseURL string) bool {
+	video, err := url.Parse(videoURL)
+	if err != nil || video.Host == "" {
+		return false
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Host == "" {
+		return false
+	}
+	return strings.EqualFold(video.Scheme, base.Scheme) && strings.EqualFold(video.Host, base.Host)
+}
+
 func VideoProxy(c *gin.Context) {
 	taskID := c.Param("task_id")
 	if taskID == "" {
@@ -38,7 +61,7 @@ func VideoProxy(c *gin.Context) {
 	}
 
 	userID := c.GetInt("id")
-	task, exists, err := model.GetByTaskId(userID, taskID)
+	task, exists, err := getVideoProxyTask(c, userID, taskID)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Failed to query task %s: %s", taskID, err.Error()))
 		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
@@ -107,8 +130,14 @@ func VideoProxy(c *gin.Context) {
 			return
 		}
 	case constant.ChannelTypeOpenAI, constant.ChannelTypeSora:
-		videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
-		req.Header.Set("Authorization", "Bearer "+channel.Key)
+		if resultURL := strings.TrimSpace(task.GetResultURL()); resultURL != "" && !isTaskProxyContentURL(resultURL, task.TaskID) {
+			videoURL = resultURL
+		} else {
+			videoURL = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, task.GetUpstreamTaskID())
+		}
+		if shouldAttachVideoBearerAuth(videoURL, baseURL) {
+			req.Header.Set("Authorization", "Bearer "+channel.Key)
+		}
 	default:
 		// Video URL is stored in PrivateData.ResultURL (fallback to FailReason for old data)
 		videoURL = task.GetResultURL()

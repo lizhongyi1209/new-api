@@ -88,8 +88,6 @@ export function Home() {
   return (
     <PublicLayout showMainContainer={false}>
       <Hero isAuthenticated={isAuthenticated} />
-      <Stats />
-      <HowItWorks />
       <CTA isAuthenticated={isAuthenticated} />
       <Footer />
     </PublicLayout>

@@ -39,7 +39,7 @@ import {
 } from './section-registry'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
-const TASK_LOG_SECTIONS = ['drawing', 'task', 'async_image'] as const
+const TASK_LOG_SECTIONS = ['drawing', 'task'] as const
 
 const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
   common: {
@@ -50,10 +50,6 @@ const SECTION_META: Record<UsageLogsSectionId, { titleKey: string }> = {
   },
   task: {
     titleKey: 'Task Logs',
-  },
-  async_image: {
-    titleKey: 'Async Image Logs',
-    descriptionKey: 'View and manage your async image generation logs',
   },
 }
 
@@ -104,6 +100,7 @@ function UsageLogsContent() {
       void navigate({
         to: '/usage-logs/$section',
         params: { section: section as UsageLogsSectionId },
+        search: (prev) => ({ ...prev, page: undefined }),
       })
     },
     [navigate]

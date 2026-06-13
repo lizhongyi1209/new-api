@@ -106,6 +106,20 @@ export type SystemTaskListResponse = {
   data?: SystemTask[]
 }
 
+export type ReleaseInfo = {
+  tag_name: string
+  name?: string
+  body?: string
+  html_url?: string
+  published_at?: string
+}
+
+export type LatestReleaseResponse = {
+  success: boolean
+  message: string
+  data?: ReleaseInfo
+}
+
 export type SiteSettings = {
   'theme.frontend': string
   Notice: string

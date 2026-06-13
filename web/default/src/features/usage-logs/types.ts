@@ -28,7 +28,7 @@ import type { UsageLog } from './data/schema'
 /**
  * Log category for different log types
  */
-export type LogCategory = 'common' | 'drawing' | 'task' | 'async_image'
+export type LogCategory = 'common' | 'drawing' | 'task'
 
 // ============================================================================
 // Filter Types
@@ -70,20 +70,9 @@ export interface TaskLogFilters extends CommonFilters {
 }
 
 /**
- * Async image logs specific filters
- */
-export interface AsyncImageLogFilters extends CommonFilters {
-  taskId?: string
-}
-
-/**
  * Union type for all log filters
  */
-export type LogFilters =
-  | CommonLogFilters
-  | DrawingLogFilters
-  | TaskLogFilters
-  | AsyncImageLogFilters
+export type LogFilters = CommonLogFilters | DrawingLogFilters | TaskLogFilters
 
 // ============================================================================
 // Common Logs Additional Types
@@ -273,6 +262,8 @@ export interface TaskLog {
   task_id: string
   action: string // MUSIC, LYRICS, GENERATE, TEXT_GENERATE, etc.
   channel_id: number
+  channel_type?: number
+  channel_type_name?: string
   submit_time: number // seconds
   finish_time?: number // seconds
   progress?: string

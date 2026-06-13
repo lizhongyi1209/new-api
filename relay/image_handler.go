@@ -146,6 +146,10 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	}
 
 	var logContent []string
+	logImageN := imageN
+	if actualN, ok := info.PriceData.OtherRatios["n"]; ok && actualN > 0 {
+		logImageN = uint(actualN)
+	}
 
 	if len(request.Size) > 0 {
 		logContent = append(logContent, fmt.Sprintf("大小 %s", request.Size))
@@ -153,8 +157,8 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if len(quality) > 0 {
 		logContent = append(logContent, fmt.Sprintf("品质 %s", quality))
 	}
-	if imageN > 0 {
-		logContent = append(logContent, fmt.Sprintf("生成数量 %d", imageN))
+	if logImageN > 0 {
+		logContent = append(logContent, fmt.Sprintf("生成数量 %d", logImageN))
 	}
 
 	usageDto := usage.(*dto.Usage)

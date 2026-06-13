@@ -26,7 +26,6 @@ import type {
   CommonLogFilters,
   DrawingLogFilters,
   TaskLogFilters,
-  AsyncImageLogFilters,
 } from '../types'
 
 // ============================================================================
@@ -73,13 +72,6 @@ export function buildSearchParams(
       return {
         ...baseParams,
         ...(taskFilters.taskId && { filter: taskFilters.taskId }),
-      }
-    }
-    case 'async_image': {
-      const imageFilters = filters as AsyncImageLogFilters
-      return {
-        ...baseParams,
-        ...(imageFilters.taskId && { filter: imageFilters.taskId }),
       }
     }
     default:

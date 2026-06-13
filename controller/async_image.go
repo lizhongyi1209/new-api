@@ -79,7 +79,6 @@ func AsyncImageSubmit(c *gin.Context) {
 			RequestHost:     c.Request.Host,
 		},
 	}
-	task.SetData(req)
 
 	// Store billing context for later refund/settlement
 	if relayInfo != nil && priceData.Quota > 0 {
@@ -96,20 +95,6 @@ func AsyncImageSubmit(c *gin.Context) {
 		}
 	}
 
-	if err := task.Insert(); err != nil {
-		// Refund pre-consumed quota on insert failure
-		if relayInfo != nil && relayInfo.Billing != nil {
-			relayInfo.Billing.Refund(c)
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"message": fmt.Sprintf("创建任务失败: %v", err),
-				"type":    "internal_error",
-			},
-		})
-		return
-	}
-
 	// Check if this should use Gemini native processing
 	// Models with nano-banana prefix or specific Gemini image models use native format
 	channelType := relayInfo.ChannelMeta.ChannelType
@@ -118,10 +103,12 @@ func AsyncImageSubmit(c *gin.Context) {
 		req.Model == "gemini-3-pro-image" ||
 		req.Model == "gemini-3.1-flash-image-preview"
 	useGeminiNative := isGeminiChannel && isGeminiImageModel
+	var nativeReq map[string]interface{}
 
 	if useGeminiNative {
 		// Convert OpenAI-format request to Gemini native format
-		nativeReq, convertErr := service.ConvertAsyncImageToGeminiNative(context.Background(), &req)
+		var convertErr error
+		nativeReq, convertErr = service.ConvertAsyncImageToGeminiNative(context.Background(), &req)
 		if convertErr != nil {
 			// Refund on conversion failure
 			if relayInfo.Billing != nil {
@@ -136,15 +123,32 @@ func AsyncImageSubmit(c *gin.Context) {
 			return
 		}
 		task.Action = "generateContent"
-		task.SetData(nativeReq)
-		_ = task.Update()
+		service.SetGenerateContentRequestOmittedData(task, "submitted")
+	} else {
+		task.SetData(req)
+	}
 
+	if err := task.Insert(); err != nil {
+		// Refund pre-consumed quota on insert failure
+		if relayInfo != nil && relayInfo.Billing != nil {
+			relayInfo.Billing.Refund(c)
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("创建任务失败: %v", err),
+				"type":    "internal_error",
+			},
+		})
+		return
+	}
+
+	if useGeminiNative {
 		service.RecordAsyncImageSubmitLog(c, task, &req, relayInfo)
 		_ = task.Update()
 
 		ctx := context.WithValue(context.Background(), "gin_context", c)
 		gopool.Go(func() {
-			service.ProcessUnifiedImageTask(ctx, task)
+			service.ProcessUnifiedImageTask(ctx, task, nativeReq)
 		})
 	} else {
 		// Record usage log at submission time and persist the log ID for later update
@@ -221,7 +225,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 			RequestHost:     c.Request.Host,
 		},
 	}
-	task.SetData(req)
+	service.SetGenerateContentRequestOmittedData(task, "submitted")
 
 	// Store billing context for later refund/settlement
 	if relayInfo != nil && priceData.Quota > 0 {
@@ -258,7 +262,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)
 	gopool.Go(func() {
-		service.ProcessAsyncGeminiTask(ctx, task)
+		service.ProcessAsyncGeminiTask(ctx, task, req)
 	})
 
 	c.JSON(http.StatusOK, dto.AsyncTaskResponse{

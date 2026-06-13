@@ -68,6 +68,9 @@ func sweepTimedOutTasks(ctx context.Context) {
 		} else {
 			task.FailReason = reason
 		}
+		if task.Action == "generateContent" {
+			SetGenerateContentRequestOmittedData(task, "timeout")
+		}
 
 		won, err := task.UpdateWithStatus(oldStatus)
 		if err != nil {
