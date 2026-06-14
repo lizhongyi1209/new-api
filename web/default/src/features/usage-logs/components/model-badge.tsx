@@ -129,11 +129,9 @@ function ModelBadgeContent(props: ModelBadgeProps) {
     <StatusBadge
       copyText={props.modelName}
       size='sm'
-      showDot={!provider}
-      autoColor={provider ? undefined : props.modelName}
+      showDot={false}
       className={cn(
-        'border-border/60 bg-muted/30 h-6 max-w-none gap-1.5 rounded-md border px-2 [font-family:var(--font-body)]',
-        provider && 'text-foreground',
+        'border-border/60 bg-muted/30 text-foreground h-6 max-w-full gap-1.5 rounded-md border px-2 [font-family:var(--font-body)]',
         props.className
       )}
     >
@@ -164,7 +162,10 @@ export function ModelBadge(props: ModelBadgeProps) {
     <Popover>
       <PopoverTrigger
         render={
-          <button type='button' className='inline-flex items-center gap-1' />
+          <button
+            type='button'
+            className='inline-flex min-w-0 max-w-full items-center gap-1'
+          />
         }
       >
         <ModelBadgeContent {...props} />
