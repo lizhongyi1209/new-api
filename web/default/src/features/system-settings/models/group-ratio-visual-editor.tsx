@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Plus, Trash2, GripVertical, ChevronDown } from 'lucide-react'
+import { Plus, Trash2, GripVertical, ChevronDown, Zap } from 'lucide-react'
 import { useState, useMemo, useEffect, useCallback, memo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -178,6 +178,11 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
   const [groupOverrideEditData, setGroupOverrideEditData] =
     useState<GroupOverride | null>(null)
 
+  const [quickAddDialogOpen, setQuickAddDialogOpen] = useState(false)
+  const [quickAddUserGroup, setQuickAddUserGroup] = useState<string | null>(
+    null
+  )
+
   const [userGroupDialogOpen, setUserGroupDialogOpen] = useState(false)
   const [userGroupInput, setUserGroupInput] = useState('')
 
@@ -200,6 +205,23 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
       context: 'auto groups',
     })
   }, [autoGroups])
+
+  // Parse base group ratios (used to auto-compute final inter-group ratios)
+  const baseGroupRatioMap = useMemo(() => {
+    return safeJsonParse<Record<string, number>>(groupRatio, {
+      fallback: {},
+      context: 'group ratios',
+    })
+  }, [groupRatio])
+
+  // Parse user-selectable groups (target candidates for quick add)
+  const selectableGroupNames = useMemo(() => {
+    const usableMap = safeJsonParse<Record<string, string>>(userUsableGroups, {
+      fallback: {},
+      context: 'user usable groups',
+    })
+    return Object.keys(usableMap)
+  }, [userUsableGroups])
 
   // Parse group-group ratios
   const groupGroupRatioList = useMemo(() => {
@@ -397,6 +419,35 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
     onChange('GroupGroupRatio', JSON.stringify(map, null, 2))
   }
 
+  const handleQuickAddOpen = (userGroup: string) => {
+    setQuickAddUserGroup(userGroup)
+    setQuickAddDialogOpen(true)
+  }
+
+  const handleQuickAddSave = (
+    userGroup: string,
+    overrides: Array<{ targetGroup: string; ratio: number }>
+  ) => {
+    const map = safeJsonParse<Record<string, Record<string, number>>>(
+      groupGroupRatio,
+      {
+        fallback: {},
+        silent: true,
+      }
+    )
+
+    if (!map[userGroup]) {
+      map[userGroup] = {}
+    }
+
+    for (const { targetGroup, ratio } of overrides) {
+      map[userGroup][targetGroup] = ratio
+    }
+
+    onChange('GroupGroupRatio', JSON.stringify(map, null, 2))
+    setQuickAddDialogOpen(false)
+  }
+
   return (
     <div className='space-y-4'>
       <GroupPricingTable
@@ -502,6 +553,16 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
                           </span>
                         </div>
                         <div className='flex gap-2'>
+                          <Button
+                            variant='ghost'
+                            size='sm'
+                            title={t('Quick add from selectable groups')}
+                            onClick={() =>
+                              handleQuickAddOpen(userGroupData.userGroup)
+                            }
+                          >
+                            <Zap className='h-4 w-4' />
+                          </Button>
                           <Button
                             variant='ghost'
                             size='sm'
@@ -720,6 +781,23 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
         onSave={handleOverrideSave}
         editData={groupOverrideEditData}
         userGroup={groupOverrideUserGroup}
+      />
+
+      {/* Quick Add Dialog */}
+      <QuickAddOverrideDialog
+        open={quickAddDialogOpen}
+        onOpenChange={setQuickAddDialogOpen}
+        onSave={handleQuickAddSave}
+        userGroup={quickAddUserGroup}
+        baseGroupRatioMap={baseGroupRatioMap}
+        selectableGroupNames={selectableGroupNames}
+        existingOverrides={
+          quickAddUserGroup
+            ? (groupGroupRatioList.find(
+                (g) => g.userGroup === quickAddUserGroup
+              )?.overrides ?? [])
+            : []
+        }
       />
     </div>
   )
@@ -1137,5 +1215,269 @@ function GroupOverrideDialog({
         </div>
       </div>
     </Dialog>
+  )
+}
+
+// Quick Add Override Dialog Component
+type QuickAddOverrideDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSave: (
+    userGroup: string,
+    overrides: Array<{ targetGroup: string; ratio: number }>
+  ) => void
+  userGroup: string | null
+  baseGroupRatioMap: Record<string, number>
+  selectableGroupNames: string[]
+  existingOverrides: Array<{ targetGroup: string; ratio: number }>
+}
+
+function roundRatio(value: number): number {
+  return Math.round(value * 1e6) / 1e6
+}
+
+function QuickAddOverrideDialog({
+  open,
+  onOpenChange,
+  onSave,
+  userGroup,
+  baseGroupRatioMap,
+  selectableGroupNames,
+  existingOverrides,
+}: QuickAddOverrideDialogProps) {
+  const { t } = useTranslation()
+  const [multiplier, setMultiplier] = useState('1')
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+
+  const existingMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const o of existingOverrides) map[o.targetGroup] = o.ratio
+    return map
+  }, [existingOverrides])
+
+  // On open: auto-read the user group's own base ratio as the multiplier,
+  // and pre-select target groups that don't yet have an override.
+  useEffect(() => {
+    if (!open || !userGroup) return
+    const ownRatio = baseGroupRatioMap[userGroup]
+    setMultiplier(
+      Number.isFinite(ownRatio) ? String(roundRatio(ownRatio)) : '1'
+    )
+    const nextSelected: Record<string, boolean> = {}
+    for (const name of selectableGroupNames) {
+      nextSelected[name] = !Object.prototype.hasOwnProperty.call(
+        existingMap,
+        name
+      )
+    }
+    setSelected(nextSelected)
+  }, [open, userGroup, baseGroupRatioMap, selectableGroupNames, existingMap])
+
+  const parsedMultiplier = parseFloat(multiplier)
+  const multiplierValid = !isNaN(parsedMultiplier) && parsedMultiplier >= 0
+
+  const rows = useMemo(() => {
+    return selectableGroupNames.map((name) => {
+      const base = Number.isFinite(baseGroupRatioMap[name])
+        ? baseGroupRatioMap[name]
+        : 1
+      const final = multiplierValid ? roundRatio(base * parsedMultiplier) : NaN
+      return {
+        name,
+        base: roundRatio(base),
+        final,
+        existing: Object.prototype.hasOwnProperty.call(existingMap, name)
+          ? existingMap[name]
+          : null,
+      }
+    })
+  }, [
+    selectableGroupNames,
+    baseGroupRatioMap,
+    parsedMultiplier,
+    multiplierValid,
+    existingMap,
+  ])
+
+  const selectedCount = rows.filter((r) => selected[r.name]).length
+
+  const handleSave = () => {
+    if (!userGroup || !multiplierValid) return
+    const overrides = rows
+      .filter((r) => selected[r.name] && Number.isFinite(r.final))
+      .map((r) => ({ targetGroup: r.name, ratio: r.final }))
+    if (overrides.length === 0) return
+    onSave(userGroup, overrides)
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t('Quick add from selectable groups')}
+      description={
+        userGroup
+          ? t(
+              'Pick selectable groups for "{{userGroup}}". The final ratio is the group base ratio multiplied by the multiplier below.',
+              { userGroup }
+            )
+          : ''
+      }
+      contentHeight='auto'
+      bodyClassName='space-y-4'
+      footer={
+        <>
+          <Button variant='outline' onClick={() => onOpenChange(false)}>
+            {t('Cancel')}
+          </Button>
+          <Button onClick={handleSave} disabled={selectedCount === 0}>
+            {t('Add {{count}} override', { count: selectedCount })}
+          </Button>
+        </>
+      }
+    >
+      <QuickAddBody
+        multiplier={multiplier}
+        setMultiplier={setMultiplier}
+        multiplierValid={multiplierValid}
+        rows={rows}
+        selected={selected}
+        setSelected={setSelected}
+      />
+    </Dialog>
+  )
+}
+
+type QuickAddRow = {
+  name: string
+  base: number
+  final: number
+  existing: number | null
+}
+
+type QuickAddBodyProps = {
+  multiplier: string
+  setMultiplier: (value: string) => void
+  multiplierValid: boolean
+  rows: QuickAddRow[]
+  selected: Record<string, boolean>
+  setSelected: (
+    updater: (prev: Record<string, boolean>) => Record<string, boolean>
+  ) => void
+}
+
+function QuickAddBody({
+  multiplier,
+  setMultiplier,
+  multiplierValid,
+  rows,
+  selected,
+  setSelected,
+}: QuickAddBodyProps) {
+  const { t } = useTranslation()
+
+  const allSelected = rows.length > 0 && rows.every((r) => selected[r.name])
+  const toggleAll = (checked: boolean) => {
+    setSelected(() => {
+      const next: Record<string, boolean> = {}
+      for (const r of rows) next[r.name] = checked
+      return next
+    })
+  }
+
+  return (
+    <div className='space-y-4 py-4'>
+      <div className='space-y-2'>
+        <Label>{t('Distribution multiplier')}</Label>
+        <Input
+          type='number'
+          min={0}
+          step={0.01}
+          value={multiplier}
+          onChange={(e) => setMultiplier(e.target.value)}
+          placeholder='1.33'
+          aria-invalid={!multiplierValid}
+        />
+        <p className='text-muted-foreground text-xs'>
+          {t(
+            'Auto-filled from this user group base ratio. Final ratio = group base ratio x this multiplier.'
+          )}
+        </p>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className='text-muted-foreground text-sm'>
+          {t(
+            'No user-selectable groups configured. Add groups in the pricing table first.'
+          )}
+        </p>
+      ) : (
+        <StaticDataTable
+          data={rows}
+          getRowKey={(row) => row.name}
+          columns={[
+            {
+              id: 'select',
+              header: (
+                <Checkbox
+                  checked={allSelected}
+                  onCheckedChange={(checked) => toggleAll(checked === true)}
+                  aria-label={t('Select all')}
+                />
+              ),
+              className: 'w-10',
+              cell: (row) => (
+                <Checkbox
+                  checked={!!selected[row.name]}
+                  onCheckedChange={(checked) =>
+                    setSelected((prev) => ({
+                      ...prev,
+                      [row.name]: checked === true,
+                    }))
+                  }
+                  aria-label={row.name}
+                />
+              ),
+            },
+            {
+              id: 'group',
+              header: t('Target group'),
+              cellClassName: 'font-medium',
+              cell: (row) => row.name,
+            },
+            {
+              id: 'base',
+              header: t('Base ratio'),
+              cell: (row) => row.base,
+            },
+            {
+              id: 'final',
+              header: t('Final ratio'),
+              cellClassName: 'font-semibold',
+              cell: (row) =>
+                Number.isFinite(row.final) ? (
+                  <span>{row.final}</span>
+                ) : (
+                  <span className='text-muted-foreground'>-</span>
+                ),
+            },
+            {
+              id: 'existing',
+              header: t('Current'),
+              cell: (row) =>
+                row.existing === null ? (
+                  <span className='text-muted-foreground text-xs'>
+                    {t('none')}
+                  </span>
+                ) : (
+                  <span className='text-muted-foreground text-xs'>
+                    {t('overwrite {{value}}', { value: row.existing })}
+                  </span>
+                ),
+            },
+          ]}
+        />
+      )}
+    </div>
   )
 }
