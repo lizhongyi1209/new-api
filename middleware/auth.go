@@ -212,6 +212,19 @@ func RequirePermission(permission authz.Permission) func(c *gin.Context) {
 	}
 }
 
+// ChannelWriteAuth 守卫渠道的增/删/改操作。
+// 当 LOCK_CHANNEL_TO_ROOT=true（分销子站）时收紧到仅 root，
+// 否则保持原行为（admin 即可）。
+func ChannelWriteAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		if common.LockChannelToRoot {
+			authHelper(c, common.RoleRootUser)
+		} else {
+			authHelper(c, common.RoleAdminUser)
+		}
+	}
+}
+
 func WssAuth(c *gin.Context) {
 
 }

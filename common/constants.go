@@ -218,6 +218,11 @@ var (
 // All duration's unit is seconds
 // Shouldn't larger then RateLimitKeyExpirationDuration
 var (
+	// LockChannelToRoot 为 true 时，渠道的增/删/改操作收紧到仅 RootAuth（超管）可用，
+	// 管理员(admin)仍可查看/测试渠道但无法增删改。用于分销子站：下级当 admin 管自己客户，
+	// 但只有站主(root)能配置上游渠道。主站默认 false，行为不变。
+	LockChannelToRoot bool
+
 	GlobalApiRateLimitEnable   bool
 	GlobalApiRateLimitNum      int
 	GlobalApiRateLimitDuration int64
