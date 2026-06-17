@@ -56,6 +56,8 @@ services:
       - ALIYUN_OSS_ENDPOINT=${ALIYUN_OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
       - ALIYUN_OSS_PUBLIC_BASE_URL=${ALIYUN_OSS_PUBLIC_BASE_URL:-https://img.o1key.cn}
       - ALIYUN_OSS_STORAGE_HOSTS=${ALIYUN_OSS_STORAGE_HOSTS:-api.o1key.cn}
+      # Kill-switch: when true, every upload that would target Aliyun OSS is redirected to R2
+      - DISABLE_ALIYUN_OSS=${DISABLE_ALIYUN_OSS:-false}
 #      - STREAMING_TIMEOUT=300
 #      - RELAY_IDLE_CONN_TIMEOUT=90  # Relay HTTP 客户端空闲连接超时时间，单位秒，默认跟随 Go 标准库，设置为0表示不限制 (Relay HTTP client idle keep-alive timeout in seconds, defaults to Go standard library; set 0 to disable)
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX

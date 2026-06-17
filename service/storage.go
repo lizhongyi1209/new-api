@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 
@@ -85,7 +87,19 @@ func GeneratePresignedUploadURLForHost(requestHost, filename, contentType string
 	return GeneratePresignedUploadURL(filename, contentType, maxSize)
 }
 
+// IsAliyunOSSBlocked reports whether Aliyun OSS uploads are administratively
+// disabled. When true, every storage path that would otherwise target OSS is
+// transparently redirected to R2. Toggle via the DISABLE_ALIYUN_OSS env var.
+func IsAliyunOSSBlocked() bool {
+	return common.GetEnvOrDefaultBool("DISABLE_ALIYUN_OSS", false)
+}
+
 func SelectImageStorageProvider(requestHost string) string {
+	// Kill-switch: force every would-be OSS upload onto R2.
+	if IsAliyunOSSBlocked() {
+		return ImageStorageProviderR2
+	}
+
 	host := normalizeRequestHost(requestHost)
 	ossHosts := firstNonEmptyString(os.Getenv("ALIYUN_OSS_STORAGE_HOSTS"), defaultAliyunOSSStorageHosts)
 	if hostMatchesCSV(host, ossHosts) {
@@ -208,6 +222,35 @@ func getAliyunOSSClient() (*s3.Client, *s3.PresignClient, error) {
 }
 
 func GenerateOSSPresignedUploadURL(filename, contentType string, maxSize int64) (*OSSPresignResult, error) {
+	// Kill-switch: redirect explicit OSS presign requests to R2, wrapping the
+	// R2 result in the OSS response shape so existing clients keep working.
+	if IsAliyunOSSBlocked() {
+		r2Result, err := GeneratePresignedUploadURL(filename, contentType, maxSize)
+		if err != nil {
+			return nil, err
+		}
+		headers := make(map[string]string)
+		if contentType != "" {
+			headers["Content-Type"] = contentType
+		}
+		// Derive object_key from public_url so the response matches the OSS shape
+		// (R2's PresignResult does not carry it explicitly).
+		objectKey := ""
+		r2Base := normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
+		if r2Base != "" {
+			objectKey = strings.TrimPrefix(r2Result.PublicURL, r2Base+"/")
+		}
+		return &OSSPresignResult{
+			Method:    "PUT",
+			UploadURL: r2Result.UploadURL,
+			Headers:   headers,
+			PublicURL: r2Result.PublicURL,
+			ObjectKey: objectKey,
+			ExpiresAt: r2Result.ExpiresAt,
+			Provider:  ImageStorageProviderR2,
+		}, nil
+	}
+
 	_, presignClient, err := getAliyunOSSClient()
 	if err != nil {
 		return nil, err
