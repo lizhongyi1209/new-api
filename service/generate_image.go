@@ -242,6 +242,9 @@ type geminiInlineImageRef struct {
 	data     string
 }
 
+// fitNanoBananaGenerateContentBody 按上游体积上限对内联图做缩放。
+// 注意：自「性能优先，超限直接打回」策略上线后，生产路径不再调用此函数
+// （见 ProcessGenerateImageTask），保留它仅供潜在的可配置回退与单测使用。
 func fitNanoBananaGenerateContentBody(ctx context.Context, requestBody map[string]interface{}, maxBytes int) ([]byte, bool, error) {
 	jsonData, err := common.Marshal(requestBody)
 	if err != nil {
@@ -308,9 +311,15 @@ func nanoBananaScaleForBodySize(currentBytes, targetBytes int) float64 {
 	if currentBytes <= 0 || targetBytes <= 0 || currentBytes <= targetBytes {
 		return 1
 	}
+	// Body size scales roughly with image pixel area, so sqrt(target/current)
+	// estimates the linear scale needed to hit the target in a single pass.
 	scale := math.Sqrt(float64(targetBytes) / float64(currentBytes))
-	if scale >= 0.98 {
-		return 0.98
+	// Enforce a minimum effective step: even when the body only slightly
+	// exceeds the limit, shrink by at least 5% per attempt so we converge in
+	// 1-2 rounds instead of crawling at 2%/round (each round re-decodes and
+	// re-encodes every inline image, which is the dominant CPU cost).
+	if scale >= 0.95 {
+		return 0.95
 	}
 	if scale < 0.01 {
 		return 0.01
@@ -726,20 +735,22 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 	}
 
 	var jsonData []byte
+	jsonData, err = common.Marshal(requestBody)
+	if err != nil {
+		failGenerateImageTask(task, fmt.Sprintf("序列化请求失败: %v", err))
+		return
+	}
+	// nano-banana 的上游有 20MB 请求体硬上限。为保证网关 CPU 不被图片缩放
+	// 拖垮，这里不再在服务端做 resize 救场，而是直接打回，让客户端自行压缩。
 	if isNanoBananaModelName(task.Properties.OriginModelName) || isNanoBananaModelName(relayInfo.UpstreamModelName) {
-		var resized bool
-		jsonData, resized, err = fitNanoBananaGenerateContentBody(ctx, requestBody, nanoBananaGenerateContentMaxBodyBytes)
-		if err != nil {
-			failGenerateImageTask(task, fmt.Sprintf("调整 nano-banana 请求体失败: %v", err))
-			return
-		}
-		if resized {
-			logger.LogInfo(ctx, fmt.Sprintf("generate_image(gemini): resized nano-banana request body to %d bytes", len(jsonData)))
-		}
-	} else {
-		jsonData, err = common.Marshal(requestBody)
-		if err != nil {
-			failGenerateImageTask(task, fmt.Sprintf("序列化请求失败: %v", err))
+		if len(jsonData) > nanoBananaGenerateContentMaxBodyBytes {
+			maxMB := nanoBananaGenerateContentMaxBodyBytes / 1024 / 1024
+			curMB := float64(len(jsonData)) / 1024 / 1024
+			// 请求体含 base64 编码（约放大 1.37 倍），据此估算原图体积，便于客户端定位。
+			rawMB := curMB / 1.37
+			failGenerateImageTask(task, fmt.Sprintf(
+				"请求体过大，请缩小图片体积。当前约 %.1f MB（含 base64 编码，原图约 %.1f MB），上限 %d MB。",
+				curMB, rawMB, maxMB))
 			return
 		}
 	}
