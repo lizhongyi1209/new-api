@@ -39,13 +39,14 @@ func TestSplitCredential(t *testing.T) {
 
 func TestModelNameToTencentCode(t *testing.T) {
 	cases := map[string]string{
-		"kling-v1":          "v1.0",
-		"kling-v1-6":        "v1.6",
-		"kling-v2-1-master": "v2.1m",
-		"kling-v3":          "v3.0",
-		"KLING-V3":          "v3.0",
-		"v1.6":              "v1.6", // raw code passes through
-		"unknown-model":     "unknown-model",
+		"kling-v1-t":          "v1.0",
+		"kling-v1-6-t":        "v1.6",
+		"kling-v2-1-master-t": "v2.1m",
+		"kling-v3-t":          "v3.0",
+		"KLING-V3-T":          "v3.0",
+		"kling-v3":            "v3.0", // suffix optional; bare name still maps
+		"v1.6":                "v1.6", // raw code passes through
+		"unknown-model":       "unknown-model",
 	}
 	for in, want := range cases {
 		if got := modelNameToTencentCode(in); got != want {

@@ -58,6 +58,9 @@ services:
       - ALIYUN_OSS_STORAGE_HOSTS=${ALIYUN_OSS_STORAGE_HOSTS:-api.o1key.cn}
       # Kill-switch: when true, every upload that would target Aliyun OSS is redirected to R2
       - DISABLE_ALIYUN_OSS=${DISABLE_ALIYUN_OSS:-false}
+      # Tencent VCLM (Kling -t models) post-paid markup over actual cost.
+      # FinalUnitDeduction is RMB (1 credit = ¥1); 1.0 = sell at cost, 1.5 = +50%.
+      - TENCENT_VIDEO_MARKUP=${TENCENT_VIDEO_MARKUP:-1.0}
 #      - STREAMING_TIMEOUT=300
 #      - RELAY_IDLE_CONN_TIMEOUT=90  # Relay HTTP 客户端空闲连接超时时间，单位秒，默认跟随 Go 标准库，设置为0表示不限制 (Relay HTTP client idle keep-alive timeout in seconds, defaults to Go standard library; set 0 to disable)
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX

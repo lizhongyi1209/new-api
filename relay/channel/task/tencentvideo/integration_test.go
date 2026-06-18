@@ -71,7 +71,10 @@ func TestIntegrationSubmitAndPoll(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse describe: %v\nbody=%s", err, body)
 		}
-		t.Logf("status=%s progress=%s url=%s", ti.Status, ti.Progress, ti.Url)
+		var dr describeResponse
+		_ = common.Unmarshal(body, &dr)
+		t.Logf("status=%s progress=%s FinalUnitDeduction=%q tokens=%d url=%s",
+			ti.Status, ti.Progress, dr.Response.FinalUnitDeduction, ti.TotalTokens, ti.Url)
 		if ti.Status == "SUCCESS" {
 			if ti.Url == "" {
 				t.Fatalf("success but no video url, body=%s", body)

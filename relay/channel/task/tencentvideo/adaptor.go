@@ -157,18 +157,26 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 // GetModelList exposes the friendly model names users configure on the channel.
 // They are mapped to Tencent's short codes (v1.0, v1.6, v3.0, …) at request time.
+// GetModelList exposes the model names users configure on the channel.
+// The "-t" suffix marks these as the Tencent-channel variants so they do NOT
+// collide with the official Kling channel's model names (kling-v3 etc.), which
+// keeps the official channel's pricing for online users untouched. The suffix
+// is stripped before mapping to Tencent's short codes.
 func (a *TaskAdaptor) GetModelList() []string {
 	return []string{
-		"kling-v1", "kling-v1-5", "kling-v1-6",
-		"kling-v2-master", "kling-v2-1", "kling-v2-1-master",
-		"kling-v2-5-turbo", "kling-v2-6", "kling-v3",
+		"kling-v1-t", "kling-v1-5-t", "kling-v1-6-t",
+		"kling-v2-master-t", "kling-v2-1-t", "kling-v2-1-master-t",
+		"kling-v2-5-turbo-t", "kling-v2-6-t", "kling-v3-t",
 	}
 }
 
-// modelNameToTencentCode maps the friendly model name to Tencent's Model code.
-// Unknown names are passed through unchanged so a raw code (e.g. "v1.6") also works.
+// modelNameToTencentCode maps the model name to Tencent's Model code.
+// The "-t" channel suffix is stripped first; unknown names pass through
+// unchanged so a raw code (e.g. "v1.6") also works.
 func modelNameToTencentCode(name string) string {
-	switch strings.ToLower(strings.TrimSpace(name)) {
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, "-t")
+	switch n {
 	case "kling-v1", "kling-v1-0":
 		return "v1.0"
 	case "kling-v1-5":

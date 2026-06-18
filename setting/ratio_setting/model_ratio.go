@@ -263,6 +263,23 @@ var defaultModelRatio = map[string]float64{
 	"deepseek-ai/DeepSeek-R1":                 0.8,
 	"deepseek-ai/DeepSeek-V3-0324":            0.8,
 	"deepseek-ai/DeepSeek-V3.1":               0.8,
+	// Tencent VCLM (Kling) image-to-video models — billed post-paid by actual
+	// FinalUnitDeduction in the tencentvideo adaptor's AdjustBillingOnComplete.
+	// The "-t" suffix isolates them from the official Kling channel's model
+	// names so online users' pricing is unaffected. This ratio is a code-level
+	// default (overridable in the UI) that only sizes the small submit-time
+	// deposit; it is NOT the final price. Keeping a ratio here (rather than a
+	// fixed price) makes ModelPriceHelperPerCall pass the submit-gate while
+	// leaving PerCallBilling=false so completion settlement runs.
+	"kling-v1-t":          1,
+	"kling-v1-5-t":        1,
+	"kling-v1-6-t":        1,
+	"kling-v2-master-t":   1,
+	"kling-v2-1-t":        1,
+	"kling-v2-1-master-t": 1,
+	"kling-v2-5-turbo-t":  1,
+	"kling-v2-6-t":        1,
+	"kling-v3-t":          1,
 }
 
 var defaultModelPrice = map[string]float64{
