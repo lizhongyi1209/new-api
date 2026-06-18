@@ -52,9 +52,10 @@ func bindAndValidatePresignRequest(c *gin.Context, req *presignRequest) bool {
 	}
 
 	if !strings.HasPrefix(req.ContentType, "image/") &&
-		!strings.HasPrefix(req.ContentType, "video/") {
+		!strings.HasPrefix(req.ContentType, "video/") &&
+		!strings.HasPrefix(req.ContentType, "audio/") {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "只支持图片或视频类型 (image/*, video/*)",
+			"error": "只支持图片、视频或音频类型 (image/*, video/*, audio/*)",
 		})
 		return false
 	}
