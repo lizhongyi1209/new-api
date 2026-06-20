@@ -52,6 +52,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
+	// Record non-sensitive task request parameters (mode/size/duration/prompt)
+	// so they are visible in the usage log. Applies to all video task channels.
+	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		if req.Prompt != "" {
+			other["prompt"] = req.Prompt
+		}
+		if req.Mode != "" {
+			other["mode"] = req.Mode
+		}
+		if req.Size != "" {
+			other["size"] = req.Size
+		}
+		if req.Duration > 0 {
+			other["duration"] = req.Duration
+		}
+	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,

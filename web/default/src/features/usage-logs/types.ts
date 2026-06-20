@@ -201,6 +201,11 @@ export interface LogOtherData {
   is_task?: boolean
   task_id?: string
   reason?: string
+  // Video task request params (image/video generation), non-sensitive only.
+  prompt?: string
+  mode?: string
+  size?: string
+  duration?: number
   // Subscription billing fields
   subscription_plan_id?: string
   subscription_plan_title?: string

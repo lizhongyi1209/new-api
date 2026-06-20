@@ -1054,6 +1054,24 @@ export function DetailsDialog(props: DetailsDialogProps) {
             </DetailSection>
           )}
 
+        {/* Video task request params (image/video generation) */}
+        {other &&
+          (other.prompt || other.mode || other.size || other.duration) && (
+            <DetailSection label={t('Video Params')}>
+              {other.prompt && (
+                <DetailRow label={t('Prompt')} value={other.prompt} />
+              )}
+              {other.mode && <DetailRow label={t('Mode')} value={other.mode} />}
+              {other.size && <DetailRow label={t('Size')} value={other.size} />}
+              {other.duration != null && (
+                <DetailRow
+                  label={t('Duration')}
+                  value={`${other.duration}s`}
+                />
+              )}
+            </DetailSection>
+          )}
+
         {/* Subscription billing details */}
         {isSubscription && other && (
           <DetailSection label={t('Subscription Billing')}>
