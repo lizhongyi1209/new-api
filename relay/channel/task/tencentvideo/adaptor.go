@@ -39,6 +39,9 @@ const (
 	actionSubmit   = "SubmitImageToVideoJob"
 	actionDescribe = "DescribeImageToVideoJob"
 
+	actionMotionSubmit   = "SubmitMotionControlKlingJob"
+	actionMotionDescribe = "DescribeMotionControlKlingJob"
+
 	// gin context keys
 	ctxKeyBody   = "tencentvideo_body_bytes"
 	ctxKeyRegion = "tencentvideo_region"
@@ -103,6 +106,22 @@ type submitPayload struct {
 	LogoAdd        *int              `json:"LogoAdd,omitempty"`
 }
 
+// motionPayload is the SubmitMotionControlKlingJob request body. Unlike
+// image2video, Model uses full names (kling-v2-6 / kling-v3) and Image is a
+// plain URL string (not an {Url} object).
+type motionPayload struct {
+	Model                string        `json:"Model,omitempty"`
+	Prompt               string        `json:"Prompt,omitempty"`
+	Image                string        `json:"Image,omitempty"`
+	Video                string        `json:"Video,omitempty"`
+	Mode                 string        `json:"Mode,omitempty"`
+	ElementList          []elementItem `json:"ElementList,omitempty"`
+	KeepOriginalSound    string        `json:"KeepOriginalSound,omitempty"`
+	CharacterOrientation string        `json:"CharacterOrientation,omitempty"`
+	CallbackUrl          string        `json:"CallbackUrl,omitempty"`
+	LogoAdd              *int          `json:"LogoAdd,omitempty"`
+}
+
 // submitResponse is the {"Response":{...}} envelope for SubmitImageToVideoJob.
 type submitResponse struct {
 	Response struct {
@@ -155,18 +174,44 @@ func (a *TaskAdaptor) GetChannelName() string {
 	return "tencentvideo"
 }
 
-// GetModelList exposes the friendly model names users configure on the channel.
-// They are mapped to Tencent's short codes (v1.0, v1.6, v3.0, …) at request time.
 // GetModelList exposes the model names users configure on the channel.
 // The "-t" suffix marks these as the Tencent-channel variants so they do NOT
 // collide with the official Kling channel's model names (kling-v3 etc.), which
 // keeps the official channel's pricing for online users untouched. The suffix
 // is stripped before mapping to Tencent's short codes.
+//
+// "-motion-t" names route to the motion-control API (SubmitMotionControlKlingJob).
 func (a *TaskAdaptor) GetModelList() []string {
 	return []string{
 		"kling-v1-t", "kling-v1-5-t", "kling-v1-6-t",
 		"kling-v2-master-t", "kling-v2-1-t", "kling-v2-1-master-t",
 		"kling-v2-5-turbo-t", "kling-v2-6-t", "kling-v3-t",
+		"kling-v2-6-motion-t", "kling-v3-motion-t",
+	}
+}
+
+// isMotionControlModel reports whether the model name selects the
+// motion-control API (carries a "-motion" marker before the "-t" suffix).
+func isMotionControlModel(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, "-t")
+	return strings.HasSuffix(n, "-motion")
+}
+
+// modelNameToMotionModel maps a motion-control model name to Tencent's Model
+// value. Motion control uses full names (kling-v2-6 / kling-v3), not the short
+// codes used by image2video.
+func modelNameToMotionModel(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, "-t")
+	n = strings.TrimSuffix(n, "-motion")
+	switch n {
+	case "kling-v2-6":
+		return "kling-v2-6"
+	case "kling-v3", "kling-v3-0":
+		return "kling-v3"
+	default:
+		return n
 	}
 }
 
@@ -201,15 +246,20 @@ func modelNameToTencentCode(name string) string {
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
-	if err := relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate); err != nil {
+	action := constant.TaskActionGenerate
+	if isMotionControlModel(info.OriginModelName) {
+		action = constant.TaskActionMotionControl
+	}
+	if err := relaycommon.ValidateBasicTaskRequest(c, info, action); err != nil {
 		return err
 	}
-	info.Action = constant.TaskActionGenerate
+	info.Action = action
 	return nil
 }
 
-// BuildRequestBody converts the unified task request into a Tencent
-// SubmitImageToVideoJob payload and caches the exact bytes for TC3 signing.
+// BuildRequestBody converts the unified task request into the Tencent submit
+// payload (image2video or motion-control depending on action) and caches the
+// exact bytes for TC3 signing.
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
 	v, exists := c.Get("task_request")
 	if !exists {
@@ -217,7 +267,13 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	}
 	req := v.(relaycommon.TaskSubmitReq)
 
-	payload, err := a.convertToSubmitPayload(&req, info)
+	var payload any
+	var err error
+	if info.Action == constant.TaskActionMotionControl {
+		payload, err = a.convertToMotionPayload(&req, info)
+	} else {
+		payload, err = a.convertToSubmitPayload(&req, info)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +284,41 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	// Cache the marshaled body so BuildRequestHeader can sign the exact bytes.
 	c.Set(ctxKeyBody, data)
 	return bytes.NewReader(data), nil
+}
+
+// convertToMotionPayload builds a SubmitMotionControlKlingJob body. Image and
+// Video are required; both are plain URL strings. Video comes from metadata
+// ("video" or "Video") since the unified request has no top-level video field.
+func (a *TaskAdaptor) convertToMotionPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*motionPayload, error) {
+	p := motionPayload{
+		Model:  modelNameToMotionModel(info.UpstreamModelName),
+		Prompt: req.Prompt,
+		Mode:   taskcommon.DefaultString(req.Mode, "std"),
+	}
+	if len(req.Images) > 0 && strings.TrimSpace(req.Images[0]) != "" {
+		p.Image = req.Images[0]
+	}
+	// Optional region override (used in TC3 credential scope, not the body).
+	if v, ok := req.Metadata["region"]; ok {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			a.region = strings.TrimSpace(s)
+		}
+	}
+	// metadata supplies Video and any other PascalCase Tencent fields
+	// (Video, KeepOriginalSound, CharacterOrientation, ElementList, LogoAdd).
+	if err := taskcommon.UnmarshalMetadata(req.Metadata, &p); err != nil {
+		return nil, errors.Wrap(err, "unmarshal metadata failed")
+	}
+	// Re-apply the channel-mapped model so metadata cannot bypass billing.
+	p.Model = modelNameToMotionModel(info.UpstreamModelName)
+
+	if strings.TrimSpace(p.Image) == "" {
+		return nil, fmt.Errorf("image is required for motion control")
+	}
+	if strings.TrimSpace(p.Video) == "" {
+		return nil, fmt.Errorf("video is required for motion control (pass it in metadata.Video)")
+	}
+	return &p, nil
 }
 
 func (a *TaskAdaptor) convertToSubmitPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*submitPayload, error) {
@@ -293,7 +384,11 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 	if err != nil {
 		return err
 	}
-	a.applyTC3Headers(req, actionSubmit, payload, secretId, secretKey, a.region)
+	action := actionSubmit
+	if info.Action == constant.TaskActionMotionControl {
+		action = actionMotionSubmit
+	}
+	a.applyTC3Headers(req, action, payload, secretId, secretKey, a.region)
 	return nil
 }
 
@@ -334,7 +429,8 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	return sResp.Response.JobId, responseBody, nil
 }
 
-// FetchTask queries DescribeImageToVideoJob for the given JobId.
+// FetchTask queries the Describe endpoint (image2video or motion-control,
+// chosen by the task's action) for the given JobId.
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
 	if !ok || taskID == "" {
@@ -351,6 +447,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		region = strings.TrimSpace(r)
 	}
 
+	action := actionDescribe
+	if act, ok := body["action"].(string); ok && act == constant.TaskActionMotionControl {
+		action = actionMotionDescribe
+	}
+
 	payload, err := common.Marshal(map[string]string{"JobId": taskID})
 	if err != nil {
 		return nil, err
@@ -360,7 +461,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	if err != nil {
 		return nil, err
 	}
-	a.applyTC3Headers(req, actionDescribe, payload, secretId, secretKey, region)
+	a.applyTC3Headers(req, action, payload, secretId, secretKey, region)
 
 	client, err := service.GetHttpClientWithProxy(proxy)
 	if err != nil {

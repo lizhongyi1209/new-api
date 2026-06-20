@@ -123,3 +123,74 @@ func doCall(t *testing.T, a *TaskAdaptor, client *http.Client, action string, pa
 	body := rawCall(t, a, client, action, payload, region, id, key)
 	return extract(body)
 }
+
+// TestIntegrationMotionControl exercises SubmitMotionControlKlingJob /
+// DescribeMotionControlKlingJob. Skipped unless creds + an image + a video URL
+// are provided:
+//
+//	TC_SECRET_ID, TC_SECRET_KEY
+//	TC_TEST_IMAGE_URL  — reference image (the character)
+//	TC_TEST_VIDEO_URL  — reference action video (mp4/mov, China-reachable)
+//	TC_TEST_MOTION_MODEL — optional, default kling-v3
+func TestIntegrationMotionControl(t *testing.T) {
+	secretID := os.Getenv("TC_SECRET_ID")
+	secretKey := os.Getenv("TC_SECRET_KEY")
+	imageURL := os.Getenv("TC_TEST_IMAGE_URL")
+	videoURL := os.Getenv("TC_TEST_VIDEO_URL")
+	if secretID == "" || secretKey == "" || imageURL == "" || videoURL == "" {
+		t.Skip("set TC_SECRET_ID, TC_SECRET_KEY, TC_TEST_IMAGE_URL and TC_TEST_VIDEO_URL to run the motion-control test")
+	}
+	region := tcDefaultRegion
+	if r := os.Getenv("TC_TEST_REGION"); r != "" {
+		region = r
+	}
+	a := &TaskAdaptor{baseURL: "https://" + tcDefaultHost, region: region}
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	submit := motionPayload{
+		Model:                modelNameToMotionModel(getenvDefault("TC_TEST_MOTION_MODEL", "kling-v3")),
+		Prompt:               "keep the character action consistent with the reference video",
+		Image:                imageURL,
+		Video:                videoURL,
+		Mode:                 "std",
+		CharacterOrientation: "image",
+	}
+	jobID := doCall(t, a, client, actionMotionSubmit, submit, region, secretID, secretKey, func(body []byte) string {
+		var sr submitResponse
+		if err := common.Unmarshal(body, &sr); err != nil {
+			t.Fatalf("unmarshal motion submit resp: %v\nbody=%s", err, body)
+		}
+		if sr.Response.Error != nil && sr.Response.Error.Code != "" {
+			t.Fatalf("motion submit error: %s: %s", sr.Response.Error.Code, sr.Response.Error.Message)
+		}
+		if sr.Response.JobId == "" {
+			t.Fatalf("empty JobId, body=%s", body)
+		}
+		return sr.Response.JobId
+	})
+	t.Logf("motion submitted JobId=%s", jobID)
+
+	deadline := time.Now().Add(15 * time.Minute)
+	for time.Now().Before(deadline) {
+		time.Sleep(30 * time.Second)
+		body := rawCall(t, a, client, actionMotionDescribe, map[string]string{"JobId": jobID}, region, secretID, secretKey)
+		ti, err := a.ParseTaskResult(body)
+		if err != nil {
+			t.Fatalf("parse motion describe: %v\nbody=%s", err, body)
+		}
+		var dr describeResponse
+		_ = common.Unmarshal(body, &dr)
+		t.Logf("status=%s FinalUnitDeduction=%q duration=%q url=%s",
+			ti.Status, dr.Response.FinalUnitDeduction, dr.Response.Duration, ti.Url)
+		if ti.Status == "SUCCESS" {
+			if ti.Url == "" {
+				t.Fatalf("success but no video url, body=%s", body)
+			}
+			return
+		}
+		if ti.Status == "FAILURE" {
+			t.Fatalf("motion task failed: %s", ti.Reason)
+		}
+	}
+	t.Fatal("motion polling timed out after 15m")
+}

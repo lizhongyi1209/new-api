@@ -55,6 +55,37 @@ func TestModelNameToTencentCode(t *testing.T) {
 	}
 }
 
+func TestMotionControlModelRouting(t *testing.T) {
+	// isMotionControlModel: only -motion(-t) names route to motion control
+	motion := map[string]bool{
+		"kling-v3-motion-t":   true,
+		"kling-v2-6-motion-t": true,
+		"kling-v3-motion":     true,
+		"KLING-V3-MOTION-T":   true,
+		"kling-v3-t":          false,
+		"kling-v2-6-t":        false,
+		"kling-v3":            false,
+	}
+	for in, want := range motion {
+		if got := isMotionControlModel(in); got != want {
+			t.Errorf("isMotionControlModel(%q) = %v, want %v", in, got, want)
+		}
+	}
+
+	// modelNameToMotionModel: full names (kling-v2-6 / kling-v3), suffixes stripped
+	mapping := map[string]string{
+		"kling-v3-motion-t":   "kling-v3",
+		"kling-v2-6-motion-t": "kling-v2-6",
+		"kling-v3-motion":     "kling-v3",
+		"KLING-V3-MOTION-T":   "kling-v3",
+	}
+	for in, want := range mapping {
+		if got := modelNameToMotionModel(in); got != want {
+			t.Errorf("modelNameToMotionModel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestApplyTC3Headers(t *testing.T) {
 	a := &TaskAdaptor{baseURL: "https://vclm.tencentcloudapi.com"}
 	req, _ := http.NewRequest(http.MethodPost, "https://vclm.tencentcloudapi.com/", nil)
