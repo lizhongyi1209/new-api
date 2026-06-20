@@ -250,6 +250,7 @@ func SetApiRouter(router *gin.Engine) {
 		aigcElementRoute.Use(middleware.TokenOrUserAuth())
 		{
 			aigcElementRoute.GET("/", controller.GetAigcElements)
+			aigcElementRoute.GET("/mine", controller.ListMyAigcElements)
 			aigcElementRoute.POST("/", controller.CreateAigcElement)
 			aigcElementRoute.POST("/upload", controller.UploadAigcElementImage)
 			aigcElementRoute.POST("/:id/refresh", controller.RefreshAigcElement)

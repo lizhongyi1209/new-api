@@ -306,6 +306,50 @@ func ownerScope(c *gin.Context) int {
 	return c.GetInt("id")
 }
 
+// clientAigcElement is the slim shape returned to API clients picking a subject
+// to reference in a video request: the display name (used as the 【@Name】 tag
+// in the prompt), the element id (sent in ElementList), the frontal reference
+// image (for a visual picker), and the status.
+type clientAigcElement struct {
+	ElementId     string `json:"element_id"`
+	Name          string `json:"name"`
+	FrontalImage  string `json:"frontal_image"`
+	ReferenceType string `json:"reference_type"`
+	Status        string `json:"status"`
+}
+
+// ListMyAigcElements returns the subjects owned by the current token's account,
+// so a client holding an API token can fetch its own subjects and reference
+// them when generating a video. By default only succeeded subjects are
+// returned; pass ?include_all=true to also see pending/failed ones.
+//
+// Usage flow for the client:
+//  1. GET /api/aigc_element/mine  -> get {element_id, name, frontal_image}
+//  2. when generating a video, put the element_id into metadata.ElementList and
+//     reference the subject in the prompt as 【@<name>】.
+func ListMyAigcElements(c *gin.Context) {
+	userId := c.GetInt("id")
+	onlySucceed := c.Query("include_all") != "true"
+
+	elements, err := model.ListUserAigcElements(userId, onlySucceed)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	items := make([]clientAigcElement, 0, len(elements))
+	for _, e := range elements {
+		items = append(items, clientAigcElement{
+			ElementId:     e.ElementId,
+			Name:          e.Name,
+			FrontalImage:  e.FrontalImage,
+			ReferenceType: e.ReferenceType,
+			Status:        e.Status,
+		})
+	}
+	common.ApiSuccess(c, items)
+}
+
 // RefreshAigcElement re-queries Tencent for the element's latest status/detail
 // and updates the local row.
 func RefreshAigcElement(c *gin.Context) {

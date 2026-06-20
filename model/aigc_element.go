@@ -87,6 +87,20 @@ func GetUserAigcElements(userId, startIdx, num int) ([]*AigcElement, int64, erro
 	return elements, total, err
 }
 
+// ListUserAigcElements returns all of a user's elements without pagination,
+// newest first. When onlySucceed is true, only subjects that finished creating
+// (status = succeed) are returned — these are the ones usable in a video
+// request. Intended for the client "pick a subject" flow.
+func ListUserAigcElements(userId int, onlySucceed bool) ([]*AigcElement, error) {
+	var elements []*AigcElement
+	tx := DB.Where("user_id = ?", userId)
+	if onlySucceed {
+		tx = tx.Where("status = ?", "succeed")
+	}
+	err := tx.Order("id desc").Find(&elements).Error
+	return elements, err
+}
+
 // GetAllAigcElements lists every user's elements (admin), newest first, with the
 // owner's username joined in.
 func GetAllAigcElements(startIdx, num int) ([]*AigcElement, int64, error) {
