@@ -77,7 +77,7 @@ type multiPromptItem struct {
 }
 
 type elementItem struct {
-	ElementId int64 `json:"ElementId,omitempty"`
+	ElementId string `json:"ElementId,omitempty"`
 }
 
 type voiceItem struct {

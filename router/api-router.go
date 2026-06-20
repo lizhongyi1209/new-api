@@ -243,6 +243,19 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch/group", controller.UpdateTokenBatchGroup)
 		}
 
+		// Tencent VCLM 主体管理 (AIGC Element). Callable by API-token clients and
+		// console sessions alike; subjects are owned by the token's main account.
+		// Admins can list every user's subjects via ?all=true.
+		aigcElementRoute := apiRouter.Group("/aigc_element")
+		aigcElementRoute.Use(middleware.TokenOrUserAuth())
+		{
+			aigcElementRoute.GET("/", controller.GetAigcElements)
+			aigcElementRoute.POST("/", controller.CreateAigcElement)
+			aigcElementRoute.POST("/upload", controller.UploadAigcElementImage)
+			aigcElementRoute.POST("/:id/refresh", controller.RefreshAigcElement)
+			aigcElementRoute.DELETE("/:id", controller.DeleteAigcElement)
+		}
+
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{
