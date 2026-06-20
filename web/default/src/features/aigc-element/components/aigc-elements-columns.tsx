@@ -22,6 +22,11 @@ import { formatTimestampToDate } from '@/lib/format'
 import { StatusBadge } from '@/components/status-badge'
 import { TableId } from '@/components/table-id'
 import { MaskedValueDisplay } from '@/components/masked-value-display'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { ELEMENT_STATUSES } from '../constants'
 import type { AigcElement } from '../types'
 import { DataTableRowActions } from './data-table-row-actions'
@@ -74,7 +79,8 @@ export function useAigcElementsColumns(): ColumnDef<AigcElement>[] {
       cell: ({ row }) => {
         const status = String(row.getValue('status'))
         const config = ELEMENT_STATUSES[status]
-        return (
+        const failReason = row.original.fail_reason
+        const badge = (
           <StatusBadge
             label={config ? t(config.labelKey) : status}
             variant={config?.variant ?? 'neutral'}
@@ -82,6 +88,20 @@ export function useAigcElementsColumns(): ColumnDef<AigcElement>[] {
             className='-ml-1.5'
           />
         )
+        // On failure, surface the reason in a tooltip so users can diagnose.
+        if (status === 'failed' && failReason) {
+          return (
+            <Tooltip>
+              <TooltipTrigger render={<span className='cursor-help' />}>
+                {badge}
+              </TooltipTrigger>
+              <TooltipContent className='max-w-[320px]'>
+                <p className='text-xs'>{failReason}</p>
+              </TooltipContent>
+            </Tooltip>
+          )
+        }
+        return badge
       },
       size: 110,
     },

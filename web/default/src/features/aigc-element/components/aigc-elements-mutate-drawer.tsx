@@ -54,8 +54,9 @@ import {
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
 } from '@/components/drawer-layout'
+import { Checkbox } from '@/components/ui/checkbox'
 import { createAigcElement } from '../api'
-import { REFERENCE_TYPE, SUCCESS_MESSAGES } from '../constants'
+import { ELEMENT_TAGS, REFERENCE_TYPE, SUCCESS_MESSAGES } from '../constants'
 import type { CreateAigcElementPayload } from '../types'
 import { useAigcElements } from './aigc-elements-provider'
 import { ImageUploadButton } from './image-upload-button'
@@ -96,6 +97,7 @@ export function AigcElementsMutateDrawer({
     refer_images: z.string().optional(),
     video_list: z.string().optional(),
     element_voice_id: z.string().optional(),
+    tag_ids: z.array(z.string()).optional(),
   })
   type FormValues = z.infer<typeof formSchema>
 
@@ -108,6 +110,7 @@ export function AigcElementsMutateDrawer({
     refer_images: '',
     video_list: '',
     element_voice_id: '',
+    tag_ids: [],
   }
 
   const form = useForm<FormValues>({
@@ -154,6 +157,7 @@ export function AigcElementsMutateDrawer({
       description: data.description.trim(),
       reference_type: data.reference_type,
       element_voice_id: data.element_voice_id?.trim() || undefined,
+      tag_ids: data.tag_ids && data.tag_ids.length > 0 ? data.tag_ids : undefined,
     }
     const channelId = Number.parseInt(data.channel_id || '', 10)
     if (!Number.isNaN(channelId) && channelId > 0) {
@@ -351,9 +355,18 @@ export function AigcElementsMutateDrawer({
                           placeholder='https://example.com/video.mp4'
                         />
                       </FormControl>
-                      <FormDescription>
-                        {t('A single 3-8s, 1080P, 16:9 or 9:16 MP4/MOV video (max 200MB)')}
-                      </FormDescription>
+                      <div className='bg-muted/50 text-muted-foreground rounded-md p-2 text-xs leading-relaxed'>
+                        <div className='text-foreground mb-1 font-medium'>
+                          {t('Video requirements')}
+                        </div>
+                        <ul className='list-disc space-y-0.5 pl-4'>
+                          <li>{t('Format: MP4 or MOV, max 200MB, one video only')}</li>
+                          <li>{t('Duration 3-8s, 1080P, aspect ratio 16:9 or 9:16')}</li>
+                          <li>{t('Only realistic human figures are supported')}</li>
+                          <li>{t('Video subjects work only on kling-video-o3 and later models')}</li>
+                          <li>{t('A video with human voice triggers voice customization')}</li>
+                        </ul>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -372,6 +385,44 @@ export function AigcElementsMutateDrawer({
                         placeholder={t('Bind an existing voice library ID')}
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='tag_ids'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Tags (optional)')}</FormLabel>
+                    <div className='grid grid-cols-2 gap-2 sm:grid-cols-4'>
+                      {ELEMENT_TAGS.map((tag) => {
+                        const checked = (field.value || []).includes(tag.id)
+                        return (
+                          <label
+                            key={tag.id}
+                            className='flex cursor-pointer items-center gap-2 text-sm'
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(v) => {
+                                const cur = field.value || []
+                                field.onChange(
+                                  v
+                                    ? [...cur, tag.id]
+                                    : cur.filter((x) => x !== tag.id)
+                                )
+                              }}
+                            />
+                            {t(tag.labelKey)}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    <FormDescription>
+                      {t('Categorize the subject; helps organize and filter subjects')}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

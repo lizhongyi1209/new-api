@@ -15,5 +15,10 @@
   "1 to 3 additional images, jpg/jpeg/png, max 10MB each, one URL per line": "1 to 3 additional images, jpg/jpeg/png, max 10MB each, one URL per line",
   "Click to preview": "Click to preview",
   "One frontal reference image, jpg/jpeg/png, max 10MB (upload a local file or paste a public URL)": "One frontal reference image, jpg/jpeg/png, max 10MB (upload a local file or paste a public URL)",
-  "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)": "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)"
+  "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)": "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)",
+  "Categorize the subject; helps organize and filter subjects": "Categorize the subject; helps organize and filter subjects",
+  "Format: MP4 or MOV, max 200MB, one video only": "Format: MP4 or MOV, max 200MB, one video only",
+  "Duration 3-8s, 1080P, aspect ratio 16:9 or 9:16": "Duration 3-8s, 1080P, aspect ratio 16:9 or 9:16",
+  "Video subjects work only on kling-video-o3 and later models": "Video subjects work only on kling-video-o3 and later models",
+  "A video with human voice triggers voice customization": "A video with human voice triggers voice customization"
 }

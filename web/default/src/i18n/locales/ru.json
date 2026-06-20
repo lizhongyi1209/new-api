@@ -5060,6 +5060,14 @@
     "{{name}} uploaded": "{{name}} uploaded",
     "Copy @Name": "Copy @Name",
     "Prompt tag copied": "Prompt tag copied",
-    "Element ID copied": "Element ID copied"
+    "Element ID copied": "Element ID copied",
+    "Tags (optional)": "Tags (optional)",
+    "Categorize the subject; helps organize and filter subjects": "Categorize the subject; helps organize and filter subjects",
+    "Video requirements": "Video requirements",
+    "Format: MP4 or MOV, max 200MB, one video only": "Format: MP4 or MOV, max 200MB, one video only",
+    "Duration 3-8s, 1080P, aspect ratio 16:9 or 9:16": "Duration 3-8s, 1080P, aspect ratio 16:9 or 9:16",
+    "Only realistic human figures are supported": "Only realistic human figures are supported",
+    "Video subjects work only on kling-video-o3 and later models": "Video subjects work only on kling-video-o3 and later models",
+    "A video with human voice triggers voice customization": "A video with human voice triggers voice customization"
   }
 }
