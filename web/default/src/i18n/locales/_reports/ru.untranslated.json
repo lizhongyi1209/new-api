@@ -68,5 +68,8 @@
   "Frontal preview": "Frontal preview",
   "Reference Images": "Reference Images",
   "One frontal reference image, jpg/jpeg/png, max 10MB (upload a local file or paste a public URL)": "One frontal reference image, jpg/jpeg/png, max 10MB (upload a local file or paste a public URL)",
-  "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)": "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)"
+  "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)": "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)",
+  "Copy @Name": "Copy @Name",
+  "Prompt tag copied": "Prompt tag copied",
+  "Element ID copied": "Element ID copied"
 }

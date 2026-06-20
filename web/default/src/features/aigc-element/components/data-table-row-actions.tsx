@@ -21,10 +21,13 @@ import type { Row } from '@tanstack/react-table'
 import {
   RefreshCw,
   Trash2,
+  Copy,
+  AtSign,
   MoreHorizontal as DotsHorizontalIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -49,6 +52,7 @@ export function DataTableRowActions<TData>({
   const { t } = useTranslation()
   const element = aigcElementSchema.parse(row.original)
   const { setOpen, setCurrentRow, triggerRefresh } = useAigcElements()
+  const { copyToClipboard } = useCopyToClipboard({ notify: false })
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefresh = async () => {
@@ -68,6 +72,21 @@ export function DataTableRowActions<TData>({
     }
   }
 
+  // Copy the 【@Name】 tag used to reference this subject inside a video prompt.
+  const handleCopyTag = async () => {
+    const ok = await copyToClipboard(`【@${element.name}】`)
+    if (ok) {toast.success(t('Prompt tag copied'))}
+  }
+
+  const handleCopyElementId = async () => {
+    if (!element.element_id) {
+      toast.error(t('This subject has no Element ID yet'))
+      return
+    }
+    const ok = await copyToClipboard(element.element_id)
+    if (ok) {toast.success(t('Element ID copied'))}
+  }
+
   return (
     <div className='-ml-2'>
       <DropdownMenu modal={false}>
@@ -82,7 +101,20 @@ export function DataTableRowActions<TData>({
           <DotsHorizontalIcon className='h-4 w-4' />
           <span className='sr-only'>{t('Open menu')}</span>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align='end' className='w-[160px]'>
+        <DropdownMenuContent align='end' className='w-[180px]'>
+          <DropdownMenuItem onClick={handleCopyTag}>
+            {t('Copy @Name')}
+            <DropdownMenuShortcut>
+              <AtSign size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={handleCopyElementId}>
+            {t('Copy Element ID')}
+            <DropdownMenuShortcut>
+              <Copy size={16} />
+            </DropdownMenuShortcut>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleRefresh} disabled={isRefreshing}>
             {t('Refresh Status')}
             <DropdownMenuShortcut>

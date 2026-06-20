@@ -5057,6 +5057,9 @@
     "One frontal reference image, jpg/jpeg/png, max 10MB (upload a local file or paste a public URL)": "One frontal reference image, jpg/jpeg/png, max 10MB (upload a local file or paste a public URL)",
     "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)": "1 to 3 additional images, jpg/jpeg/png, max 10MB each (upload local files or paste one URL per line)",
     "{{name}} was resized to {{size}} and uploaded": "{{name}} was resized to {{size}} and uploaded",
-    "{{name}} uploaded": "{{name}} uploaded"
+    "{{name}} uploaded": "{{name}} uploaded",
+    "Copy @Name": "Copy @Name",
+    "Prompt tag copied": "Prompt tag copied",
+    "Element ID copied": "Element ID copied"
   }
 }
