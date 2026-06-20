@@ -22,6 +22,8 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testStringPtr(value string) *string {
@@ -578,6 +580,54 @@ func TestPrepareGenerateImageResultsUploadsBase64(t *testing.T) {
 	if images[0].B64Json != "" {
 		t.Fatalf("B64Json should be empty after upload: %#v", images[0])
 	}
+}
+
+func TestPrepareGenerateImageResultsReturnsBase64WhenSwitchOn(t *testing.T) {
+	t.Setenv("GENERATE_IMAGE_RETURN_BASE64", "true")
+
+	oldUpload := uploadGenerateImageBase64
+	uploadGenerateImageBase64 = func(mimeType, base64Data, compression, requestHost string) (string, error) {
+		t.Fatalf("upload must not be called when GENERATE_IMAGE_RETURN_BASE64=true")
+		return "", nil
+	}
+	defer func() { uploadGenerateImageBase64 = oldUpload }()
+
+	images, err := prepareGenerateImageResults([]dto.GenerateImageData{
+		{B64Json: "AQID", MimeType: "image/png"},
+		{Url: "https://upstream.example/image.png"},
+	}, "origin", "api.o1key.cn")
+	require.NoError(t, err)
+	require.Len(t, images, 2)
+
+	// 上游 base64 原样返回，不上传，不带 URL。
+	assert.Equal(t, "AQID", images[0].B64Json)
+	assert.Equal(t, "image/png", images[0].MimeType)
+	assert.Empty(t, images[0].Url)
+
+	// 上游本就是 URL 的图片仍原样返回。
+	assert.Equal(t, "https://upstream.example/image.png", images[1].Url)
+	assert.Empty(t, images[1].B64Json)
+}
+
+func TestPrepareGenerateImageResultsUploadsBase64WhenSwitchOff(t *testing.T) {
+	t.Setenv("GENERATE_IMAGE_RETURN_BASE64", "false")
+
+	oldUpload := uploadGenerateImageBase64
+	uploadCalled := false
+	uploadGenerateImageBase64 = func(mimeType, base64Data, compression, requestHost string) (string, error) {
+		uploadCalled = true
+		return "https://img.o1key.cn/uploads/oss/generated.png", nil
+	}
+	defer func() { uploadGenerateImageBase64 = oldUpload }()
+
+	images, err := prepareGenerateImageResults([]dto.GenerateImageData{
+		{B64Json: "AQID", MimeType: "image/png"},
+	}, "origin", "api.o1key.cn")
+	require.NoError(t, err)
+	require.Len(t, images, 1)
+	assert.True(t, uploadCalled, "switch off must keep uploading base64 to storage")
+	assert.Equal(t, "https://img.o1key.cn/uploads/oss/generated.png", images[0].Url)
+	assert.Empty(t, images[0].B64Json)
 }
 
 func TestBuildGenerateImageTaskErrorDetailUsesRelayStatusAndRetryAfter(t *testing.T) {
