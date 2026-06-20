@@ -29,13 +29,17 @@ import type {
 // Tencent VCLM 主体管理 (AIGC Element) API
 // ============================================================================
 
+// Kling subject management base path. Future video platforms (e.g. seedance)
+// will get their own /api/element/<platform> base.
+const KLING_BASE = '/api/element/kling'
+
 // Get paginated element list. Pass all=true (admin only) to list every user's.
 export async function getAigcElements(
   params: GetAigcElementsParams = {}
 ): Promise<GetAigcElementsResponse> {
   const { p = 1, page_size = 10, all = false } = params
   const res = await api.get(
-    `/api/aigc_element/?p=${p}&page_size=${page_size}${all ? '&all=true' : ''}`
+    `${KLING_BASE}/?p=${p}&page_size=${page_size}${all ? '&all=true' : ''}`
   )
   return res.data
 }
@@ -44,7 +48,7 @@ export async function getAigcElements(
 export async function createAigcElement(
   data: CreateAigcElementPayload
 ): Promise<ApiResponse<AigcElement>> {
-  const res = await api.post('/api/aigc_element/', data)
+  const res = await api.post(`${KLING_BASE}/`, data)
   return res.data
 }
 
@@ -52,7 +56,7 @@ export async function createAigcElement(
 export async function refreshAigcElement(
   id: number
 ): Promise<ApiResponse<{ element: AigcElement; detail: unknown }>> {
-  const res = await api.post(`/api/aigc_element/${id}/refresh`)
+  const res = await api.post(`${KLING_BASE}/${id}/refresh`)
   return res.data
 }
 
@@ -63,7 +67,7 @@ export async function deleteAigcElement(
   force = false
 ): Promise<ApiResponse> {
   const res = await api.delete(
-    `/api/aigc_element/${id}/${force ? '?force=true' : ''}`
+    `${KLING_BASE}/${id}/${force ? '?force=true' : ''}`
   )
   return res.data
 }
@@ -75,7 +79,8 @@ export async function uploadAigcElementImage(
 ): Promise<ApiResponse<{ url: string; resized: boolean; size_human: string }>> {
   const formData = new FormData()
   formData.append('file', file)
-  const res = await api.post('/api/aigc_element/upload', formData)
+  const res = await api.post(`${KLING_BASE}/upload`, formData)
   return res.data
 }
+
 

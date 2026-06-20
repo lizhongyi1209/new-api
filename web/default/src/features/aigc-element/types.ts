@@ -28,6 +28,7 @@ export const aigcElementSchema = z.object({
   token_id: z.number().optional().default(0),
   token_name: z.string().optional().default(''),
   channel_id: z.number(),
+  platform: z.string().optional().default('kling'),
   job_id: z.string(),
   element_id: z.string(),
   name: z.string(),

@@ -243,18 +243,20 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch/group", controller.UpdateTokenBatchGroup)
 		}
 
-		// Tencent VCLM 主体管理 (AIGC Element). Callable by API-token clients and
-		// console sessions alike; subjects are owned by the token's main account.
-		// Admins can list every user's subjects via ?all=true.
-		aigcElementRoute := apiRouter.Group("/aigc_element")
-		aigcElementRoute.Use(middleware.TokenOrUserAuth())
+		// Kling (Tencent VCLM) 主体管理. Callable by API-token clients and console
+		// sessions alike; subjects are owned by the token's main account and
+		// tagged platform=kling. Future video providers (e.g. seedance) get their
+		// own /element/<platform> group. Admins can list every user's subjects via
+		// ?all=true.
+		klingElementRoute := apiRouter.Group("/element/kling")
+		klingElementRoute.Use(middleware.TokenOrUserAuth())
 		{
-			aigcElementRoute.GET("/", controller.GetAigcElements)
-			aigcElementRoute.GET("/mine", controller.ListMyAigcElements)
-			aigcElementRoute.POST("/", controller.CreateAigcElement)
-			aigcElementRoute.POST("/upload", controller.UploadAigcElementImage)
-			aigcElementRoute.POST("/:id/refresh", controller.RefreshAigcElement)
-			aigcElementRoute.DELETE("/:id", controller.DeleteAigcElement)
+			klingElementRoute.GET("/", controller.GetAigcElements)
+			klingElementRoute.GET("/mine", controller.ListMyAigcElements)
+			klingElementRoute.POST("/", controller.CreateAigcElement)
+			klingElementRoute.POST("/upload", controller.UploadAigcElementImage)
+			klingElementRoute.POST("/:id/refresh", controller.RefreshAigcElement)
+			klingElementRoute.DELETE("/:id", controller.DeleteAigcElement)
 		}
 
 		usageRoute := apiRouter.Group("/usage")

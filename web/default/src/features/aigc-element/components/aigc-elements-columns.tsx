@@ -86,6 +86,24 @@ export function useAigcElementsColumns(): ColumnDef<AigcElement>[] {
       size: 110,
     },
     {
+      accessorKey: 'platform',
+      header: t('Platform'),
+      meta: { mobileHidden: true },
+      cell: ({ row }) => {
+        const platform = String(row.getValue('platform') || 'kling')
+        return (
+          <StatusBadge
+            label={platform}
+            variant='info'
+            copyable={false}
+            className='-ml-1.5'
+          />
+        )
+      },
+      enableSorting: false,
+      size: 100,
+    },
+    {
       accessorKey: 'element_id',
       header: t('Element ID'),
       cell: function ElementIdCell({ row }) {

@@ -177,6 +177,7 @@ func CreateAigcElement(c *gin.Context) {
 		TokenId:       c.GetInt("token_id"),
 		TokenName:     c.GetString("token_name"),
 		ChannelId:     channel.Id,
+		Platform:      model.AigcElementPlatformKling,
 		JobId:         result.JobId,
 		ElementId:     result.ElementId,
 		Name:          req.Name,
@@ -284,9 +285,9 @@ func GetAigcElements(c *gin.Context) {
 		err      error
 	)
 	if all {
-		elements, total, err = model.GetAllAigcElements(pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		elements, total, err = model.GetAllAigcElements(model.AigcElementPlatformKling, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	} else {
-		elements, total, err = model.GetUserAigcElements(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		elements, total, err = model.GetUserAigcElements(userId, model.AigcElementPlatformKling, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	}
 	if err != nil {
 		common.ApiError(c, err)
@@ -315,6 +316,7 @@ type clientAigcElement struct {
 	Name          string `json:"name"`
 	FrontalImage  string `json:"frontal_image"`
 	ReferenceType string `json:"reference_type"`
+	Platform      string `json:"platform"`
 	Status        string `json:"status"`
 }
 
@@ -331,7 +333,7 @@ func ListMyAigcElements(c *gin.Context) {
 	userId := c.GetInt("id")
 	onlySucceed := c.Query("include_all") != "true"
 
-	elements, err := model.ListUserAigcElements(userId, onlySucceed)
+	elements, err := model.ListUserAigcElements(userId, model.AigcElementPlatformKling, onlySucceed)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -344,6 +346,7 @@ func ListMyAigcElements(c *gin.Context) {
 			Name:          e.Name,
 			FrontalImage:  e.FrontalImage,
 			ReferenceType: e.ReferenceType,
+			Platform:      e.Platform,
 			Status:        e.Status,
 		})
 	}
