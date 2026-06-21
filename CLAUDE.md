@@ -361,6 +361,18 @@ git checkout custom
 git rebase upstream/main
 ```
 
+**After every sync, bump the `VERSION` file** to match the official release you just
+rebased onto. The official version is the latest `v1.0.0-rc.*` tag fetched from upstream
+(it also equals `git rev-list -n1 <tag>` == `upstream/main` tip). The `VERSION` string is
+compiled into the binary via `-ldflags` and shown in `/api/status`; it is NOT auto-bumped.
+
+```bash
+# Find the version just synced (newest rc tag = upstream/main tip)
+git tag --list 'v1.0.0-rc.*' --sort=-version:refname | head -1
+# Write it into VERSION (replace with the actual tag)
+echo -n "v1.0.0-rc.NN" > VERSION
+```
+
 **Case 1 — No conflicts:**
 ```bash
 git push origin custom --force-with-lease
@@ -417,5 +429,6 @@ ls -lh /home/ubuntu/backup_*.sql
 1. **Always develop on `custom` branch** — never commit to `main`.
 2. **Commit your changes before syncing upstream** — otherwise rebase will fail.
 3. **Back up the database before each deployment** (recommended).
-4. First `docker compose up --build` takes 5–15 min; subsequent builds are faster due to cache.
-5. This manual may be updated over time — Claude should update it in-place when the user provides new information, rather than keeping stale data.
+4. **Bump the `VERSION` file on every upstream sync** to the synced official `v1.0.0-rc.*` tag — it is not auto-updated and otherwise `/api/status` keeps showing the old version.
+5. First `docker compose up --build` takes 5–15 min; subsequent builds are faster due to cache.
+6. This manual may be updated over time — Claude should update it in-place when the user provides new information, rather than keeping stale data.
