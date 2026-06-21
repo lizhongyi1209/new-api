@@ -663,3 +663,58 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.SetMetadata("url", t.GetResultURL())
 	return openAIVideo
 }
+
+// ClearGenerateImageDataWindow blanks the heavy `data` column (which holds
+// returned base64 image payloads when GENERATE_IMAGE_RETURN_BASE64 is enabled)
+// for terminal generate_image tasks whose finish_time falls in the window
+// (since, cutoff]. Rows are kept for billing/audit; only the consumed base64 is
+// dropped.
+//
+// The window is driven entirely off the indexed finish_time bigint and an id
+// cursor — the json `data` column is never referenced in a predicate. This is
+// deliberate and load-bearing for cross-DB safety: PostgreSQL's json type has
+// no equality operator, and SQLite stores json.RawMessage as a BLOB whose
+// storage class differs from a TEXT literal, so `data != '{}'` is unusable on
+// both. Callers must advance `since` to the previous `cutoff` between runs (see
+// the cleanup task watermark) so each row is blanked at most once, avoiding
+// MVCC dead-tuple churn from repeated rewrites.
+//
+// Returns the number of rows blanked across all internal batches.
+func ClearGenerateImageDataWindow(since, cutoff int64, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = 500
+	}
+	var total int64
+	lastID := int64(0)
+	for {
+		var ids []int64
+		err := DB.Model(&Task{}).
+			Where("platform = ?", constant.TaskPlatformGenerateImage).
+			Where("status IN ?", []string{TaskStatusSuccess, TaskStatusFailure}).
+			Where("finish_time > ? AND finish_time <= ?", since, cutoff).
+			Where("id > ?", lastID).
+			Order("id").
+			Limit(batchSize).
+			Pluck("id", &ids).Error
+		if err != nil {
+			return total, err
+		}
+		if len(ids) == 0 {
+			break
+		}
+
+		result := DB.Model(&Task{}).
+			Where("id IN ?", ids).
+			Update("data", json.RawMessage("{}"))
+		if result.Error != nil {
+			return total, result.Error
+		}
+		total += result.RowsAffected
+
+		lastID = ids[len(ids)-1]
+		if len(ids) < batchSize {
+			break
+		}
+	}
+	return total, nil
+}
