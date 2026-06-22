@@ -312,6 +312,11 @@ func (a *TaskAdaptor) convertToMotionPayload(req *relaycommon.TaskSubmitReq, inf
 	// Re-apply the channel-mapped model so metadata cannot bypass billing.
 	p.Model = modelNameToMotionModel(info.UpstreamModelName)
 
+	// Always disable Tencent's AI-generated watermark. Tencent defaults LogoAdd
+	// to 1 (adds a logo) when omitted, so we force 0 regardless of client input.
+	zero := 0
+	p.LogoAdd = &zero
+
 	if strings.TrimSpace(p.Image) == "" {
 		return nil, fmt.Errorf("image is required for motion control")
 	}
@@ -353,6 +358,11 @@ func (a *TaskAdaptor) convertToSubmitPayload(req *relaycommon.TaskSubmitReq, inf
 	}
 	// Re-apply the channel-mapped model so metadata cannot bypass billing.
 	p.Model = modelCode
+
+	// Always disable Tencent's AI-generated watermark. Tencent defaults LogoAdd
+	// to 1 (adds a logo) when omitted, so we force 0 regardless of client input.
+	zero := 0
+	p.LogoAdd = &zero
 
 	if p.Image == nil && p.ImageTail == nil {
 		return nil, fmt.Errorf("either image or image_tail (ImageTail) is required")
