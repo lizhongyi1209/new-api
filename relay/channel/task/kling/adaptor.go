@@ -141,7 +141,9 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.baseURL = info.ChannelBaseUrl
 	a.apiKey = info.ApiKey
 
-	// apiKey format: "access_key|secret_key"
+	// apiKey format:
+	// - New format (official): "api-key-kling-xxx" (used directly as Bearer token)
+	// - Legacy format: "access_key|secret_key" (generates JWT token)
 }
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
@@ -377,15 +379,33 @@ func (a *TaskAdaptor) createJWTTokenWithKey(apiKey string) (string, error) {
 	if isNewAPIRelay(apiKey) {
 		return apiKey, nil // new api relay
 	}
+
+	// Check if it's the new official API key format (Bearer token directly)
+	// New format example: api-key-kling-mykbR7zMT1pcFcJrY5um1UA_tretIj9ba2W-8xsgBrQ
+	if strings.HasPrefix(apiKey, "api-key-kling-") {
+		return apiKey, nil // Use the API key directly as Bearer token
+	}
+
+	// Check if it's the old format with pipe separator
+	if !strings.Contains(apiKey, "|") {
+		// If no pipe separator and not prefixed with api-key-kling-, assume it's a direct token
+		return apiKey, nil
+	}
+
+	// Legacy format: AccessKey|SecretKey - generate JWT token
 	keyParts := strings.Split(apiKey, "|")
 	if len(keyParts) != 2 {
-		return "", errors.New("invalid api_key, required format is accessKey|secretKey")
+		return "", errors.New("invalid api_key, required format is accessKey|secretKey or api-key-kling-xxx")
 	}
 	accessKey := strings.TrimSpace(keyParts[0])
-	if len(keyParts) == 1 {
+	secretKey := strings.TrimSpace(keyParts[1])
+
+	if secretKey == "" {
+		// Only access key provided, use it directly
 		return accessKey, nil
 	}
-	secretKey := strings.TrimSpace(keyParts[1])
+
+	// Generate JWT token for legacy format
 	now := time.Now().Unix()
 	claims := jwt.MapClaims{
 		"iss": accessKey,

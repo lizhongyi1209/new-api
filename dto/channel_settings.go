@@ -48,6 +48,11 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateLastDetectedModels []string              `json:"upstream_model_update_last_detected_models,omitempty"` // 上次检测到的可加入模型
 	UpstreamModelUpdateLastRemovedModels  []string              `json:"upstream_model_update_last_removed_models,omitempty"`  // 上次检测到的可删除模型
 	UpstreamModelUpdateIgnoredModels      []string              `json:"upstream_model_update_ignored_models,omitempty"`       // 手动忽略的模型
+	ServiceInferenceAssetGroupID          string                `json:"service_inference_asset_group_id,omitempty"`
+	ServiceInferenceAssetGroupName        string                `json:"service_inference_asset_group_name,omitempty"`
+	ServiceInferenceAssetGroupDescription string                `json:"service_inference_asset_group_description,omitempty"`
+	ServiceInferenceAssetPollIntervalMS   int                   `json:"service_inference_asset_poll_interval_ms,omitempty"`
+	ServiceInferenceAssetPollAttempts     int                   `json:"service_inference_asset_poll_attempts,omitempty"`
 	AdvancedCustom                        *AdvancedCustomConfig `json:"advanced_custom,omitempty"`
 }
 

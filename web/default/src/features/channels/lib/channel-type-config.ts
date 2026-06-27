@@ -144,6 +144,19 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
       models: 'Models exposed by this channel',
     },
   },
+  60: {
+    id: 60,
+    name: CHANNEL_TYPES[60],
+    icon: 'openai',
+    defaultBaseUrl: 'https://model.service-inference.ai',
+    hints: {
+      baseUrl: 'Default: https://model.service-inference.ai',
+      key: 'Bearer token',
+      models: 'dreamina-seedance-2-0-260128',
+      other:
+        'Optional settings: service_inference_asset_group_id, service_inference_asset_group_name',
+    },
+  },
 }
 
 /**

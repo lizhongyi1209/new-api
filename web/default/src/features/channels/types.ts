@@ -106,6 +106,11 @@ export interface ChannelOtherSettings {
   upstream_model_update_ignored_models?: string[]
   upstream_model_update_last_check_time?: number
   upstream_model_update_last_detected_models?: string[]
+  service_inference_asset_group_id?: string
+  service_inference_asset_group_name?: string
+  service_inference_asset_group_description?: string
+  service_inference_asset_poll_interval_ms?: number
+  service_inference_asset_poll_attempts?: number
   advanced_custom?: AdvancedCustomConfig
 }
 

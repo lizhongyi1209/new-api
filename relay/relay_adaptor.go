@@ -37,6 +37,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
+	taskserviceinference "github.com/QuantumNous/new-api/relay/channel/task/serviceinference"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
 	tasktencentvideo "github.com/QuantumNous/new-api/relay/channel/task/tencentvideo"
@@ -165,6 +166,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &hailuo.TaskAdaptor{}
 		case constant.ChannelTypeTencentVideo:
 			return &tasktencentvideo.TaskAdaptor{}
+		case constant.ChannelTypeServiceInferenceVideo:
+			return &taskserviceinference.TaskAdaptor{}
 		}
 	}
 	return nil

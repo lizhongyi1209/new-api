@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
 	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
@@ -283,6 +284,26 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	}
 	// Cache the marshaled body so BuildRequestHeader can sign the exact bytes.
 	c.Set(ctxKeyBody, data)
+	switch p := payload.(type) {
+	case *submitPayload:
+		logoAdd := "<nil>"
+		if p.LogoAdd != nil {
+			logoAdd = strconv.Itoa(*p.LogoAdd)
+		}
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf(
+			"tencentvideo submit payload: action=%s model=%s mode=%s duration=%s sound=%s logo_add=%s has_image=%t has_image_tail=%t",
+			actionSubmit, p.Model, p.Mode, p.Duration, p.Sound, logoAdd, p.Image != nil, p.ImageTail != nil,
+		))
+	case *motionPayload:
+		logoAdd := "<nil>"
+		if p.LogoAdd != nil {
+			logoAdd = strconv.Itoa(*p.LogoAdd)
+		}
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf(
+			"tencentvideo submit payload: action=%s model=%s mode=%s logo_add=%s has_image=%t has_video=%t",
+			actionMotionSubmit, p.Model, p.Mode, logoAdd, strings.TrimSpace(p.Image) != "", strings.TrimSpace(p.Video) != "",
+		))
+	}
 	return bytes.NewReader(data), nil
 }
 
