@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/pkg/errors"
 )
@@ -25,14 +24,14 @@ const (
 
 // Tag IDs for element classification
 const (
-	TagHottest  = "o_101"
+	TagHottest   = "o_101"
 	TagCharacter = "o_102"
-	TagAnimal   = "o_103"
-	TagItem     = "o_104"
-	TagCostume  = "o_105"
-	TagScene    = "o_106"
-	TagEffect   = "o_107"
-	TagOthers   = "o_108"
+	TagAnimal    = "o_103"
+	TagItemID    = "o_104"
+	TagCostume   = "o_105"
+	TagScene     = "o_106"
+	TagEffect    = "o_107"
+	TagOthers    = "o_108"
 )
 
 // ElementImageList represents the frontal and reference images for multi-image elements
