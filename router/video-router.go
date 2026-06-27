@@ -49,6 +49,14 @@ func SetVideoRouter(router *gin.Engine) {
 		klingMotionControlRouter.GET("/videos/motion-control/:task_id", controller.RelayTaskFetch)
 	}
 
+	klingOmniVideoRouter := router.Group("/kling/v1")
+	klingOmniVideoRouter.Use(middleware.RouteTag("relay"))
+	klingOmniVideoRouter.Use(middleware.KlingOmniVideoConvert(), middleware.TokenAuth(), middleware.Distribute())
+	{
+		klingOmniVideoRouter.POST("/videos/omni-video", controller.RelayTask)
+		klingOmniVideoRouter.GET("/videos/omni-video/:task_id", controller.RelayTaskFetch)
+	}
+
 	// Jimeng official API routes - direct mapping to official API format
 	jimengOfficialGroup := router.Group("jimeng")
 	jimengOfficialGroup.Use(middleware.RouteTag("relay"))

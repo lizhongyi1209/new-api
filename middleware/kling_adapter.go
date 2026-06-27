@@ -95,3 +95,58 @@ func KlingMotionControlConvert() func(c *gin.Context) {
 	}
 }
 
+// KlingOmniVideoConvert converts Kling-native omni-video requests to the unified
+// TaskSubmitReq format (model/prompt/metadata) without rewriting the URL path,
+// so that ValidateRequestAndSetAction can detect the route correctly.
+func KlingOmniVideoConvert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		var originalReq map[string]interface{}
+		if err := common.UnmarshalBodyReusable(c, &originalReq); err != nil {
+			c.Next()
+			return
+		}
+
+		model, _ := originalReq["model_name"].(string)
+		if model == "" {
+			model, _ = originalReq["model"].(string)
+		}
+		prompt, _ := originalReq["prompt"].(string)
+
+		// Extract common fields if present
+		mode, _ := originalReq["mode"].(string)
+		duration, _ := originalReq["duration"].(string)
+		aspectRatio, _ := originalReq["aspect_ratio"].(string)
+
+		unifiedReq := map[string]interface{}{
+			"model":    model,
+			"prompt":   prompt,
+			"metadata": originalReq,
+		}
+
+		// Add optional fields to top level if present
+		if mode != "" {
+			unifiedReq["mode"] = mode
+		}
+		if duration != "" {
+			unifiedReq["duration"] = duration
+		}
+		if aspectRatio != "" {
+			unifiedReq["size"] = aspectRatio
+		}
+
+		jsonData, err := json.Marshal(unifiedReq)
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+		if bs, err := common.CreateBodyStorage(jsonData); err == nil {
+			c.Set(common.KeyBodyStorage, bs)
+		}
+		c.Set(common.KeyRequestBody, jsonData)
+		// Do NOT rewrite URL path — ValidateRequestAndSetAction relies on it to detect omni-video.
+		// Do NOT set action — let ValidateRequestAndSetAction set TaskActionOmniVideo.
+		c.Next()
+	}
+}

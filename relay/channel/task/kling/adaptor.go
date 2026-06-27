@@ -63,6 +63,21 @@ type ElementItem struct {
 	ElementId int64 `json:"element_id"`
 }
 
+type ImageItem struct {
+	ImageUrl string `json:"image_url"`
+	Type     string `json:"type,omitempty"` // first_frame or end_frame
+}
+
+type VideoItem struct {
+	VideoUrl          string `json:"video_url"`
+	ReferType         string `json:"refer_type,omitempty"`         // feature or base
+	KeepOriginalSound string `json:"keep_original_sound,omitempty"` // yes or no
+}
+
+type WatermarkInfo struct {
+	Enabled bool `json:"enabled"`
+}
+
 type requestPayload struct {
 	Prompt         string         `json:"prompt,omitempty"`
 	Image          string         `json:"image,omitempty"`
@@ -76,7 +91,7 @@ type requestPayload struct {
 	Model          string         `json:"model,omitempty"` // Compatible with upstreams that only recognize "model"
 	CfgScale       float64        `json:"cfg_scale,omitempty"`
 	Sound          string            `json:"sound,omitempty"`
-	MultiShot      string            `json:"multi_shot,omitempty"`
+	MultiShot      *bool             `json:"multi_shot,omitempty"` // Use pointer to distinguish false from absent
 	ShotType       string            `json:"shot_type,omitempty"`
 	MultiPrompt    []MultiPromptItem `json:"multi_prompt,omitempty"`
 	StaticMask     string            `json:"static_mask,omitempty"`
@@ -86,7 +101,11 @@ type requestPayload struct {
 	VideoUrl             string        `json:"video_url,omitempty"`
 	CharacterOrientation string        `json:"character_orientation,omitempty"`
 	KeepOriginalSound    string        `json:"keep_original_sound,omitempty"`
-	ElementList          []ElementItem `json:"element_list,omitempty"`
+	// Omni Video specific fields
+	ImageList      []ImageItem    `json:"image_list,omitempty"`
+	ElementList    []ElementItem  `json:"element_list,omitempty"`
+	VideoList      []VideoItem    `json:"video_list,omitempty"`
+	WatermarkInfo  *WatermarkInfo `json:"watermark_info,omitempty"`
 	CallbackUrl    string         `json:"callback_url,omitempty"`
 	ExternalTaskId string         `json:"external_task_id,omitempty"`
 }
@@ -151,6 +170,9 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.Contains(c.Request.URL.Path, "motion-control") {
 		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionMotionControl)
 	}
+	if strings.Contains(c.Request.URL.Path, "omni-video") {
+		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo)
+	}
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
 }
 
@@ -160,6 +182,8 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	switch info.Action {
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
+	case constant.TaskActionOmniVideo:
+		path = "/v1/videos/omni-video"
 	case constant.TaskActionGenerate:
 		path = "/v1/videos/image2video"
 	default:
@@ -258,6 +282,8 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	switch action {
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
+	case constant.TaskActionOmniVideo:
+		path = "/v1/videos/omni-video"
 	case constant.TaskActionGenerate:
 		path = "/v1/videos/image2video"
 	default:
@@ -315,6 +341,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		modelName = "kling-v1"
 	}
 
+	// Handle motion-control
 	if info.Action == constant.TaskActionMotionControl {
 		r := requestPayload{
 			Prompt:    req.Prompt,
@@ -332,6 +359,35 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		return &r, nil
 	}
 
+	// Handle omni-video
+	if info.Action == constant.TaskActionOmniVideo {
+		// Default model for omni-video
+		if modelName == "kling-v1" {
+			modelName = "kling-video-o1"
+		}
+
+		r := requestPayload{
+			Prompt:      req.Prompt,
+			ModelName:   modelName,
+			Model:       modelName,
+			Mode:        taskcommon.DefaultString(req.Mode, "pro"),
+			Duration:    fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
+			AspectRatio: a.getAspectRatio(req.Size),
+		}
+
+		// Unmarshal metadata to get all omni-video specific fields
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
+			return nil, errors.Wrap(err, "unmarshal metadata failed")
+		}
+
+		// Re-apply the channel-mapped model name after metadata unmarshal
+		r.ModelName = modelName
+		r.Model = modelName
+
+		return &r, nil
+	}
+
+	// Default: image2video / text2video
 	r := requestPayload{
 		Prompt:         req.Prompt,
 		NegativePrompt: negativePrompt,
