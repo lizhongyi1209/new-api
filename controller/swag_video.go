@@ -204,3 +204,44 @@ type KlingWatermarkInfo struct {
 // @Param task_id path string true "Task ID"
 // @Router /kling/v1/videos/omni-video/{task_id} [get]
 func KlingOmniVideoTaskId(c *gin.Context) {}
+
+// KlingMotionControlGenerations
+// @Summary 可灵动作控制
+// @Description 调用可灵 Motion Control 接口，根据参考图片和动作视频生成视频
+// @Tags Video
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "用户认证令牌 (Access-Token: sk-xxxx)"
+// @Param request body KlingMotionControlRequest true "Motion Control 生成请求参数"
+// @Success 200 {object} dto.VideoTaskResponse "任务状态和结果"
+// @Failure 400 {object} dto.OpenAIError "请求参数错误"
+// @Failure 401 {object} dto.OpenAIError "未授权"
+// @Failure 403 {object} dto.OpenAIError "无权限"
+// @Failure 500 {object} dto.OpenAIError "服务器内部错误"
+// @Router /kling/v1/videos/motion-control [post]
+func KlingMotionControlGenerations(c *gin.Context) {
+}
+
+type KlingMotionControlRequest struct {
+	ModelName            string                 `json:"model_name,omitempty" example:"kling-v2-6"`
+	Prompt               string                 `json:"prompt,omitempty" example:"The girl is wearing a loose gray T-shirt"`
+	ImageUrl             string                 `json:"image_url" binding:"required" example:"https://example.com/reference.jpg"`
+	VideoUrl             string                 `json:"video_url" binding:"required" example:"https://example.com/motion.mp4"`
+	ElementList          []KlingElementItem     `json:"element_list,omitempty"`
+	KeepOriginalSound    string                 `json:"keep_original_sound,omitempty" example:"yes"`
+	CharacterOrientation string                 `json:"character_orientation" binding:"required" example:"image"`
+	Mode                 string                 `json:"mode" binding:"required" example:"pro"`
+	WatermarkInfo        *KlingWatermarkInfo    `json:"watermark_info,omitempty"`
+	CallbackURL          string                 `json:"callback_url,omitempty" example:"https://your.domain/callback"`
+	ExternalTaskId       string                 `json:"external_task_id,omitempty" example:"custom-task-004"`
+}
+
+// KlingMotionControlTaskId godoc
+// @Summary 可灵任务查询--Motion Control
+// @Description Query the status and result of a Kling Motion Control generation task by task ID
+// @Tags Origin
+// @Accept json
+// @Produce json
+// @Param task_id path string true "Task ID"
+// @Router /kling/v1/videos/motion-control/{task_id} [get]
+func KlingMotionControlTaskId(c *gin.Context) {}

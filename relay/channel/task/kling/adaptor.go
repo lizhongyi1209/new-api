@@ -342,7 +342,13 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	}
 
 	// Handle motion-control
+	// Handle motion-control
 	if info.Action == constant.TaskActionMotionControl {
+		// Default model for motion-control
+		if modelName == "kling-v1" || modelName == "" {
+			modelName = "kling-v2-6"
+		}
+
 		r := requestPayload{
 			Prompt:    req.Prompt,
 			ModelName: modelName,
