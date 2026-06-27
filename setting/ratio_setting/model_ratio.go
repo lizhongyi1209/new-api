@@ -280,6 +280,7 @@ var defaultModelRatio = map[string]float64{
 	"kling-v2-5-turbo-t":  1,
 	"kling-v2-6-t":        1,
 	"kling-v3-t":          1,
+	"kling-v3-omni":       1,  // Omni video model
 	// Motion-control variants (SubmitMotionControlKlingJob), same post-paid billing.
 	"kling-v2-6-motion-t":          1,
 	"kling-v3-motion-t":            1,
