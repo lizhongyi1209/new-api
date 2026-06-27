@@ -124,21 +124,14 @@ export function Pricing() {
 
     if (viewMode === VIEW_MODES.CARD) {
       return (
-        <div className='space-y-6'>
-          {/* Kling Pricing Cards - Show when no filters are active */}
-          {!hasActiveFilters && !searchInput && (
-            <KlingPricingCards />
-          )}
-
-          <ModelCardGrid
-            models={filteredModels}
-            onModelClick={handleModelClick}
-            priceRate={priceRate}
-            usdExchangeRate={usdExchangeRate}
-            tokenUnit={tokenUnit}
-            showRechargePrice={showRechargePrice}
-          />
-        </div>
+        <ModelCardGrid
+          models={filteredModels}
+          onModelClick={handleModelClick}
+          priceRate={priceRate}
+          usdExchangeRate={usdExchangeRate}
+          tokenUnit={tokenUnit}
+          showRechargePrice={showRechargePrice}
+        />
       )
     }
 

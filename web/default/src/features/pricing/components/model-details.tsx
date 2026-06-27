@@ -78,6 +78,7 @@ import type {
 import { DynamicPricingBreakdown } from './dynamic-pricing-breakdown'
 import { ModelDetailsApi } from './model-details-api'
 import { ModelDetailsPerformance } from './model-details-performance'
+import { KlingModelPricingDetail } from './kling-model-pricing-detail'
 
 // ----------------------------------------------------------------------------
 // Local UI helpers
@@ -1196,6 +1197,7 @@ export function ModelDetailsContent(props: ModelDetailsContentProps) {
             {isDynamic && (
               <DynamicPricingBreakdown billingExpr={props.model.billing_expr} />
             )}
+            <KlingModelPricingDetail modelName={props.model.model_name} />
             <GroupPricingSection
               model={props.model}
               groupRatio={props.groupRatio}
