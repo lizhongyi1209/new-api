@@ -559,3 +559,26 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	}
 	return common.Marshal(openAIVideo)
 }
+
+// AdjustBillingOnComplete implements differential settlement for Kling tasks.
+// Kling returns final_unit_deduction (in RMB) which represents the actual cost.
+// We convert this to quota units and return it to trigger delta settlement.
+func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
+	// Only adjust billing for successful tasks
+	if taskResult.Status != model.TaskStatusSuccess {
+		return 0
+	}
+
+	// Kling returns final_unit_deduction as the actual cost in RMB
+	// This value is already stored in taskResult.CompletionTokens
+	if taskResult.CompletionTokens <= 0 {
+		return 0
+	}
+
+	// Convert RMB to quota units
+	// 1 RMB = 100,000 quota units (based on USD = 500, USD2RMB = 7.3)
+	// quota = RMB × 100,000
+	actualQuota := taskResult.CompletionTokens * 100000
+
+	return actualQuota
+}

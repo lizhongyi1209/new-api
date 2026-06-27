@@ -318,13 +318,6 @@ var defaultModelPrice = map[string]float64{
 	"veo-3.0-fast-generate-001":      0.15,
 	"veo-3.1-generate-preview":       0.4,
 	"veo-3.1-fast-generate-preview":  0.15,
-	// Kling video models - per second pricing in RMB
-	"kling-v2-6":       0.36,  // 0.36元/秒 (5s=1.8元, 10s=3.6元)
-	"kling-v3":         0.72,  // 0.72元/秒 (5s=3.6元, 10s=7.2元)
-	"kling-v3-omni":    0.75,  // 0.75元/秒 (5s=3.75元, 10s=7.5元)
-	"kling-v2-6-t":     0.36,  // Task API variant
-	"kling-v3-t":       0.72,  // Task API variant
-	"kling-video-o1":   0.75,  // Omni video (same as v3-omni)
 }
 
 var defaultAudioRatio = map[string]float64{
