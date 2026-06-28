@@ -378,16 +378,12 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 			Mode:           taskcommon.DefaultString(req.Mode, "pro"),
 			Duration:       fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
 			AspectRatio:    a.getAspectRatio(req.Size, req.AspectRatio),
+			ImageList:      convertImageList(req.ImageList),
 			CallbackUrl:    req.CallbackUrl,
 			ExternalTaskId: req.ExternalTaskId,
 		}
 
 		// Parse top-level RawMessage fields
-		if len(req.ImageList) > 0 {
-			if err := common.Unmarshal(req.ImageList, &r.ImageList); err != nil {
-				return nil, errors.Wrap(err, "unmarshal image_list failed")
-			}
-		}
 		if len(req.ElementList) > 0 {
 			if err := common.Unmarshal(req.ElementList, &r.ElementList); err != nil {
 				return nil, errors.Wrap(err, "unmarshal element_list failed")
@@ -650,9 +646,29 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		return 0
 	}
 
-	// Kling returns final_unit_deduction as the actual cost in RMB (1 credit = ¥1)
-	// This value is already stored in taskResult.CompletionTokens
-	if taskResult.CompletionTokens <= 0 {
+	// Parse final_unit_deduction directly from task.Data to preserve precision
+	// (taskResult.CompletionTokens is rounded, losing decimal precision)
+	var klingResp responsePayload
+	if err := common.Unmarshal(task.Data, &klingResp); err != nil {
+		// Fallback to rounded value if parsing fails
+		if taskResult.CompletionTokens <= 0 {
+			return 0
+		}
+		rmbCost := float64(taskResult.CompletionTokens)
+		usdExchangeRate := operation_setting.USDExchangeRate
+		if usdExchangeRate <= 0 {
+			usdExchangeRate = 1.0
+		}
+		groupRatio := 1.0
+		if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
+			groupRatio = bc.GroupRatio
+		}
+		return int(math.Ceil(rmbCost * common.QuotaPerUnit / usdExchangeRate * groupRatio))
+	}
+
+	// Parse final_unit_deduction as float64 to preserve decimal precision
+	rmbCost, err := strconv.ParseFloat(klingResp.Data.FinalUnitDeduction, 64)
+	if err != nil || rmbCost <= 0 {
 		return 0
 	}
 
@@ -660,15 +676,14 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 	// quota = RMB × (QuotaPerUnit ÷ USDExchangeRate) × groupRatio
 	//
 	// Example with USDExchangeRate=1:
-	//   - RMB cost: 3 yuan
-	//   - quota = 3 × (500,000 ÷ 1) × 1 = 1,500,000
-	//   - Display: 1,500,000 ÷ 500,000 × 1 = 3 CNY ✓
+	//   - RMB cost: 1.5 yuan
+	//   - quota = 1.5 × (500,000 ÷ 1) × 1 = 750,000
+	//   - Display: 750,000 ÷ 500,000 × 1 = 1.5 CNY ✓
 	//
 	// Example with USDExchangeRate=7.3 (realistic rate):
-	//   - RMB cost: 3 yuan
-	//   - quota = 3 × (500,000 ÷ 7.3) × 1 ≈ 205,479
-	//   - Display: 205,479 ÷ 500,000 × 7.3 ≈ 3 CNY ✓
-	rmbCost := float64(taskResult.CompletionTokens)
+	//   - RMB cost: 1.5 yuan
+	//   - quota = 1.5 × (500,000 ÷ 7.3) × 1 ≈ 102,740
+	//   - Display: 102,740 ÷ 500,000 × 7.3 ≈ 1.5 CNY ✓
 
 	usdExchangeRate := operation_setting.USDExchangeRate
 	if usdExchangeRate <= 0 {
