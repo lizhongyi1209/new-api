@@ -39,12 +39,13 @@ func TestSplitCredential(t *testing.T) {
 
 func TestModelNameToTencentCode(t *testing.T) {
 	cases := map[string]string{
-		"kling-v1-t":          "v1.0",
-		"kling-v1-6-t":        "v1.6",
-		"kling-v2-1-master-t": "v2.1m",
-		"kling-v3-t":          "v3.0",
-		"KLING-V3-T":          "v3.0",
-		"kling-v3":            "v3.0", // suffix optional; bare name still maps
+		"tencent-v1":          "v1.0",
+		"tencent-v1-6":        "v1.6",
+		"tencent-v2-1-master": "v2.1m",
+		"tencent-v3":          "v3.0",
+		"TENCENT-V3":          "v3.0",
+		"kling-v3":            "v3.0", // legacy kling- prefix still supported
+		"kling-v1-t":          "v1.0", // legacy -t suffix still supported
 		"v1.6":                "v1.6", // raw code passes through
 		"unknown-model":       "unknown-model",
 	}
@@ -56,14 +57,15 @@ func TestModelNameToTencentCode(t *testing.T) {
 }
 
 func TestMotionControlModelRouting(t *testing.T) {
-	// isMotionControlModel: only -motion(-t) names route to motion control
+	// isMotionControlModel: only -motion names route to motion control
 	motion := map[string]bool{
-		"kling-v3-motion-t":   true,
-		"kling-v2-6-motion-t": true,
-		"kling-v3-motion":     true,
-		"KLING-V3-MOTION-T":   true,
-		"kling-v3-t":          false,
-		"kling-v2-6-t":        false,
+		"tencent-v3-motion":   true,
+		"tencent-v2-6-motion": true,
+		"TENCENT-V3-MOTION":   true,
+		"kling-v3-motion-t":   true, // legacy format
+		"kling-v3-motion":     true, // legacy format
+		"tencent-v3":          false,
+		"tencent-v2-6":        false,
 		"kling-v3":            false,
 	}
 	for in, want := range motion {
@@ -72,12 +74,13 @@ func TestMotionControlModelRouting(t *testing.T) {
 		}
 	}
 
-	// modelNameToMotionModel: full names (kling-v2-6 / kling-v3), suffixes stripped
+	// modelNameToMotionModel: maps to full names (kling-v2-6 / kling-v3)
 	mapping := map[string]string{
-		"kling-v3-motion-t":   "kling-v3",
-		"kling-v2-6-motion-t": "kling-v2-6",
-		"kling-v3-motion":     "kling-v3",
-		"KLING-V3-MOTION-T":   "kling-v3",
+		"tencent-v3-motion":   "kling-v3",
+		"tencent-v2-6-motion": "kling-v2-6",
+		"TENCENT-V3-MOTION":   "kling-v3",
+		"kling-v3-motion-t":   "kling-v3", // legacy format
+		"kling-v3-motion":     "kling-v3", // legacy format
 	}
 	for in, want := range mapping {
 		if got := modelNameToMotionModel(in); got != want {

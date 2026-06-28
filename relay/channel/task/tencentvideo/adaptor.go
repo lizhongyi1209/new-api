@@ -215,36 +215,33 @@ func (a *TaskAdaptor) GetChannelName() string {
 }
 
 // GetModelList exposes the model names users configure on the channel.
-// The "-t" suffix marks these as the Tencent-channel variants so they do NOT
+// The "tencent-" prefix marks these as Tencent-channel variants so they do NOT
 // collide with the official Kling channel's model names (kling-v3 etc.), which
-// keeps the official channel's pricing for online users untouched. The suffix
-// is stripped before mapping to Tencent's short codes.
+// keeps the official channel's pricing for online users untouched.
 //
-// "-motion-t" names route to the motion-control API (SubmitMotionControlKlingJob).
-// "-omni-t" names route to the omni video editing API (SubmitVideoEditKlingJob).
+// "-motion" suffix routes to the motion-control API (SubmitMotionControlKlingJob).
+// "-omni" suffix routes to the omni video editing API (SubmitVideoEditKlingJob).
 func (a *TaskAdaptor) GetModelList() []string {
 	return []string{
-		"kling-v1-t", "kling-v1-5-t", "kling-v1-6-t",
-		"kling-v2-master-t", "kling-v2-1-t", "kling-v2-1-master-t",
-		"kling-v2-5-turbo-t", "kling-v2-6-t", "kling-v3-t",
-		"kling-v2-6-motion-t", "kling-v3-motion-t",
-		"kling-video-o1-omni-t", "kling-v3-omni-t",
+		"tencent-v1", "tencent-v1-5", "tencent-v1-6",
+		"tencent-v2-master", "tencent-v2-1", "tencent-v2-1-master",
+		"tencent-v2-5-turbo", "tencent-v2-6", "tencent-v3",
+		"tencent-v2-6-motion", "tencent-v3-motion",
+		"tencent-video-o1-omni", "tencent-v3-omni",
 	}
 }
 
 // isMotionControlModel reports whether the model name selects the
-// motion-control API (carries a "-motion" marker before the "-t" suffix).
+// motion-control API (carries a "-motion" suffix).
 func isMotionControlModel(name string) bool {
 	n := strings.ToLower(strings.TrimSpace(name))
-	n = strings.TrimSuffix(n, "-t")
 	return strings.HasSuffix(n, "-motion")
 }
 
 // isOmniModel reports whether the model name selects the omni video editing
-// API (carries an "-omni" marker before the "-t" suffix).
+// API (carries an "-omni" suffix).
 func isOmniModel(name string) bool {
 	n := strings.ToLower(strings.TrimSpace(name))
-	n = strings.TrimSuffix(n, "-t")
 	return strings.HasSuffix(n, "-omni")
 }
 
@@ -253,15 +250,20 @@ func isOmniModel(name string) bool {
 // codes used by image2video.
 func modelNameToMotionModel(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
-	n = strings.TrimSuffix(n, "-t")
 	n = strings.TrimSuffix(n, "-motion")
+	// Strip tencent- prefix to get the base version
+	n = strings.TrimPrefix(n, "tencent-")
 	switch n {
-	case "kling-v2-6":
+	case "v2-6":
 		return "kling-v2-6"
-	case "kling-v3", "kling-v3-0":
+	case "v3", "v3-0":
 		return "kling-v3"
 	default:
-		return n
+		// If already in kling-* format, use it
+		if strings.HasPrefix(name, "kling-") {
+			return name
+		}
+		return "kling-" + n
 	}
 }
 
@@ -269,17 +271,18 @@ func modelNameToMotionModel(name string) string {
 // Omni supports kling-video-o1 and kling-v3-omni.
 func modelNameToOmniModel(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
-	n = strings.TrimSuffix(n, "-t")
 	n = strings.TrimSuffix(n, "-omni")
+	// Strip tencent- prefix
+	n = strings.TrimPrefix(n, "tencent-")
 	switch n {
-	case "kling-video-o1":
+	case "video-o1":
 		return "kling-video-o1"
-	case "kling-v3", "kling-v3-0":
+	case "v3", "v3-0":
 		return "kling-v3-omni"
 	default:
 		// If it already looks like a full omni model name, use it
-		if n == "kling-v3-omni" {
-			return "kling-v3-omni"
+		if n == "kling-v3-omni" || n == "kling-video-o1" {
+			return n
 		}
 		// Default to kling-video-o1
 		return "kling-video-o1"
@@ -287,29 +290,32 @@ func modelNameToOmniModel(name string) string {
 }
 
 // modelNameToTencentCode maps the model name to Tencent's Model code.
-// The "-t" channel suffix is stripped first; unknown names pass through
+// The "tencent-" prefix is stripped first; unknown names pass through
 // unchanged so a raw code (e.g. "v1.6") also works.
 func modelNameToTencentCode(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
-	n = strings.TrimSuffix(n, "-t")
+	// Strip tencent- prefix
+	n = strings.TrimPrefix(n, "tencent-")
+	// Also support legacy kling- prefix for backwards compatibility
+	n = strings.TrimPrefix(n, "kling-")
 	switch n {
-	case "kling-v1", "kling-v1-0":
+	case "v1", "v1-0":
 		return "v1.0"
-	case "kling-v1-5":
+	case "v1-5":
 		return "v1.5"
-	case "kling-v1-6":
+	case "v1-6":
 		return "v1.6"
-	case "kling-v2-master", "kling-v2-0":
+	case "v2-master", "v2-0":
 		return "v2.0"
-	case "kling-v2-1":
+	case "v2-1":
 		return "v2.1"
-	case "kling-v2-1-master":
+	case "v2-1-master":
 		return "v2.1m"
-	case "kling-v2-5-turbo":
+	case "v2-5-turbo":
 		return "v2.5"
-	case "kling-v2-6":
+	case "v2-6":
 		return "v2.6"
-	case "kling-v3", "kling-v3-0":
+	case "v3", "v3-0":
 		return "v3.0"
 	default:
 		return name

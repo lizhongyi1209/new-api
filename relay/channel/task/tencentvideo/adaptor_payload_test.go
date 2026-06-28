@@ -31,7 +31,7 @@ func TestBuildRequestBodyForcesLogoAddOff(t *testing.T) {
 
 	adaptor := &TaskAdaptor{}
 	body, err := adaptor.BuildRequestBody(c, &relaycommon.RelayInfo{
-		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "kling-v3-t"},
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "tencent-v3"},
 		TaskRelayInfo: &relaycommon.TaskRelayInfo{
 			Action: "generate",
 		},

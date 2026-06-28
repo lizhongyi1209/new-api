@@ -691,15 +691,84 @@ type TaskImageInfo struct {
 type TaskSubmitReq struct {
 	Prompt         string                 `json:"prompt"`
 	Model          string                 `json:"model,omitempty"`
+	ModelName      string                 `json:"model_name,omitempty"` // Kling official field
 	Mode           string                 `json:"mode,omitempty"`
 	Image          string                 `json:"image,omitempty"`
+	ImageUrl       string                 `json:"image_url,omitempty"`     // Kling official field
+	ImageTail      string                 `json:"image_tail,omitempty"`    // Kling official field
 	Images         []string               `json:"images,omitempty"`
-	ImageList      []TaskImageInfo        `json:"image_list,omitempty"` // Full image list with type info
+	ImageList      []TaskImageInfo        `json:"image_list,omitempty"`    // Full image list with type info
 	Size           string                 `json:"size,omitempty"`
 	Duration       int                    `json:"duration,omitempty"`
 	Seconds        string                 `json:"seconds,omitempty"`
+	AspectRatio    string                 `json:"aspect_ratio,omitempty"`  // Kling official field
 	InputReference string                 `json:"input_reference,omitempty"`
+
+	// Kling-specific fields (top-level passthrough)
+	NegativePrompt       string             `json:"negative_prompt,omitempty"`
+	CfgScale             *float64           `json:"cfg_scale,omitempty"`
+	Sound                string             `json:"sound,omitempty"`
+	MultiShot            string             `json:"multi_shot,omitempty"` // "true" or "false" as string
+	ShotType             string             `json:"shot_type,omitempty"`
+	MultiPrompt          []MultiPromptItem  `json:"multi_prompt,omitempty"`
+	StaticMask           string             `json:"static_mask,omitempty"`
+	DynamicMasks         []DynamicMask      `json:"dynamic_masks,omitempty"`
+	CameraControl        *CameraControl     `json:"camera_control,omitempty"`
+	VideoUrl             string             `json:"video_url,omitempty"`
+	CharacterOrientation string             `json:"character_orientation,omitempty"`
+	KeepOriginalSound    string             `json:"keep_original_sound,omitempty"`
+	VideoList            []VideoItem        `json:"video_list,omitempty"`
+	ElementList          []ElementItem      `json:"element_list,omitempty"`
+	WatermarkInfo        *WatermarkInfo     `json:"watermark_info,omitempty"`
+	CallbackUrl          string             `json:"callback_url,omitempty"`
+	ExternalTaskId       string             `json:"external_task_id,omitempty"`
+
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// Kling-specific type definitions for TaskSubmitReq
+type MultiPromptItem struct {
+	Index    int    `json:"index"`
+	Prompt   string `json:"prompt"`
+	Duration string `json:"duration"`
+}
+
+type DynamicMask struct {
+	Mask         string            `json:"mask,omitempty"`
+	Trajectories []TrajectoryPoint `json:"trajectories,omitempty"`
+}
+
+type TrajectoryPoint struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+type CameraControl struct {
+	Type   string        `json:"type,omitempty"`
+	Config *CameraConfig `json:"config,omitempty"`
+}
+
+type CameraConfig struct {
+	Horizontal float64 `json:"horizontal,omitempty"`
+	Vertical   float64 `json:"vertical,omitempty"`
+	Pan        float64 `json:"pan,omitempty"`
+	Tilt       float64 `json:"tilt,omitempty"`
+	Roll       float64 `json:"roll,omitempty"`
+	Zoom       float64 `json:"zoom,omitempty"`
+}
+
+type VideoItem struct {
+	VideoUrl          string `json:"video_url"`
+	ReferType         string `json:"refer_type,omitempty"`
+	KeepOriginalSound string `json:"keep_original_sound,omitempty"`
+}
+
+type ElementItem struct {
+	ElementId int64 `json:"element_id"`
+}
+
+type WatermarkInfo struct {
+	Enabled bool `json:"enabled"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {

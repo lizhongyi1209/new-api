@@ -329,20 +329,15 @@ func (a *TaskAdaptor) GetChannelName() string {
 // ============================
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*requestPayload, error) {
-	// Extract negative_prompt from metadata if provided at top level
-	var negativePrompt string
-	if v, ok := req.Metadata["negative_prompt"]; ok {
-		if s, ok := v.(string); ok {
-			negativePrompt = s
-		}
-	}
-
 	modelName := info.UpstreamModelName
 	if modelName == "" {
 		modelName = "kling-v1"
 	}
+	// Support model_name field (Kling official) with fallback to model
+	if req.ModelName != "" {
+		modelName = req.ModelName
+	}
 
-	// Handle motion-control
 	// Handle motion-control
 	if info.Action == constant.TaskActionMotionControl {
 		// Default model for motion-control
@@ -351,16 +346,19 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		}
 
 		r := requestPayload{
-			Prompt:    req.Prompt,
-			ModelName: modelName,
-			Model:     modelName,
+			Prompt:               req.Prompt,
+			ModelName:            modelName,
+			Model:                modelName,
+			VideoUrl:             req.VideoUrl,
+			CharacterOrientation: req.CharacterOrientation,
+			KeepOriginalSound:    req.KeepOriginalSound,
+			ImageUrl:             req.ImageUrl,
 		}
-		// motion-control fields come from metadata (image_url, video_url, character_orientation, etc.)
+		// metadata can still override (for backward compatibility)
 		if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 			return nil, errors.Wrap(err, "unmarshal metadata failed")
 		}
-		// Re-apply the channel-mapped model name; metadata may have overwritten it
-		// with the raw client-side compound name (e.g. "kling-v2-6-motion-std-5s").
+		// Re-apply the channel-mapped model name
 		r.ModelName = modelName
 		r.Model = modelName
 		return &r, nil
@@ -374,15 +372,21 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		}
 
 		r := requestPayload{
-			Prompt:      req.Prompt,
-			ModelName:   modelName,
-			Model:       modelName,
-			Mode:        taskcommon.DefaultString(req.Mode, "pro"),
-			Duration:    fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
-			AspectRatio: a.getAspectRatio(req.Size),
+			Prompt:         req.Prompt,
+			ModelName:      modelName,
+			Model:          modelName,
+			Mode:           taskcommon.DefaultString(req.Mode, "pro"),
+			Duration:       fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
+			AspectRatio:    a.getAspectRatio(req.Size, req.AspectRatio),
+			ImageList:      convertImageList(req.ImageList),
+			ElementList:    req.ElementList,
+			VideoList:      req.VideoList,
+			WatermarkInfo:  req.WatermarkInfo,
+			CallbackUrl:    req.CallbackUrl,
+			ExternalTaskId: req.ExternalTaskId,
 		}
 
-		// Unmarshal metadata to get all omni-video specific fields
+		// metadata can still override (for backward compatibility)
 		if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 			return nil, errors.Wrap(err, "unmarshal metadata failed")
 		}
@@ -397,27 +401,74 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	// Default: image2video / text2video
 	r := requestPayload{
 		Prompt:         req.Prompt,
-		NegativePrompt: negativePrompt,
+		NegativePrompt: req.NegativePrompt,
 		Image:          req.Image,
+		ImageUrl:       req.ImageUrl,
+		ImageTail:      req.ImageTail,
 		Mode:           taskcommon.DefaultString(req.Mode, "std"),
 		Duration:       fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
-		AspectRatio:    a.getAspectRatio(req.Size),
+		AspectRatio:    a.getAspectRatio(req.Size, req.AspectRatio),
 		ModelName:      modelName,
 		Model:          modelName,
 		CfgScale:       0.5,
-		DynamicMasks:   []DynamicMask{},
+		Sound:          req.Sound,
+		ShotType:       req.ShotType,
+		StaticMask:     req.StaticMask,
+		DynamicMasks:   req.DynamicMasks,
+		CameraControl:  req.CameraControl,
+		MultiPrompt:    req.MultiPrompt,
+		CallbackUrl:    req.CallbackUrl,
+		ExternalTaskId: req.ExternalTaskId,
 	}
-	// metadata can override any field (e.g. sound, camera_control, negative_prompt)
+
+	// Handle multi_shot field (string "true"/"false" to *bool)
+	if req.MultiShot != "" {
+		multiShotBool := req.MultiShot == "true"
+		r.MultiShot = &multiShotBool
+	}
+
+	// Handle cfg_scale from top-level
+	if req.CfgScale != nil {
+		r.CfgScale = *req.CfgScale
+	}
+
+	// Handle dynamic_masks - initialize empty array if nil
+	if r.DynamicMasks == nil {
+		r.DynamicMasks = []DynamicMask{}
+	}
+
+	// metadata can still override any field (for backward compatibility)
 	if err := taskcommon.UnmarshalMetadata(req.Metadata, &r); err != nil {
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
-	// Re-apply the channel-mapped model name after metadata unmarshal.
+
+	// Re-apply the channel-mapped model name after metadata unmarshal
 	r.ModelName = modelName
 	r.Model = modelName
 	return &r, nil
 }
 
-func (a *TaskAdaptor) getAspectRatio(size string) string {
+// convertImageList converts TaskImageInfo to ImageItem
+func convertImageList(taskImages []relaycommon.TaskImageInfo) []ImageItem {
+	if len(taskImages) == 0 {
+		return nil
+	}
+	result := make([]ImageItem, len(taskImages))
+	for i, img := range taskImages {
+		result[i] = ImageItem{
+			ImageUrl: img.ImageURL,
+			Type:     img.Type,
+		}
+	}
+	return result
+}
+
+func (a *TaskAdaptor) getAspectRatio(size string, aspectRatio string) string {
+	// If aspect_ratio is provided directly, use it
+	if aspectRatio != "" {
+		return aspectRatio
+	}
+	// Otherwise, derive from size
 	switch size {
 	case "1024x1024", "512x512":
 		return "1:1"
