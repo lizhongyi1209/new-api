@@ -579,12 +579,11 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 			video := videos[0]
 			taskInfo.Url = video.Url
 		}
-		if tokens, err := strconv.ParseFloat(resPayload.Data.FinalUnitDeduction, 64); err == nil {
-			rounded := int(math.Ceil(tokens))
-			if rounded > 0 {
-				taskInfo.CompletionTokens = rounded
-				taskInfo.TotalTokens = rounded
-			}
+		if cost, err := strconv.ParseFloat(resPayload.Data.FinalUnitDeduction, 64); err == nil && cost > 0 {
+			taskInfo.ActualCost = cost
+			// 保留整数 token 字段用于兼容性（向上取整）
+			taskInfo.CompletionTokens = int(math.Ceil(cost))
+			taskInfo.TotalTokens = int(math.Ceil(cost))
 		}
 	case "failed":
 		taskInfo.Status = model.TaskStatusFailure
@@ -648,27 +647,24 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 
 	// Parse final_unit_deduction directly from task.Data to preserve precision
 	// (taskResult.CompletionTokens is rounded, losing decimal precision)
-	var klingResp responsePayload
-	if err := common.Unmarshal(task.Data, &klingResp); err != nil {
-		// Fallback to rounded value if parsing fails
-		if taskResult.CompletionTokens <= 0 {
-			return 0
+	// Priority 1: Use ActualCost if available (preserves decimal precision)
+	var rmbCost float64
+	if taskResult.ActualCost > 0 {
+		rmbCost = taskResult.ActualCost
+	} else {
+		// Fallback: parse from task.Data or use rounded CompletionTokens
+		var klingResp responsePayload
+		if err := common.Unmarshal(task.Data, &klingResp); err == nil {
+			if cost, err := strconv.ParseFloat(klingResp.Data.FinalUnitDeduction, 64); err == nil && cost > 0 {
+				rmbCost = cost
+			}
 		}
-		rmbCost := float64(taskResult.CompletionTokens)
-		usdExchangeRate := operation_setting.USDExchangeRate
-		if usdExchangeRate <= 0 {
-			usdExchangeRate = 1.0
+		if rmbCost <= 0 && taskResult.CompletionTokens > 0 {
+			rmbCost = float64(taskResult.CompletionTokens)
 		}
-		groupRatio := 1.0
-		if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
-			groupRatio = bc.GroupRatio
-		}
-		return int(math.Ceil(rmbCost * common.QuotaPerUnit / usdExchangeRate * groupRatio))
 	}
 
-	// Parse final_unit_deduction as float64 to preserve decimal precision
-	rmbCost, err := strconv.ParseFloat(klingResp.Data.FinalUnitDeduction, 64)
-	if err != nil || rmbCost <= 0 {
+	if rmbCost <= 0 {
 		return 0
 	}
 
