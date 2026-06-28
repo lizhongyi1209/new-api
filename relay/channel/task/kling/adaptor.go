@@ -378,12 +378,30 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 			Mode:           taskcommon.DefaultString(req.Mode, "pro"),
 			Duration:       fmt.Sprintf("%d", taskcommon.DefaultInt(req.Duration, 5)),
 			AspectRatio:    a.getAspectRatio(req.Size, req.AspectRatio),
-			ImageList:      convertImageList(req.ImageList),
-			ElementList:    req.ElementList,
-			VideoList:      req.VideoList,
-			WatermarkInfo:  req.WatermarkInfo,
 			CallbackUrl:    req.CallbackUrl,
 			ExternalTaskId: req.ExternalTaskId,
+		}
+
+		// Parse top-level RawMessage fields
+		if len(req.ImageList) > 0 {
+			if err := common.Unmarshal(req.ImageList, &r.ImageList); err != nil {
+				return nil, errors.Wrap(err, "unmarshal image_list failed")
+			}
+		}
+		if len(req.ElementList) > 0 {
+			if err := common.Unmarshal(req.ElementList, &r.ElementList); err != nil {
+				return nil, errors.Wrap(err, "unmarshal element_list failed")
+			}
+		}
+		if len(req.VideoList) > 0 {
+			if err := common.Unmarshal(req.VideoList, &r.VideoList); err != nil {
+				return nil, errors.Wrap(err, "unmarshal video_list failed")
+			}
+		}
+		if len(req.WatermarkInfo) > 0 {
+			if err := common.Unmarshal(req.WatermarkInfo, &r.WatermarkInfo); err != nil {
+				return nil, errors.Wrap(err, "unmarshal watermark_info failed")
+			}
 		}
 
 		// metadata can still override (for backward compatibility)
@@ -414,9 +432,6 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		Sound:          req.Sound,
 		ShotType:       req.ShotType,
 		StaticMask:     req.StaticMask,
-		DynamicMasks:   req.DynamicMasks,
-		CameraControl:  req.CameraControl,
-		MultiPrompt:    req.MultiPrompt,
 		CallbackUrl:    req.CallbackUrl,
 		ExternalTaskId: req.ExternalTaskId,
 	}
@@ -432,9 +447,23 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		r.CfgScale = *req.CfgScale
 	}
 
-	// Handle dynamic_masks - initialize empty array if nil
-	if r.DynamicMasks == nil {
-		r.DynamicMasks = []DynamicMask{}
+	// Parse top-level RawMessage fields
+	if len(req.MultiPrompt) > 0 {
+		if err := common.Unmarshal(req.MultiPrompt, &r.MultiPrompt); err != nil {
+			return nil, errors.Wrap(err, "unmarshal multi_prompt failed")
+		}
+	}
+	if len(req.DynamicMasks) > 0 {
+		if err := common.Unmarshal(req.DynamicMasks, &r.DynamicMasks); err != nil {
+			return nil, errors.Wrap(err, "unmarshal dynamic_masks failed")
+		}
+	} else {
+		r.DynamicMasks = []DynamicMask{} // Initialize empty array if not provided
+	}
+	if len(req.CameraControl) > 0 {
+		if err := common.Unmarshal(req.CameraControl, &r.CameraControl); err != nil {
+			return nil, errors.Wrap(err, "unmarshal camera_control failed")
+		}
 	}
 
 	// metadata can still override any field (for backward compatibility)

@@ -705,70 +705,27 @@ type TaskSubmitReq struct {
 	InputReference string                 `json:"input_reference,omitempty"`
 
 	// Kling-specific fields (top-level passthrough)
-	NegativePrompt       string             `json:"negative_prompt,omitempty"`
-	CfgScale             *float64           `json:"cfg_scale,omitempty"`
-	Sound                string             `json:"sound,omitempty"`
-	MultiShot            string             `json:"multi_shot,omitempty"` // "true" or "false" as string
-	ShotType             string             `json:"shot_type,omitempty"`
-	MultiPrompt          []MultiPromptItem  `json:"multi_prompt,omitempty"`
-	StaticMask           string             `json:"static_mask,omitempty"`
-	DynamicMasks         []DynamicMask      `json:"dynamic_masks,omitempty"`
-	CameraControl        *CameraControl     `json:"camera_control,omitempty"`
-	VideoUrl             string             `json:"video_url,omitempty"`
-	CharacterOrientation string             `json:"character_orientation,omitempty"`
-	KeepOriginalSound    string             `json:"keep_original_sound,omitempty"`
-	VideoList            []VideoItem        `json:"video_list,omitempty"`
-	ElementList          []ElementItem      `json:"element_list,omitempty"`
-	WatermarkInfo        *WatermarkInfo     `json:"watermark_info,omitempty"`
-	CallbackUrl          string             `json:"callback_url,omitempty"`
-	ExternalTaskId       string             `json:"external_task_id,omitempty"`
+	// Note: these use json.RawMessage to avoid type conversion issues
+	// Actual parsing happens in the specific adaptor
+	NegativePrompt       string          `json:"negative_prompt,omitempty"`
+	CfgScale             *float64        `json:"cfg_scale,omitempty"`
+	Sound                string          `json:"sound,omitempty"`
+	MultiShot            string          `json:"multi_shot,omitempty"` // "true" or "false" as string
+	ShotType             string          `json:"shot_type,omitempty"`
+	MultiPrompt          json.RawMessage `json:"multi_prompt,omitempty"`
+	StaticMask           string          `json:"static_mask,omitempty"`
+	DynamicMasks         json.RawMessage `json:"dynamic_masks,omitempty"`
+	CameraControl        json.RawMessage `json:"camera_control,omitempty"`
+	VideoUrl             string          `json:"video_url,omitempty"`
+	CharacterOrientation string          `json:"character_orientation,omitempty"`
+	KeepOriginalSound    string          `json:"keep_original_sound,omitempty"`
+	VideoList            json.RawMessage `json:"video_list,omitempty"`
+	ElementList          json.RawMessage `json:"element_list,omitempty"`
+	WatermarkInfo        json.RawMessage `json:"watermark_info,omitempty"`
+	CallbackUrl          string          `json:"callback_url,omitempty"`
+	ExternalTaskId       string          `json:"external_task_id,omitempty"`
 
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// Kling-specific type definitions for TaskSubmitReq
-type MultiPromptItem struct {
-	Index    int    `json:"index"`
-	Prompt   string `json:"prompt"`
-	Duration string `json:"duration"`
-}
-
-type DynamicMask struct {
-	Mask         string            `json:"mask,omitempty"`
-	Trajectories []TrajectoryPoint `json:"trajectories,omitempty"`
-}
-
-type TrajectoryPoint struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-}
-
-type CameraControl struct {
-	Type   string        `json:"type,omitempty"`
-	Config *CameraConfig `json:"config,omitempty"`
-}
-
-type CameraConfig struct {
-	Horizontal float64 `json:"horizontal,omitempty"`
-	Vertical   float64 `json:"vertical,omitempty"`
-	Pan        float64 `json:"pan,omitempty"`
-	Tilt       float64 `json:"tilt,omitempty"`
-	Roll       float64 `json:"roll,omitempty"`
-	Zoom       float64 `json:"zoom,omitempty"`
-}
-
-type VideoItem struct {
-	VideoUrl          string `json:"video_url"`
-	ReferType         string `json:"refer_type,omitempty"`
-	KeepOriginalSound string `json:"keep_original_sound,omitempty"`
-}
-
-type ElementItem struct {
-	ElementId int64 `json:"element_id"`
-}
-
-type WatermarkInfo struct {
-	Enabled bool `json:"enabled"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {
