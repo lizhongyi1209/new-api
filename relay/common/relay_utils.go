@@ -186,36 +186,36 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 
 func isKnownTaskField(field string) bool {
 	knownFields := map[string]bool{
-		"prompt":                 true,
-		"model":                  true,
-		"model_name":             true, // Kling official field
-		"mode":                   true,
-		"image":                  true,
-		"image_url":              true, // Kling official field
-		"image_tail":             true, // Kling official field
-		"images":                 true,
-		"image_list":             true,
-		"size":                   true,
-		"duration":               true,
-		"aspect_ratio":           true, // Kling official field
-		"input_reference":        true, // Sora specific field
-		"negative_prompt":        true, // Kling field
-		"cfg_scale":              true, // Kling field
-		"sound":                  true, // Kling field
-		"multi_shot":             true, // Kling field
-		"shot_type":              true, // Kling field
-		"multi_prompt":           true, // Kling field
-		"static_mask":            true, // Kling field
-		"dynamic_masks":          true, // Kling field
-		"camera_control":         true, // Kling field
-		"video_url":              true, // Kling field
-		"character_orientation":  true, // Kling field
-		"keep_original_sound":    true, // Kling field
-		"video_list":             true, // Kling field
-		"element_list":           true, // Kling field
-		"watermark_info":         true, // Kling field
-		"callback_url":           true, // Kling field
-		"external_task_id":       true, // Kling field
+		"prompt":                true,
+		"model":                 true,
+		"model_name":            true, // Kling official field
+		"mode":                  true,
+		"image":                 true,
+		"image_url":             true, // Kling official field
+		"image_tail":            true, // Kling official field
+		"images":                true,
+		"image_list":            true,
+		"size":                  true,
+		"duration":              true,
+		"aspect_ratio":          true, // Kling official field
+		"input_reference":       true, // Sora specific field
+		"negative_prompt":       true, // Kling field
+		"cfg_scale":             true, // Kling field
+		"sound":                 true, // Kling field
+		"multi_shot":            true, // Kling field
+		"shot_type":             true, // Kling field
+		"multi_prompt":          true, // Kling field
+		"static_mask":           true, // Kling field
+		"dynamic_masks":         true, // Kling field
+		"camera_control":        true, // Kling field
+		"video_url":             true, // Kling field
+		"character_orientation": true, // Kling field
+		"keep_original_sound":   true, // Kling field
+		"video_list":            true, // Kling field
+		"element_list":          true, // Kling field
+		"watermark_info":        true, // Kling field
+		"callback_url":          true, // Kling field
+		"external_task_id":      true, // Kling field
 	}
 	return knownFields[field]
 }
@@ -236,11 +236,24 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 	}
 
 	// multi_shot requests carry prompts inside multi_prompt items; top-level prompt may be empty
-	isMultiShot := req.MultiShot == "true"
+	isMultiShot := false
+	if len(req.MultiShot) > 0 {
+		var multiShotBool bool
+		if err := common.Unmarshal(req.MultiShot, &multiShotBool); err == nil {
+			isMultiShot = multiShotBool
+		} else {
+			var multiShotStr string
+			if err := common.Unmarshal(req.MultiShot, &multiShotStr); err == nil {
+				isMultiShot = multiShotStr == "true"
+			}
+		}
+	}
 	if !isMultiShot {
 		// Fallback: check metadata for backward compatibility
 		if metaMultiShot, ok := req.Metadata["multi_shot"].(string); ok {
 			isMultiShot = metaMultiShot == "true"
+		} else if metaMultiShot, ok := req.Metadata["multi_shot"].(bool); ok {
+			isMultiShot = metaMultiShot
 		}
 	}
 	if !isMultiShot {

@@ -229,7 +229,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, err
 	}
-	if info.Action != constant.TaskActionMotionControl && body.Image == "" && body.ImageTail == "" {
+	if info.Action == constant.TaskActionGenerate && body.Image == "" && body.ImageTail == "" {
 		c.Set("action", constant.TaskActionTextGenerate)
 	}
 	data, err := common.Marshal(body)
