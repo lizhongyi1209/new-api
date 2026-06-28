@@ -682,12 +682,19 @@ type TaskRelayInfo struct {
 	LockedChannel any
 }
 
+// TaskImageInfo represents an image with metadata (e.g. type: first_frame/end_frame)
+type TaskImageInfo struct {
+	ImageURL string `json:"image_url,omitempty"`
+	Type     string `json:"type,omitempty"`
+}
+
 type TaskSubmitReq struct {
 	Prompt         string                 `json:"prompt"`
 	Model          string                 `json:"model,omitempty"`
 	Mode           string                 `json:"mode,omitempty"`
 	Image          string                 `json:"image,omitempty"`
 	Images         []string               `json:"images,omitempty"`
+	ImageList      []TaskImageInfo        `json:"image_list,omitempty"` // Full image list with type info
 	Size           string                 `json:"size,omitempty"`
 	Duration       int                    `json:"duration,omitempty"`
 	Seconds        string                 `json:"seconds,omitempty"`
@@ -700,7 +707,7 @@ func (t *TaskSubmitReq) GetPrompt() string {
 }
 
 func (t *TaskSubmitReq) HasImage() bool {
-	return len(t.Images) > 0
+	return len(t.Images) > 0 || len(t.ImageList) > 0
 }
 
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {

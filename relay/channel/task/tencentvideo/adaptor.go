@@ -453,12 +453,23 @@ func (a *TaskAdaptor) convertToOmniPayload(req *relaycommon.TaskSubmitReq, info 
 	}
 
 	// Process images into ImageList format
-	if len(req.Images) > 0 {
+	// Prefer ImageList (with type info) over Images (plain URLs)
+	if len(req.ImageList) > 0 {
+		for _, img := range req.ImageList {
+			if strings.TrimSpace(img.ImageURL) != "" {
+				p.ImageList = append(p.ImageList, imageInfo{
+					ImageUrl: img.ImageURL,
+					Type:     img.Type, // Preserve type (first_frame, end_frame)
+				})
+			}
+		}
+	} else if len(req.Images) > 0 {
+		// Fallback: if only plain URLs provided, use them without type
 		for _, imgUrl := range req.Images {
 			if strings.TrimSpace(imgUrl) != "" {
 				p.ImageList = append(p.ImageList, imageInfo{
 					ImageUrl: imgUrl,
-					// Type can be set via metadata if needed (first_frame, end_frame)
+					// Type not set - may cause issues if provider requires it
 				})
 			}
 		}
