@@ -64,6 +64,10 @@ type ElementItem struct {
 	ElementId int64 `json:"element_id"`
 }
 
+type VoiceItem struct {
+	VoiceId string `json:"voice_id"`
+}
+
 type ImageItem struct {
 	ImageUrl string `json:"image_url"`
 	Type     string `json:"type,omitempty"` // first_frame or end_frame
@@ -71,7 +75,7 @@ type ImageItem struct {
 
 type VideoItem struct {
 	VideoUrl          string `json:"video_url"`
-	ReferType         string `json:"refer_type,omitempty"`         // feature or base
+	ReferType         string `json:"refer_type,omitempty"`          // feature or base
 	KeepOriginalSound string `json:"keep_original_sound,omitempty"` // yes or no
 }
 
@@ -80,31 +84,32 @@ type WatermarkInfo struct {
 }
 
 type requestPayload struct {
-	Prompt         string         `json:"prompt,omitempty"`
-	Image          string         `json:"image,omitempty"`
-	ImageUrl       string         `json:"image_url,omitempty"`
-	ImageTail      string         `json:"image_tail,omitempty"`
-	NegativePrompt string         `json:"negative_prompt,omitempty"`
-	Mode           string         `json:"mode,omitempty"`
-	Duration       string         `json:"duration,omitempty"`
-	AspectRatio    string         `json:"aspect_ratio,omitempty"`
-	ModelName      string         `json:"model_name,omitempty"`
-	Model          string         `json:"model,omitempty"` // Compatible with upstreams that only recognize "model"
-	CfgScale       float64        `json:"cfg_scale,omitempty"`
+	Prompt         string            `json:"prompt,omitempty"`
+	Image          string            `json:"image,omitempty"`
+	ImageUrl       string            `json:"image_url,omitempty"`
+	ImageTail      string            `json:"image_tail,omitempty"`
+	NegativePrompt string            `json:"negative_prompt,omitempty"`
+	Mode           string            `json:"mode,omitempty"`
+	Duration       string            `json:"duration,omitempty"`
+	AspectRatio    string            `json:"aspect_ratio,omitempty"`
+	ModelName      string            `json:"model_name,omitempty"`
+	Model          string            `json:"model,omitempty"` // Compatible with upstreams that only recognize "model"
+	CfgScale       float64           `json:"cfg_scale,omitempty"`
 	Sound          string            `json:"sound,omitempty"`
 	MultiShot      *bool             `json:"multi_shot,omitempty"` // Use pointer to distinguish false from absent
 	ShotType       string            `json:"shot_type,omitempty"`
 	MultiPrompt    []MultiPromptItem `json:"multi_prompt,omitempty"`
 	StaticMask     string            `json:"static_mask,omitempty"`
-	DynamicMasks   []DynamicMask  `json:"dynamic_masks,omitempty"`
-	CameraControl  *CameraControl `json:"camera_control,omitempty"`
+	DynamicMasks   []DynamicMask     `json:"dynamic_masks,omitempty"`
+	CameraControl  *CameraControl    `json:"camera_control,omitempty"`
 	// motion-control specific fields
-	VideoUrl             string        `json:"video_url,omitempty"`
-	CharacterOrientation string        `json:"character_orientation,omitempty"`
-	KeepOriginalSound    string        `json:"keep_original_sound,omitempty"`
+	VideoUrl             string `json:"video_url,omitempty"`
+	CharacterOrientation string `json:"character_orientation,omitempty"`
+	KeepOriginalSound    string `json:"keep_original_sound,omitempty"`
 	// Omni Video specific fields
 	ImageList      []ImageItem    `json:"image_list,omitempty"`
 	ElementList    []ElementItem  `json:"element_list,omitempty"`
+	VoiceList      []VoiceItem    `json:"voice_list,omitempty"`
 	VideoList      []VideoItem    `json:"video_list,omitempty"`
 	WatermarkInfo  *WatermarkInfo `json:"watermark_info,omitempty"`
 	CallbackUrl    string         `json:"callback_url,omitempty"`
@@ -432,10 +437,20 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 		ExternalTaskId: req.ExternalTaskId,
 	}
 
-	// Handle multi_shot field (string "true"/"false" to *bool)
-	if req.MultiShot != "" {
-		multiShotBool := req.MultiShot == "true"
-		r.MultiShot = &multiShotBool
+	// Handle multi_shot field (supports both boolean and string "true"/"false")
+	if len(req.MultiShot) > 0 {
+		var multiShotBool bool
+		// Try parsing as boolean first
+		if err := common.Unmarshal(req.MultiShot, &multiShotBool); err == nil {
+			r.MultiShot = &multiShotBool
+		} else {
+			// Fallback to string parsing
+			var multiShotStr string
+			if err := common.Unmarshal(req.MultiShot, &multiShotStr); err == nil {
+				multiShotBool = multiShotStr == "true"
+				r.MultiShot = &multiShotBool
+			}
+		}
 	}
 
 	// Handle cfg_scale from top-level
@@ -459,6 +474,21 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	if len(req.CameraControl) > 0 {
 		if err := common.Unmarshal(req.CameraControl, &r.CameraControl); err != nil {
 			return nil, errors.Wrap(err, "unmarshal camera_control failed")
+		}
+	}
+	if len(req.ElementList) > 0 {
+		if err := common.Unmarshal(req.ElementList, &r.ElementList); err != nil {
+			return nil, errors.Wrap(err, "unmarshal element_list failed")
+		}
+	}
+	if len(req.VoiceList) > 0 {
+		if err := common.Unmarshal(req.VoiceList, &r.VoiceList); err != nil {
+			return nil, errors.Wrap(err, "unmarshal voice_list failed")
+		}
+	}
+	if len(req.WatermarkInfo) > 0 {
+		if err := common.Unmarshal(req.WatermarkInfo, &r.WatermarkInfo); err != nil {
+			return nil, errors.Wrap(err, "unmarshal watermark_info failed")
 		}
 	}
 

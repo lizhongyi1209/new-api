@@ -689,20 +689,20 @@ type TaskImageInfo struct {
 }
 
 type TaskSubmitReq struct {
-	Prompt         string                 `json:"prompt"`
-	Model          string                 `json:"model,omitempty"`
-	ModelName      string                 `json:"model_name,omitempty"` // Kling official field
-	Mode           string                 `json:"mode,omitempty"`
-	Image          string                 `json:"image,omitempty"`
-	ImageUrl       string                 `json:"image_url,omitempty"`     // Kling official field
-	ImageTail      string                 `json:"image_tail,omitempty"`    // Kling official field
-	Images         []string               `json:"images,omitempty"`
-	ImageList      []TaskImageInfo        `json:"image_list,omitempty"`    // Full image list with type info
-	Size           string                 `json:"size,omitempty"`
-	Duration       int                    `json:"duration,omitempty"`
-	Seconds        string                 `json:"seconds,omitempty"`
-	AspectRatio    string                 `json:"aspect_ratio,omitempty"`  // Kling official field
-	InputReference string                 `json:"input_reference,omitempty"`
+	Prompt         string          `json:"prompt"`
+	Model          string          `json:"model,omitempty"`
+	ModelName      string          `json:"model_name,omitempty"` // Kling official field
+	Mode           string          `json:"mode,omitempty"`
+	Image          string          `json:"image,omitempty"`
+	ImageUrl       string          `json:"image_url,omitempty"`  // Kling official field
+	ImageTail      string          `json:"image_tail,omitempty"` // Kling official field
+	Images         []string        `json:"images,omitempty"`
+	ImageList      []TaskImageInfo `json:"image_list,omitempty"` // Full image list with type info
+	Size           string          `json:"size,omitempty"`
+	Duration       int             `json:"duration,omitempty"`
+	Seconds        string          `json:"seconds,omitempty"`
+	AspectRatio    string          `json:"aspect_ratio,omitempty"` // Kling official field
+	InputReference string          `json:"input_reference,omitempty"`
 
 	// Kling-specific fields (top-level passthrough)
 	// Note: these use json.RawMessage to avoid type conversion issues
@@ -710,7 +710,7 @@ type TaskSubmitReq struct {
 	NegativePrompt       string          `json:"negative_prompt,omitempty"`
 	CfgScale             *float64        `json:"cfg_scale,omitempty"`
 	Sound                string          `json:"sound,omitempty"`
-	MultiShot            string          `json:"multi_shot,omitempty"` // "true" or "false" as string
+	MultiShot            json.RawMessage `json:"multi_shot,omitempty"` // Supports both boolean and "true"/"false" string
 	ShotType             string          `json:"shot_type,omitempty"`
 	MultiPrompt          json.RawMessage `json:"multi_prompt,omitempty"`
 	StaticMask           string          `json:"static_mask,omitempty"`
@@ -721,11 +721,12 @@ type TaskSubmitReq struct {
 	KeepOriginalSound    string          `json:"keep_original_sound,omitempty"`
 	VideoList            json.RawMessage `json:"video_list,omitempty"`
 	ElementList          json.RawMessage `json:"element_list,omitempty"`
+	VoiceList            json.RawMessage `json:"voice_list,omitempty"`
 	WatermarkInfo        json.RawMessage `json:"watermark_info,omitempty"`
 	CallbackUrl          string          `json:"callback_url,omitempty"`
 	ExternalTaskId       string          `json:"external_task_id,omitempty"`
 
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 func (t *TaskSubmitReq) GetPrompt() string {
