@@ -43,6 +43,9 @@ const (
 	actionMotionSubmit   = "SubmitMotionControlKlingJob"
 	actionMotionDescribe = "DescribeMotionControlKlingJob"
 
+	actionOmniSubmit   = "SubmitVideoEditKlingJob"
+	actionOmniDescribe = "DescribeVideoEditKlingJob"
+
 	// gin context keys
 	ctxKeyBody   = "tencentvideo_body_bytes"
 	ctxKeyRegion = "tencentvideo_region"
@@ -85,6 +88,22 @@ type voiceItem struct {
 	VoiceId string `json:"VoiceId,omitempty"`
 }
 
+type imageInfo struct {
+	ImageUrl string `json:"ImageUrl,omitempty"`
+	Type     string `json:"Type,omitempty"` // first_frame or end_frame
+}
+
+type referVideoInfo struct {
+	VideoUrl          string `json:"VideoUrl,omitempty"`
+	ReferType         string `json:"ReferType,omitempty"`         // feature or base
+	KeepOriginalSound string `json:"KeepOriginalSound,omitempty"` // yes or no
+}
+
+type logoParam struct {
+	LogoUrl  string `json:"LogoUrl,omitempty"`
+	LogoRect string `json:"LogoRect,omitempty"`
+}
+
 // submitPayload is the SubmitImageToVideoJob request body.
 type submitPayload struct {
 	Model          string            `json:"Model,omitempty"`
@@ -121,6 +140,26 @@ type motionPayload struct {
 	CharacterOrientation string        `json:"CharacterOrientation,omitempty"`
 	CallbackUrl          string        `json:"CallbackUrl,omitempty"`
 	LogoAdd              *int          `json:"LogoAdd,omitempty"`
+}
+
+// omniPayload is the SubmitVideoEditKlingJob request body for omni video editing.
+type omniPayload struct {
+	Prompt         string            `json:"Prompt,omitempty"`
+	Model          string            `json:"Model,omitempty"` // kling-video-o1 or kling-v3-omni
+	ExternalTaskId string            `json:"ExternalTaskId,omitempty"`
+	ImageList      []imageInfo       `json:"ImageList,omitempty"`
+	AspectRatio    string            `json:"AspectRatio,omitempty"` // 16:9, 9:16, 1:1
+	Duration       *int              `json:"Duration,omitempty"`    // 3-10 seconds
+	LogoAdd        *int              `json:"LogoAdd,omitempty"`
+	LogoParam      *logoParam        `json:"LogoParam,omitempty"`
+	Mode           string            `json:"Mode,omitempty"` // std or pro
+	VideoList      []referVideoInfo  `json:"VideoList,omitempty"`
+	MultiShot      *bool             `json:"MultiShot,omitempty"`
+	ShotType       string            `json:"ShotType,omitempty"` // customize
+	MultiPrompt    []multiPromptItem `json:"MultiPrompt,omitempty"`
+	ElementList    []elementItem     `json:"ElementList,omitempty"`
+	CallbackUrl    string            `json:"CallbackUrl,omitempty"`
+	Sound          string            `json:"Sound,omitempty"` // off or on
 }
 
 // submitResponse is the {"Response":{...}} envelope for SubmitImageToVideoJob.
@@ -182,12 +221,14 @@ func (a *TaskAdaptor) GetChannelName() string {
 // is stripped before mapping to Tencent's short codes.
 //
 // "-motion-t" names route to the motion-control API (SubmitMotionControlKlingJob).
+// "-omni-t" names route to the omni video editing API (SubmitVideoEditKlingJob).
 func (a *TaskAdaptor) GetModelList() []string {
 	return []string{
 		"kling-v1-t", "kling-v1-5-t", "kling-v1-6-t",
 		"kling-v2-master-t", "kling-v2-1-t", "kling-v2-1-master-t",
 		"kling-v2-5-turbo-t", "kling-v2-6-t", "kling-v3-t",
 		"kling-v2-6-motion-t", "kling-v3-motion-t",
+		"kling-video-o1-omni-t", "kling-v3-omni-t",
 	}
 }
 
@@ -197,6 +238,14 @@ func isMotionControlModel(name string) bool {
 	n := strings.ToLower(strings.TrimSpace(name))
 	n = strings.TrimSuffix(n, "-t")
 	return strings.HasSuffix(n, "-motion")
+}
+
+// isOmniModel reports whether the model name selects the omni video editing
+// API (carries an "-omni" marker before the "-t" suffix).
+func isOmniModel(name string) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, "-t")
+	return strings.HasSuffix(n, "-omni")
 }
 
 // modelNameToMotionModel maps a motion-control model name to Tencent's Model
@@ -213,6 +262,27 @@ func modelNameToMotionModel(name string) string {
 		return "kling-v3"
 	default:
 		return n
+	}
+}
+
+// modelNameToOmniModel maps an omni model name to Tencent's Model value.
+// Omni supports kling-video-o1 and kling-v3-omni.
+func modelNameToOmniModel(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, "-t")
+	n = strings.TrimSuffix(n, "-omni")
+	switch n {
+	case "kling-video-o1":
+		return "kling-video-o1"
+	case "kling-v3", "kling-v3-0":
+		return "kling-v3-omni"
+	default:
+		// If it already looks like a full omni model name, use it
+		if n == "kling-v3-omni" {
+			return "kling-v3-omni"
+		}
+		// Default to kling-video-o1
+		return "kling-video-o1"
 	}
 }
 
@@ -250,6 +320,8 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	action := constant.TaskActionGenerate
 	if isMotionControlModel(info.OriginModelName) {
 		action = constant.TaskActionMotionControl
+	} else if isOmniModel(info.OriginModelName) {
+		action = constant.TaskActionOmniVideo
 	}
 	if err := relaycommon.ValidateBasicTaskRequest(c, info, action); err != nil {
 		return err
@@ -259,8 +331,8 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 }
 
 // BuildRequestBody converts the unified task request into the Tencent submit
-// payload (image2video or motion-control depending on action) and caches the
-// exact bytes for TC3 signing.
+// payload (image2video, motion-control, or omni depending on action) and caches
+// the exact bytes for TC3 signing.
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
 	v, exists := c.Get("task_request")
 	if !exists {
@@ -270,9 +342,12 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 
 	var payload any
 	var err error
-	if info.Action == constant.TaskActionMotionControl {
+	switch info.Action {
+	case constant.TaskActionMotionControl:
 		payload, err = a.convertToMotionPayload(&req, info)
-	} else {
+	case constant.TaskActionOmniVideo:
+		payload, err = a.convertToOmniPayload(&req, info)
+	default:
 		payload, err = a.convertToSubmitPayload(&req, info)
 	}
 	if err != nil {
@@ -302,6 +377,19 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf(
 			"tencentvideo submit payload: action=%s model=%s mode=%s logo_add=%s has_image=%t has_video=%t",
 			actionMotionSubmit, p.Model, p.Mode, logoAdd, strings.TrimSpace(p.Image) != "", strings.TrimSpace(p.Video) != "",
+		))
+	case *omniPayload:
+		logoAdd := "<nil>"
+		if p.LogoAdd != nil {
+			logoAdd = strconv.Itoa(*p.LogoAdd)
+		}
+		duration := "<nil>"
+		if p.Duration != nil {
+			duration = strconv.Itoa(*p.Duration)
+		}
+		logger.LogInfo(c.Request.Context(), fmt.Sprintf(
+			"tencentvideo submit payload: action=%s model=%s mode=%s duration=%s aspect_ratio=%s logo_add=%s image_list_count=%d video_list_count=%d",
+			actionOmniSubmit, p.Model, p.Mode, duration, p.AspectRatio, logoAdd, len(p.ImageList), len(p.VideoList),
 		))
 	}
 	return bytes.NewReader(data), nil
@@ -345,6 +433,72 @@ func (a *TaskAdaptor) convertToMotionPayload(req *relaycommon.TaskSubmitReq, inf
 		return nil, fmt.Errorf("video is required for motion control (pass it in metadata.Video)")
 	}
 	return &p, nil
+}
+
+// convertToOmniPayload builds a SubmitVideoEditKlingJob body for omni video editing.
+func (a *TaskAdaptor) convertToOmniPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*omniPayload, error) {
+	modelName := modelNameToOmniModel(info.UpstreamModelName)
+
+	p := omniPayload{
+		Model:       modelName,
+		Prompt:      req.Prompt,
+		Mode:        taskcommon.DefaultString(req.Mode, "pro"),
+		AspectRatio: a.getAspectRatio(req.Size),
+	}
+
+	// Duration - convert to pointer
+	if req.Duration > 0 {
+		duration := taskcommon.DefaultInt(req.Duration, 5)
+		p.Duration = &duration
+	}
+
+	// Process images into ImageList format
+	if len(req.Images) > 0 {
+		for _, imgUrl := range req.Images {
+			if strings.TrimSpace(imgUrl) != "" {
+				p.ImageList = append(p.ImageList, imageInfo{
+					ImageUrl: imgUrl,
+					// Type can be set via metadata if needed (first_frame, end_frame)
+				})
+			}
+		}
+	}
+
+	// Optional region override (used in TC3 credential scope, not the body).
+	if v, ok := req.Metadata["region"]; ok {
+		if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+			a.region = strings.TrimSpace(s)
+		}
+	}
+
+	// metadata may override / supply any PascalCase Tencent field
+	// (e.g. VideoList, ElementList, MultiShot, ShotType, MultiPrompt, Sound, LogoParam, CallbackUrl).
+	if err := taskcommon.UnmarshalMetadata(req.Metadata, &p); err != nil {
+		return nil, errors.Wrap(err, "unmarshal metadata failed")
+	}
+
+	// Re-apply the channel-mapped model so metadata cannot bypass billing.
+	p.Model = modelName
+
+	// Always disable Tencent's AI-generated watermark.
+	zero := 0
+	p.LogoAdd = &zero
+
+	return &p, nil
+}
+
+// getAspectRatio converts size string to Tencent's AspectRatio format.
+func (a *TaskAdaptor) getAspectRatio(size string) string {
+	switch size {
+	case "1024x1024", "512x512":
+		return "1:1"
+	case "1280x720", "1920x1080":
+		return "16:9"
+	case "720x1280", "1080x1920":
+		return "9:16"
+	default:
+		return "16:9" // Default for omni
+	}
 }
 
 func (a *TaskAdaptor) convertToSubmitPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*submitPayload, error) {
@@ -416,8 +570,11 @@ func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info
 		return err
 	}
 	action := actionSubmit
-	if info.Action == constant.TaskActionMotionControl {
+	switch info.Action {
+	case constant.TaskActionMotionControl:
 		action = actionMotionSubmit
+	case constant.TaskActionOmniVideo:
+		action = actionOmniSubmit
 	}
 	a.applyTC3Headers(req, action, payload, secretId, secretKey, a.region)
 	return nil
@@ -460,7 +617,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	return sResp.Response.JobId, responseBody, nil
 }
 
-// FetchTask queries the Describe endpoint (image2video or motion-control,
+// FetchTask queries the Describe endpoint (image2video, motion-control, or omni,
 // chosen by the task's action) for the given JobId.
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
@@ -479,8 +636,13 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 
 	action := actionDescribe
-	if act, ok := body["action"].(string); ok && act == constant.TaskActionMotionControl {
-		action = actionMotionDescribe
+	if act, ok := body["action"].(string); ok {
+		switch act {
+		case constant.TaskActionMotionControl:
+			action = actionMotionDescribe
+		case constant.TaskActionOmniVideo:
+			action = actionOmniDescribe
+		}
 	}
 
 	payload, err := common.Marshal(map[string]string{"JobId": taskID})

@@ -23,6 +23,7 @@ import (
 	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
 // ============================
@@ -569,16 +570,38 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		return 0
 	}
 
-	// Kling returns final_unit_deduction as the actual cost in RMB
+	// Kling returns final_unit_deduction as the actual cost in RMB (1 credit = ¥1)
 	// This value is already stored in taskResult.CompletionTokens
 	if taskResult.CompletionTokens <= 0 {
 		return 0
 	}
 
-	// Convert RMB to quota units
-	// 1 RMB = 100,000 quota units (based on USD = 500, USD2RMB = 7.3)
-	// quota = RMB × 100,000
-	actualQuota := taskResult.CompletionTokens * 100000
+	// Convert RMB to quota units using the system's exchange rate
+	// quota = RMB × (QuotaPerUnit ÷ USDExchangeRate) × groupRatio
+	//
+	// Example with USDExchangeRate=1:
+	//   - RMB cost: 3 yuan
+	//   - quota = 3 × (500,000 ÷ 1) × 1 = 1,500,000
+	//   - Display: 1,500,000 ÷ 500,000 × 1 = 3 CNY ✓
+	//
+	// Example with USDExchangeRate=7.3 (realistic rate):
+	//   - RMB cost: 3 yuan
+	//   - quota = 3 × (500,000 ÷ 7.3) × 1 ≈ 205,479
+	//   - Display: 205,479 ÷ 500,000 × 7.3 ≈ 3 CNY ✓
+	rmbCost := float64(taskResult.CompletionTokens)
+
+	usdExchangeRate := operation_setting.USDExchangeRate
+	if usdExchangeRate <= 0 {
+		usdExchangeRate = 1.0 // fallback to 1:1 if not set
+	}
+
+	// Get group ratio from billing context
+	groupRatio := 1.0
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
+		groupRatio = bc.GroupRatio
+	}
+
+	actualQuota := int(math.Ceil(rmbCost * common.QuotaPerUnit / usdExchangeRate * groupRatio))
 
 	return actualQuota
 }
