@@ -66,7 +66,20 @@ func CreateSeedanceElement(c *gin.Context) {
 	if channel.BaseURL != nil {
 		baseURL = *channel.BaseURL
 	}
-	assetService := service.NewSeedanceAssetService(baseURL, channel.Key)
+
+	// Try to get user's personal API key first
+	apiKey := channel.Key
+	userSetting, err := model.GetUserAPIKeySetting(userId)
+	if err == nil && userSetting != nil && userSetting.ServiceInferenceAPIKey != "" {
+		// Use user's personal API key
+		apiKey = userSetting.ServiceInferenceAPIKey
+		fmt.Printf("[INFO] Using user's personal ServiceInference API key for user %d\n", userId)
+	} else {
+		// Use channel's API key
+		fmt.Printf("[INFO] Using channel ServiceInference API key for user %d\n", userId)
+	}
+
+	assetService := service.NewSeedanceAssetService(baseURL, apiKey)
 
 	// Create or get asset group
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)

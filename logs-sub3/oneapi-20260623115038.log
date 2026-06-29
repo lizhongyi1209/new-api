@@ -128728,3 +128728,7 @@
 [SYS] 2026/07/04 - 00:15:54 | syncing options from database 
 [SYS] 2026/07/04 - 00:15:54 | syncing channels from database 
 [SYS] 2026/07/04 - 00:15:54 | channels synced from database 
+[GIN] 2026/07/04 - 00:16:07 | api | 202607031616073470788838268d9d6ah8cJLhh | 200 |     311.552µs |             ::1 |     GET /api/status
+[SYS] 2026/07/04 - 00:16:24 | syncing channels from database 
+[SYS] 2026/07/04 - 00:16:24 | syncing options from database 
+[SYS] 2026/07/04 - 00:16:24 | channels synced from database 

@@ -274,6 +274,17 @@ func SetApiRouter(router *gin.Engine) {
 			seedanceElementRoute.DELETE("/:id", controller.DeleteSeedanceElement)
 		}
 
+		// User settings (API keys, preferences)
+		userSettingsRoute := apiRouter.Group("/user/settings")
+		userSettingsRoute.Use(middleware.UserAuth())
+		{
+			userSettingsRoute.GET("", controller.GetUserSettings)
+			userSettingsRoute.GET("/", controller.GetUserSettings)
+			userSettingsRoute.PUT("", controller.UpdateUserSettings)
+			userSettingsRoute.PUT("/", controller.UpdateUserSettings)
+			userSettingsRoute.POST("/test-key", controller.TestServiceInferenceKey)
+		}
+
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{
