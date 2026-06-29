@@ -178,3 +178,28 @@ func fillAigcElementUsernames(elements []*AigcElement) {
 		e.Username = nameById[e.UserId]
 	}
 }
+
+// GetUserSuccessAigcElements returns all succeed elements for a user on a platform.
+// Used for UI selection (no pagination).
+func GetUserSuccessAigcElements(userId int, platform string) ([]*AigcElement, error) {
+	var elements []*AigcElement
+	tx := DB.Where("user_id = ? AND platform = ? AND status = ?", userId, platform, "succeed")
+	if err := tx.Order("id desc").Find(&elements).Error; err != nil {
+		return nil, err
+	}
+	return elements, nil
+}
+
+// GetUserSeedanceElementWithAssetGroup returns the first Seedance element with a job_id (asset group).
+// Used to reuse existing asset group when creating new subjects.
+func GetUserSeedanceElementWithAssetGroup(userId int) (*AigcElement, error) {
+	var element AigcElement
+	err := DB.Where("user_id = ? AND platform = ? AND job_id != ?",
+		userId, AigcElementPlatformSeedance, "").
+		Order("id desc").
+		First(&element).Error
+	if err != nil {
+		return nil, err
+	}
+	return &element, nil
+}

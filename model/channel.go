@@ -1123,3 +1123,4 @@ func CountChannelsGroupByType() (map[int64]int64, error) {
 	}
 	return counts, nil
 }
+
