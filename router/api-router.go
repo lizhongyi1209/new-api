@@ -265,8 +265,10 @@ func SetApiRouter(router *gin.Engine) {
 		seedanceElementRoute := apiRouter.Group("/element/seedance")
 		seedanceElementRoute.Use(middleware.TokenOrUserAuth())
 		{
+			seedanceElementRoute.GET("", controller.GetSeedanceElements)
 			seedanceElementRoute.GET("/", controller.GetSeedanceElements)
 			seedanceElementRoute.GET("/mine", controller.ListMySeedanceElements)
+			seedanceElementRoute.POST("", controller.CreateSeedanceElement)
 			seedanceElementRoute.POST("/", controller.CreateSeedanceElement)
 			seedanceElementRoute.POST("/upload", controller.UploadAigcElementImage)
 			seedanceElementRoute.DELETE("/:id", controller.DeleteSeedanceElement)
