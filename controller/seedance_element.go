@@ -17,7 +17,7 @@ import (
 // ServiceInference happens automatically during video generation by the
 // serviceinference adaptor.
 
-const seedanceElementImageFolder = "seedance"
+const seedanceElementImageFolder = "subject"
 
 // CreateSeedanceElementRequest is the inbound JSON for creating a Seedance subject.
 type CreateSeedanceElementRequest struct {
