@@ -32,8 +32,8 @@ type CreateSeedanceElementRequest struct {
 // to the asset-group during video generation.
 func CreateSeedanceElement(c *gin.Context) {
 	userId := c.GetInt("id")
-	tokenId := c.GetInt(constant.TokenId)
-	tokenName := c.GetString(constant.TokenName)
+	tokenId := c.GetInt("token_id")
+	tokenName := c.GetString("token_name")
 
 	var req CreateSeedanceElementRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
