@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const maxVideoUploadSizeMB = 100
+
 type presignRequest struct {
 	Filename    string `json:"filename" binding:"required"`
 	ContentType string `json:"content_type" binding:"required"`
@@ -51,9 +53,10 @@ func bindAndValidatePresignRequest(c *gin.Context, req *presignRequest) bool {
 		return false
 	}
 
-	if !strings.HasPrefix(req.ContentType, "image/") &&
-		!strings.HasPrefix(req.ContentType, "video/") &&
-		!strings.HasPrefix(req.ContentType, "audio/") {
+	contentType := strings.ToLower(strings.TrimSpace(req.ContentType))
+	if !strings.HasPrefix(contentType, "image/") &&
+		!strings.HasPrefix(contentType, "video/") &&
+		!strings.HasPrefix(contentType, "audio/") {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "只支持图片、视频或音频类型 (image/*, video/*, audio/*)",
 		})
@@ -61,11 +64,15 @@ func bindAndValidatePresignRequest(c *gin.Context, req *presignRequest) bool {
 	}
 
 	if req.Size > 0 {
-		maxSize := int64(service.AsyncImageMaxURLSizeMB * 1024 * 1024)
+		maxSizeMB := service.AsyncImageMaxURLSizeMB
+		if strings.HasPrefix(contentType, "video/") {
+			maxSizeMB = maxVideoUploadSizeMB
+		}
+		maxSize := int64(maxSizeMB * 1024 * 1024)
 		if req.Size > maxSize {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error": fmt.Sprintf("文件大小 %.2f MB 超过限制 %d MB",
-					float64(req.Size)/1024/1024, service.AsyncImageMaxURLSizeMB),
+					float64(req.Size)/1024/1024, maxSizeMB),
 			})
 			return false
 		}

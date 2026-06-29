@@ -45,6 +45,10 @@ type AigcElement struct {
 // subjects can be listed and filtered per platform.
 const AigcElementPlatformKling = "kling"
 
+// AigcElementPlatformSeedance is the platform tag for Seedance (ServiceInference)
+// subjects.
+const AigcElementPlatformSeedance = "seedance"
+
 func (e *AigcElement) Insert() error {
 	now := time.Now().Unix()
 	e.CreatedAt = now

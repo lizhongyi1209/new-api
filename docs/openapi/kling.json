@@ -1,0 +1,563 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Kling API - 可灵视频生成接口",
+    "description": "可灵官方视频生成 API，支持图生视频、文生视频、运动控制、全能视频等功能。",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.klingai.com",
+      "description": "可灵官方 API"
+    }
+  ],
+  "tags": [
+    {
+      "name": "图片",
+      "description": "图片和视频生成相关接口"
+    },
+    {
+      "name": "可灵",
+      "description": "可灵视频生成服务"
+    }
+  ],
+  "paths": {
+    "/v1/videos/image2video": {
+      "post": {
+        "summary": "图生视频",
+        "description": "将图片转换为视频。支持文本提示词引导，控制视频时长、画幅比例等参数。\n\n**适用场景：**\n- 将静态图片转换为动态视频\n- 基于图片内容生成动画效果\n- 支持首帧和尾帧控制\n\n**计费说明：**\n- 标准模式(std)：5秒视频约消耗0.6元，10秒约1.2元\n- 专业模式(pro)：5秒视频约消耗1.2元，10秒约2.4元",
+        "operationId": "image2video",
+        "tags": ["图片", "可灵"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt"],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "视频生成的提示词描述，建议详细描述场景、动作、氛围等",
+                    "example": "一只可爱的橘猫在阳光明媚的花园里悠闲地散步，蝴蝶在周围飞舞，微风轻拂草地"
+                  },
+                  "negative_prompt": {
+                    "type": "string",
+                    "description": "负面提示词，描述不希望出现的内容",
+                    "example": "模糊，低质量，扭曲，重影"
+                  },
+                  "image": {
+                    "type": "string",
+                    "description": "输入图片的 base64 编码（首帧）。图片要求：JPG/PNG，最大10MB"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "description": "输入图片的 URL（首帧）。与 image 二选一",
+                    "example": "https://example.com/cat.jpg"
+                  },
+                  "image_tail": {
+                    "type": "string",
+                    "description": "尾帧图片的 base64 编码。设置尾帧可控制视频结束画面"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["std", "pro"],
+                    "description": "生成模式：std=标准模式（快速、经济），pro=专业模式（高质量、细节丰富）",
+                    "default": "std"
+                  },
+                  "duration": {
+                    "type": "string",
+                    "enum": ["5", "10"],
+                    "description": "视频时长（秒）",
+                    "default": "5"
+                  },
+                  "aspect_ratio": {
+                    "type": "string",
+                    "enum": ["1:1", "16:9", "9:16"],
+                    "description": "画幅比例。1:1=方形，16:9=横屏，9:16=竖屏",
+                    "default": "16:9"
+                  },
+                  "model_name": {
+                    "type": "string",
+                    "enum": ["kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3"],
+                    "description": "使用的模型名称。v2-6和v3是较新的高质量模型",
+                    "default": "kling-v2-6"
+                  },
+                  "cfg_scale": {
+                    "type": "number",
+                    "description": "提示词相关性（0-1）。值越高，生成结果越贴近提示词",
+                    "default": 0.5,
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "callback_url": {
+                    "type": "string",
+                    "description": "任务完成后的回调地址（POST请求）"
+                  },
+                  "external_task_id": {
+                    "type": "string",
+                    "description": "外部任务ID，用于关联业务系统"
+                  }
+                }
+              },
+              "examples": {
+                "basic": {
+                  "summary": "基础示例 - 图生视频",
+                  "value": {
+                    "prompt": "一只可爱的橘猫在阳光明媚的花园里悠闲地散步，蝴蝶在周围飞舞",
+                    "image_url": "https://example.com/cat.jpg",
+                    "mode": "pro",
+                    "duration": "5",
+                    "aspect_ratio": "16:9",
+                    "model_name": "kling-v2-6"
+                  }
+                },
+                "with_tail": {
+                  "summary": "首尾帧控制",
+                  "value": {
+                    "prompt": "从白天过渡到夜晚，天空颜色渐变",
+                    "image_url": "https://example.com/day.jpg",
+                    "image_tail": "base64_encoded_night_image...",
+                    "mode": "pro",
+                    "duration": "10",
+                    "aspect_ratio": "16:9",
+                    "model_name": "kling-v2-6"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "任务提交成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "任务ID"
+                    },
+                    "task_id": {
+                      "type": "string",
+                      "description": "任务ID（同id）"
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "任务状态：submitted=已提交，processing=处理中",
+                      "example": "submitted"
+                    },
+                    "created_at": {
+                      "type": "integer",
+                      "description": "创建时间戳（秒）"
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "使用的模型"
+                    }
+                  }
+                },
+                "examples": {
+                  "success": {
+                    "summary": "成功响应",
+                    "value": {
+                      "id": "task_abc123xyz",
+                      "task_id": "task_abc123xyz",
+                      "status": "submitted",
+                      "created_at": 1704038400,
+                      "model": "kling-v2-6"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 400001,
+                  "message": "prompt is required"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "认证失败",
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 401001,
+                  "message": "Invalid or expired token"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/text2video": {
+      "post": {
+        "summary": "文生视频",
+        "description": "根据文本提示词直接生成视频，无需输入图片。\n\n**适用场景：**\n- 纯文本描述生成视频\n- 创意视频生成\n- 概念可视化\n\n**计费说明：**与图生视频相同",
+        "operationId": "text2video",
+        "tags": ["图片", "可灵"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt"],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "视频生成的提示词描述",
+                    "example": "一片宁静的湖泊，水面倒映着蓝天白云，微风轻拂"
+                  },
+                  "negative_prompt": {"type": "string"},
+                  "mode": {
+                    "type": "string",
+                    "enum": ["std", "pro"],
+                    "default": "std"
+                  },
+                  "duration": {
+                    "type": "string",
+                    "enum": ["5", "10"],
+                    "default": "5"
+                  },
+                  "aspect_ratio": {
+                    "type": "string",
+                    "enum": ["1:1", "16:9", "9:16"],
+                    "default": "16:9"
+                  },
+                  "model_name": {
+                    "type": "string",
+                    "enum": ["kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3"],
+                    "default": "kling-v2-6"
+                  },
+                  "cfg_scale": {
+                    "type": "number",
+                    "default": 0.5,
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "callback_url": {"type": "string"},
+                  "external_task_id": {"type": "string"}
+                }
+              },
+              "examples": {
+                "landscape": {
+                  "summary": "风景视频",
+                  "value": {
+                    "prompt": "一片金色的麦田在夕阳下随风摇曳，远处有一座古老的风车，天空泛着橙红色的晚霞",
+                    "mode": "pro",
+                    "duration": "5",
+                    "aspect_ratio": "16:9",
+                    "model_name": "kling-v2-6"
+                  }
+                },
+                "character": {
+                  "summary": "人物动作",
+                  "value": {
+                    "prompt": "一个年轻女孩在海边奔跑，长发在风中飘扬，身穿白色连衣裙，背景是蔚蓝的大海和天空",
+                    "mode": "pro",
+                    "duration": "10",
+                    "aspect_ratio": "16:9",
+                    "model_name": "kling-v3"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "任务提交成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "task_xyz789",
+                  "task_id": "task_xyz789",
+                  "status": "submitted",
+                  "created_at": 1704038400,
+                  "model": "kling-v2-6"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/motion-control": {
+      "post": {
+        "summary": "运动控制",
+        "description": "对现有视频进行运动控制处理，支持角色方向调整、保留原声等功能。\n\n**适用场景：**\n- 视频二次编辑\n- 角色动作调整\n- 视频内容增强\n\n**注意事项：**\n- 需要 v2-6 或更高版本模型\n- 输入视频需符合格式要求",
+        "operationId": "motionControl",
+        "tags": ["图片", "可灵"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt", "video_url"],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "运动控制的提示词",
+                    "example": "人物向左转身并挥手"
+                  },
+                  "video_url": {
+                    "type": "string",
+                    "description": "输入视频的URL（必须可公开访问）",
+                    "example": "https://example.com/video.mp4"
+                  },
+                  "character_orientation": {
+                    "type": "string",
+                    "enum": ["left", "right", "forward", "backward"],
+                    "description": "角色朝向控制"
+                  },
+                  "keep_original_sound": {
+                    "type": "string",
+                    "enum": ["yes", "no"],
+                    "description": "是否保留原始音频",
+                    "default": "no"
+                  },
+                  "image_url": {
+                    "type": "string",
+                    "description": "参考图片URL（可选，用于引导生成）"
+                  },
+                  "model_name": {
+                    "type": "string",
+                    "enum": ["kling-v2-6", "kling-v2-master", "kling-v3"],
+                    "default": "kling-v2-6"
+                  },
+                  "callback_url": {"type": "string"},
+                  "external_task_id": {"type": "string"}
+                }
+              },
+              "examples": {
+                "turn_around": {
+                  "summary": "转身动作",
+                  "value": {
+                    "prompt": "让人物缓慢地向右转动90度，保持微笑",
+                    "video_url": "https://example.com/input.mp4",
+                    "character_orientation": "right",
+                    "keep_original_sound": "yes",
+                    "model_name": "kling-v2-6"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "任务提交成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "task_motion123",
+                  "task_id": "task_motion123",
+                  "status": "submitted",
+                  "created_at": 1704038400,
+                  "model": "kling-v2-6"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/videos/omni-video": {
+      "post": {
+        "summary": "全能视频（Omni Video）",
+        "description": "全能视频生成接口，支持多图片、自定义元素、声音绑定、视频参考、水印控制等高级功能。\n\n**特色功能：**\n- 多图片输入（首帧+尾帧）\n- 自定义元素库（角色、物品等）\n- 声音/配音绑定\n- 视频参考（feature/base模式）\n- 水印控制\n\n**适用场景：**\n- 专业视频制作\n- 品牌内容生成\n- 多模态内容创作",
+        "operationId": "omniVideo",
+        "tags": ["图片", "可灵"],
+        "security": [{"bearerAuth": []}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["prompt"],
+                "properties": {
+                  "prompt": {
+                    "type": "string",
+                    "description": "视频生成的提示词",
+                    "example": "一个温馨的家庭场景，从客厅过渡到厨房"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["std", "pro"],
+                    "default": "pro"
+                  },
+                  "duration": {
+                    "type": "string",
+                    "enum": ["5", "10"],
+                    "default": "5"
+                  },
+                  "aspect_ratio": {
+                    "type": "string",
+                    "enum": ["1:1", "16:9", "9:16"],
+                    "default": "16:9"
+                  },
+                  "model_name": {
+                    "type": "string",
+                    "enum": ["kling-video-o1"],
+                    "description": "全能视频专用模型",
+                    "default": "kling-video-o1"
+                  },
+                  "image_list": {
+                    "type": "array",
+                    "description": "图片列表，支持首帧和尾帧",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "image_url": {
+                          "type": "string",
+                          "description": "图片URL"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": ["first_frame", "end_frame"],
+                          "description": "图片类型"
+                        }
+                      }
+                    }
+                  },
+                  "element_list": {
+                    "type": "array",
+                    "description": "自定义元素ID列表（需提前创建）",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "element_id": {
+                          "type": "integer",
+                          "description": "元素ID"
+                        }
+                      }
+                    }
+                  },
+                  "voice_list": {
+                    "type": "array",
+                    "description": "声音ID列表",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "voice_id": {
+                          "type": "string",
+                          "description": "声音ID"
+                        }
+                      }
+                    }
+                  },
+                  "video_list": {
+                    "type": "array",
+                    "description": "参考视频列表",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "video_url": {"type": "string"},
+                        "refer_type": {
+                          "type": "string",
+                          "enum": ["feature", "base"],
+                          "description": "feature=特征参考，base=基础参考"
+                        },
+                        "keep_original_sound": {
+                          "type": "string",
+                          "enum": ["yes", "no"]
+                        }
+                      }
+                    }
+                  },
+                  "watermark_info": {
+                    "type": "object",
+                    "description": "水印配置",
+                    "properties": {
+                      "enabled": {
+                        "type": "boolean",
+                        "description": "是否启用水印"
+                      }
+                    }
+                  },
+                  "callback_url": {"type": "string"},
+                  "external_task_id": {"type": "string"}
+                }
+              },
+              "examples": {
+                "multi_frame": {
+                  "summary": "多图片生成",
+                  "value": {
+                    "prompt": "从白天的城市街景过渡到夜晚的霓虹灯闪烁",
+                    "mode": "pro",
+                    "duration": "10",
+                    "aspect_ratio": "16:9",
+                    "model_name": "kling-video-o1",
+                    "image_list": [
+                      {"image_url": "https://example.com/day.jpg", "type": "first_frame"},
+                      {"image_url": "https://example.com/night.jpg", "type": "end_frame"}
+                    ],
+                    "watermark_info": {"enabled": false}
+                  }
+                },
+                "with_elements": {
+                  "summary": "使用自定义元素",
+                  "value": {
+                    "prompt": "品牌吉祥物在产品旁边跳舞",
+                    "mode": "pro",
+                    "duration": "5",
+                    "model_name": "kling-video-o1",
+                    "element_list": [
+                      {"element_id": 12345}
+                    ],
+                    "watermark_info": {"enabled": true}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "任务提交成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "task_omni456",
+                  "task_id": "task_omni456",
+                  "status": "submitted",
+                  "created_at": 1704038400,
+                  "model": "kling-video-o1"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "使用可灵 API Key 作为 Bearer Token。\n\n获取方式：访问 https://klingai.com 注册并在开发者中心获取 API Key。\n\n格式：`Authorization: Bearer api-key-kling-xxx`"
+      }
+    }
+  }
+}

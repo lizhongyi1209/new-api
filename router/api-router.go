@@ -13,6 +13,7 @@ import (
 
 func SetApiRouter(router *gin.Engine) {
 	apiRouter := router.Group("/api")
+	apiRouter.Use(middleware.CORS()) // CORS must be first
 	apiRouter.Use(middleware.RouteTag("api"))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))
 	apiRouter.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
@@ -257,6 +258,18 @@ func SetApiRouter(router *gin.Engine) {
 			klingElementRoute.POST("/upload", controller.UploadAigcElementImage)
 			klingElementRoute.POST("/:id/refresh", controller.RefreshAigcElement)
 			klingElementRoute.DELETE("/:id", controller.DeleteAigcElement)
+		}
+
+		// Seedance (ServiceInference) 主体管理. Independent from Kling; subjects
+		// are owned by the token's main account and tagged platform=seedance.
+		seedanceElementRoute := apiRouter.Group("/element/seedance")
+		seedanceElementRoute.Use(middleware.TokenOrUserAuth())
+		{
+			seedanceElementRoute.GET("/", controller.GetSeedanceElements)
+			seedanceElementRoute.GET("/mine", controller.ListMySeedanceElements)
+			seedanceElementRoute.POST("/", controller.CreateSeedanceElement)
+			seedanceElementRoute.POST("/upload", controller.UploadAigcElementImage)
+			seedanceElementRoute.DELETE("/:id", controller.DeleteSeedanceElement)
 		}
 
 		usageRoute := apiRouter.Group("/usage")
