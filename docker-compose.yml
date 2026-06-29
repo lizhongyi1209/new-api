@@ -46,7 +46,7 @@ services:
       - R2_ACCESS_KEY_ID=4343befbc1949bcffabeefea95037224
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_BUCKET=api-o1key
-      - R2_PUBLIC_BASE_URL=https://assetcache.o1key.com
+      - R2_PUBLIC_BASE_URL=${R2_PUBLIC_BASE_URL:-https://assetcache.o1key.com}
       - R2_STORAGE_HOSTS=${R2_STORAGE_HOSTS:-cf-api.o1key.cn,cf-api.o1key.com}
       # Aliyun OSS Storage (api.o1key.cn)
       - ALIYUN_OSS_ACCESS_KEY_ID=${ALIYUN_OSS_ACCESS_KEY_ID}
