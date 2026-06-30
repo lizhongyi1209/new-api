@@ -216,8 +216,8 @@ func main() {
 		Path:     "/",
 		MaxAge:   2592000, // 30 days
 		HttpOnly: true,
-		Secure:   false,
-		SameSite: http.SameSiteStrictMode,
+		Secure:   false, // Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode, // Changed from Strict to Lax for cross-origin compatibility
 	})
 	server.Use(sessions.Sessions("session", store))
 
