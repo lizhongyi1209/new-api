@@ -17,6 +17,7 @@ func CORS() gin.HandlerFunc {
 	// This is required for session-based authentication with cookies.
 	// Without these settings, browsers will block requests with credentials.
 	config.AllowOrigins = []string{
+		"https://key.o1key.com",      // Token query tool frontend
 		"http://15.204.107.201:3002", // TokenFlow frontend
 		"http://localhost:3002",      // TokenFlow local dev
 		"http://15.204.107.201:3000",
