@@ -202,7 +202,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 
 	usageDto := usage.(*dto.Usage)
 	service.PostTextConsumeQuota(c, info, usageDto, nil)
-	service.RefundIfZeroCompletionTokens(c, info, usageDto)
+	// Removed RefundIfZeroCompletionTokens: Gemini's usageMetadata is the official billing source.
+	// If upstream returns tokens (even with completion=0), it means upstream has processed and billed.
+	// Cases like safety filters, client disconnects still consume input tokens upstream.
 	return nil
 }
 

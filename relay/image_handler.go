@@ -163,6 +163,8 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 
 	usageDto := usage.(*dto.Usage)
 	service.PostTextConsumeQuota(c, info, usageDto, logContent)
-	service.RefundIfZeroCompletionTokens(c, info, usageDto)
+	// Note: RefundIfZeroCompletionTokens removed for image generation.
+	// Image generation providers (DALL-E, Gemini Imagen, etc.) return accurate usage.
+	// For image tasks, completion_tokens is often 0 by design (output is an image, not text).
 	return nil
 }

@@ -481,6 +481,18 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 // RefundIfZeroCompletionTokens refunds the charged quota when the upstream returns
 // a successful response but with zero completion/output tokens (risk control scenario).
 // This runs after the normal billing path as a separate safety-net refund.
+//
+// IMPORTANT: Modern AI providers (OpenAI, Anthropic, Google, etc.) return detailed usage
+// metadata that represents their actual billing. If they return tokens, they will bill for them.
+// Common scenarios where completion_tokens=0 but prompt_tokens>0:
+//   - Safety filters/content moderation (provider processed input, blocks output)
+//   - Client disconnects mid-stream (provider processed input, client gone)
+//   - Rate limits or quota exceeded (provider validated input)
+// In all these cases, the provider HAS processed and WILL bill for the input tokens.
+// Therefore, this function should NOT refund when upstream returns valid usage metadata.
+//
+// This function is now DEPRECATED and should only be called for legacy/custom channels
+// that don't return reliable usage information. For standard providers, trust their usage data.
 func RefundIfZeroCompletionTokens(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) {
 	if usage == nil {
 		return
@@ -496,12 +508,34 @@ func RefundIfZeroCompletionTokens(ctx *gin.Context, relayInfo *relaycommon.Relay
 		return
 	}
 
+	// Check if this is a known scenario where upstream has legitimately processed input
+	// but returned no output (these should NOT be refunded)
+	rejectReason := common.GetContextKeyString(ctx, constant.ContextKeyAdminRejectReason)
+
+	// Safety filters, content blocks, etc. - provider processed input and will bill for it
+	if strings.Contains(rejectReason, "block_reason") ||
+	   strings.Contains(rejectReason, "PROHIBITED_CONTENT") ||
+	   strings.Contains(rejectReason, "SAFETY") ||
+	   strings.Contains(rejectReason, "content_filter") {
+		logger.LogInfo(ctx, fmt.Sprintf("上游内容拦截（%s），已消耗输入token，不退费", rejectReason))
+		return
+	}
+
+	// Client disconnects - provider processed input
+	if strings.Contains(rejectReason, "client_gone") ||
+	   strings.Contains(rejectReason, "context canceled") {
+		logger.LogInfo(ctx, "客户端断开连接，上游已处理输入token，不退费")
+		return
+	}
+
 	summary := calculateTextQuotaSummary(ctx, relayInfo, usage)
 	if summary.Quota <= 0 {
 		return
 	}
 
-	logger.LogWarn(ctx, fmt.Sprintf("检测到上游返回0输出token但返回了%d输入token，触发风控退款，退款额度: %s，模型: %s，用户ID: %d",
+	// Only refund in truly exceptional cases where we suspect upstream didn't actually
+	// process the request properly (not safety filters, not client disconnects)
+	logger.LogWarn(ctx, fmt.Sprintf("检测到异常情况：上游返回0输出token但返回了%d输入token（无明确拒绝原因），触发退款，退款额度: %s，模型: %s，用户ID: %d",
 		summary.PromptTokens, logger.LogQuota(summary.Quota), summary.ModelName, relayInfo.UserId))
 
 	err := PostConsumeQuota(relayInfo, -summary.Quota, 0, false)

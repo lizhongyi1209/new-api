@@ -88,7 +88,8 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 			service.PostAudioConsumeQuota(c, info, usage, "")
 		} else {
 			service.PostTextConsumeQuota(c, info, usage, nil)
-			service.RefundIfZeroCompletionTokens(c, info, usage)
+			// Note: RefundIfZeroCompletionTokens removed for chatCompletionsViaResponses.
+			// Modern providers return accurate usage metadata; trust their billing data.
 		}
 		return nil
 	}
@@ -220,7 +221,8 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	} else {
 		usageDto := usage.(*dto.Usage)
 		service.PostTextConsumeQuota(c, info, usageDto, nil)
-		service.RefundIfZeroCompletionTokens(c, info, usageDto)
+		// Note: RefundIfZeroCompletionTokens removed for standard providers.
+		// OpenAI, Claude, Gemini, etc. return accurate usage metadata; trust their billing data.
 	}
 	return nil
 }
