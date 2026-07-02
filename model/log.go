@@ -463,14 +463,57 @@ func UpdateConsumeLogQuotaAndOther(logId int, quota int, otherUpdates map[string
 		if otherMap == nil {
 			otherMap = make(map[string]interface{})
 		}
+
+		// 提取 prompt_tokens 和 completion_tokens 到日志主字段
+		var promptTokens, completionTokens int
 		for k, v := range otherUpdates {
+			if k == "prompt_tokens" {
+				if pt, ok := v.(int); ok {
+					promptTokens = pt
+				}
+			} else if k == "completion_tokens" {
+				if ct, ok := v.(int); ok {
+					completionTokens = ct
+				}
+			}
 			otherMap[k] = v
 		}
+
+		// 更新主字段的 tokens
+		if promptTokens > 0 || completionTokens > 0 {
+			updates["prompt_tokens"] = promptTokens
+			updates["completion_tokens"] = completionTokens
+		}
+
 		updates["other"] = common.MapToJsonStr(otherMap)
 	}
 
 	if err := LOG_DB.Model(&Log{}).Where("id = ?", logId).Updates(updates).Error; err != nil {
 		common.SysLog(fmt.Sprintf("UpdateConsumeLogQuotaAndOther: failed to update log %d: %v", logId, err))
+	}
+}
+
+// UpdateConsumeLogOther 更新消费日志的 other 字段（合并方式）
+func UpdateConsumeLogOther(logId int, otherUpdates map[string]interface{}) {
+	if logId == 0 || len(otherUpdates) == 0 {
+		return
+	}
+
+	var log Log
+	if err := LOG_DB.Where("id = ?", logId).First(&log).Error; err != nil {
+		return
+	}
+
+	otherMap, _ := common.StrToMap(log.Other)
+	if otherMap == nil {
+		otherMap = make(map[string]interface{})
+	}
+	for k, v := range otherUpdates {
+		otherMap[k] = v
+	}
+
+	if err := LOG_DB.Model(&Log{}).Where("id = ?", logId).Update("other", common.MapToJsonStr(otherMap)).Error; err != nil {
+		common.SysLog(fmt.Sprintf("UpdateConsumeLogOther: failed to update log %d: %v", logId, err))
 	}
 }
 

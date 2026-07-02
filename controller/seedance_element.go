@@ -76,7 +76,7 @@ func CreateSeedanceElement(c *gin.Context) {
 		fmt.Printf("[INFO] Using user's personal ServiceInference API key for user %d\n", userId)
 	} else {
 		// Use channel's API key
-		fmt.Printf("[INFO] Using channel ServiceInference API key for user %d\n", userId)
+		fmt.Printf("[INFO] Using channel ServiceInference API key for user %d (key length: %d, prefix: %s)\n", userId, len(apiKey), apiKey[:min(15, len(apiKey))])
 	}
 
 	assetService := service.NewSeedanceAssetService(baseURL, apiKey)
@@ -138,16 +138,20 @@ func getServiceInferenceChannel(userId, channelID int) (*model.Channel, error) {
 	}
 
 	// Otherwise, get any available ServiceInference channel for this user
-	// GetChannelsByType(startIdx, num, idSort, channelType)
+	// GetChannelsByType omits the key field, so we need to get the full channel
 	channels, err := model.GetChannelsByType(0, 100, false, 60)
 	if err != nil || len(channels) == 0 {
 		return nil, fmt.Errorf("没有可用的 ServiceInference 渠道，请先在后台添加类型 60 的渠道")
 	}
 
-	// Return the first enabled channel
+	// Find the first enabled channel and get its full info including key
 	for _, ch := range channels {
 		if ch.Status == 1 { // enabled
-			return ch, nil
+			// Get full channel info with key using GetChannelById
+			fullChannel, err := model.GetChannelById(ch.Id, true)
+			if err == nil {
+				return fullChannel, nil
+			}
 		}
 	}
 

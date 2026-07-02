@@ -331,6 +331,13 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		// 解析 usage 信息用于按倍率计费
 		taskResult.CompletionTokens = resTask.Usage.CompletionTokens
 		taskResult.TotalTokens = resTask.Usage.TotalTokens
+		// 保存视频时长信息，用于日志展示
+		if resTask.Duration > 0 {
+			taskResult.Metadata = map[string]interface{}{
+				"duration_seconds": resTask.Duration,
+				"resolution":       resTask.Resolution,
+			}
+		}
 	case "failed":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
