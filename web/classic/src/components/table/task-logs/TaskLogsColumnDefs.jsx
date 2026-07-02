@@ -411,6 +411,8 @@ export const getTaskLogsColumns = ({
         }
 
         // 视频预览：优先使用 result_url，兼容旧数据 fail_reason 中的 URL
+        // 注意：新增视频类 action 时需同步后端 constant/task.go 与此判断，
+        // 否则即使 result_url 有值，列表也只会显示 “-” 而非预览链接。
         const isVideoTask =
           record.action === TASK_ACTION_GENERATE ||
           record.action === TASK_ACTION_TEXT_GENERATE ||
