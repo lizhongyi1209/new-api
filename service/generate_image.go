@@ -646,6 +646,25 @@ func ProcessGenerateImageTask(ctx context.Context, task *model.Task, requestData
 				SetGenerateContentRequestOmittedData(task, "failure")
 				_ = task.Update()
 			}
+
+			// 检查是否为"上游未返回图片数据"且上游已产生计费
+			if task.FailReason == "上游未返回图片数据" {
+				if detail := task.PrivateData.ErrorDetail; detail != nil {
+					if detail.UpstreamPromptTokens > 0 || detail.UpstreamCompletionTokens > 0 {
+						// 上游已计费(有 token 用量),本站也扣费,不退款
+						logger.LogWarn(ctx, fmt.Sprintf(
+							"任务 %s 失败但上游已计费(prompt=%d, completion=%d, total=%d tokens),不退款,用户已扣费 %s",
+							task.TaskID,
+							detail.UpstreamPromptTokens,
+							detail.UpstreamCompletionTokens,
+							detail.UpstreamPromptTokens+detail.UpstreamCompletionTokens,
+							logger.LogQuota(task.Quota),
+						))
+						return
+					}
+				}
+			}
+
 			RefundTaskQuota(ctx, task, task.FailReason)
 		}
 	}()
