@@ -120,6 +120,9 @@ type TaskErrorDetail struct {
 	UpstreamType      string `json:"upstream_type,omitempty"`
 	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
 	RetryAction       string `json:"retry_action,omitempty"`
+	// 上游返回 200 但未附带图片数据时，若响应仍带用量信息，记录下来用于核对上游是否已计费。
+	UpstreamPromptTokens     int `json:"upstream_prompt_tokens,omitempty"`
+	UpstreamCompletionTokens int `json:"upstream_completion_tokens,omitempty"`
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。

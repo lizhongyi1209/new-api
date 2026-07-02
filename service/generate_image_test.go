@@ -630,6 +630,32 @@ func TestPrepareGenerateImageResultsUploadsBase64WhenSwitchOff(t *testing.T) {
 	assert.Empty(t, images[0].B64Json)
 }
 
+func TestImageUpstreamUsageDetail(t *testing.T) {
+	cases := []struct {
+		name             string
+		promptTokens     int
+		completionTokens int
+		wantNil          bool
+	}{
+		{name: "both zero returns nil", promptTokens: 0, completionTokens: 0, wantNil: true},
+		{name: "prompt tokens only", promptTokens: 120, completionTokens: 0, wantNil: false},
+		{name: "completion tokens only", promptTokens: 0, completionTokens: 30, wantNil: false},
+		{name: "both non-zero", promptTokens: 120, completionTokens: 30, wantNil: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			detail := imageUpstreamUsageDetail(tc.promptTokens, tc.completionTokens)
+			if tc.wantNil {
+				assert.Nil(t, detail)
+				return
+			}
+			require.NotNil(t, detail)
+			assert.Equal(t, tc.promptTokens, detail.UpstreamPromptTokens)
+			assert.Equal(t, tc.completionTokens, detail.UpstreamCompletionTokens)
+		})
+	}
+}
+
 func TestBuildGenerateImageTaskErrorDetailUsesRelayStatusAndRetryAfter(t *testing.T) {
 	relayErr := types.WithOpenAIError(types.OpenAIError{
 		Message: "too many requests",

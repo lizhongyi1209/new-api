@@ -529,6 +529,18 @@ func failGenerateImageTaskWithRelayError(task *model.Task, relayErr *types.NewAP
 	failGenerateImageTaskWithDetail(task, reason, buildGenerateImageTaskErrorDetail(relayErr, headers))
 }
 
+// imageUpstreamUsageDetail 在"上游未返回图片数据"时记录上游是否已产生用量（判断是否已计费），
+// 不保留响应体本身（可能含大量 base64 图片数据）。两项均为 0 时视为无用量信息，返回 nil。
+func imageUpstreamUsageDetail(promptTokens, completionTokens int) *model.TaskErrorDetail {
+	if promptTokens == 0 && completionTokens == 0 {
+		return nil
+	}
+	return &model.TaskErrorDetail{
+		UpstreamPromptTokens:     promptTokens,
+		UpstreamCompletionTokens: completionTokens,
+	}
+}
+
 func buildGenerateImageTaskErrorDetail(relayErr *types.NewAPIError, headers http.Header) *model.TaskErrorDetail {
 	detail := &model.TaskErrorDetail{}
 	if relayErr != nil {
@@ -799,7 +811,7 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 	promptTokens, completionTokens, tokenDetails := extractGeminiUsage(geminiResp)
 	images := extractGeminiImages(geminiResp)
 	if len(images) == 0 {
-		failGenerateImageTask(task, "上游未返回图片数据")
+		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
 	images, err = prepareGenerateImageResults(images, imageCompression, task.Properties.RequestHost)
@@ -978,8 +990,10 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTask(task, fmt.Sprintf("解析响应失败: %v", err))
 		return
 	}
+
+	promptTokens, completionTokens, tokenDetails, modelVersion := extractOpenAIImageUsage(bodyBytes)
 	if len(imageResp.Data) == 0 {
-		failGenerateImageTask(task, "上游未返回图片数据")
+		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
 
@@ -992,7 +1006,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		}
 	}
 	if len(images) == 0 {
-		failGenerateImageTask(task, "上游未返回图片数据")
+		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
 	images, err = prepareGenerateImageResults(images, asyncReq.ImageCompression, task.Properties.RequestHost)
@@ -1001,7 +1015,6 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		return
 	}
 
-	promptTokens, completionTokens, tokenDetails, modelVersion := extractOpenAIImageUsage(bodyBytes)
 	finalizeGenerateImageTask(ctx, task, images, promptTokens, completionTokens, tokenDetails,
 		relayInfo.UpstreamModelName, relayInfo.IsModelMapped, modelVersion)
 }
