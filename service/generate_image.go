@@ -1252,11 +1252,20 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 		}
 	}
 
-	// 0 输出 token（疑似风控）：全额退款
+	// 0 输出 token（疑似风控）：只有在真正无图片时才退款
 	if completionTokens == 0 && task.Quota > 0 {
-		logger.LogWarn(ctx, fmt.Sprintf("generate_image: 上游返回0输出token（疑似风控），退还扣费，任务 %s，模型 %s",
-			task.TaskID, task.Properties.OriginModelName))
-		RefundTaskQuota(ctx, task, "上游返回0输出token（疑似风控），退还全部扣费")
+		if len(images) > 0 {
+			// 有图片数据,说明不是风控,只是上游未返回 token 统计,不退款
+			logger.LogWarn(ctx, fmt.Sprintf(
+				"generate_image: 上游返回0输出token但生成了%d张图片,不退款,任务 %s，模型 %s",
+				len(images), task.TaskID, task.Properties.OriginModelName))
+		} else {
+			// 无图片数据,才是真正的风控,退款
+			logger.LogWarn(ctx, fmt.Sprintf(
+				"generate_image: 上游返回0输出token且无图片（疑似风控），退还扣费，任务 %s，模型 %s",
+				task.TaskID, task.Properties.OriginModelName))
+			RefundTaskQuota(ctx, task, "上游返回0输出token且无图片（疑似风控），退还全部扣费")
+		}
 	}
 
 	// 更新提交时的消费日志为完成态
