@@ -643,23 +643,14 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
 		return
 	}
-
-	// 准备 metadata 用于日志记录
-	otherOverrides := make(map[string]interface{})
-	if taskResult.Metadata != nil {
-		for k, v := range taskResult.Metadata {
-			otherOverrides[k] = v
-		}
-	}
-
 	// 1. 优先让 adaptor 决定最终额度
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-		SettleTaskQuotaInSubmitLog(ctx, task, actualQuota, "adaptor计费调整", otherOverrides)
+		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整")
 		return
 	}
 	// 2. 回退到 token 重算
 	if taskResult.TotalTokens > 0 {
-		RecalculateTaskQuotaByTokensWithMetadata(ctx, task, 0, taskResult.TotalTokens, otherOverrides)
+		RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens)
 		return
 	}
 	// 3. 无调整，保持预扣额度
