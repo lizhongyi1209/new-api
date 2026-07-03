@@ -1237,18 +1237,15 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 				}
 				tr, err := billingexpr.ComputeTieredQuota(&snap, params)
 				if err == nil {
-					SettleTaskQuotaInSubmitLog(ctx, task, tr.ActualQuotaAfterGroup,
+					RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
 						fmt.Sprintf("tiered_expr重算：p=%d, c=%d, img=%.0f, tier=%s",
-							promptTokens, completionTokens, params.Img, tr.MatchedTier),
-						map[string]interface{}{
-							"matched_tier": tr.MatchedTier,
-						})
+							promptTokens, completionTokens, params.Img, tr.MatchedTier))
 				} else {
 					logger.LogError(ctx, fmt.Sprintf("generate_image: tiered settle failed: %v", err))
 				}
 			}
 		} else {
-			RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+			RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
 		}
 	}
 

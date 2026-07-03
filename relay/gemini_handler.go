@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -76,7 +77,7 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			if !strings.Contains(info.OriginModelName, "-nothinking") {
 				// try to get no thinking model price
 				noThinkingModelName := info.OriginModelName + "-nothinking"
-				containPrice := helper.HasModelBillingConfig(noThinkingModelName)
+				containPrice := helper.ContainPriceOrRatio(noThinkingModelName)
 				if containPrice {
 					info.OriginModelName = noThinkingModelName
 					info.UpstreamModelName = noThinkingModelName
@@ -162,16 +163,9 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			}
 		}
 
-		logger.LogDebug(c, "Gemini request body: %s", jsonData)
+		logger.LogDebug(c, "Gemini request body: "+string(jsonData))
 
-		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-		defer closer.Close()
-		jsonData = nil
-		info.UpstreamRequestBodySize = size
-		requestBody = body
+		requestBody = bytes.NewReader(jsonData)
 	}
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -200,11 +194,7 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		return openaiErr
 	}
 
-	usageDto := usage.(*dto.Usage)
-	service.PostTextConsumeQuota(c, info, usageDto, nil)
-	// Removed RefundIfZeroCompletionTokens: Gemini's usageMetadata is the official billing source.
-	// If upstream returns tokens (even with completion=0), it means upstream has processed and billed.
-	// Cases like safety filters, client disconnects still consume input tokens upstream.
+	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	return nil
 }
 
@@ -272,15 +262,8 @@ func GeminiEmbeddingHandler(c *gin.Context, info *relaycommon.RelayInfo) (newAPI
 			return newAPIErrorFromParamOverride(err)
 		}
 	}
-	logger.LogDebug(c, "Gemini embedding request body: %s", jsonData)
-	body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-	}
-	defer closer.Close()
-	jsonData = nil
-	info.UpstreamRequestBodySize = size
-	requestBody = body
+	logger.LogDebug(c, "Gemini embedding request body: "+string(jsonData))
+	requestBody = bytes.NewReader(jsonData)
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {

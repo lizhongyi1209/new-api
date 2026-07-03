@@ -681,3 +681,45 @@ func formatUpstreamError(value any) string {
 	}
 	return string(data)
 }
+
+// EstimateBilling 检测请求 metadata 中是否包含视频输入，返回视频折扣 OtherRatio。
+func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil
+	}
+	if hasVideoInMetadata(req.Metadata) {
+		if ratio, ok := GetVideoInputRatio(info.OriginModelName); ok {
+			return map[string]float64{"video_input": ratio}
+		}
+	}
+	return nil
+}
+
+// hasVideoInMetadata 检查 metadata 的 content 数组是否包含 video_url 条目
+func hasVideoInMetadata(metadata map[string]interface{}) bool {
+	if metadata == nil {
+		return false
+	}
+	contentRaw, ok := metadata["content"]
+	if !ok {
+		return false
+	}
+	contentList, ok := contentRaw.([]interface{})
+	if !ok {
+		return false
+	}
+	for _, item := range contentList {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if itemType, ok := itemMap["type"].(string); ok && itemType == "video_url" {
+			return true
+		}
+		if _, hasVideoURL := itemMap["video_url"]; hasVideoURL {
+			return true
+		}
+	}
+	return false
+}

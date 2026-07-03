@@ -954,7 +954,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 
 	// Settle billing: per-token models need post-completion recalculation with actual usage
 	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
 	}
 
 	// Update submission-time log with actual completion data
@@ -1337,7 +1337,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 
 	// Settle billing: per-token models need post-completion recalculation
 	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
 	}
 
 	// Refund if risk control blocked the output (zero completion tokens)
@@ -1891,7 +1891,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 
 	// Settle billing: per-token models need post-completion recalculation with actual token counts
 	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		RecalculateTaskQuotaByTokens(ctx, task, promptTokens, completionTokens)
+		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
 	}
 
 	// Refund if risk control blocked the output (zero completion tokens)
