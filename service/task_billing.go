@@ -317,6 +317,12 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 // tiered_expr 模型用冻结的 BillingSnapshot + 真实 token 重算；
 // 其余按 token 计费的模型走倍率重算；按次计费（PerCallBilling）不重算。
 // tokenDetails 中的 image_tokens / image_output_tokens 分别映射到表达式的 img / img_o 变量。
+//
+// 契约：本函数不为 img/img_o 做兜底，各异步路径的 usage 提取函数必须自行填好
+// tokenDetails（Gemini 取 candidatesTokensDetails 的 IMAGE modality；OpenAI 图像
+// 端点无输出明细时输出 token 全记为 image_output_tokens）。漏填不会报错，
+// 图像输出会静默按低价的 c 计费。另 TieredSnapshot 为空时静默退回倍率/按次
+// 逻辑——新增提交入口漏存快照即触发（见 prepareAsyncBilling 的契约说明）。
 func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTokens, completionTokens int, tokenDetails map[string]interface{}) {
 	bc := task.PrivateData.BillingContext
 	if bc == nil {

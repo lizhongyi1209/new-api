@@ -30,6 +30,12 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 		cc5m = float64(usage.ClaudeCacheCreation5mTokens)
 	}
 
+	// 契约：img/img_o 只从下面两个字段取值，本函数不做任何兜底。每条图像
+	// relay 路径的响应处理器都必须把图像 token 标进对应字段（Gemini 按
+	// candidatesTokensDetails 的 IMAGE modality 累加；OpenAI 图像端点优先取
+	// output_tokens_details，无明细时输出 token 应全记为图像）。漏填不会报错：
+	// img_o=0 时图像输出静默落进低价的 c（图像模型表达式常配 c*0），直接少收费。
+	// 新增图像路径上线前，用日志实扣值与 expr_b64 解码后的手算结果核对一次。
 	img := float64(usage.PromptTokensDetails.ImageTokens)
 	ai := float64(usage.PromptTokensDetails.AudioTokens)
 	imgO := float64(usage.CompletionTokenDetails.ImageTokens)

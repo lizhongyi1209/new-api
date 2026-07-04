@@ -178,6 +178,27 @@ After the upstream response returns with actual token usage:
    - Converts via `quotaConversion()` (version-dispatched)
    - Returns actual quota
 
+#### ⚠️ Pitfall: `img_o` / snapshot must be wired per relay path (三起线上少收费事故的共同根因)
+
+表达式引擎只消费喂给它的数：`img`/`img_o` 取自 `usage.PromptTokensDetails.ImageTokens` /
+`usage.CompletionTokenDetails.ImageTokens`（同步，`BuildTieredTokenParams`）或
+`tokenDetails["image_tokens"]`/`["image_output_tokens"]`（异步，`SettleAsyncImageTaskBilling`）。
+**任何一环漏填都不报错**——图像输出 token 静默落进低价的 `c`（图像模型表达式常配 `c*0`，即免费）。
+已踩过的三种漏法：
+
+1. 异步 usage 提取函数没解析 `candidatesTokensDetails` 的 IMAGE modality（Gemini async）。
+2. 异步提交入口没把 `c.Get("tiered_snapshot_bytes")` 写入 `TaskBillingContext.TieredSnapshot`
+   （原生 async）——提交日志仍显示 `billing_mode=tiered_expr`（读的是 context），但结算读任务快照，
+   读不到就静默跳过重算，扣费停在预扣值，极具迷惑性。
+3. 同步响应处理器只归一了输入侧明细（OpenAI `/v1/images/edits` 走 `OpenaiHandlerWithUsage`，
+   不是 `relay_image.go` 里的同名家族函数——确定处理器必须查 adaptor 的 `DoResponse` dispatch，
+   不要按文件名猜）；且 `dto.Usage` 曾缺 `output_tokens_details` 映射，上游给的明细被丢弃。
+
+约定：图像端点（输出天然 100% 是图像）在上游无输出明细时，输出 token 全记为图像模态。
+**新增/改动任何图像 relay 路径后，必须发一笔真实请求，解码日志 `other.expr_b64` 手算
+`exprOutput/1e6 × QuotaPerUnit × groupRatio` 与实扣 quota 核对**——若实扣恰等于
+"img_o=0 的算式"，就是喂数断了。
+
 ### 5. Log Display
 
 **Files**: `service/log_info_generate.go`, `web/src/helpers/render.jsx`

@@ -288,6 +288,13 @@ func AsyncGeminiSubmit(c *gin.Context) {
 // prepareAsyncBilling builds a RelayInfo, calculates price, and pre-consumes quota.
 // Returns the relayInfo (with billing session attached) and priceData.
 // Returns nil relayInfo and a NewAPIError if billing fails.
+//
+// 契约：tiered_expr 模型的 BillingSnapshot 经 c.Set("tiered_snapshot_bytes") 传出，
+// 每个调用本函数的异步提交入口在创建 Task 时都必须把它写入
+// TaskBillingContext.TieredSnapshot（写法见 AsyncImageSubmit / AsyncGeminiSubmit /
+// GenerateImageSubmit）。漏写不会报错：提交日志仍显示 billing_mode=tiered_expr
+// （日志读的是本处快照），但完成侧结算读的是任务里的快照，读不到就静默跳过
+// 表达式重算，扣费永远停在预扣值。
 func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int, tokenId int, modelName string) (*relaycommon.RelayInfo, types.PriceData, *types.NewAPIError) {
 	channel, err := model.CacheGetChannel(channelId)
 	if err != nil {
