@@ -682,18 +682,20 @@ func formatUpstreamError(value any) string {
 	return string(data)
 }
 
-// EstimateBilling 检测请求 metadata 中是否包含视频输入，返回视频折扣 OtherRatio。
+// EstimateBilling 根据请求 metadata 中的输出分辨率与是否含视频输入，返回相对基准价的计费 OtherRatio。
+// 计费口径完全对齐官方 doubao（火山引擎），倍率为 1.0（基准价）时无需附加 OtherRatio。
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil
 	}
-	if hasVideoInMetadata(req.Metadata) {
-		if ratio, ok := GetVideoInputRatio(info.OriginModelName); ok {
-			return map[string]float64{"video_input": ratio}
-		}
+	resolution, _ := req.Metadata["resolution"].(string)
+	hasVideo := hasVideoInMetadata(req.Metadata)
+	ratio, ok := videoInputRatio(info.OriginModelName, resolution, hasVideo)
+	if !ok || ratio == 1.0 {
+		return nil
 	}
-	return nil
+	return map[string]float64{"video_input": ratio}
 }
 
 // hasVideoInMetadata 检查 metadata 的 content 数组是否包含 video_url 条目

@@ -270,3 +270,35 @@ func TestConvertToOpenAIVideoQueuedTaskWithoutData(t *testing.T) {
 	assert.Nil(t, video.Error)
 	assert.Nil(t, video.Metadata)
 }
+
+// TestVideoInputRatioMirrorsOfficialPricing 锁定本渠道计费与官方 doubao（火山引擎）完全一致：
+// 按「输出分辨率 × 是否含视频输入」相对 720p/480p 不含视频基准价取倍率。
+func TestVideoInputRatioMirrorsOfficialPricing(t *testing.T) {
+	cases := []struct {
+		name       string
+		model      string
+		resolution string
+		hasVideo   bool
+		wantRatio  float64
+		wantOK     bool
+	}{
+		// 标准版：720p 基准 46；含视频 28；1080p 51/含视频 31；4k 26/含视频 16。
+		{"standard 720p base", "dreamina-seedance-2-0-260128", "720p", false, 1.0, true},
+		{"standard 720p video", "dreamina-seedance-2-0-260128", "720p", true, 28.0 / 46.0, true},
+		{"standard 1080p", "dreamina-seedance-2-0-260128", "1080p", false, 51.0 / 46.0, true},
+		{"standard 1080p video", "dreamina-seedance-2-0-260128", "1080p", true, 31.0 / 46.0, true},
+		{"standard 4k", "dreamina-seedance-2-0-260128", "4k", false, 26.0 / 46.0, true},
+		{"standard 4k video", "dreamina-seedance-2-0-260128", "4k", true, 16.0 / 46.0, true},
+		// fast 版：基准 37/含视频 22；官方未配置 1080p/4k，回落基准价（倍率 1.0）。
+		{"fast 720p base", "dreamina-seedance-2-0-fast-260128", "720p", false, 1.0, true},
+		{"fast 720p video", "dreamina-seedance-2-0-fast-260128", "720p", true, 22.0 / 37.0, true},
+		{"fast 1080p falls back to base", "dreamina-seedance-2-0-fast-260128", "1080p", false, 1.0, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ratio, ok := videoInputRatio(tc.model, tc.resolution, tc.hasVideo)
+			require.Equal(t, tc.wantOK, ok)
+			assert.InDelta(t, tc.wantRatio, ratio, 1e-9)
+		})
+	}
+}
