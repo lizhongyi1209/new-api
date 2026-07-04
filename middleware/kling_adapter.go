@@ -26,10 +26,27 @@ func KlingRequestConvert() func(c *gin.Context) {
 		}
 		prompt, _ := originalReq["prompt"].(string)
 
+		// Extract common fields if present (parity with KlingOmniVideoConvert)
+		mode, _ := originalReq["mode"].(string)
+		duration, _ := originalReq["duration"].(string)
+		aspectRatio, _ := originalReq["aspect_ratio"].(string)
+
 		unifiedReq := map[string]interface{}{
 			"model":    model,
 			"prompt":   prompt,
 			"metadata": originalReq,
+		}
+
+		// Promote optional params to top level so they populate TaskSubmitReq
+		// (used for usage-log detail: mode/size/duration).
+		if mode != "" {
+			unifiedReq["mode"] = mode
+		}
+		if duration != "" {
+			unifiedReq["duration"] = duration
+		}
+		if aspectRatio != "" {
+			unifiedReq["size"] = aspectRatio
 		}
 
 		jsonData, err := json.Marshal(unifiedReq)
