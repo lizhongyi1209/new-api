@@ -92,6 +92,16 @@ func normalizeOpenAIUsage(usage *dto.Usage) {
 		usage.PromptTokensDetails.TextTokens = usage.InputTokensDetails.TextTokens
 		usage.PromptTokensDetails.AudioTokens = usage.InputTokensDetails.AudioTokens
 	}
+	if usage.OutputTokensDetails != nil {
+		usage.CompletionTokenDetails.ImageTokens = usage.OutputTokensDetails.ImageTokens
+		usage.CompletionTokenDetails.TextTokens = usage.OutputTokensDetails.TextTokens
+		usage.CompletionTokenDetails.AudioTokens = usage.OutputTokensDetails.AudioTokens
+	}
+	// 图像端点的输出 token 全部是图像（无输出明细时兜底），
+	// 标记为图像模态供 tiered_expr 的 img_o 变量取用；表达式未引用 img_o 时不影响任何计费。
+	if usage.CompletionTokenDetails.ImageTokens == 0 && usage.CompletionTokens > 0 {
+		usage.CompletionTokenDetails.ImageTokens = usage.CompletionTokens
+	}
 	if usage.TotalTokens == 0 {
 		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}

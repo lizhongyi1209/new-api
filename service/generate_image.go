@@ -1129,8 +1129,13 @@ func extractOpenAIImageUsage(bodyBytes []byte) (promptTokens, completionTokens i
 	if resp.InputTokensDetails != nil && resp.InputTokensDetails.ImageTokens > 0 {
 		details["image_tokens"] = resp.InputTokensDetails.ImageTokens
 	}
-	if resp.CompletionTokenDetails.ImageTokens > 0 {
+	if resp.OutputTokensDetails != nil && resp.OutputTokensDetails.ImageTokens > 0 {
+		details["image_output_tokens"] = resp.OutputTokensDetails.ImageTokens
+	} else if resp.CompletionTokenDetails.ImageTokens > 0 {
 		details["image_output_tokens"] = resp.CompletionTokenDetails.ImageTokens
+	} else if resp.CompletionTokens > 0 {
+		// gpt-image 图像端点输出全部是图像 token（无明细时兜底）
+		details["image_output_tokens"] = resp.CompletionTokens
 	}
 
 	// modelVersion 在响应顶层，SimpleResponse 不含，单独提取。

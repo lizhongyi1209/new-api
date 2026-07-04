@@ -343,19 +343,27 @@ func ForwardImageSSEStream(c *gin.Context, info *relaycommon.RelayInfo, resp *ht
 func parseImageStreamUsage(data string) *dto.Usage {
 	var event struct {
 		Usage *struct {
-			TotalTokens  int `json:"total_tokens"`
-			InputTokens  int `json:"input_tokens"`
-			OutputTokens int `json:"output_tokens"`
+			TotalTokens         int                     `json:"total_tokens"`
+			InputTokens         int                     `json:"input_tokens"`
+			OutputTokens        int                     `json:"output_tokens"`
+			OutputTokensDetails *dto.OutputTokenDetails `json:"output_tokens_details"`
 		} `json:"usage"`
 	}
 	if err := common.Unmarshal([]byte(data), &event); err != nil || event.Usage == nil {
 		return nil
 	}
-	return &dto.Usage{
+	usage := &dto.Usage{
 		PromptTokens:     event.Usage.InputTokens,
 		CompletionTokens: event.Usage.OutputTokens,
 		TotalTokens:      event.Usage.TotalTokens,
 	}
+	// 图像流式输出全部是图像 token（无明细时兜底），供 tiered_expr 的 img_o 取用
+	if event.Usage.OutputTokensDetails != nil && event.Usage.OutputTokensDetails.ImageTokens > 0 {
+		usage.CompletionTokenDetails.ImageTokens = event.Usage.OutputTokensDetails.ImageTokens
+	} else if usage.CompletionTokens > 0 {
+		usage.CompletionTokenDetails.ImageTokens = usage.CompletionTokens
+	}
+	return usage
 }
 
 func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -388,6 +396,15 @@ func OpenaiHandlerWithUsage(c *gin.Context, info *relaycommon.RelayInfo, resp *h
 	if usageResp.InputTokensDetails != nil {
 		usageResp.PromptTokensDetails.ImageTokens += usageResp.InputTokensDetails.ImageTokens
 		usageResp.PromptTokensDetails.TextTokens += usageResp.InputTokensDetails.TextTokens
+	}
+	if usageResp.OutputTokensDetails != nil {
+		usageResp.CompletionTokenDetails.ImageTokens += usageResp.OutputTokensDetails.ImageTokens
+		usageResp.CompletionTokenDetails.TextTokens += usageResp.OutputTokensDetails.TextTokens
+	}
+	// 本 handler 仅服务图像端点（generations/edits）：上游未给输出明细时，
+	// 输出 token 全部是图像，标记为图像模态供 tiered_expr 的 img_o 取用。
+	if usageResp.CompletionTokenDetails.ImageTokens == 0 && usageResp.CompletionTokens > 0 {
+		usageResp.CompletionTokenDetails.ImageTokens = usageResp.CompletionTokens
 	}
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
 	return &usageResp.Usage, nil
