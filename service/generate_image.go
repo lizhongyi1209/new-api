@@ -863,6 +863,21 @@ func extractGeminiUsage(geminiResp map[string]interface{}) (promptTokens, comple
 		completionTokens += int(th)
 		details["thought_tokens"] = int(th)
 	}
+
+	// 提取输出图像 token（用于 tiered_expr 表达式的 img_o 变量）
+	if candidatesTokensDetails, ok := usage["candidatesTokensDetails"].([]interface{}); ok {
+		for _, detail := range candidatesTokensDetails {
+			if detailMap, ok := detail.(map[string]interface{}); ok {
+				if modality, _ := detailMap["modality"].(string); modality == "IMAGE" {
+					if tokenCount, ok := detailMap["tokenCount"].(float64); ok {
+						details["image_output_tokens"] = int(tokenCount)
+						break
+					}
+				}
+			}
+		}
+	}
+
 	return promptTokens, completionTokens, details
 }
 
@@ -1115,6 +1130,9 @@ func extractOpenAIImageUsage(bodyBytes []byte) (promptTokens, completionTokens i
 	if resp.InputTokensDetails != nil && resp.InputTokensDetails.ImageTokens > 0 {
 		details["image_tokens"] = resp.InputTokensDetails.ImageTokens
 	}
+	if resp.CompletionTokenDetails.ImageTokens > 0 {
+		details["image_output_tokens"] = resp.CompletionTokenDetails.ImageTokens
+	}
 
 	// modelVersion 在响应顶层，SimpleResponse 不含，单独提取。
 	var raw map[string]interface{}
@@ -1235,11 +1253,51 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 						}
 					}
 				}
+				if imgOTokens, ok := tokenDetails["image_output_tokens"]; ok {
+					if v, ok := imgOTokens.(int); ok {
+						params.ImgO = float64(v)
+						params.C -= params.ImgO
+						if params.C < 0 {
+							params.C = 0
+						}
+					}
+				}
 				tr, err := billingexpr.ComputeTieredQuota(&snap, params)
 				if err == nil {
+					// 构建易读的计费说明
+					var parts []string
+					if params.P > 0 {
+						parts = append(parts, fmt.Sprintf("文本输入%.0f×$%.1f", params.P, 0.5))
+					}
+					if params.C > 0 {
+						parts = append(parts, fmt.Sprintf("文本输出%.0f×$%.0f", params.C, 3.0))
+					}
+					if params.Img > 0 {
+						parts = append(parts, fmt.Sprintf("图像输入%.0f×$%.1f", params.Img, 2.0))
+					}
+					if params.ImgO > 0 {
+						parts = append(parts, fmt.Sprintf("图像输出%.0f×$%.0f", params.ImgO, 60.0))
+					}
+					if params.AI > 0 {
+						parts = append(parts, fmt.Sprintf("音频输入%.0f", params.AI))
+					}
+					if params.AO > 0 {
+						parts = append(parts, fmt.Sprintf("音频输出%.0f", params.AO))
+					}
+					breakdown := ""
+					if len(parts) > 0 {
+						for i, part := range parts {
+							if i > 0 {
+								breakdown += " + "
+							}
+							breakdown += part
+						}
+					}
+					baseCost := float64(tr.ActualQuotaBeforeGroup) / float64(snap.QuotaPerUnit)
+					finalCost := float64(tr.ActualQuotaAfterGroup) / float64(snap.QuotaPerUnit)
 					RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
-						fmt.Sprintf("tiered_expr重算：p=%d, c=%d, img=%.0f, tier=%s",
-							promptTokens, completionTokens, params.Img, tr.MatchedTier))
+						fmt.Sprintf("tiered_expr重算 [%s档]：%s = $%.4f ×分组%.0f → $%.3f (%d额度)",
+							tr.MatchedTier, breakdown, baseCost, snap.GroupRatio, finalCost, tr.ActualQuotaAfterGroup))
 				} else {
 					logger.LogError(ctx, fmt.Sprintf("generate_image: tiered settle failed: %v", err))
 				}
