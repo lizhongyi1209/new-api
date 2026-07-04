@@ -1263,6 +1263,19 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 			completionTokens += int(tt)
 			tokenDetails["thought_tokens"] = int(tt)
 		}
+		// 提取输出图像 token（tiered_expr 表达式的 img_o 变量），与 extractGeminiUsage 一致
+		if candidatesTokensDetails, ok := usageMetadata["candidatesTokensDetails"].([]interface{}); ok {
+			for _, detail := range candidatesTokensDetails {
+				if detailMap, ok := detail.(map[string]interface{}); ok {
+					if modality, _ := detailMap["modality"].(string); modality == "IMAGE" {
+						if tokenCount, ok := detailMap["tokenCount"].(float64); ok {
+							tokenDetails["image_output_tokens"] = int(tokenCount)
+							break
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Strip thoughtSignature before storing
@@ -1340,10 +1353,8 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
-	// Settle billing: per-token models need post-completion recalculation
-	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
-	}
+	// Settle billing with actual token usage (tiered_expr or per-token models)
+	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
 	// Refund if risk control blocked the output (zero completion tokens)
 	if completionTokens == 0 && promptTokens > 0 && task.Quota > 0 {
@@ -1801,6 +1812,19 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 			completionTokens += int(tt)
 			tokenDetails["thought_tokens"] = int(tt)
 		}
+		// 提取输出图像 token（tiered_expr 表达式的 img_o 变量），与 extractGeminiUsage 一致
+		if candidatesTokensDetails, ok := usageMetadata["candidatesTokensDetails"].([]interface{}); ok {
+			for _, detail := range candidatesTokensDetails {
+				if detailMap, ok := detail.(map[string]interface{}); ok {
+					if modality, _ := detailMap["modality"].(string); modality == "IMAGE" {
+						if tokenCount, ok := detailMap["tokenCount"].(float64); ok {
+							tokenDetails["image_output_tokens"] = int(tokenCount)
+							break
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Strip thoughtSignature from parts before storing (it can be megabytes of base64)
@@ -1894,10 +1918,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 	task.Properties.UpstreamModelName = upstreamModelName
 	_ = task.Update()
 
-	// Settle billing: per-token models need post-completion recalculation with actual token counts
-	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
-	}
+	// Settle billing with actual token usage (tiered_expr or per-token models)
+	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
 	// Refund if risk control blocked the output (zero completion tokens)
 	if completionTokens == 0 && promptTokens > 0 && task.Quota > 0 {

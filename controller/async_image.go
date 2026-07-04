@@ -81,11 +81,12 @@ func AsyncImageSubmit(c *gin.Context) {
 	}
 
 	// Store billing context for later refund/settlement
-	if relayInfo != nil && priceData.Quota > 0 {
+	// tiered_expr 模型即使预扣为 0（信任用户）也必须存 BillingContext，否则完成时无法结算
+	if relayInfo != nil && (priceData.Quota > 0 || c.GetBool("tiered_billing_active")) {
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = tokenId
-		task.PrivateData.BillingContext = &model.TaskBillingContext{
+		bc := &model.TaskBillingContext{
 			ModelPrice:      priceData.ModelPrice,
 			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
 			ModelRatio:      priceData.ModelRatio,
@@ -93,6 +94,12 @@ func AsyncImageSubmit(c *gin.Context) {
 			OriginModelName: req.Model,
 			PerCallBilling:  priceData.UsePrice,
 		}
+		if snapBytes, ok := c.Get("tiered_snapshot_bytes"); ok {
+			if b, ok := snapBytes.([]byte); ok {
+				bc.TieredSnapshot = b
+			}
+		}
+		task.PrivateData.BillingContext = bc
 	}
 
 	// Check if this should use Gemini native processing
@@ -228,11 +235,12 @@ func AsyncGeminiSubmit(c *gin.Context) {
 	service.SetGenerateContentRequestOmittedData(task, "submitted")
 
 	// Store billing context for later refund/settlement
-	if relayInfo != nil && priceData.Quota > 0 {
+	// tiered_expr 模型即使预扣为 0（信任用户）也必须存 BillingContext，否则完成时无法结算
+	if relayInfo != nil && (priceData.Quota > 0 || c.GetBool("tiered_billing_active")) {
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = tokenId
-		task.PrivateData.BillingContext = &model.TaskBillingContext{
+		bc := &model.TaskBillingContext{
 			ModelPrice:      priceData.ModelPrice,
 			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
 			ModelRatio:      priceData.ModelRatio,
@@ -240,6 +248,12 @@ func AsyncGeminiSubmit(c *gin.Context) {
 			OriginModelName: modelName,
 			PerCallBilling:  priceData.UsePrice,
 		}
+		if snapBytes, ok := c.Get("tiered_snapshot_bytes"); ok {
+			if b, ok := snapBytes.([]byte); ok {
+				bc.TieredSnapshot = b
+			}
+		}
+		task.PrivateData.BillingContext = bc
 	}
 
 	if err := task.Insert(); err != nil {

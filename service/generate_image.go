@@ -23,7 +23,6 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/types"
@@ -1233,78 +1232,8 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
-	// 按 token 计费的模型：完成后用真实用量重新结算差额
-	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		if len(bc.TieredSnapshot) > 0 {
-			// tiered_expr 模型：用冻结的 BillingSnapshot + 真实 token 重算
-			var snap billingexpr.BillingSnapshot
-			if err := common.Unmarshal(bc.TieredSnapshot, &snap); err == nil {
-				params := billingexpr.TokenParams{
-					P:   float64(promptTokens),
-					C:   float64(completionTokens),
-					Len: float64(promptTokens + completionTokens),
-				}
-				if imgTokens, ok := tokenDetails["image_tokens"]; ok {
-					if v, ok := imgTokens.(int); ok {
-						params.Img = float64(v)
-						params.P -= params.Img
-						if params.P < 0 {
-							params.P = 0
-						}
-					}
-				}
-				if imgOTokens, ok := tokenDetails["image_output_tokens"]; ok {
-					if v, ok := imgOTokens.(int); ok {
-						params.ImgO = float64(v)
-						params.C -= params.ImgO
-						if params.C < 0 {
-							params.C = 0
-						}
-					}
-				}
-				tr, err := billingexpr.ComputeTieredQuota(&snap, params)
-				if err == nil {
-					// 构建易读的计费说明（不显示单价，避免硬编码）
-					var parts []string
-					if params.P > 0 {
-						parts = append(parts, fmt.Sprintf("文本输入%.0f tokens", params.P))
-					}
-					if params.C > 0 {
-						parts = append(parts, fmt.Sprintf("文本输出%.0f tokens", params.C))
-					}
-					if params.Img > 0 {
-						parts = append(parts, fmt.Sprintf("图像输入%.0f tokens", params.Img))
-					}
-					if params.ImgO > 0 {
-						parts = append(parts, fmt.Sprintf("图像输出%.0f tokens", params.ImgO))
-					}
-					if params.AI > 0 {
-						parts = append(parts, fmt.Sprintf("音频输入%.0f tokens", params.AI))
-					}
-					if params.AO > 0 {
-						parts = append(parts, fmt.Sprintf("音频输出%.0f tokens", params.AO))
-					}
-					breakdown := ""
-					if len(parts) > 0 {
-						for i, part := range parts {
-							if i > 0 {
-								breakdown += " + "
-							}
-							breakdown += part
-						}
-					}
-					finalCost := float64(tr.ActualQuotaAfterGroup) / float64(snap.QuotaPerUnit)
-					RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
-						fmt.Sprintf("tiered_expr重算 [%s档]：%s → $%.3f (%d额度)",
-							tr.MatchedTier, breakdown, finalCost, tr.ActualQuotaAfterGroup))
-				} else {
-					logger.LogError(ctx, fmt.Sprintf("generate_image: tiered settle failed: %v", err))
-				}
-			}
-		} else {
-			RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
-		}
-	}
+	// 完成后用真实用量重新结算差额（tiered_expr 或按 token 模型）
+	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
 	// 0 输出 token（疑似风控）：只有在真正无图片时才退款
 	if completionTokens == 0 && task.Quota > 0 {

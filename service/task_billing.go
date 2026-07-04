@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -183,7 +183,7 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 	})
 }
 
-// RecalculateTaskQuota 通用的异步差额结算。
+// RecalculateTaskQuota 通用的异步差额结算，更新原有的提交日志。
 // actualQuota 是任务完成后的实际应扣额度，与预扣额度 (task.Quota) 做差额结算。
 // reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。
 func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason string) {
@@ -196,6 +196,15 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	if quotaDelta == 0 {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 预扣费准确（%s，%s）",
 			task.TaskID, logger.LogQuota(actualQuota), reason))
+		// 即使没有差额，也要更新日志的 other 字段，添加 actual_quota 信息
+		if task.PrivateData.SubmitLogID > 0 {
+			otherUpdates := map[string]interface{}{
+				"pre_consumed_quota": preConsumedQuota,
+				"actual_quota":       actualQuota,
+				"settlement_reason":  reason,
+			}
+			model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, actualQuota, otherUpdates)
+		}
 		return
 	}
 
@@ -217,48 +226,35 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	taskAdjustTokenQuota(ctx, task, quotaDelta)
 
 	task.Quota = actualQuota
+	_ = task.Update()
 
-	var logType int
-	var logQuota int
-	if quotaDelta > 0 {
-		logType = model.LogTypeConsume
-		logQuota = quotaDelta
-		model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quotaDelta)
-		model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
-	} else {
-		logType = model.LogTypeRefund
-		logQuota = -quotaDelta
-	}
-	other := taskBillingOther(task)
-	other["task_id"] = task.TaskID
-	other["pre_consumed_quota"] = preConsumedQuota
-	other["actual_quota"] = actualQuota
+	// 更新用户和渠道统计（只更新差额部分；负差额即退款场景做相应扣减）
+	model.UpdateUserUsedQuotaAndRequestCount(task.UserId, quotaDelta)
+	model.UpdateChannelUsedQuota(task.ChannelId, quotaDelta)
 
-	// 添加 tiered_expr 计费信息到差额结算日志
-	if bc := task.PrivateData.BillingContext; bc != nil && len(bc.TieredSnapshot) > 0 {
-		other["billing_mode"] = "tiered_expr"
-		// 从 TieredSnapshot 中提取 expr 和 tier 信息
-		var snap struct {
-			ExprString    string `json:"expr_string"`
-			EstimatedTier string `json:"estimated_tier"`
+	// 更新原有的提交日志，而不是创建新日志
+	if task.PrivateData.SubmitLogID > 0 {
+		otherUpdates := map[string]interface{}{
+			"pre_consumed_quota": preConsumedQuota,
+			"actual_quota":       actualQuota,
+			"settlement_reason":  reason,
 		}
-		if err := json.Unmarshal(bc.TieredSnapshot, &snap); err == nil {
-			other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
-			other["matched_tier"] = snap.EstimatedTier
+
+		// 添加 tiered_expr 计费信息（如果提交时没有的话）
+		if bc := task.PrivateData.BillingContext; bc != nil && len(bc.TieredSnapshot) > 0 {
+			var snap struct {
+				ExprString    string `json:"expr_string"`
+				EstimatedTier string `json:"estimated_tier"`
+			}
+			if err := common.Unmarshal(bc.TieredSnapshot, &snap); err == nil {
+				otherUpdates["billing_mode"] = "tiered_expr"
+				otherUpdates["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
+				otherUpdates["matched_tier"] = snap.EstimatedTier
+			}
 		}
+
+		model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, actualQuota, otherUpdates)
 	}
-	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   logType,
-		Content:   reason,
-		ChannelId: task.ChannelId,
-		ModelName: taskModelName(task),
-		Quota:     logQuota,
-		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
-		Other:     other,
-		NodeName:  task.PrivateData.NodeName,
-	})
 }
 
 // RecalculateTaskQuotaByTokens 根据实际 token 消耗重新计费（异步差额结算）。
@@ -315,4 +311,73 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 
 	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f", totalTokens, modelRatio, finalGroupRatio, otherMultiplier)
 	RecalculateTaskQuota(ctx, task, actualQuota, reason)
+}
+
+// SettleAsyncImageTaskBilling 异步生图任务完成后的统一差额结算入口。
+// tiered_expr 模型用冻结的 BillingSnapshot + 真实 token 重算；
+// 其余按 token 计费的模型走倍率重算；按次计费（PerCallBilling）不重算。
+// tokenDetails 中的 image_tokens / image_output_tokens 分别映射到表达式的 img / img_o 变量。
+func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTokens, completionTokens int, tokenDetails map[string]interface{}) {
+	bc := task.PrivateData.BillingContext
+	if bc == nil {
+		return
+	}
+
+	if len(bc.TieredSnapshot) == 0 {
+		if !bc.PerCallBilling {
+			RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
+		}
+		return
+	}
+
+	var snap billingexpr.BillingSnapshot
+	if err := common.Unmarshal(bc.TieredSnapshot, &snap); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("任务 %s tiered 结算失败：快照解析错误 %v", task.TaskID, err))
+		return
+	}
+
+	params := billingexpr.TokenParams{
+		P:   float64(promptTokens),
+		C:   float64(completionTokens),
+		Len: float64(promptTokens + completionTokens),
+	}
+	if v, ok := tokenDetails["image_tokens"].(int); ok && v > 0 {
+		params.Img = float64(v)
+		params.P -= params.Img
+		if params.P < 0 {
+			params.P = 0
+		}
+	}
+	if v, ok := tokenDetails["image_output_tokens"].(int); ok && v > 0 {
+		params.ImgO = float64(v)
+		params.C -= params.ImgO
+		if params.C < 0 {
+			params.C = 0
+		}
+	}
+
+	tr, err := billingexpr.ComputeTieredQuota(&snap, params)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("任务 %s tiered 结算失败：表达式计算错误 %v", task.TaskID, err))
+		return
+	}
+
+	var parts []string
+	if params.P > 0 {
+		parts = append(parts, fmt.Sprintf("文本输入%.0f tokens", params.P))
+	}
+	if params.C > 0 {
+		parts = append(parts, fmt.Sprintf("文本输出%.0f tokens", params.C))
+	}
+	if params.Img > 0 {
+		parts = append(parts, fmt.Sprintf("图像输入%.0f tokens", params.Img))
+	}
+	if params.ImgO > 0 {
+		parts = append(parts, fmt.Sprintf("图像输出%.0f tokens", params.ImgO))
+	}
+	breakdown := strings.Join(parts, " + ")
+	finalCost := float64(tr.ActualQuotaAfterGroup) / snap.QuotaPerUnit
+	RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
+		fmt.Sprintf("tiered_expr重算 [%s档]：%s → $%.3f (%d额度)",
+			tr.MatchedTier, breakdown, finalCost, tr.ActualQuotaAfterGroup))
 }
