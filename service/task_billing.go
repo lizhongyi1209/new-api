@@ -239,8 +239,8 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		other["billing_mode"] = "tiered_expr"
 		// 从 TieredSnapshot 中提取 expr 和 tier 信息
 		var snap struct {
-			ExprString    string `json:"exprString"`
-			EstimatedTier string `json:"estimatedTier"`
+			ExprString    string `json:"expr_string"`
+			EstimatedTier string `json:"estimated_tier"`
 		}
 		if err := json.Unmarshal(bc.TieredSnapshot, &snap); err == nil {
 			other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
