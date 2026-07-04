@@ -1264,25 +1264,25 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 				}
 				tr, err := billingexpr.ComputeTieredQuota(&snap, params)
 				if err == nil {
-					// 构建易读的计费说明
+					// 构建易读的计费说明（不显示单价，避免硬编码）
 					var parts []string
 					if params.P > 0 {
-						parts = append(parts, fmt.Sprintf("文本输入%.0f×$%.1f", params.P, 0.5))
+						parts = append(parts, fmt.Sprintf("文本输入%.0f tokens", params.P))
 					}
 					if params.C > 0 {
-						parts = append(parts, fmt.Sprintf("文本输出%.0f×$%.0f", params.C, 3.0))
+						parts = append(parts, fmt.Sprintf("文本输出%.0f tokens", params.C))
 					}
 					if params.Img > 0 {
-						parts = append(parts, fmt.Sprintf("图像输入%.0f×$%.1f", params.Img, 2.0))
+						parts = append(parts, fmt.Sprintf("图像输入%.0f tokens", params.Img))
 					}
 					if params.ImgO > 0 {
-						parts = append(parts, fmt.Sprintf("图像输出%.0f×$%.0f", params.ImgO, 60.0))
+						parts = append(parts, fmt.Sprintf("图像输出%.0f tokens", params.ImgO))
 					}
 					if params.AI > 0 {
-						parts = append(parts, fmt.Sprintf("音频输入%.0f", params.AI))
+						parts = append(parts, fmt.Sprintf("音频输入%.0f tokens", params.AI))
 					}
 					if params.AO > 0 {
-						parts = append(parts, fmt.Sprintf("音频输出%.0f", params.AO))
+						parts = append(parts, fmt.Sprintf("音频输出%.0f tokens", params.AO))
 					}
 					breakdown := ""
 					if len(parts) > 0 {
@@ -1293,11 +1293,10 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 							breakdown += part
 						}
 					}
-					baseCost := float64(tr.ActualQuotaBeforeGroup) / float64(snap.QuotaPerUnit)
 					finalCost := float64(tr.ActualQuotaAfterGroup) / float64(snap.QuotaPerUnit)
 					RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
-						fmt.Sprintf("tiered_expr重算 [%s档]：%s = $%.4f ×分组%.0f → $%.3f (%d额度)",
-							tr.MatchedTier, breakdown, baseCost, snap.GroupRatio, finalCost, tr.ActualQuotaAfterGroup))
+						fmt.Sprintf("tiered_expr重算 [%s档]：%s → $%.3f (%d额度)",
+							tr.MatchedTier, breakdown, finalCost, tr.ActualQuotaAfterGroup))
 				} else {
 					logger.LogError(ctx, fmt.Sprintf("generate_image: tiered settle failed: %v", err))
 				}

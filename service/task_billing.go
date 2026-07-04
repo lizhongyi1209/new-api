@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -231,6 +233,20 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	other["task_id"] = task.TaskID
 	other["pre_consumed_quota"] = preConsumedQuota
 	other["actual_quota"] = actualQuota
+
+	// 添加 tiered_expr 计费信息到差额结算日志
+	if bc := task.PrivateData.BillingContext; bc != nil && len(bc.TieredSnapshot) > 0 {
+		other["billing_mode"] = "tiered_expr"
+		// 从 TieredSnapshot 中提取 expr 和 tier 信息
+		var snap struct {
+			ExprString    string `json:"exprString"`
+			EstimatedTier string `json:"estimatedTier"`
+		}
+		if err := json.Unmarshal(bc.TieredSnapshot, &snap); err == nil {
+			other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
+			other["matched_tier"] = snap.EstimatedTier
+		}
+	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 		UserId:    task.UserId,
 		LogType:   logType,
