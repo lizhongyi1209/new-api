@@ -243,11 +243,15 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           log.action === TASK_ACTIONS.TEXT_GENERATE ||
           log.action === TASK_ACTIONS.FIRST_TAIL_GENERATE ||
           log.action === TASK_ACTIONS.REFERENCE_GENERATE ||
-          log.action === TASK_ACTIONS.REMIX_GENERATE
+          log.action === TASK_ACTIONS.REMIX_GENERATE ||
+          log.action === TASK_ACTIONS.MOTION_CONTROL ||
+          log.action === TASK_ACTIONS.OMNI_VIDEO
         const isSuccess = status === TASK_STATUS.SUCCESS
-        const isUrl = failReason?.startsWith('http')
+        // 视频链接可能在 result_url（成功任务的标准来源），也可能历史上被塞进 fail_reason。
+        const hasVideoUrl =
+          log.result_url?.startsWith('http') || failReason?.startsWith('http')
 
-        if (isSuccess && isVideoTask && isUrl) {
+        if (isSuccess && isVideoTask && hasVideoUrl) {
           const videoUrl = `/v1/videos/${log.task_id}/content`
           return (
             <a

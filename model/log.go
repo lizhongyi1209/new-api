@@ -464,8 +464,9 @@ func UpdateConsumeLogQuotaAndOther(logId int, quota int, otherUpdates map[string
 			otherMap = make(map[string]interface{})
 		}
 
-		// 提取 prompt_tokens 和 completion_tokens 到日志主字段
-		var promptTokens, completionTokens int
+		// 提取 prompt_tokens / completion_tokens / use_time_seconds 到日志主字段。
+		// use_time_seconds 是主字段值而非请求参数，提取后不写入 other JSON。
+		var promptTokens, completionTokens, useTimeSeconds int
 		for k, v := range otherUpdates {
 			if k == "prompt_tokens" {
 				if pt, ok := v.(int); ok {
@@ -475,6 +476,11 @@ func UpdateConsumeLogQuotaAndOther(logId int, quota int, otherUpdates map[string
 				if ct, ok := v.(int); ok {
 					completionTokens = ct
 				}
+			} else if k == "use_time_seconds" {
+				if ut, ok := v.(int); ok {
+					useTimeSeconds = ut
+				}
+				continue
 			}
 			otherMap[k] = v
 		}
@@ -483,6 +489,11 @@ func UpdateConsumeLogQuotaAndOther(logId int, quota int, otherUpdates map[string
 		if promptTokens > 0 || completionTokens > 0 {
 			updates["prompt_tokens"] = promptTokens
 			updates["completion_tokens"] = completionTokens
+		}
+
+		// 回填任务实际耗时（提交时为 0，完成结算时才知道）
+		if useTimeSeconds > 0 {
+			updates["use_time"] = useTimeSeconds
 		}
 
 		updates["other"] = common.MapToJsonStr(otherMap)

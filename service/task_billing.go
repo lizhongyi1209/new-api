@@ -52,6 +52,21 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) int {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
+	// 记录非敏感的任务请求参数（mode/size/duration/prompt），便于日志详情查看与审计。
+	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		if req.Prompt != "" {
+			other["prompt"] = req.Prompt
+		}
+		if req.Mode != "" {
+			other["mode"] = req.Mode
+		}
+		if req.Size != "" {
+			other["size"] = req.Size
+		}
+		if req.Duration > 0 {
+			other["duration"] = req.Duration
+		}
+	}
 	submitLogID := model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -70,6 +85,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) int {
 // ---------------------------------------------------------------------------
 // 异步任务计费辅助函数
 // ---------------------------------------------------------------------------
+
+// taskUseTimeSeconds 计算任务实际耗时（秒），用于结算时回填消费日志的 use_time。
+// 优先用 finish-submit；缺 finish_time 时退回到 finish-start，均不可用则返回 0。
+func taskUseTimeSeconds(task *model.Task) int {
+	if task.FinishTime <= 0 {
+		return 0
+	}
+	base := task.SubmitTime
+	if base <= 0 {
+		base = task.StartTime
+	}
+	if base <= 0 || task.FinishTime < base {
+		return 0
+	}
+	return int(task.FinishTime - base)
+}
 
 // resolveTokenKey 通过 TokenId 运行时获取令牌 Key（用于 Redis 缓存操作）。
 // 如果令牌已被删除或查询失败，返回空字符串。
@@ -194,6 +225,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	preConsumedQuota := task.Quota
 	quotaDelta := actualQuota - preConsumedQuota
 
+	// 任务实际耗时（提交时日志的 use_time 为 0，完成结算时才知道）。
+	useTimeSeconds := taskUseTimeSeconds(task)
+
 	if quotaDelta == 0 {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 预扣费准确（%s，%s）",
 			task.TaskID, logger.LogQuota(actualQuota), reason))
@@ -203,6 +237,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 				"pre_consumed_quota": preConsumedQuota,
 				"actual_quota":       actualQuota,
 				"settlement_reason":  reason,
+			}
+			if useTimeSeconds > 0 {
+				otherUpdates["use_time_seconds"] = useTimeSeconds
 			}
 			model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, actualQuota, otherUpdates)
 		}
@@ -239,6 +276,10 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 			"pre_consumed_quota": preConsumedQuota,
 			"actual_quota":       actualQuota,
 			"settlement_reason":  reason,
+		}
+
+		if useTimeSeconds > 0 {
+			otherUpdates["use_time_seconds"] = useTimeSeconds
 		}
 
 		// 添加 tiered_expr 计费信息（如果提交时没有的话）
