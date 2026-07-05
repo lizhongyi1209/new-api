@@ -34,5 +34,6 @@ declare module '@tanstack/react-table' {
     mobileSpan?: 1 | 2
     // Optional mobile-specific cell renderer
     mobileCell?: (cell: Cell<_TData, _TValue>) => ReactNode
+    mobileOrder?: number // lower values appear first in card field area
   }
 }
