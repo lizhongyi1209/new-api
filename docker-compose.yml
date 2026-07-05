@@ -71,6 +71,8 @@ services:
 #      - GOOGLE_ANALYTICS_ID=G-XXXXXXXXXX
 #      - UMAMI_WEBSITE_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 #      - UMAMI_SCRIPT_URL=https://analytics.umami.is/script.js
+#      - SESSION_COOKIE_SECURE=true  # 启用 Secure session cookie，必须同时配置 SESSION_COOKIE_TRUSTED_URL (Enable Secure session cookies; requires SESSION_COOKIE_TRUSTED_URL)
+#      - SESSION_COOKIE_TRUSTED_URL=https://example.com,https://admin.example.com  # 可信 HTTPS 入口地址，多个用英文逗号分隔 (Trusted HTTPS entry URLs, comma-separated)
 
       # ========== 高并发优化配置（32G内存服务器）==========
       # 数据库连接池优化

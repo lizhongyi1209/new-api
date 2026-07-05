@@ -207,7 +207,7 @@ func main() {
 	// This will cause SSE not to work!!!
 	//server.Use(gzip.Gzip(gzip.DefaultCompression))
 	server.Use(middleware.RequestId())
-	server.Use(middleware.PoweredBy())
+	server.Use(middleware.Version())
 	server.Use(middleware.I18n())
 	middleware.SetUpLogger(server)
 	// Initialize session store
@@ -216,7 +216,7 @@ func main() {
 		Path:     "/",
 		MaxAge:   2592000, // 30 days
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
+		Secure:   common.SessionCookieSecure,
 		SameSite: http.SameSiteLaxMode, // Changed from Strict to Lax for cross-origin compatibility
 	})
 	server.Use(sessions.Sessions("session", store))
@@ -246,6 +246,8 @@ func main() {
 			common.FatalLog("failed to start HTTP server: " + err.Error())
 		}
 	}()
+
+	time.Sleep(100 * time.Millisecond)
 
 	common.LogStartupSuccess(startTime, port)
 
