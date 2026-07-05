@@ -33,30 +33,34 @@ export interface StatsResponse {
   };
 }
 
-export const getUploadedFiles = (params: {
+export const getUploadedFiles = async (params: {
   category?: string;
   p?: number;
 }): Promise<FileListResponse> => {
-  return api.get('/api/upload-management/files', { params });
+  const res = await api.get('/api/upload-management/files', { params });
+  return res.data;
 };
 
-export const deleteFile = (path: string): Promise<{ success: boolean; message: string }> => {
-  return api.post('/api/upload-management/delete', { path });
+export const deleteFile = async (path: string): Promise<{ success: boolean; message: string }> => {
+  const res = await api.post('/api/upload-management/delete', { path });
+  return res.data;
 };
 
-export const batchDeleteFiles = (paths: string[]): Promise<{
+export const batchDeleteFiles = async (paths: string[]): Promise<{
   success: boolean;
   deleted: number;
   failed: number;
 }> => {
-  return api.post('/api/upload-management/batch-delete', { paths });
+  const res = await api.post('/api/upload-management/batch-delete', { paths });
+  return res.data;
 };
 
-export const getUploadStats = (): Promise<StatsResponse> => {
-  return api.get('/api/upload-management/stats');
+export const getUploadStats = async (): Promise<StatsResponse> => {
+  const res = await api.get('/api/upload-management/stats');
+  return res.data;
 };
 
-export const cleanOldFiles = (params: {
+export const cleanOldFiles = async (params: {
   category: string;
   days: number;
 }): Promise<{
@@ -65,5 +69,6 @@ export const cleanOldFiles = (params: {
   size: number;
   message: string;
 }> => {
-  return api.post('/api/upload-management/clean', params);
+  const res = await api.post('/api/upload-management/clean', params);
+  return res.data;
 };
