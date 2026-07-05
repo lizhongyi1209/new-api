@@ -30,10 +30,12 @@ export default function UploadManagement() {
         category: selectedCategory || undefined,
         p: page,
       });
-      setFiles(response.data);
-      setTotal(response.total);
+      setFiles(response.data || []);
+      setTotal(response.total || 0);
     } catch (error: any) {
       toast.error(error.message || '加载文件列表失败');
+      setFiles([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -45,6 +47,7 @@ export default function UploadManagement() {
       setStats(response.data);
     } catch (error: any) {
       toast.error(error.message || '加载统计信息失败');
+      setStats(null);
     }
   };
 
