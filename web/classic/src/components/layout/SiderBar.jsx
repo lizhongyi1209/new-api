@@ -38,6 +38,7 @@ const routerMap = {
   topup: '/console/topup',
   user: '/console/user',
   subscription: '/console/subscription',
+  uploadManagement: '/console/upload-management',
   log: '/console/log',
   midjourney: '/console/midjourney',
   setting: '/console/setting',
@@ -157,6 +158,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('订阅管理'),
         itemKey: 'subscription',
         to: '/subscription',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('上传管理'),
+        itemKey: 'uploadManagement',
+        to: '/upload-management',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
