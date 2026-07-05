@@ -45,6 +45,10 @@ type AigcElement struct {
 // subjects can be listed and filtered per platform.
 const AigcElementPlatformKling = "kling"
 
+// AigcElementPlatformKlingOfficial is the platform tag for Kling Official Element Management API
+// (the new 2024 version, element_id is int64)
+const AigcElementPlatformKlingOfficial = "kling_official"
+
 // AigcElementPlatformSeedance is the platform tag for Seedance (ServiceInference)
 // subjects.
 const AigcElementPlatformSeedance = "seedance"

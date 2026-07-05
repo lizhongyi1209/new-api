@@ -61,3 +61,4 @@ gcloud/
 *keystore*
 *secret*.yaml
 *secret*.yml
+uploads/

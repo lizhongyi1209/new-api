@@ -17,6 +17,7 @@ func SetRouter(router *gin.Engine, assets ThemeAssets) {
 	SetDashboardRouter(router)
 	SetRelayRouter(router)
 	SetVideoRouter(router)
+	SetStaticUploadRouter(router) // Serve uploaded files
 	frontendBaseUrl := os.Getenv("FRONTEND_BASE_URL")
 	if common.IsMasterNode && frontendBaseUrl != "" {
 		frontendBaseUrl = ""
@@ -31,4 +32,14 @@ func SetRouter(router *gin.Engine, assets ThemeAssets) {
 			c.Redirect(http.StatusMovedPermanently, fmt.Sprintf("%s%s", frontendBaseUrl, c.Request.RequestURI))
 		})
 	}
+}
+
+// SetStaticUploadRouter serves uploaded files from local storage
+func SetStaticUploadRouter(router *gin.Engine) {
+	uploadDir := os.Getenv("LOCAL_UPLOAD_DIR")
+	if uploadDir == "" {
+		uploadDir = "uploads"
+	}
+
+	router.Static("/upload", uploadDir)
 }

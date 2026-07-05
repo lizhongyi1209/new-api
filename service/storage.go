@@ -36,11 +36,13 @@ var ossPresignClient *s3.PresignClient
 const (
 	ImageStorageProviderR2        = "r2"
 	ImageStorageProviderAliyunOSS = "aliyun_oss"
+	ImageStorageProviderLocal     = "local"
 )
 
 const (
-	defaultAliyunOSSStorageHosts = "api.o1key.cn"
+	defaultAliyunOSSStorageHosts = ""
 	defaultR2StorageHosts        = "cf-api.o1key.cn,cf-api.o1key.com"
+	defaultLocalStorageHosts     = "api.o1key.cn"
 )
 
 func getR2Client() (*s3.Client, *s3.PresignClient) {
@@ -81,10 +83,15 @@ type OSSPresignResult struct {
 }
 
 func GeneratePresignedUploadURLForHost(requestHost, filename, contentType string, maxSize int64) (any, error) {
-	if SelectImageStorageProvider(requestHost) == ImageStorageProviderAliyunOSS {
+	provider := SelectImageStorageProvider(requestHost)
+	switch provider {
+	case ImageStorageProviderAliyunOSS:
 		return GenerateOSSPresignedUploadURL(filename, contentType, maxSize)
+	case ImageStorageProviderLocal:
+		return GenerateLocalPresignedUploadURL(filename, contentType, maxSize)
+	default:
+		return GeneratePresignedUploadURL(filename, contentType, maxSize)
 	}
-	return GeneratePresignedUploadURL(filename, contentType, maxSize)
 }
 
 // IsAliyunOSSBlocked reports whether Aliyun OSS uploads are administratively
@@ -101,8 +108,15 @@ func SelectImageStorageProvider(requestHost string) string {
 	}
 
 	host := normalizeRequestHost(requestHost)
+
+	// Check local storage first (api.o1key.cn)
+	localHosts := firstNonEmptyString(os.Getenv("LOCAL_STORAGE_HOSTS"), defaultLocalStorageHosts)
+	if hostMatchesCSV(host, localHosts) {
+		return ImageStorageProviderLocal
+	}
+
 	ossHosts := firstNonEmptyString(os.Getenv("ALIYUN_OSS_STORAGE_HOSTS"), defaultAliyunOSSStorageHosts)
-	if hostMatchesCSV(host, ossHosts) {
+	if ossHosts != "" && hostMatchesCSV(host, ossHosts) {
 		return ImageStorageProviderAliyunOSS
 	}
 
@@ -111,13 +125,15 @@ func SelectImageStorageProvider(requestHost string) string {
 		return ImageStorageProviderR2
 	}
 
-	return ImageStorageProviderR2
+	return ImageStorageProviderLocal
 }
 
 func UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, compression, requestHost string) (string, error) {
 	switch SelectImageStorageProvider(requestHost) {
 	case ImageStorageProviderAliyunOSS:
 		return UploadBase64ImageToOSSCompressed(mimeType, base64Data, compression)
+	case ImageStorageProviderLocal:
+		return UploadBase64ImageToLocalCompressed(mimeType, base64Data, compression)
 	default:
 		return UploadBase64ImageToR2Compressed(mimeType, base64Data, compression)
 	}
@@ -338,6 +354,61 @@ func UploadBase64ImageToOSSCompressed(mimeType, base64Data, compression string) 
 	}
 
 	return fmt.Sprintf("%s/%s", publicBase, key), nil
+}
+
+// GenerateLocalPresignedUploadURL generates a direct upload URL for local storage.
+// For local storage, we return a direct POST endpoint that accepts multipart/form-data.
+func GenerateLocalPresignedUploadURL(filename, contentType string, maxSize int64) (*OSSPresignResult, error) {
+	localPublicBase := normalizeHTTPBaseURL(firstNonEmptyString(os.Getenv("LOCAL_PUBLIC_BASE_URL"), "https://api.o1key.cn"))
+
+	id := uuid.New().String()
+	objectKey := fmt.Sprintf("uploads/%s_%s", id, sanitizeUploadFilename(filename))
+
+	uploadURL := fmt.Sprintf("%s/v1/storage/local/upload?object_key=%s", localPublicBase, objectKey)
+	publicURL := fmt.Sprintf("%s/upload/%s", localPublicBase, objectKey)
+
+	expiresIn := 15 * time.Minute
+	headers := make(map[string]string)
+	if contentType != "" {
+		headers["Content-Type"] = contentType
+	}
+
+	return &OSSPresignResult{
+		Method:    "POST",
+		UploadURL: uploadURL,
+		Headers:   headers,
+		PublicURL: publicURL,
+		ObjectKey: objectKey,
+		ExpiresAt: time.Now().Add(expiresIn).Unix(),
+		Provider:  ImageStorageProviderLocal,
+	}, nil
+}
+
+// UploadBase64ImageToLocalCompressed uploads a base64 image to local storage with optional compression.
+func UploadBase64ImageToLocalCompressed(mimeType, base64Data, compression string) (string, error) {
+	localPublicBase := normalizeHTTPBaseURL(firstNonEmptyString(os.Getenv("LOCAL_PUBLIC_BASE_URL"), "https://api.o1key.cn"))
+	uploadDir := firstNonEmptyString(os.Getenv("LOCAL_UPLOAD_DIR"), "uploads")
+
+	uploadBytes, ext, contentType, err := prepareCompressedImageUpload(mimeType, base64Data, compression)
+	if err != nil {
+		return "", err
+	}
+
+	objectKey := fmt.Sprintf("uploads/%s.%s", uuid.New().String(), ext)
+	filePath := fmt.Sprintf("%s/%s", uploadDir, objectKey)
+
+	// Ensure directory exists
+	if err := os.MkdirAll(fmt.Sprintf("%s/uploads", uploadDir), 0755); err != nil {
+		return "", fmt.Errorf("create upload directory failed: %w", err)
+	}
+
+	// Write file
+	if err := os.WriteFile(filePath, uploadBytes, 0644); err != nil {
+		return "", fmt.Errorf("local storage write failed: %w", err)
+	}
+
+	_ = contentType // contentType is determined but not stored as metadata for local files
+	return fmt.Sprintf("%s/upload/%s", localPublicBase, objectKey), nil
 }
 
 func firstNonEmptyEnv(keys ...string) string {

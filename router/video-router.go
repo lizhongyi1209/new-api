@@ -57,6 +57,20 @@ func SetVideoRouter(router *gin.Engine) {
 		klingOmniVideoRouter.GET("/videos/omni-video/:task_id", controller.RelayTaskFetch)
 	}
 
+	// Kling Official Element Management API (2024 New Version)
+	klingElementRouter := router.Group("/kling/v1/general")
+	klingElementRouter.Use(middleware.RouteTag("relay"))
+	klingElementRouter.Use(middleware.TokenOrUserAuth())
+	{
+		klingElementRouter.POST("/advanced-custom-elements", controller.CreateKlingOfficialElement)
+		klingElementRouter.GET("/advanced-custom-elements/:task_id", controller.QueryKlingOfficialElement)
+		klingElementRouter.GET("/advanced-custom-elements", controller.ListKlingOfficialElements)
+		klingElementRouter.GET("/advanced-presets-elements", controller.ListKlingOfficialPresetsElements)
+		klingElementRouter.POST("/delete-advanced-elements", controller.DeleteKlingOfficialElementByBody)
+		// Additional convenience routes for management
+		klingElementRouter.POST("/upload", controller.UploadAigcElementImage) // Reuse existing upload handler
+	}
+
 	// Jimeng official API routes - direct mapping to official API format
 	jimengOfficialGroup := router.Group("jimeng")
 	jimengOfficialGroup.Use(middleware.RouteTag("relay"))
