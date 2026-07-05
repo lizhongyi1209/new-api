@@ -22,6 +22,7 @@ import {
   CreditCard,
   FileText,
   FlaskConical,
+  FolderOpen,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -143,6 +144,11 @@ export function useSidebarData(): SidebarData {
             title: t('Subscriptions'),
             url: '/subscriptions',
             icon: CreditCard,
+          },
+          {
+            title: t('Upload Management'),
+            url: '/upload-management',
+            icon: FolderOpen,
           },
           {
             title: t('System Info'),

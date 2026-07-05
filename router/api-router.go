@@ -332,6 +332,16 @@ func SetApiRouter(router *gin.Engine) {
 			systemInfoRoute.GET("/instances", controller.ListSystemInstances)
 		}
 
+		uploadManagementRoute := apiRouter.Group("/upload-management")
+		uploadManagementRoute.Use(middleware.AdminAuth())
+		{
+			uploadManagementRoute.GET("/files", controller.ListUploadedFiles)
+			uploadManagementRoute.POST("/delete", controller.DeleteUploadedFile)
+			uploadManagementRoute.POST("/batch-delete", controller.BatchDeleteUploadedFiles)
+			uploadManagementRoute.GET("/stats", controller.GetUploadStats)
+			uploadManagementRoute.POST("/clean", controller.CleanOldFiles)
+		}
+
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)
 		dataRoute.GET("/users", middleware.AdminAuth(), controller.GetQuotaDatesByUser)

@@ -386,6 +386,12 @@ func GenerateLocalPresignedUploadURL(filename, contentType string, maxSize int64
 
 // UploadBase64ImageToLocalCompressed uploads a base64 image to local storage with optional compression.
 func UploadBase64ImageToLocalCompressed(mimeType, base64Data, compression string) (string, error) {
+	return UploadBase64ImageToLocalCompressedWithCategory(mimeType, base64Data, compression, UploadDirGeneral)
+}
+
+// UploadBase64ImageToLocalCompressedWithCategory uploads a base64 image to local storage with category.
+// category should be one of: UploadDirGeneral, UploadDirElements, UploadDirTemp
+func UploadBase64ImageToLocalCompressedWithCategory(mimeType, base64Data, compression, category string) (string, error) {
 	localPublicBase := normalizeHTTPBaseURL(firstNonEmptyString(os.Getenv("LOCAL_PUBLIC_BASE_URL"), "https://api.o1key.cn"))
 	uploadDir := firstNonEmptyString(os.Getenv("LOCAL_UPLOAD_DIR"), "uploads")
 
@@ -394,11 +400,11 @@ func UploadBase64ImageToLocalCompressed(mimeType, base64Data, compression string
 		return "", err
 	}
 
-	objectKey := fmt.Sprintf("uploads/%s.%s", uuid.New().String(), ext)
+	objectKey := fmt.Sprintf("%s/%s.%s", category, uuid.New().String(), ext)
 	filePath := fmt.Sprintf("%s/%s", uploadDir, objectKey)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(fmt.Sprintf("%s/uploads", uploadDir), 0755); err != nil {
+	if err := os.MkdirAll(fmt.Sprintf("%s/%s", uploadDir, category), 0755); err != nil {
 		return "", fmt.Errorf("create upload directory failed: %w", err)
 	}
 
@@ -633,6 +639,13 @@ func convertToWebP(imgBytes []byte, quality int) ([]byte, error) {
 const ImageCompressionWebP = "webp"
 const ImageCompressionJPG = "jpg"
 const ImageCompressionOrigin = "origin"
+
+// Upload directory categories for different purposes
+const (
+	UploadDirGeneral  = "uploads"       // General uploads, can be cleaned
+	UploadDirElements = "elements"      // Kling/video elements, permanent
+	UploadDirTemp     = "temp"          // Temporary files, aggressive cleanup
+)
 
 // convertToJPEG decodes image bytes in any supported format (PNG, JPEG, GIF, WebP)
 // and re-encodes as JPEG with the given quality (1-100). Returns original bytes
