@@ -818,9 +818,12 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		}
 		if cost, err := strconv.ParseFloat(resPayload.Data.FinalUnitDeduction, 64); err == nil && cost > 0 {
 			taskInfo.ActualCost = cost
-			// 保留整数 token 字段用于兼容性（向上取整）
-			taskInfo.CompletionTokens = int(math.Ceil(cost))
-			taskInfo.TotalTokens = int(math.Ceil(cost))
+			// 保留实际成本，同时饱和转换兼容的整数 token 字段。
+			rounded := common.QuotaFromFloat(math.Ceil(cost))
+			if rounded > 0 {
+				taskInfo.CompletionTokens = rounded
+				taskInfo.TotalTokens = rounded
+			}
 		}
 	case "failed":
 		taskInfo.Status = model.TaskStatusFailure
