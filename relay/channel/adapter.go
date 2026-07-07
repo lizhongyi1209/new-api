@@ -81,3 +81,15 @@ type TaskAdaptor interface {
 type OpenAIVideoConverter interface {
 	ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error)
 }
+
+// UpstreamErrorResponseHandler marks a TaskAdaptor whose DoResponse can classify
+// non-2xx upstream submit responses itself (turning them into a properly typed
+// *dto.TaskError with a friendly message, correct status code, and LocalError
+// flag). When a TaskAdaptor implements this and returns true, RelayTaskSubmit
+// routes error responses through DoResponse instead of applying the generic
+// fail_to_fetch_task wrapping — so a client parameter error (e.g. an invalid
+// video duration wrapped by an upstream proxy as a 502) surfaces as an
+// actionable, non-retryable error instead of being masked behind a retry.
+type UpstreamErrorResponseHandler interface {
+	HandlesUpstreamErrorResponse() bool
+}

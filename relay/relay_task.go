@@ -221,9 +221,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if err != nil {
 		return nil, service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
+	// 非 2xx 上游响应：默认统一包成 fail_to_fetch_task（保持既有各渠道行为）。
+	// 但若适配器声明自己能分类上游错误响应（HandlesUpstreamErrorResponse），
+	// 则交由其 DoResponse 处理，以便把上游代理层层包裹的真实错误（如客户端
+	// duration 参数不合法被包成 502）还原成可读、状态码正确、可判定是否重试的错误。
 	if resp != nil && resp.StatusCode != http.StatusOK {
-		responseBody, _ := io.ReadAll(resp.Body)
-		return nil, service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
+		handler, ok := adaptor.(channel.UpstreamErrorResponseHandler)
+		if !ok || !handler.HandlesUpstreamErrorResponse() {
+			responseBody, _ := io.ReadAll(resp.Body)
+			return nil, service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
+		}
 	}
 
 	// 10. 返回 OtherRatios 给下游（header 必须在 DoResponse 写 body 之前设置）

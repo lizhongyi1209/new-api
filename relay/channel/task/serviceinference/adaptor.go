@@ -226,18 +226,38 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, taskErr *dto.TaskError) {
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		taskErr = service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+		taskErr = WrapError(err, http.StatusInternalServerError)
 		return
 	}
 	_ = resp.Body.Close()
 
+	// Check for HTTP error status codes
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		// Parse upstream error response
+		bodyText := string(responseBody)
+
+		// Handle specific upstream errors
+		if strings.Contains(bodyText, "Model not available") {
+			taskErr = ParseModelNotAvailableError(info.OriginModelName)
+			return
+		}
+		if strings.Contains(bodyText, "billing suspended") || strings.Contains(bodyText, "insufficient balance") {
+			taskErr = ParseOrganizationBillingSuspendedError()
+			return
+		}
+
+		// Generic upstream error handling
+		taskErr = WrapError(fmt.Errorf("%s", bodyText), resp.StatusCode)
+		return
+	}
+
 	var submitResp taskResponse
 	if err := common.Unmarshal(responseBody, &submitResp); err != nil {
-		taskErr = service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", common.LocalLogPreview(string(responseBody))), "unmarshal_response_body_failed", http.StatusInternalServerError)
+		taskErr = WrapError(errors.Wrapf(err, "body: %s", common.LocalLogPreview(string(responseBody))), http.StatusInternalServerError)
 		return
 	}
 	if strings.TrimSpace(submitResp.Task.ID) == "" {
-		taskErr = service.TaskErrorWrapper(fmt.Errorf("task id is empty"), "invalid_response", http.StatusInternalServerError)
+		taskErr = WrapError(fmt.Errorf("task id is empty"), http.StatusInternalServerError)
 		return
 	}
 
@@ -249,6 +269,15 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 	c.JSON(http.StatusOK, ov)
 	return submitResp.Task.ID, responseBody, nil
+}
+
+// HandlesUpstreamErrorResponse lets RelayTaskSubmit route non-2xx upstream submit
+// responses through DoResponse (above), so the error classifier in error.go can turn
+// proxy-wrapped upstream errors into properly typed, actionable *dto.TaskError values
+// (e.g. an invalid video duration reported as a 502 becomes a non-retryable 400 with a
+// readable message) instead of the generic fail_to_fetch_task wrapping.
+func (a *TaskAdaptor) HandlesUpstreamErrorResponse() bool {
+	return true
 }
 
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
