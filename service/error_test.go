@@ -122,6 +122,50 @@ func TestRelayErrorHandlerKeepsOpenAIErrorMessage(t *testing.T) {
 	require.Equal(t, message, newAPIError.Error())
 }
 
+func TestRelayErrorHandlerRecoversEnvelopeWrappedJSONError(t *testing.T) {
+	// Some upstream gateways (e.g. api.aig-ai.com fronting Azure) return a valid
+	// JSON error wrapped in a non-JSON envelope. The real reason must survive
+	// instead of being flattened to "bad response status code 400".
+	body := "400 ## Bad Request ## {\n" +
+		`  "error": {` + "\n" +
+		`    "message": "Your request was rejected by the safety system. safety_violations=[sexual].",` + "\n" +
+		`    "type": "image_generation_user_error",` + "\n" +
+		`    "param": null,` + "\n" +
+		`    "code": "moderation_blocked"` + "\n" +
+		"  }\n}"
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+
+	require.NotNil(t, newAPIError)
+	require.Equal(t, "Your request was rejected by the safety system. safety_violations=[sexual].", newAPIError.Error())
+	require.Equal(t, http.StatusBadRequest, newAPIError.StatusCode)
+	require.Equal(t, types.ErrorCode("moderation_blocked"), newAPIError.GetErrorCode())
+	// The recovered reason must classify as a safety block for end users, not a
+	// generic "bad response status code".
+	msg, detail := BuildFriendlyImageError("上游返回错误: status_code=400, "+newAPIError.Error(), "req-id", "task-id")
+	require.Equal(t, "image_safety_blocked", detail.Code)
+	require.Equal(t, "请求内容可能不符合安全策略，请修改提示词或图片后重试。", msg)
+}
+
+func TestRelayErrorHandlerFallsBackWhenNoEmbeddedJSON(t *testing.T) {
+	// A pure HTML/garbage body has no recoverable JSON object, so the generic
+	// fallback must still apply (no empty message surfaced).
+	body := "<html><head><title>502 Bad Gateway</title></head><body>nginx</body></html>"
+	resp := &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	newAPIError := RelayErrorHandler(context.Background(), resp, false)
+
+	require.NotNil(t, newAPIError)
+	require.Equal(t, "bad response status code 502", newAPIError.Error())
+}
+
 func TestRelayErrorHandlerKeepsInvalidJSONBodyInDebugLog(t *testing.T) {
 	withDebugEnabled(t, true)
 

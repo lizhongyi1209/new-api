@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -103,13 +104,20 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 
 	err = common.Unmarshal(responseBody, &errResponse)
 	if err != nil {
-		if showBodyWhenFail {
+		// Some upstream gateways wrap a valid JSON error in a non-JSON envelope,
+		// e.g. "400 ## Bad Request ## {\"error\":{...}}". Recover the embedded JSON
+		// so the real upstream message (safety rejection, quota, etc.) surfaces
+		// instead of a meaningless "bad response status code N".
+		if embedded, ok := extractEmbeddedJSONError(responseBody); ok {
+			errResponse = embedded
+		} else if showBodyWhenFail {
 			newApiErr.Err = buildErrWithBody("")
+			return
 		} else {
 			logger.LogError(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, responseBodyPreview))
 			newApiErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
+			return
 		}
-		return
 	}
 
 	if common.GetJsonType(errResponse.Error) == "object" {
@@ -128,6 +136,30 @@ func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFai
 		newApiErr.Err = buildErrWithBody(newApiErr.Error())
 	}
 	return
+}
+
+// extractEmbeddedJSONError recovers a JSON error object that some upstream
+// gateways wrap inside a non-JSON envelope, e.g.
+//
+//	400 ## Bad Request ## {"error":{"message":"...","code":"moderation_blocked"}}
+//
+// It scans to the first '{' and decodes one JSON value (trailing bytes are
+// tolerated). It reports success only when the embedded object yields a
+// non-empty message, so unparseable HTML/garbage bodies still fall back to the
+// caller's generic handling instead of surfacing an empty message.
+func extractEmbeddedJSONError(body []byte) (dto.GeneralErrorResponse, bool) {
+	var result dto.GeneralErrorResponse
+	start := bytes.IndexByte(body, '{')
+	if start < 0 {
+		return result, false
+	}
+	if err := common.DecodeJson(bytes.NewReader(body[start:]), &result); err != nil {
+		return result, false
+	}
+	if result.ToMessage() == "" {
+		return result, false
+	}
+	return result, true
 }
 
 func ResetStatusCode(newApiErr *types.NewAPIError, statusCodeMappingStr string) {
