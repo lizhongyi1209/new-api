@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
+import { convertDetectedLanguage } from './languages'
 import en from './locales/en.json'
 import fr from './locales/fr.json'
 import ja from './locales/ja.json'
@@ -47,8 +48,9 @@ const customLanguageDetector = {
       if (stored) return stored
     } catch { /* empty */ }
     if (typeof navigator !== 'undefined' && navigator.language) {
-      const lang = navigator.language.split('-')[0]
-      if (lang && ['en', 'zh', 'fr', 'ru', 'ja', 'vi'].includes(lang)) return lang
+      // Browsers report `zh-CN`/`zh-TW`/`zh`; map them onto our `zhCN`/`zhTW`
+      // codes (non-Chinese codes pass through for normal supportedLngs matching).
+      return convertDetectedLanguage(navigator.language)
     }
     return undefined
   },
@@ -69,12 +71,12 @@ i18n
     resources,
     fallbackLng: 'en',
     supportedLngs: ['en', 'zhCN', 'fr', 'ru', 'ja', 'vi', 'zhTW'],
-    load: 'currentOnly', // Convert zh-CN -> zh
+    load: 'currentOnly',
     nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
     showSupportNotice: false,
     debug: import.meta.env.DEV,
     interpolation: {
-      escapeValue: false,
+      escapeValue: false, // not needed for react as it escapes by default
     },
   })
 
