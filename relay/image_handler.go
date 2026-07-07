@@ -103,7 +103,13 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 				// replicate channel returns 201 Created when using Prefer: wait, treat it as success.
 				httpResp.StatusCode = http.StatusOK
 			} else {
-				newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+				// gpt-image-2 专属报错封装：命中该系列模型时改写上游原始错误为友好提示，
+				// 其他模型走原有 RelayErrorHandler 分支，行为零变化。详见 image_error_gptimage2.go。
+				if isGptImage2(info.OriginModelName) {
+					newAPIError = gptImage2UpstreamError(c, httpResp)
+				} else {
+					newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+				}
 				// reset status code 重置状态码
 				service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 				return newAPIError
@@ -113,6 +119,11 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
 	if newAPIError != nil {
+		// gpt-image-2 专属报错封装：上游返回 200 但响应体解析失败（如非 UTF-8 / 损坏 JSON）时，
+		// 改写为友好提示。仅命中该系列模型生效，其他模型行为零变化。
+		if isGptImage2(info.OriginModelName) {
+			newAPIError = rewriteGptImage2ResponseError(c, newAPIError)
+		}
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
 		return newAPIError
