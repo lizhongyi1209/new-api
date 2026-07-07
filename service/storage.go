@@ -102,11 +102,6 @@ func IsAliyunOSSBlocked() bool {
 }
 
 func SelectImageStorageProvider(requestHost string) string {
-	// Kill-switch: force every would-be OSS upload onto R2.
-	if IsAliyunOSSBlocked() {
-		return ImageStorageProviderR2
-	}
-
 	host := normalizeRequestHost(requestHost)
 
 	// Check local storage first (api.o1key.cn)
@@ -117,6 +112,11 @@ func SelectImageStorageProvider(requestHost string) string {
 
 	ossHosts := firstNonEmptyString(os.Getenv("ALIYUN_OSS_STORAGE_HOSTS"), defaultAliyunOSSStorageHosts)
 	if ossHosts != "" && hostMatchesCSV(host, ossHosts) {
+		// Kill-switch: redirect would-be OSS uploads to R2, but leave local
+		// and R2 host routing untouched. Toggle via DISABLE_ALIYUN_OSS.
+		if IsAliyunOSSBlocked() {
+			return ImageStorageProviderR2
+		}
 		return ImageStorageProviderAliyunOSS
 	}
 
