@@ -37,6 +37,15 @@ token_estimator_test.go
 skills-lock.json
 .playwright-mcp
 
+# Reseller sub-station runtime logs & env (root-owned Docker bind-mounts; never track)
+logs-sub/
+logs-sub2/
+logs-sub3/
+.env.sub
+.env.sub.example
+.env.sub2
+.env.sub3
+
 # Local-only live probes and scratch test workspaces.
 .local-tests/
 service/relayconvert/chat_responses_live_local_test.go
