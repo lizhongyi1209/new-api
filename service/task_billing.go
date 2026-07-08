@@ -215,6 +215,37 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 	})
 }
 
+// 异步生图退款统一原则：只看上游是否报告了 token 消耗（即上游是否已对本站计费），
+// 不看是否返回图片。上游有消耗 → 不退款；上游零消耗 → 全额退款。
+// 以下两个函数分别是失败路径（用量存在 ErrorDetail）和成功路径（用量为入参）的出口。
+
+// RefundFailedTaskQuotaByUpstreamUsage 失败任务的统一退款出口。
+// ErrorDetail 中记录了上游 token 用量（上游已计费）则不退款，否则全额退款。
+func RefundFailedTaskQuotaByUpstreamUsage(ctx context.Context, task *model.Task) {
+	if detail := task.PrivateData.ErrorDetail; detail != nil &&
+		(detail.UpstreamPromptTokens > 0 || detail.UpstreamCompletionTokens > 0) {
+		logger.LogWarn(ctx, fmt.Sprintf(
+			"任务 %s 失败但上游已计费(prompt=%d, completion=%d tokens)，不退款，用户已扣费 %s",
+			task.TaskID, detail.UpstreamPromptTokens, detail.UpstreamCompletionTokens,
+			logger.LogQuota(task.Quota)))
+		return
+	}
+	RefundTaskQuota(ctx, task, task.FailReason)
+}
+
+// RefundZeroUsageTaskQuota 成功任务的零用量退款检查：上游未报告任何 token 用量
+// （视为未对本站计费，常见于风控拦截）时全额退款；报告了任何用量则不退款。
+// scene 仅用于日志标注调用来源。
+func RefundZeroUsageTaskQuota(ctx context.Context, task *model.Task, promptTokens, completionTokens int, scene string) {
+	if task.Quota <= 0 || promptTokens > 0 || completionTokens > 0 {
+		return
+	}
+	logger.LogWarn(ctx, fmt.Sprintf(
+		"%s: 上游未返回任何token用量（未计费，疑似风控），退还扣费，任务 %s，模型 %s，额度 %s",
+		scene, task.TaskID, taskModelName(task), logger.LogQuota(task.Quota)))
+	RefundTaskQuota(ctx, task, "上游未返回任何token用量（未计费，疑似风控），退还全部扣费")
+}
+
 // RecalculateTaskQuota 通用的异步差额结算，更新原有的提交日志。
 // actualQuota 是任务完成后的实际应扣额度，与预扣额度 (task.Quota) 做差额结算。
 // reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。

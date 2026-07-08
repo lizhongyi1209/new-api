@@ -604,10 +604,10 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 }
 
 func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
-	// Refund pre-consumed quota if task ends in failure
+	// 失败时退还预扣额度；上游已报告 token 消耗（已计费）则不退，只看消耗不看返图
 	defer func() {
 		if task.Status == model.TaskStatusFailure {
-			RefundTaskQuota(ctx, task, task.FailReason)
+			RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
 		}
 	}()
 
@@ -871,6 +871,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	}
 
 	if len(imageResp.Data) == 0 {
+		task.PrivateData.ErrorDetail = imageUpstreamUsageDetail(promptTokens, completionTokens)
 		task.Status = model.TaskStatusFailure
 		task.FailReason = "上游未返回图片数据"
 		task.Progress = "100%"
@@ -962,6 +963,9 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
 	}
 
+	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "async_image")
+
 	// Update submission-time log with actual completion data
 	useTime := int(task.FinishTime - task.StartTime)
 	actualImageCount := len(imageResp.Data)
@@ -1051,7 +1055,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 				SetGenerateContentRequestOmittedData(task, "failure")
 				_ = task.Update()
 			}
-			RefundTaskQuota(ctx, task, task.FailReason)
+			RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
 		}
 	}()
 
@@ -1332,6 +1336,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	}
 
 	if imageCount == 0 {
+		task.PrivateData.ErrorDetail = imageUpstreamUsageDetail(promptTokens, completionTokens)
 		task.Status = model.TaskStatusFailure
 		task.FailReason = "上游未返回图片数据"
 		task.Progress = "100%"
@@ -1356,12 +1361,8 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	// Settle billing with actual token usage (tiered_expr or per-token models)
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
-	// Refund if risk control blocked the output (zero completion tokens)
-	if completionTokens == 0 && promptTokens > 0 && task.Quota > 0 {
-		logger.LogWarn(ctx, fmt.Sprintf("unified_image: 上游返回0输出token（疑似风控），退还扣费，任务 %s，模型 %s，额度 %s",
-			task.TaskID, taskModelName(task), logger.LogQuota(task.Quota)))
-		RefundTaskQuota(ctx, task, "上游返回0输出token（疑似风控），退还全部扣费")
-	}
+	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "unified_image")
 
 	// Update submission-time log with actual completion data
 	useTime := int(task.FinishTime - task.StartTime)
@@ -1585,12 +1586,12 @@ func buildAsyncImageCompleteContent(imageReq *dto.ImageRequest, actualImageCount
 }
 
 func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData ...map[string]interface{}) {
-	// Refund pre-consumed quota if task ends in failure
+	// 失败时退还预扣额度；上游已报告 token 消耗（已计费）则不退，只看消耗不看返图
 	defer func() {
 		if task.Status == model.TaskStatusFailure {
 			SetGenerateContentRequestOmittedData(task, "failure")
 			_ = task.Update()
-			RefundTaskQuota(ctx, task, task.FailReason)
+			RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
 		}
 	}()
 
@@ -1885,6 +1886,17 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 		}
 	}
 
+	if imageCount == 0 {
+		// 与其余生图平台对齐：无图即判失败；退不退款由 defer 按上游消耗决定
+		task.PrivateData.ErrorDetail = imageUpstreamUsageDetail(promptTokens, completionTokens)
+		task.Status = model.TaskStatusFailure
+		task.FailReason = "上游未返回图片数据"
+		task.Progress = "100%"
+		task.FinishTime = time.Now().Unix()
+		_ = task.Update()
+		return
+	}
+
 	task.SetData(geminiResp)
 	if firstImageURL != "" {
 		task.PrivateData.ResultURL = firstImageURL
@@ -1921,12 +1933,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 	// Settle billing with actual token usage (tiered_expr or per-token models)
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
-	// Refund if risk control blocked the output (zero completion tokens)
-	if completionTokens == 0 && promptTokens > 0 && task.Quota > 0 {
-		logger.LogWarn(ctx, fmt.Sprintf("async_gemini: 上游返回0输出token（疑似风控），退还扣费，任务 %s，模型 %s，额度 %s",
-			task.TaskID, taskModelName(task), logger.LogQuota(task.Quota)))
-		RefundTaskQuota(ctx, task, "上游返回0输出token（疑似风控），退还全部扣费")
-	}
+	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "async_gemini")
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed, generated %d images, tokens: p=%d c=%d", task.TaskID, imageCount, promptTokens, completionTokens))
 }

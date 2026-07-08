@@ -645,26 +645,7 @@ func ProcessGenerateImageTask(ctx context.Context, task *model.Task, requestData
 				SetGenerateContentRequestOmittedData(task, "failure")
 				_ = task.Update()
 			}
-
-			// 检查是否为"上游未返回图片数据"且上游已产生计费
-			if task.FailReason == "上游未返回图片数据" {
-				if detail := task.PrivateData.ErrorDetail; detail != nil {
-					if detail.UpstreamPromptTokens > 0 || detail.UpstreamCompletionTokens > 0 {
-						// 上游已计费(有 token 用量),本站也扣费,不退款
-						logger.LogWarn(ctx, fmt.Sprintf(
-							"任务 %s 失败但上游已计费(prompt=%d, completion=%d, total=%d tokens),不退款,用户已扣费 %s",
-							task.TaskID,
-							detail.UpstreamPromptTokens,
-							detail.UpstreamCompletionTokens,
-							detail.UpstreamPromptTokens+detail.UpstreamCompletionTokens,
-							logger.LogQuota(task.Quota),
-						))
-						return
-					}
-				}
-			}
-
-			RefundTaskQuota(ctx, task, task.FailReason)
+			RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
 		}
 	}()
 
@@ -1240,21 +1221,8 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	// 完成后用真实用量重新结算差额（tiered_expr 或按 token 模型）
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
-	// 0 输出 token（疑似风控）：只有在真正无图片时才退款
-	if completionTokens == 0 && task.Quota > 0 {
-		if len(images) > 0 {
-			// 有图片数据,说明不是风控,只是上游未返回 token 统计,不退款
-			logger.LogWarn(ctx, fmt.Sprintf(
-				"generate_image: 上游返回0输出token但生成了%d张图片,不退款,任务 %s，模型 %s",
-				len(images), task.TaskID, task.Properties.OriginModelName))
-		} else {
-			// 无图片数据,才是真正的风控,退款
-			logger.LogWarn(ctx, fmt.Sprintf(
-				"generate_image: 上游返回0输出token且无图片（疑似风控），退还扣费，任务 %s，模型 %s",
-				task.TaskID, task.Properties.OriginModelName))
-			RefundTaskQuota(ctx, task, "上游返回0输出token且无图片（疑似风控），退还全部扣费")
-		}
-	}
+	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "generate_image")
 
 	// 更新提交时的消费日志为完成态
 	useTime := int(task.FinishTime - task.StartTime)

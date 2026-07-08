@@ -332,6 +332,8 @@ func TestRecalculate_PositiveDelta(t *testing.T) {
 	seedChannel(t, channelID)
 
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	submitLogID := seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+	task.PrivateData.SubmitLogID = submitLogID
 
 	RecalculateTaskQuota(ctx, task, actualQuota, "adaptor adjustment")
 
@@ -344,55 +346,16 @@ func TestRecalculate_PositiveDelta(t *testing.T) {
 	// task.Quota should be updated to actualQuota
 	assert.Equal(t, actualQuota, task.Quota)
 
-	// Log type should be Consume (additional charge)
-	log := getLastLog(t)
-	require.NotNil(t, log)
-	assert.Equal(t, model.LogTypeConsume, log.Type)
-	assert.Equal(t, actualQuota-preConsumed, log.Quota)
+	// 单日志结算：不新建日志行，原提交日志金额更新为实际额度
+	assert.Equal(t, int64(1), countLogs(t))
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, submitLogID).Error)
+	assert.Equal(t, actualQuota, log.Quota)
 }
 
-func TestRecalculate_TieredBillingOther(t *testing.T) {
-	truncate(t)
-	ctx := context.Background()
-
-	const userID, tokenID, channelID = 15, 15, 15
-	const initQuota, preConsumed = 10000, 2000
-	const actualQuota = 3000
-	const tokenRemain = 5000
-
-	seedUser(t, userID, initQuota)
-	seedToken(t, tokenID, userID, "sk-recalc-tiered", tokenRemain)
-	seedChannel(t, channelID)
-
-	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
-	expr := `tier("base", p * 2 + c * 30 + img * 2.5)`
-	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
-		BillingMode:   "tiered_expr",
-		ModelName:     "test-model",
-		ExprString:    expr,
-		EstimatedTier: "estimated",
-		QuotaPerUnit:  common.QuotaPerUnit,
-	})
-	require.NoError(t, err)
-	task.PrivateData.BillingContext.ModelPrice = 0
-	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
-
-	RecalculateTaskQuotaWithBillingOther(ctx, task, actualQuota,
-		"tiered_expr重算：p=1548, c=3568, img=1530, tier=base",
-		map[string]interface{}{"matched_tier": "base"})
-
-	log := getLastLog(t)
-	require.NotNil(t, log)
-	assert.Equal(t, model.LogTypeConsume, log.Type)
-
-	other, err := common.StrToMap(log.Other)
-	require.NoError(t, err)
-	assert.Equal(t, "tiered_expr", other["billing_mode"])
-	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(expr)), other["expr_b64"])
-	assert.Equal(t, "base", other["matched_tier"])
-}
-
-func TestSettleTaskQuotaInSubmitLog_TieredUpdatesOriginalLogOnly(t *testing.T) {
+// 差额结算契约：只更新原提交日志（不产生新日志行），并写入 tiered 计费信息。
+// 原先由已删除的 SettleTaskQuotaInSubmitLog 承担，回退上游逻辑后由 RecalculateTaskQuota 承担。
+func TestRecalculate_Tiered_UpdatesOriginalSubmitLogOnly(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()
 
@@ -414,16 +377,15 @@ func TestSettleTaskQuotaInSubmitLog_TieredUpdatesOriginalLogOnly(t *testing.T) {
 		BillingMode:   "tiered_expr",
 		ModelName:     "test-model",
 		ExprString:    expr,
-		EstimatedTier: "estimated",
+		EstimatedTier: "base",
 		QuotaPerUnit:  common.QuotaPerUnit,
 	})
 	require.NoError(t, err)
 	task.PrivateData.BillingContext.ModelPrice = 0
 	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
 
-	SettleTaskQuotaInSubmitLog(ctx, task, actualQuota,
-		"tiered_expr重算：p=1548, c=3568, img=1530, tier=base",
-		map[string]interface{}{"matched_tier": "base"})
+	RecalculateTaskQuota(ctx, task, actualQuota,
+		"tiered_expr重算：p=1548, c=3568, img=1530, tier=base")
 
 	assert.Equal(t, int64(1), countLogs(t))
 	assert.Equal(t, actualQuota, task.Quota)
@@ -445,59 +407,6 @@ func TestSettleTaskQuotaInSubmitLog_TieredUpdatesOriginalLogOnly(t *testing.T) {
 	assert.Equal(t, "tiered_expr重算：p=1548, c=3568, img=1530, tier=base", other["settlement_reason"])
 }
 
-func TestSettleTaskQuotaInSubmitLog_RecoversSubmitLogIDFromLogOther(t *testing.T) {
-	truncate(t)
-	ctx := context.Background()
-
-	const userID, tokenID, channelID = 17, 17, 17
-	const initQuota, preConsumed = 10000, 2000
-	const actualQuota = 3000
-	const tokenRemain = 5000
-
-	seedUser(t, userID, initQuota)
-	seedToken(t, tokenID, userID, "sk-settle-recover", tokenRemain)
-	seedChannel(t, channelID)
-
-	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
-	submitLogID := seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
-
-	expr := `tier("base", p * 2 + c * 30 + img * 2.5)`
-	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
-		BillingMode:   "tiered_expr",
-		ModelName:     "test-model",
-		ExprString:    expr,
-		EstimatedTier: "estimated",
-		QuotaPerUnit:  common.QuotaPerUnit,
-	})
-	require.NoError(t, err)
-	task.PrivateData.BillingContext.ModelPrice = 0
-	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
-
-	require.Zero(t, task.PrivateData.SubmitLogID)
-
-	SettleTaskQuotaInSubmitLog(ctx, task, actualQuota,
-		"tiered_expr重算：p=1548, c=3568, img=1530, tier=base",
-		map[string]interface{}{"matched_tier": "base"})
-
-	assert.Equal(t, int64(1), countLogs(t))
-	assert.Equal(t, submitLogID, task.PrivateData.SubmitLogID)
-	assert.Equal(t, actualQuota, task.Quota)
-	assert.Equal(t, initQuota-(actualQuota-preConsumed), getUserQuota(t, userID))
-	assert.Equal(t, tokenRemain-(actualQuota-preConsumed), getTokenRemainQuota(t, tokenID))
-
-	var log model.Log
-	require.NoError(t, model.LOG_DB.First(&log, submitLogID).Error)
-	assert.Equal(t, actualQuota, log.Quota)
-
-	other, err := common.StrToMap(log.Other)
-	require.NoError(t, err)
-	assert.Equal(t, "tiered_expr", other["billing_mode"])
-	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(expr)), other["expr_b64"])
-	assert.Equal(t, "base", other["matched_tier"])
-	assert.Equal(t, float64(preConsumed), other["pre_consumed_quota"])
-	assert.Equal(t, float64(actualQuota), other["actual_quota"])
-}
-
 func TestRecalculate_NegativeDelta(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()
@@ -512,6 +421,8 @@ func TestRecalculate_NegativeDelta(t *testing.T) {
 	seedChannel(t, channelID)
 
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	submitLogID := seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+	task.PrivateData.SubmitLogID = submitLogID
 
 	RecalculateTaskQuota(ctx, task, actualQuota, "adaptor adjustment")
 
@@ -524,11 +435,11 @@ func TestRecalculate_NegativeDelta(t *testing.T) {
 	// task.Quota updated
 	assert.Equal(t, actualQuota, task.Quota)
 
-	// Log type should be Refund
-	log := getLastLog(t)
-	require.NotNil(t, log)
-	assert.Equal(t, model.LogTypeRefund, log.Type)
-	assert.Equal(t, preConsumed-actualQuota, log.Quota)
+	// 单日志结算：负差额也不新建退款日志行，只把原提交日志金额改小
+	assert.Equal(t, int64(1), countLogs(t))
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, submitLogID).Error)
+	assert.Equal(t, actualQuota, log.Quota)
 }
 
 func TestRecalculate_ZeroDelta(t *testing.T) {
@@ -596,9 +507,8 @@ func TestRecalculate_Subscription_NegativeDelta(t *testing.T) {
 
 	assert.Equal(t, actualQuota, task.Quota)
 
-	log := getLastLog(t)
-	require.NotNil(t, log)
-	assert.Equal(t, model.LogTypeRefund, log.Type)
+	// 单日志结算：差额调整不产生新日志行
+	assert.Equal(t, int64(0), countLogs(t))
 }
 
 // ===========================================================================
@@ -882,7 +792,102 @@ func TestSettle_NonPerCallBilling_AppliesAdaptorAdjustment(t *testing.T) {
 	assert.Equal(t, tokenRemain+(preConsumed-adaptorQuota), getTokenRemainQuota(t, tokenID))
 	assert.Equal(t, adaptorQuota, task.Quota)
 
+	// 单日志结算：差额调整不产生新日志行
+	assert.Equal(t, int64(0), countLogs(t))
+}
+
+// ===========================================================================
+// 统一退款原则：只看上游 token 消耗（上游是否已计费），不看是否返图
+// ===========================================================================
+
+func TestRefundFailedTask_UpstreamBilled_NoRefund(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 41, 41, 41
+	const initQuota, preConsumed = 10000, 3000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-billed", 5000)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Status = model.TaskStatus(model.TaskStatusFailure)
+	task.FailReason = "上游未返回图片数据"
+	task.PrivateData.ErrorDetail = &model.TaskErrorDetail{UpstreamPromptTokens: 537}
+
+	RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
+
+	// 上游已计费（prompt tokens > 0）：不退款、不产生退款日志
+	assert.Equal(t, initQuota, getUserQuota(t, userID))
+	assert.Equal(t, int64(0), countLogs(t))
+}
+
+func TestRefundFailedTask_NoUpstreamUsage_Refunds(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 42, 42, 42
+	const initQuota, preConsumed = 10000, 3000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-unbilled", 5000)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Status = model.TaskStatus(model.TaskStatusFailure)
+	task.FailReason = "上游未返回图片数据"
+	// ErrorDetail 只有上游错误信息、无 token 用量：视为上游未计费
+	task.PrivateData.ErrorDetail = &model.TaskErrorDetail{UpstreamStatus: http.StatusOK}
+
+	RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
+
+	assert.Equal(t, initQuota+preConsumed, getUserQuota(t, userID))
 	log := getLastLog(t)
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeRefund, log.Type)
+	assert.Equal(t, preConsumed, log.Quota)
+	assert.Contains(t, log.Other, "上游未返回图片数据")
+}
+
+func TestRefundZeroUsageTaskQuota_OnlyUpstreamUsageDecides(t *testing.T) {
+	cases := []struct {
+		name             string
+		promptTokens     int
+		completionTokens int
+		wantRefund       bool
+	}{
+		{"零用量退款_即使有图也退", 0, 0, true},
+		{"有输入消耗不退款_即使无图", 537, 0, false},
+		{"有输出消耗不退款", 0, 44, false},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			truncate(t)
+			ctx := context.Background()
+
+			userID := 50 + i
+			const preConsumed = 3000
+			const initQuota = 10000
+			seedUser(t, userID, initQuota)
+			seedToken(t, userID, userID, "sk-zero-usage", 5000)
+			seedChannel(t, userID)
+
+			task := makeTask(userID, userID, preConsumed, userID, BillingSourceWallet, 0)
+			task.Status = model.TaskStatus(model.TaskStatusSuccess)
+
+			RefundZeroUsageTaskQuota(ctx, task, tc.promptTokens, tc.completionTokens, "test")
+
+			if tc.wantRefund {
+				assert.Equal(t, initQuota+preConsumed, getUserQuota(t, userID))
+				log := getLastLog(t)
+				require.NotNil(t, log)
+				assert.Equal(t, model.LogTypeRefund, log.Type)
+				assert.Contains(t, log.Other, "未计费")
+			} else {
+				assert.Equal(t, initQuota, getUserQuota(t, userID))
+				assert.Equal(t, int64(0), countLogs(t))
+			}
+		})
+	}
 }
