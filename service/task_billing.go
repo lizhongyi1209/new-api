@@ -219,13 +219,14 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 // 不看是否返回图片。上游有消耗 → 不退款；上游零消耗 → 全额退款。
 // 以下两个函数分别是失败路径（用量存在 ErrorDetail）和成功路径（用量为入参）的出口。
 
-// RefundFailedTaskQuotaByUpstreamUsage 失败任务的统一退款出口。
-// ErrorDetail 中记录了上游 token 用量（上游已计费）则不退款，否则全额退款。
+// RefundFailedTaskQuotaByUpstreamUsage 失败任务的统一退款出口（方案A）。
+// 以"上游是否已计费"为准，而非是否返图或是否回显 token：
+// 上游返回 200 但没给图（UpstreamBilled=true）视为上游已在其侧计费，不退款、扣住预扣值；
+// 非 200（真实上游错误、网络失败等）则全额退款。
 func RefundFailedTaskQuotaByUpstreamUsage(ctx context.Context, task *model.Task) {
-	if detail := task.PrivateData.ErrorDetail; detail != nil &&
-		(detail.UpstreamPromptTokens > 0 || detail.UpstreamCompletionTokens > 0) {
+	if detail := task.PrivateData.ErrorDetail; detail != nil && detail.UpstreamBilled {
 		logger.LogWarn(ctx, fmt.Sprintf(
-			"任务 %s 失败但上游已计费(prompt=%d, completion=%d tokens)，不退款，用户已扣费 %s",
+			"任务 %s 失败但上游返回200已计费(prompt=%d, completion=%d tokens)，不退款，用户已扣费 %s",
 			task.TaskID, detail.UpstreamPromptTokens, detail.UpstreamCompletionTokens,
 			logger.LogQuota(task.Quota)))
 		return

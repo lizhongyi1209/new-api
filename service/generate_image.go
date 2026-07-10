@@ -528,13 +528,13 @@ func failGenerateImageTaskWithRelayError(task *model.Task, relayErr *types.NewAP
 	failGenerateImageTaskWithDetail(task, reason, buildGenerateImageTaskErrorDetail(relayErr, headers))
 }
 
-// imageUpstreamUsageDetail 在"上游未返回图片数据"时记录上游是否已产生用量（判断是否已计费），
-// 不保留响应体本身（可能含大量 base64 图片数据）。两项均为 0 时视为无用量信息，返回 nil。
+// imageUpstreamUsageDetail 记录"上游返回 200 却没给图"这一事实。调用点均在上游 200 校验之后，
+// 此时上游已受理请求并在其侧计费（方案A：以 HTTP 200 为已计费锚点，不依赖是否回显 token），
+// 因此始终标记 UpstreamBilled=true，使失败退款逻辑不再退还预扣。若响应仍带 token 用量则一并
+// 记录，仅用于核对。不保留响应体本身（可能含大量 base64 图片数据）。
 func imageUpstreamUsageDetail(promptTokens, completionTokens int) *model.TaskErrorDetail {
-	if promptTokens == 0 && completionTokens == 0 {
-		return nil
-	}
 	return &model.TaskErrorDetail{
+		UpstreamBilled:           true,
 		UpstreamPromptTokens:     promptTokens,
 		UpstreamCompletionTokens: completionTokens,
 	}

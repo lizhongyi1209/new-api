@@ -120,7 +120,10 @@ type TaskErrorDetail struct {
 	UpstreamType      string `json:"upstream_type,omitempty"`
 	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
 	RetryAction       string `json:"retry_action,omitempty"`
-	// 上游返回 200 但未附带图片数据时，若响应仍带用量信息，记录下来用于核对上游是否已计费。
+	// UpstreamBilled 表示上游返回 200 却没给图：以 HTTP 200 为锚点，视为上游已在其侧受理并计费，
+	// 失败退款据此判定不退（方案A），不依赖上游是否回显 token。
+	UpstreamBilled bool `json:"upstream_billed,omitempty"`
+	// 若 200 空图响应仍带用量信息，记录下来仅用于核对，不影响退款判定。
 	UpstreamPromptTokens     int `json:"upstream_prompt_tokens,omitempty"`
 	UpstreamCompletionTokens int `json:"upstream_completion_tokens,omitempty"`
 }

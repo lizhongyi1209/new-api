@@ -814,16 +814,17 @@ func TestRefundFailedTask_UpstreamBilled_NoRefund(t *testing.T) {
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
 	task.Status = model.TaskStatus(model.TaskStatusFailure)
 	task.FailReason = "上游未返回图片数据"
-	task.PrivateData.ErrorDetail = &model.TaskErrorDetail{UpstreamPromptTokens: 537}
+	// 方案A：上游返回 200 但没给图 → 已计费，即使一个 token 都没回显也不退款
+	task.PrivateData.ErrorDetail = &model.TaskErrorDetail{UpstreamBilled: true}
 
 	RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
 
-	// 上游已计费（prompt tokens > 0）：不退款、不产生退款日志
+	// 上游已计费：不退款、不产生退款日志
 	assert.Equal(t, initQuota, getUserQuota(t, userID))
 	assert.Equal(t, int64(0), countLogs(t))
 }
 
-func TestRefundFailedTask_NoUpstreamUsage_Refunds(t *testing.T) {
+func TestRefundFailedTask_NotBilled_Refunds(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()
 
@@ -837,8 +838,8 @@ func TestRefundFailedTask_NoUpstreamUsage_Refunds(t *testing.T) {
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
 	task.Status = model.TaskStatus(model.TaskStatusFailure)
 	task.FailReason = "上游未返回图片数据"
-	// ErrorDetail 只有上游错误信息、无 token 用量：视为上游未计费
-	task.PrivateData.ErrorDetail = &model.TaskErrorDetail{UpstreamStatus: http.StatusOK}
+	// 非 200（真实上游错误）：UpstreamBilled 未置位 → 视为上游未计费 → 全额退款
+	task.PrivateData.ErrorDetail = &model.TaskErrorDetail{UpstreamStatus: http.StatusBadGateway}
 
 	RefundFailedTaskQuotaByUpstreamUsage(ctx, task)
 

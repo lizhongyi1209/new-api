@@ -635,21 +635,18 @@ func TestImageUpstreamUsageDetail(t *testing.T) {
 		name             string
 		promptTokens     int
 		completionTokens int
-		wantNil          bool
 	}{
-		{name: "both zero returns nil", promptTokens: 0, completionTokens: 0, wantNil: true},
-		{name: "prompt tokens only", promptTokens: 120, completionTokens: 0, wantNil: false},
-		{name: "completion tokens only", promptTokens: 0, completionTokens: 30, wantNil: false},
-		{name: "both non-zero", promptTokens: 120, completionTokens: 30, wantNil: false},
+		// 方案A：调用点均在 200 校验之后，无论上游是否回显 token，都标记已计费。
+		{name: "both zero still billed", promptTokens: 0, completionTokens: 0},
+		{name: "prompt tokens only", promptTokens: 120, completionTokens: 0},
+		{name: "completion tokens only", promptTokens: 0, completionTokens: 30},
+		{name: "both non-zero", promptTokens: 120, completionTokens: 30},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			detail := imageUpstreamUsageDetail(tc.promptTokens, tc.completionTokens)
-			if tc.wantNil {
-				assert.Nil(t, detail)
-				return
-			}
 			require.NotNil(t, detail)
+			assert.True(t, detail.UpstreamBilled)
 			assert.Equal(t, tc.promptTokens, detail.UpstreamPromptTokens)
 			assert.Equal(t, tc.completionTokens, detail.UpstreamCompletionTokens)
 		})
