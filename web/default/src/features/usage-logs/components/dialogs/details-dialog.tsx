@@ -36,6 +36,7 @@ import { useTranslation } from 'react-i18next'
 import { Dialog } from '@/components/dialog'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
+import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Label } from '@/components/ui/label'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -110,11 +111,13 @@ function DetailRow(props: {
 
 function DetailSection(props: {
   icon?: React.ReactNode
+  iconTone?: IconBadgeTone
   label: string
   variant?: 'default' | 'danger'
   children: React.ReactNode
 }) {
   const isDanger = props.variant === 'danger'
+  const iconTone = isDanger ? 'destructive' : props.iconTone
   return (
     <div className='min-w-0 space-y-1.5'>
       <Label
@@ -123,7 +126,11 @@ function DetailSection(props: {
           isDanger && 'text-red-500'
         )}
       >
-        {props.icon}
+        {props.icon && (
+          <IconBadge tone={iconTone} size='xs'>
+            {props.icon}
+          </IconBadge>
+        )}
         {props.label}
       </Label>
       <div
@@ -338,8 +345,8 @@ function BillingBreakdown(props: {
 
   return (
     <DetailSection label={t('Billing Details')}>
-      {rows.map((row, idx) => (
-        <DetailRow key={idx} label={row.label} value={row.value} mono />
+      {rows.map((row) => (
+        <DetailRow key={row.label} label={row.label} value={row.value} mono />
       ))}
     </DetailSection>
   )
@@ -404,8 +411,8 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
 
   return (
     <DetailSection label={t('Token Breakdown')}>
-      {rows.map((row, idx) => (
-        <DetailRow key={idx} label={row.label} value={row.value} mono />
+      {rows.map((row) => (
+        <DetailRow key={row.label} label={row.label} value={row.value} mono />
       ))}
     </DetailSection>
   )
@@ -547,6 +554,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const useChannel = other?.admin_info?.use_channel
   const channelChain =
     useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
+  let reasoningEffortVariant: StatusBadgeProps['variant'] = 'green'
+  if (other?.reasoning_effort === 'high') {
+    reasoningEffortVariant = 'orange'
+  } else if (other?.reasoning_effort === 'medium') {
+    reasoningEffortVariant = 'yellow'
+  }
 
   return (
     <Dialog
@@ -772,11 +785,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
         {showTopupAuditSection && (
           <DetailSection
             icon={<ShieldCheck className='size-3.5' aria-hidden='true' />}
+            iconTone='success'
             label={t('Top-up Audit Info')}
           >
-            {topupAuditFields.map((field, idx) => (
+            {topupAuditFields.map((field) => (
               <DetailRow
-                key={idx}
+                key={field.label}
                 label={field.label}
                 value={field.value}
                 mono
@@ -816,6 +830,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         {showManageAuditSection && (
           <DetailSection
             icon={<ShieldCheck className='size-3.5' aria-hidden='true' />}
+            iconTone='info'
             label={t('Operation Audit Info')}
           >
             {operationText != null && (
@@ -858,14 +873,15 @@ export function DetailsDialog(props: DetailsDialogProps) {
         {isLogin && loginAuditFields.length > 0 && (
           <DetailSection
             icon={<LogIn className='size-3.5' aria-hidden='true' />}
+            iconTone='info'
             label={t('Login Info')}
           >
             {operationText != null && (
               <DetailRow label={t('Operation')} value={operationText} />
             )}
-            {loginAuditFields.map((field, idx) => (
+            {loginAuditFields.map((field) => (
               <DetailRow
-                key={idx}
+                key={field.label}
                 label={field.label}
                 value={field.value}
                 mono
@@ -878,6 +894,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         {hasAudioTokens && other && (
           <DetailSection
             icon={<Headphones className='size-3.5' aria-hidden='true' />}
+            iconTone='chart-4'
             label={t('Audio Tokens')}
           >
             {other.audio_input != null && other.audio_input > 0 && (
@@ -918,13 +935,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
             value={
               <StatusBadge
                 label={other.reasoning_effort}
-                variant={
-                  other.reasoning_effort === 'high'
-                    ? 'orange'
-                    : other.reasoning_effort === 'medium'
-                      ? 'yellow'
-                      : 'green'
-                }
+                variant={reasoningEffortVariant}
                 size='sm'
                 copyable={false}
               />
@@ -1126,14 +1137,15 @@ export function DetailsDialog(props: DetailsDialogProps) {
         {other?.po && Array.isArray(other.po) && other.po.length > 0 && (
           <DetailSection
             icon={<Settings2 className='size-3.5' aria-hidden='true' />}
+            iconTone='chart-3'
             label={`${t('Param Override')} (${other.po.length})`}
           >
-            {other.po.filter(Boolean).map((line, idx) => {
+            {other.po.filter(Boolean).map((line) => {
               const parsed = parseAuditLine(line)
               if (!parsed) return null
               return (
                 <div
-                  key={idx}
+                  key={`${parsed.action}-${parsed.content}`}
                   className='bg-background/60 flex min-w-0 flex-col gap-1.5 rounded border p-2 sm:flex-row sm:items-start sm:gap-2'
                 >
                   <StatusBadge
