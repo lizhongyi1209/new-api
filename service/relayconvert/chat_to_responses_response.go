@@ -112,6 +112,7 @@ func UsageFromChatUsage(src *dto.Usage) *dto.Usage {
 		usage.TotalTokens = usage.InputTokens + usage.OutputTokens
 	}
 	if src.PromptTokensDetails.CachedTokens != 0 ||
+		src.PromptTokensDetails.CacheWriteTokens != 0 ||
 		src.PromptTokensDetails.ImageTokens != 0 ||
 		src.PromptTokensDetails.AudioTokens != 0 ||
 		src.PromptTokensDetails.CachedCreationTokens != 0 ||
