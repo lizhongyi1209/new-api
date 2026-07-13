@@ -414,23 +414,6 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
         autoGroups={autoGroupsList}
         groupSpecialUsableGroup={groupSpecialUsableGroup}
       />
-
-      {/* Quick Add Dialog */}
-      <QuickAddOverrideDialog
-        open={quickAddDialogOpen}
-        onOpenChange={setQuickAddDialogOpen}
-        onSave={handleQuickAddSave}
-        userGroup={quickAddUserGroup}
-        baseGroupRatioMap={baseGroupRatioMap}
-        selectableGroupNames={selectableGroupNames}
-        existingOverrides={
-          quickAddUserGroup
-            ? (groupGroupRatioList.find(
-                (g) => g.userGroup === quickAddUserGroup
-              )?.overrides ?? [])
-            : []
-        }
-      />
     </div>
   )
 })

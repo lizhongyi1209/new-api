@@ -39,6 +39,7 @@ import { Route as PricingModelIdIndexRouteImport } from './routes/pricing/$model
 import { Route as AuthenticatedWalletIndexRouteImport } from './routes/_authenticated/wallet/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedUsageLogsIndexRouteImport } from './routes/_authenticated/usage-logs/index'
+import { Route as AuthenticatedUploadManagementIndexRouteImport } from './routes/_authenticated/upload-management/index'
 import { Route as AuthenticatedSystemSettingsIndexRouteImport } from './routes/_authenticated/system-settings/index'
 import { Route as AuthenticatedSystemInfoIndexRouteImport } from './routes/_authenticated/system-info/index'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
@@ -220,6 +221,12 @@ const AuthenticatedUsageLogsIndexRoute =
   AuthenticatedUsageLogsIndexRouteImport.update({
     id: '/usage-logs/',
     path: '/usage-logs/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedUploadManagementIndexRoute =
+  AuthenticatedUploadManagementIndexRouteImport.update({
+    id: '/upload-management/',
+    path: '/upload-management/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSystemSettingsIndexRoute =
@@ -448,6 +455,7 @@ export interface FileRoutesByFullPath {
   '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
+  '/upload-management/': typeof AuthenticatedUploadManagementIndexRoute
   '/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/wallet/': typeof AuthenticatedWalletIndexRoute
@@ -508,6 +516,7 @@ export interface FileRoutesByTo {
   '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings': typeof AuthenticatedSystemSettingsIndexRoute
+  '/upload-management': typeof AuthenticatedUploadManagementIndexRoute
   '/usage-logs': typeof AuthenticatedUsageLogsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/wallet': typeof AuthenticatedWalletIndexRoute
@@ -572,6 +581,7 @@ export interface FileRoutesById {
   '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/_authenticated/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/_authenticated/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
+  '/_authenticated/upload-management/': typeof AuthenticatedUploadManagementIndexRoute
   '/_authenticated/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/wallet/': typeof AuthenticatedWalletIndexRoute
@@ -635,6 +645,7 @@ export interface FileRouteTypes {
     | '/subscriptions/'
     | '/system-info/'
     | '/system-settings/'
+    | '/upload-management/'
     | '/usage-logs/'
     | '/users/'
     | '/wallet/'
@@ -695,6 +706,7 @@ export interface FileRouteTypes {
     | '/subscriptions'
     | '/system-info'
     | '/system-settings'
+    | '/upload-management'
     | '/usage-logs'
     | '/users'
     | '/wallet'
@@ -758,6 +770,7 @@ export interface FileRouteTypes {
     | '/_authenticated/subscriptions/'
     | '/_authenticated/system-info/'
     | '/_authenticated/system-settings/'
+    | '/_authenticated/upload-management/'
     | '/_authenticated/usage-logs/'
     | '/_authenticated/users/'
     | '/_authenticated/wallet/'
@@ -1009,6 +1022,13 @@ declare module '@tanstack/react-router' {
       path: '/usage-logs'
       fullPath: '/usage-logs/'
       preLoaderRoute: typeof AuthenticatedUsageLogsIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/upload-management/': {
+      id: '/_authenticated/upload-management/'
+      path: '/upload-management'
+      fullPath: '/upload-management/'
+      preLoaderRoute: typeof AuthenticatedUploadManagementIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/system-settings/': {
@@ -1332,6 +1352,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
   AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
   AuthenticatedSystemInfoIndexRoute: typeof AuthenticatedSystemInfoIndexRoute
+  AuthenticatedUploadManagementIndexRoute: typeof AuthenticatedUploadManagementIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWalletIndexRoute: typeof AuthenticatedWalletIndexRoute
@@ -1357,6 +1378,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedRedemptionCodesIndexRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedSystemInfoIndexRoute: AuthenticatedSystemInfoIndexRoute,
+  AuthenticatedUploadManagementIndexRoute:
+    AuthenticatedUploadManagementIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWalletIndexRoute: AuthenticatedWalletIndexRoute,

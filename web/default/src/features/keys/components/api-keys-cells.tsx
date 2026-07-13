@@ -53,19 +53,6 @@ export function ApiKeyCell({ apiKey }: { apiKey: ApiKey }) {
   const resolvedFullKey = resolvedKeys[apiKey.id]
   const isCopied = copiedKeyId === apiKey.id
   const maskedKey = `sk-${apiKey.key}`
-  let copyIcon = <Copy className='size-3.5' />
-  if (isLoading) {
-    copyIcon = <Loader2 className='size-3.5 animate-spin' />
-  } else if (isCopied) {
-    copyIcon = <Check className='size-3.5 text-green-600' />
-  }
-
-  let copyTooltip = t('Copy API key')
-  if (isLoading) {
-    copyTooltip = t('Loading...')
-  } else if (isCopied) {
-    copyTooltip = t('Copied!')
-  }
 
   const handlePopoverOpen = useCallback(
     (open: boolean) => {
