@@ -851,16 +851,18 @@ func TestRefundFailedTask_NotBilled_Refunds(t *testing.T) {
 	assert.Contains(t, log.Other, "上游未返回图片数据")
 }
 
-func TestRefundZeroUsageTaskQuota_OnlyUpstreamUsageDecides(t *testing.T) {
+func TestRefundZeroUsageTaskQuota_UsageOrImagesDecide(t *testing.T) {
 	cases := []struct {
 		name             string
 		promptTokens     int
 		completionTokens int
+		imageCount       int
 		wantRefund       bool
 	}{
-		{"零用量退款_即使有图也退", 0, 0, true},
-		{"有输入消耗不退款_即使无图", 537, 0, false},
-		{"有输出消耗不退款", 0, 44, false},
+		{"零用量且无图_退款", 0, 0, 0, true},
+		{"零用量但已返图_正常扣费不退款", 0, 0, 2, false},
+		{"有输入消耗不退款_即使无图", 537, 0, 0, false},
+		{"有输出消耗不退款", 0, 44, 0, false},
 	}
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -877,7 +879,7 @@ func TestRefundZeroUsageTaskQuota_OnlyUpstreamUsageDecides(t *testing.T) {
 			task := makeTask(userID, userID, preConsumed, userID, BillingSourceWallet, 0)
 			task.Status = model.TaskStatus(model.TaskStatusSuccess)
 
-			RefundZeroUsageTaskQuota(ctx, task, tc.promptTokens, tc.completionTokens, "test")
+			RefundZeroUsageTaskQuota(ctx, task, tc.promptTokens, tc.completionTokens, tc.imageCount, "test")
 
 			if tc.wantRefund {
 				assert.Equal(t, initQuota+preConsumed, getUserQuota(t, userID))

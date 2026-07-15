@@ -1221,8 +1221,8 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	// 完成后用真实用量重新结算差额（tiered_expr 或按 token 模型）
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
-	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
-	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "generate_image")
+	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, len(images), "generate_image")
 
 	// 更新提交时的消费日志为完成态
 	useTime := int(task.FinishTime - task.StartTime)

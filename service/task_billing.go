@@ -234,11 +234,18 @@ func RefundFailedTaskQuotaByUpstreamUsage(ctx context.Context, task *model.Task)
 	RefundTaskQuota(ctx, task, task.FailReason)
 }
 
-// RefundZeroUsageTaskQuota 成功任务的零用量退款检查：上游未报告任何 token 用量
-// （视为未对本站计费，常见于风控拦截）时全额退款；报告了任何用量则不退款。
+// RefundZeroUsageTaskQuota 成功任务的零用量退款检查：上游既未报告任何 token 用量、
+// 也未返回图片（视为未提供服务，常见于风控拦截）时全额退款。
+// 只要返了图（部分上游正常返图但不回显 token 用量）或报告了任何用量，都视为服务已提供，正常扣费不退款。
 // scene 仅用于日志标注调用来源。
-func RefundZeroUsageTaskQuota(ctx context.Context, task *model.Task, promptTokens, completionTokens int, scene string) {
+func RefundZeroUsageTaskQuota(ctx context.Context, task *model.Task, promptTokens, completionTokens, imageCount int, scene string) {
 	if task.Quota <= 0 || promptTokens > 0 || completionTokens > 0 {
+		return
+	}
+	if imageCount > 0 {
+		logger.LogInfo(ctx, fmt.Sprintf(
+			"%s: 上游未回显token用量但已正常返图（%d 张），视为服务已提供，正常扣费，任务 %s",
+			scene, imageCount, task.TaskID))
 		return
 	}
 	logger.LogWarn(ctx, fmt.Sprintf(

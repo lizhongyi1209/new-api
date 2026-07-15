@@ -963,8 +963,8 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
 	}
 
-	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
-	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "async_image")
+	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, len(imageResp.Data), "async_image")
 
 	// Update submission-time log with actual completion data
 	useTime := int(task.FinishTime - task.StartTime)
@@ -1361,8 +1361,8 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	// Settle billing with actual token usage (tiered_expr or per-token models)
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
-	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
-	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "unified_image")
+	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, imageCount, "unified_image")
 
 	// Update submission-time log with actual completion data
 	useTime := int(task.FinishTime - task.StartTime)
@@ -1933,8 +1933,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 	// Settle billing with actual token usage (tiered_expr or per-token models)
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
-	// 退款只看上游消耗：上游未报告任何 token 用量（未计费）则全额退款，不看是否返图
-	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, "async_gemini")
+	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费
+	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, imageCount, "async_gemini")
 
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: task %s completed, generated %d images, tokens: p=%d c=%d", task.TaskID, imageCount, promptTokens, completionTokens))
 }
