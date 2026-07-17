@@ -180,7 +180,6 @@ export function ModelsTable() {
     onPaginationChange,
     onGlobalFilterChange,
     manualPagination: true,
-    manualSorting: true,
     manualFiltering: true,
     ensurePageInRange,
   })
