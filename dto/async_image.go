@@ -33,25 +33,11 @@ type AsyncTaskResponse struct {
 }
 
 type AsyncTaskFetchResponse struct {
-	TaskID      string            `json:"task_id"`
-	Status      string            `json:"status"`
-	Progress    string            `json:"progress,omitempty"`
-	Data        json.RawMessage   `json:"data,omitempty"`
-	Error       string            `json:"error,omitempty"`
-	ErrorDetail *ImageErrorDetail `json:"error_detail,omitempty"`
-}
-
-type ImageErrorDetail struct {
-	Code              string `json:"code"`
-	Category          string `json:"category"`
-	Retryable         bool   `json:"retryable"`
-	RequestID         string `json:"request_id,omitempty"`
-	TaskID            string `json:"task_id,omitempty"`
-	UpstreamStatus    int    `json:"upstream_status,omitempty"`
-	UpstreamCode      string `json:"upstream_code,omitempty"`
-	UpstreamType      string `json:"upstream_type,omitempty"`
-	RetryAfterSeconds int    `json:"retry_after_seconds,omitempty"`
-	RetryAction       string `json:"retry_action,omitempty"`
+	TaskID   string          `json:"task_id"`
+	Status   string          `json:"status"`
+	Progress string          `json:"progress,omitempty"`
+	Data     json.RawMessage `json:"data,omitempty"`
+	Error    string          `json:"error,omitempty"`
 }
 
 type AsyncImageResponseData struct {

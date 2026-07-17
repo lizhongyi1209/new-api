@@ -144,11 +144,6 @@ func TestRelayErrorHandlerRecoversEnvelopeWrappedJSONError(t *testing.T) {
 	require.Equal(t, "Your request was rejected by the safety system. safety_violations=[sexual].", newAPIError.Error())
 	require.Equal(t, http.StatusBadRequest, newAPIError.StatusCode)
 	require.Equal(t, types.ErrorCode("moderation_blocked"), newAPIError.GetErrorCode())
-	// The recovered reason must classify as a safety block for end users, not a
-	// generic "bad response status code".
-	msg, detail := BuildFriendlyImageError("上游返回错误: status_code=400, "+newAPIError.Error(), "req-id", "task-id")
-	require.Equal(t, "image_safety_blocked", detail.Code)
-	require.Equal(t, "请求内容可能不符合安全策略，请修改提示词或图片后重试。", msg)
 }
 
 func TestRelayErrorHandlerFallsBackWhenNoEmbeddedJSON(t *testing.T) {
