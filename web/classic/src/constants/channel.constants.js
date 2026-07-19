@@ -189,6 +189,11 @@ export const CHANNEL_OPTIONS = [
     color: 'blue',
     label: 'ChatGPT Subscription (Codex)',
   },
+  {
+    value: 61,
+    color: 'blue',
+    label: 'xinhankr',
+  },
 ];
 
 // Channel types that support upstream model list fetching in UI.

@@ -58,6 +58,7 @@ const (
 	ChannelTypeTencentVideo          = 58
 	ChannelTypeAdvancedCustom        = 59
 	ChannelTypeServiceInferenceVideo = 60
+	ChannelTypeXinhankr              = 61
 	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
 
 )
@@ -124,6 +125,7 @@ var ChannelBaseURLs = []string{
 	"https://vclm.tencentcloudapi.com",          //58
 	"",                                          //59
 	"https://model.service-inference.ai",        //60
+	"https://token.xinhankr.com",                //61
 }
 
 var ChannelTypeNames = map[int]string{
@@ -184,6 +186,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeTencentVideo:          "TencentVideo",
 	ChannelTypeAdvancedCustom:        "Advanced Custom",
 	ChannelTypeServiceInferenceVideo: "TokenMartSeedance",
+	ChannelTypeXinhankr:              "xinhankr",
 }
 
 func GetChannelTypeName(channelType int) string {

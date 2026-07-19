@@ -104,6 +104,7 @@ export function getChannelTypeIcon(type: number): string {
     56: 'Replicate', // Replicate
     58: 'Hunyuan', // TencentVideo
     60: 'OpenAI', // TokenMartSeedance
+    61: 'Doubao', // xinhankr (Seedance via xinhankr gateway)
 
     // Tools & Platforms
     37: 'Dify', // Dify
