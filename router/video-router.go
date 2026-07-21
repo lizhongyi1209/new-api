@@ -31,6 +31,19 @@ func SetVideoRouter(router *gin.Engine) {
 		videoV1Router.GET("/videos/:task_id", controller.RelayTaskFetch)
 	}
 
+	// ServiceInference asset-management proxy for sub-stations. Their type-60
+	// channel points here with a gateway token; the real upstream key stays on
+	// this instance (see controller.ProxySeedanceAssetAPI).
+	seedanceAssetProxyRouter := router.Group("/v1")
+	seedanceAssetProxyRouter.Use(middleware.RouteTag("relay"))
+	seedanceAssetProxyRouter.Use(middleware.TokenAuth())
+	{
+		seedanceAssetProxyRouter.POST("/asset-groups", controller.ProxySeedanceAssetAPI)
+		seedanceAssetProxyRouter.GET("/asset-groups/:group_id", controller.ProxySeedanceAssetAPI)
+		seedanceAssetProxyRouter.POST("/assets", controller.ProxySeedanceAssetAPI)
+		seedanceAssetProxyRouter.POST("/assets/get", controller.ProxySeedanceAssetAPI)
+	}
+
 	klingV1Router := router.Group("/kling/v1")
 	klingV1Router.Use(middleware.RouteTag("relay"))
 	klingV1Router.Use(middleware.KlingRequestConvert(), middleware.TokenAuth(), middleware.Distribute())
