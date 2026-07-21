@@ -150,6 +150,38 @@ type responsePayload struct {
 	} `json:"data"`
 }
 
+// tencentEnvelopeResponse matches channels that front Kling with a Tencent
+// VCLM-style envelope instead of the official {"code":0,"data":{...}} shape
+// (observed on xinhankr: submit returns {"Response":{"TaskId":...}}).
+type tencentEnvelopeResponse struct {
+	Response struct {
+		TaskId string `json:"TaskId"`
+		Error  *struct {
+			Code    string `json:"Code"`
+			Message string `json:"Message"`
+		} `json:"Error,omitempty"`
+	} `json:"Response"`
+}
+
+// unifiedTaskStatusResponse matches channels that front Kling with an
+// OpenAI/unified video-generation status shape instead of the official
+// {"code":0,"data":{"task_status":...}} shape (observed on xinhankr: task
+// query returns {"id","status","data":[{"url":...}],"usage":{...}}).
+type unifiedTaskStatusResponse struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Data   []struct {
+		URL string `json:"url"`
+	} `json:"data"`
+	Usage struct {
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage"`
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
 // ============================
 // Adaptor implementation
 // ============================
@@ -265,13 +297,32 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("%s", kResp.Message), "task_failed", http.StatusBadRequest)
 		return
 	}
+
+	resolvedTaskID := kResp.Data.TaskId
+	if resolvedTaskID == "" {
+		// Official Kling shape didn't yield a task_id — some channels (e.g.
+		// xinhankr) front Kling with a Tencent VCLM-style envelope instead.
+		var tResp tencentEnvelopeResponse
+		if err := common.Unmarshal(responseBody, &tResp); err == nil {
+			if tResp.Response.Error != nil && tResp.Response.Error.Message != "" {
+				taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("%s", tResp.Response.Error.Message), "task_failed", http.StatusBadRequest)
+				return
+			}
+			resolvedTaskID = tResp.Response.TaskId
+		}
+	}
+	if resolvedTaskID == "" {
+		taskErr = service.TaskErrorWrapper(fmt.Errorf("task_id not found in response: %s", responseBody), "invalid_response", http.StatusInternalServerError)
+		return
+	}
+
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
 	ov.TaskID = info.PublicTaskID
 	ov.CreatedAt = time.Now().Unix()
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
-	return kResp.Data.TaskId, responseBody, nil
+	return resolvedTaskID, responseBody, nil
 }
 
 // FetchTask fetch task status
@@ -590,8 +641,17 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	taskInfo := &relaycommon.TaskInfo{}
 	resPayload := responsePayload{}
 	err := common.Unmarshal(respBody, &resPayload)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal response body")
+	if err != nil || resPayload.Data.TaskStatus == "" {
+		// Official Kling shape either failed to parse (e.g. "data" is an
+		// array, not an object) or yielded no status — some channels (e.g.
+		// xinhankr) front Kling with an OpenAI/unified video-generation
+		// status shape instead ({"id","status","data":[{"url":...}]}).
+		if ti, uErr := a.parseUnifiedTaskResult(respBody); uErr == nil {
+			return ti, nil
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal response body")
+		}
 	}
 	taskInfo.Code = resPayload.Code
 	taskInfo.TaskID = resPayload.Data.TaskId
@@ -623,8 +683,46 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	return taskInfo, nil
 }
 
+// parseUnifiedTaskResult parses the OpenAI/unified video-generation status
+// shape used by channels like xinhankr that front Kling but don't speak the
+// official response format.
+func (a *TaskAdaptor) parseUnifiedTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	var uResp unifiedTaskStatusResponse
+	if err := common.Unmarshal(respBody, &uResp); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal unified task result")
+	}
+	taskInfo := &relaycommon.TaskInfo{TaskID: uResp.ID}
+	switch strings.ToLower(strings.TrimSpace(uResp.Status)) {
+	case "pending", "queued", "submitted":
+		taskInfo.Status = model.TaskStatusSubmitted
+	case "processing", "running", "in_progress":
+		taskInfo.Status = model.TaskStatusInProgress
+	case "completed", "succeeded", "success":
+		taskInfo.Status = model.TaskStatusSuccess
+		if len(uResp.Data) > 0 {
+			taskInfo.Url = uResp.Data[0].URL
+		}
+		taskInfo.CompletionTokens = uResp.Usage.CompletionTokens
+		taskInfo.TotalTokens = uResp.Usage.TotalTokens
+	case "failed", "failure", "error", "cancelled", "canceled":
+		taskInfo.Status = model.TaskStatusFailure
+		taskInfo.Reason = uResp.Error.Message
+		if taskInfo.Reason == "" {
+			taskInfo.Reason = "task failed"
+		}
+	default:
+		return nil, fmt.Errorf("unknown task status: %s", uResp.Status)
+	}
+	return taskInfo, nil
+}
+
 func isNewAPIRelay(apiKey string) bool {
-	return strings.HasPrefix(apiKey, "sk-")
+	// 曾经靠 key 是否 sk- 前缀猜测上游是不是"另一个 new-api 中转"，从而决定要不要
+	// 给上游路径加 /kling 前缀。但原生 Kling 网关（如 xinhankr）发的 key 也可能是
+	// sk- 开头，被误判后请求路径多了一层上游并不存在的 /kling 前缀，导致 404/405。
+	// 默认关闭自动加前缀：官方 kling（api-key- 前缀）和 xinhankr（sk- 前缀）两类
+	// 现网渠道都已验证走不加前缀的原生路径可以正常工作。
+	return false
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
