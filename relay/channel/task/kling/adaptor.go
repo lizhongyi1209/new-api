@@ -163,6 +163,15 @@ type tencentEnvelopeResponse struct {
 	} `json:"Response"`
 }
 
+// unifiedSubmitResponse matches channels that front Kling with an
+// OpenAI/unified video-generation submit shape instead of the official
+// {"code":0,"data":{"task_id":...}} shape (observed on our own new-api
+// relay: submit returns {"id","task_id","status":"queued",...}).
+type unifiedSubmitResponse struct {
+	ID     string `json:"id"`
+	TaskID string `json:"task_id"`
+}
+
 // unifiedTaskStatusResponse matches channels that front Kling with an
 // OpenAI/unified video-generation status shape instead of the official
 // {"code":0,"data":{"task_status":...}} shape (observed on xinhankr: task
@@ -309,6 +318,20 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 				return
 			}
 			resolvedTaskID = tResp.Response.TaskId
+		}
+	}
+	if resolvedTaskID == "" {
+		// Neither official nor Tencent-envelope shape yielded a task_id —
+		// some channels front Kling with an OpenAI/unified video-generation
+		// submit shape instead ({"id"/"task_id","status":"queued",...}, same
+		// family parseUnifiedTaskResult already handles for status polling).
+		var uResp unifiedSubmitResponse
+		if err := common.Unmarshal(responseBody, &uResp); err == nil {
+			if uResp.TaskID != "" {
+				resolvedTaskID = uResp.TaskID
+			} else {
+				resolvedTaskID = uResp.ID
+			}
 		}
 	}
 	if resolvedTaskID == "" {
