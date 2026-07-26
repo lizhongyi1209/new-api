@@ -40,6 +40,8 @@ import type {
   GetTaskLogsParams,
 } from '../types'
 
+export { buildQueryParams } from './query'
+
 // ============================================================================
 // Type Checkers & Utilities
 // ============================================================================
@@ -70,7 +72,10 @@ export function getLogTypeConfig(type: number) {
  * Either model_price > 0 (fixed price configured) or the log explicitly
  * signals per-call billing via the `per_call_billing` field (async tasks).
  */
-export function isPerCallBilling(modelPrice?: number, perCallBilling?: boolean): boolean {
+export function isPerCallBilling(
+  modelPrice?: number,
+  perCallBilling?: boolean
+): boolean {
   if (perCallBilling) return true
   return (modelPrice ?? 0) > 0
 }
@@ -97,21 +102,6 @@ function timestampToSeconds(ms: number): number {
 /**
  * Build query parameters from filters
  */
-export function buildQueryParams(
-  params: Record<string, unknown>
-): URLSearchParams {
-  const queryParams = new URLSearchParams()
-
-  Object.entries(params).forEach(([key, value]) => {
-    // Keep 0 as a valid value, only filter out undefined, null, and empty string
-    if (value !== undefined && value !== null && value !== '') {
-      queryParams.append(key, String(value))
-    }
-  })
-
-  return queryParams
-}
-
 /**
  * Build time range parameters with default values
  * Shared logic for all log types
@@ -313,7 +303,9 @@ export async function fetchLogsByCategory(
  * Extract user prompt from task log record.
  * Checks multiple fields: properties.input → data.contents → data prompt
  */
-export function extractPrompt(record: Record<string, unknown>): string | undefined {
+export function extractPrompt(
+  record: Record<string, unknown>
+): string | undefined {
   // 1. properties.input
   const props = record.properties as Record<string, unknown> | undefined
   if (props?.input && typeof props.input === 'string' && props.input.trim()) {
@@ -328,8 +320,14 @@ export function extractPrompt(record: Record<string, unknown>): string | undefin
     const contents = dataObj.contents
     if (Array.isArray(contents)) {
       for (const c of contents) {
-        if (c && typeof c === 'object' && (c as Record<string, unknown>).role === 'user') {
-          const parts = (c as Record<string, unknown>).parts as Array<Record<string, unknown>> | undefined
+        if (
+          c &&
+          typeof c === 'object' &&
+          (c as Record<string, unknown>).role === 'user'
+        ) {
+          const parts = (c as Record<string, unknown>).parts as
+            | Array<Record<string, unknown>>
+            | undefined
           if (parts) {
             const texts = parts
               .map((p) => (typeof p.text === 'string' ? p.text : ''))
@@ -340,8 +338,12 @@ export function extractPrompt(record: Record<string, unknown>): string | undefin
       }
     }
     // Check data.prompt or data.input (other formats)
-    if (typeof dataObj.prompt === 'string' && dataObj.prompt.trim()) return dataObj.prompt.trim()
-    if (typeof dataObj.input === 'string' && dataObj.input.trim()) return dataObj.input.trim()
+    if (typeof dataObj.prompt === 'string' && dataObj.prompt.trim()) {
+      return dataObj.prompt.trim()
+    }
+    if (typeof dataObj.input === 'string' && dataObj.input.trim()) {
+      return dataObj.input.trim()
+    }
   }
 
   return undefined

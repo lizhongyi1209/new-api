@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import { buildQueryParams } from './lib/utils'
+import { buildQueryParams } from './lib/query'
 import type {
   GetLogsParams,
   GetLogsResponse,
@@ -26,6 +26,7 @@ import type {
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
+  ExportUsageLogsParams,
   UserInfo,
 } from './types'
 
@@ -83,6 +84,25 @@ export const getLogStats = (params: GetLogStatsParams = {}) =>
 export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
+
+export async function exportUsageLogs(
+  params: ExportUsageLogsParams,
+  isAdmin: boolean
+): Promise<{ blob: Blob; filename: string }> {
+  const path = isAdmin ? '/api/log/export' : '/api/log/self/export'
+  const queryParams = buildQueryParams(
+    params as unknown as Record<string, unknown>
+  )
+  const response = await api.get(`${path}?${queryParams}`, {
+    responseType: 'blob',
+  })
+  const disposition = String(response.headers['content-disposition'] || '')
+  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i)
+  return {
+    blob: response.data as Blob,
+    filename: filenameMatch?.[1] || `usage-logs.${params.format}`,
+  }
+}
 
 export async function getUserInfo(
   userId: number

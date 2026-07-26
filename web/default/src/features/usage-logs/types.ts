@@ -307,6 +307,12 @@ export interface GetLogsParams {
   upstream_request_id?: string
 }
 
+export type UsageLogExportFormat = 'csv' | 'json' | 'xlsx'
+
+export interface ExportUsageLogsParams extends GetLogsParams {
+  format: UsageLogExportFormat
+}
+
 export interface GetLogsResponse {
   success: boolean
   message?: string
