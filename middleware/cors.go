@@ -28,7 +28,17 @@ func CORS() gin.HandlerFunc {
 	// Must explicitly list headers when using credentials
 	config.AllowHeaders = []string{"Origin", "Content-Type", "Content-Length", "Accept", "Authorization", "X-Requested-With"}
 	config.ExposeHeaders = []string{"Content-Length", "Content-Type"}
-	return cors.New(config)
+	corsHandler := cors.New(config)
+	return func(c *gin.Context) {
+		// This endpoint is authenticated by a signed downstream identity and its
+		// own origin allowlist. Its Origin header is part of the HMAC payload, so
+		// the browser-oriented global CORS allowlist must not reject it first.
+		if c.Request.URL.Path == "/v1/storage/public/presign" {
+			c.Next()
+			return
+		}
+		corsHandler(c)
+	}
 }
 
 func Version() gin.HandlerFunc {
