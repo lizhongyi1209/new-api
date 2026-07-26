@@ -22,6 +22,9 @@ import type {
   ConfirmPaymentComplianceResponse,
   FetchUpstreamRatiosRequest,
   LogCleanupTask,
+  R2PublicUploadClient,
+  R2PublicUploadClientsResponse,
+  RotateR2PublicUploadSecretResponse,
   SystemOptionsResponse,
   SystemTaskListResponse,
   SystemTaskResponse,
@@ -30,6 +33,30 @@ import type {
   UpstreamChannelsResponse,
   UpstreamRatiosResponse,
 } from './types'
+
+export async function getR2PublicUploadClients() {
+  const res = await api.get<R2PublicUploadClientsResponse>(
+    '/api/option/r2_public_upload_clients'
+  )
+  return res.data
+}
+
+export async function updateR2PublicUploadClients(
+  clients: R2PublicUploadClient[]
+) {
+  const res = await api.put<UpdateOptionResponse>(
+    '/api/option/r2_public_upload_clients',
+    clients
+  )
+  return res.data
+}
+
+export async function rotateR2PublicUploadSecret(clientId: string) {
+  const res = await api.post<RotateR2PublicUploadSecretResponse>(
+    `/api/option/r2_public_upload_clients/${encodeURIComponent(clientId)}/rotate_secret`
+  )
+  return res.data
+}
 
 export async function getSystemOptions() {
   const res = await api.get<SystemOptionsResponse>('/api/option/')

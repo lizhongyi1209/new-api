@@ -20,10 +20,16 @@ import { RateLimitSection } from '../request-limits/rate-limit-section'
 import { SensitiveWordsSection } from '../request-limits/sensitive-words-section'
 import { SSRFSection } from '../request-limits/ssrf-section'
 import { TokenLimitSection } from '../request-limits/token-limit-section'
+import { R2PublicUploadSection } from './r2-public-upload-section'
 import type { SecuritySettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 
 const SECURITY_SECTIONS = [
+  {
+    id: 'r2-upload-whitelist',
+    titleKey: 'R2 Upload Whitelist',
+    build: () => <R2PublicUploadSection />,
+  },
   {
     id: 'rate-limit',
     titleKey: 'Rate Limiting',

@@ -3812,7 +3812,7 @@
     "Requests": "リクエスト",
     "Requests (24h)": "リクエスト (24h)",
     "Requests / 24h": "リクエスト / 24h",
-    "Requests per minute": "1分あたりのリクエスト数",
+    "Requests per minute": "1 分あたりのリクエスト数",
     "requests served": "処理されたリクエスト",
     "Requests will be forwarded to this worker. Trailing slashes are removed automatically.": "リクエストはこのワーカーに転送されます。末尾のスラッシュは自動的に削除されます。",
     "Requests:": "リクエスト:",
@@ -5214,7 +5214,23 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "R2 Upload Whitelist": "R2 アップロード許可リスト",
+    "Allow trusted downstream servers to request short-lived Cloudflare R2 upload URLs.": "信頼済みの下流サーバーに短期間有効な Cloudflare R2 アップロード URL の発行を許可します。",
+    "Each request must include the allowed Origin and a valid HMAC signature.": "各リクエストには許可済み Origin と有効な HMAC 署名が必要です。",
+    "Downstream name": "下流名",
+    "Remove downstream": "下流を削除",
+    "Downstream ID": "下流 ID",
+    "Allowed origins": "許可するオリジン",
+    "One HTTPS origin per line.": "1 行に 1 つの HTTPS オリジンを入力します。",
+    "Max file size (MB)": "最大ファイルサイズ（MB）",
+    "Rotate and copy signing secret": "署名シークレットを更新してコピー",
+    "The secret is returned only once. Rotation immediately invalidates the old secret.": "シークレットは一度だけ返され、更新すると古いシークレットは直ちに無効になります。",
+    "New downstream": "新しい下流",
+    "Add downstream": "下流を追加",
+    "Save whitelist": "許可リストを保存",
+    "R2 upload whitelist updated": "R2 許可リストを更新しました",
+    "New signing secret copied": "新しい署名シークレットをコピーしました"
   },
   "Upload Management": "アップロード管理"
 }

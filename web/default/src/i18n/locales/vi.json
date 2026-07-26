@@ -1625,7 +1625,7 @@
     "Enable Waffo Pancake": "Bật Waffo Pancake",
     "Enable WeChat Auth": "Bật xác thực WeChat",
     "Enable when proxying workers that fetch images over HTTP.": "Kích hoạt khi làm proxy cho các worker tìm nạp hình ảnh qua HTTP.",
-    "Enabled": "Đã bật",
+    "Enabled": "Bật",
     "Enabled all channels with tag: {{tag}}": "Đã bật tất cả kênh với nhãn: {{tag}}",
     "Enabled channels with tag {{tag}}": "Đã kích hoạt các kênh có thẻ {{tag}}",
     "Enabled Status": "Trạng thái kích hoạt",
@@ -5214,7 +5214,23 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "R2 Upload Whitelist": "Danh sách cho phép tải lên R2",
+    "Allow trusted downstream servers to request short-lived Cloudflare R2 upload URLs.": "Cho phép máy chủ hạ nguồn đáng tin cậy yêu cầu URL tải lên Cloudflare R2 ngắn hạn.",
+    "Each request must include the allowed Origin and a valid HMAC signature.": "Mỗi yêu cầu phải có Origin được cho phép và chữ ký HMAC hợp lệ.",
+    "Downstream name": "Tên hạ nguồn",
+    "Remove downstream": "Xóa hạ nguồn",
+    "Downstream ID": "ID hạ nguồn",
+    "Allowed origins": "Origin được phép",
+    "One HTTPS origin per line.": "Mỗi dòng một origin HTTPS.",
+    "Max file size (MB)": "Kích thước tối đa (MB)",
+    "Rotate and copy signing secret": "Đổi và sao chép khóa ký",
+    "The secret is returned only once. Rotation immediately invalidates the old secret.": "Khóa chỉ được trả về một lần. Khóa cũ mất hiệu lực ngay sau khi đổi.",
+    "New downstream": "Hạ nguồn mới",
+    "Add downstream": "Thêm hạ nguồn",
+    "Save whitelist": "Lưu danh sách",
+    "R2 upload whitelist updated": "Đã cập nhật danh sách R2",
+    "New signing secret copied": "Đã sao chép khóa ký mới"
   },
   "Upload Management": "Quản lý tệp tin"
 }

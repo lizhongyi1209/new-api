@@ -39,6 +39,27 @@ export type UpdateOptionResponse = {
   message: string
 }
 
+export type R2PublicUploadClient = {
+  id: string
+  name: string
+  origins: string[]
+  enabled: boolean
+  max_file_size_mb: number
+  requests_per_minute: number
+  has_secret: boolean
+}
+
+export type R2PublicUploadClientsResponse = {
+  success: boolean
+  message?: string
+  data: R2PublicUploadClient[]
+}
+
+export type RotateR2PublicUploadSecretResponse = {
+  success: boolean
+  data: { secret: string }
+}
+
 export type ConfirmPaymentComplianceResponse = {
   success: boolean
   message: string

@@ -1625,7 +1625,7 @@
     "Enable Waffo Pancake": "启用 Waffo Pancake",
     "Enable WeChat Auth": "启用微信授权",
     "Enable when proxying workers that fetch images over HTTP.": "当代理通过 HTTP 获取图像的 worker 时启用。",
-    "Enabled": "已启用",
+    "Enabled": "启用",
     "Enabled all channels with tag: {{tag}}": "已启用标签「{{tag}}」下的所有渠道",
     "Enabled channels with tag {{tag}}": "启用标签为 {{tag}} 的渠道",
     "Enabled Status": "启用状态",
@@ -5214,7 +5214,23 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "R2 Upload Whitelist": "R2 上传白名单",
+    "Allow trusted downstream servers to request short-lived Cloudflare R2 upload URLs.": "允许受信任的下游服务器申请短效 Cloudflare R2 上传地址。",
+    "Each request must include the allowed Origin and a valid HMAC signature.": "每个请求都必须包含白名单内的 Origin 和有效的 HMAC 签名。",
+    "Downstream name": "下游名称",
+    "Remove downstream": "移除下游",
+    "Downstream ID": "下游 ID",
+    "Allowed origins": "允许的来源域名",
+    "One HTTPS origin per line.": "每行填写一个 HTTPS 来源。",
+    "Max file size (MB)": "最大文件大小（MB）",
+    "Rotate and copy signing secret": "轮换并复制签名密钥",
+    "The secret is returned only once. Rotation immediately invalidates the old secret.": "密钥仅返回一次；轮换后旧密钥立即失效。",
+    "New downstream": "新下游",
+    "Add downstream": "添加下游",
+    "Save whitelist": "保存白名单",
+    "R2 upload whitelist updated": "R2 上传白名单已更新",
+    "New signing secret copied": "新签名密钥已复制"
   },
   "Upload Management": "Upload Management"
 }

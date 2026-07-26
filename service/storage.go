@@ -170,13 +170,22 @@ func hostMatchesCSV(host, csv string) bool {
 }
 
 func GeneratePresignedUploadURL(filename, contentType string, maxSize int64) (*PresignResult, error) {
+	return generateR2PresignedUploadURL("uploads", filename, contentType, maxSize)
+}
+
+func GeneratePublicR2PresignedUploadURL(clientID, filename, contentType string, size int64) (*PresignResult, error) {
+	prefix := "downstream-uploads/" + clientID
+	return generateR2PresignedUploadURL(prefix, filename, contentType, size)
+}
+
+func generateR2PresignedUploadURL(prefix, filename, contentType string, maxSize int64) (*PresignResult, error) {
 	_, presignClient := getR2Client()
 
 	bucket := os.Getenv("R2_BUCKET")
 	publicBase := os.Getenv("R2_PUBLIC_BASE_URL")
 
 	id := uuid.New().String()
-	objectKey := fmt.Sprintf("uploads/%s_%s", id, filename)
+	objectKey := fmt.Sprintf("%s/%s_%s", strings.Trim(prefix, "/"), id, filename)
 
 	putInput := &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
@@ -642,9 +651,9 @@ const ImageCompressionOrigin = "origin"
 
 // Upload directory categories for different purposes
 const (
-	UploadDirGeneral  = "uploads"       // General uploads, can be cleaned
-	UploadDirElements = "elements"      // Kling/video elements, permanent
-	UploadDirTemp     = "temp"          // Temporary files, aggressive cleanup
+	UploadDirGeneral  = "uploads"  // General uploads, can be cleaned
+	UploadDirElements = "elements" // Kling/video elements, permanent
+	UploadDirTemp     = "temp"     // Temporary files, aggressive cleanup
 )
 
 // convertToJPEG decodes image bytes in any supported format (PNG, JPEG, GIF, WebP)

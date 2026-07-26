@@ -191,6 +191,9 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.POST("/payment_compliance", controller.ConfirmPaymentCompliance)
 			optionRoute.GET("/channel_affinity_cache", controller.GetChannelAffinityCacheStats)
 			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)
+			optionRoute.GET("/r2_public_upload_clients", controller.GetR2PublicUploadClients)
+			optionRoute.PUT("/r2_public_upload_clients", controller.UpdateR2PublicUploadClients)
+			optionRoute.POST("/r2_public_upload_clients/:client_id/rotate_secret", controller.RotateR2PublicUploadClientSecret)
 			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
 			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
 			optionRoute.GET("/waffo-pancake/catalog", controller.ListWaffoPancakeCatalog)

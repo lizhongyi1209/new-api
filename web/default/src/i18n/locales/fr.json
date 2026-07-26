@@ -5214,7 +5214,23 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "R2 Upload Whitelist": "Liste blanche de téléversement R2",
+    "Allow trusted downstream servers to request short-lived Cloudflare R2 upload URLs.": "Autoriser les serveurs en aval approuvés à demander des URL de téléversement Cloudflare R2 temporaires.",
+    "Each request must include the allowed Origin and a valid HMAC signature.": "Chaque requête doit inclure une origine autorisée et une signature HMAC valide.",
+    "Downstream name": "Nom du client",
+    "Remove downstream": "Supprimer le client",
+    "Downstream ID": "ID du client",
+    "Allowed origins": "Origines autorisées",
+    "One HTTPS origin per line.": "Une origine HTTPS par ligne.",
+    "Max file size (MB)": "Taille maximale (Mo)",
+    "Rotate and copy signing secret": "Renouveler et copier le secret",
+    "The secret is returned only once. Rotation immediately invalidates the old secret.": "Le secret n'est renvoyé qu'une fois. Le renouvellement invalide immédiatement l'ancien secret.",
+    "New downstream": "Nouveau client",
+    "Add downstream": "Ajouter un client",
+    "Save whitelist": "Enregistrer la liste blanche",
+    "R2 upload whitelist updated": "Liste blanche R2 mise à jour",
+    "New signing secret copied": "Nouveau secret copié"
   },
   "Upload Management": "Gestion des fichiers"
 }
