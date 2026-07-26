@@ -8,6 +8,17 @@ import (
 )
 
 func SetVideoRouter(router *gin.Engine) {
+	// Doubao-compatible facade for downstream New API sites. Their built-in
+	// DoubaoVideo adaptor submits the official content-array request here; this
+	// gateway converts it to the flat xinhankr-compatible task contract.
+	doubaoVideoSubmitRouter := router.Group("/api/v3/contents/generations/tasks")
+	doubaoVideoSubmitRouter.Use(middleware.RouteTag("relay"), middleware.DoubaoVideoRequestConvert(), middleware.TokenAuth(), middleware.Distribute())
+	doubaoVideoSubmitRouter.POST("", controller.RelayTask)
+
+	doubaoVideoFetchRouter := router.Group("/api/v3/contents/generations/tasks")
+	doubaoVideoFetchRouter.Use(middleware.RouteTag("relay"), middleware.TokenAuth())
+	doubaoVideoFetchRouter.GET("/:task_id", controller.RelayDoubaoVideoTaskFetch)
+
 	// Video proxy: accepts either session auth (dashboard) or token auth (API clients)
 	videoProxyRouter := router.Group("/v1")
 	videoProxyRouter.Use(middleware.RouteTag("relay"))

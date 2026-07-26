@@ -569,3 +569,49 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		Data:       task.Data,
 	}
 }
+
+// BuildDoubaoVideoTaskResponse converts a stored task into the response
+// contract consumed by New API's built-in DoubaoVideo adaptor.
+func BuildDoubaoVideoTaskResponse(task *model.Task) map[string]any {
+	status := "processing"
+	switch task.Status {
+	case model.TaskStatusQueued, model.TaskStatusSubmitted:
+		status = "queued"
+	case model.TaskStatusSuccess:
+		status = "succeeded"
+	case model.TaskStatusFailure:
+		status = "failed"
+	}
+
+	response := map[string]any{
+		"id":         task.TaskID,
+		"status":     status,
+		"created_at": task.CreatedAt,
+		"updated_at": task.UpdatedAt,
+	}
+	if task.Properties.OriginModelName != "" {
+		response["model"] = task.Properties.OriginModelName
+	}
+	if resultURL := task.GetResultURL(); status == "succeeded" && resultURL != "" {
+		response["content"] = map[string]any{"video_url": resultURL}
+	}
+	if status == "failed" {
+		message := strings.TrimSpace(task.FailReason)
+		if message == "" {
+			message = "task failed"
+		}
+		response["error"] = map[string]any{"code": "generation_failed", "message": message}
+	}
+
+	var upstreamData struct {
+		Usage struct {
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	if len(task.Data) > 0 && common.Unmarshal(task.Data, &upstreamData) == nil &&
+		(upstreamData.Usage.CompletionTokens > 0 || upstreamData.Usage.TotalTokens > 0) {
+		response["usage"] = upstreamData.Usage
+	}
+	return response
+}

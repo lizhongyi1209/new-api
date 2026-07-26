@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	generateImageDataCleanupTickInterval = 1 * time.Hour
+	generateImageDataCleanupTickInterval = 24 * time.Hour
 	generateImageDataCleanupBatchSize    = 500
 	// 默认保留 24 小时：客户端异步轮询取图后，base64 即成为死数据。
 	generateImageDataDefaultRetentionHours = 24
