@@ -766,6 +766,35 @@ func TestSettle_PerCallBilling_SkipsTotalTokens(t *testing.T) {
 	assert.Equal(t, int64(0), countLogs(t))
 }
 
+func TestSettle_RecordsPromptAndCompletionTokensInSubmitLog(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 33, 33, 33
+	const preConsumed = 4000
+
+	seedUser(t, userID, 10000)
+	seedToken(t, tokenID, userID, "sk-settle-log-tokens", 7000)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.PrivateData.BillingContext.PerCallBilling = true
+	submitLogID := seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+	task.PrivateData.SubmitLogID = submitLogID
+
+	settleTaskBillingOnComplete(ctx, &mockAdaptor{}, task, &relaycommon.TaskInfo{
+		Status:           model.TaskStatusSuccess,
+		CompletionTokens: 108872,
+		TotalTokens:      108872,
+	})
+
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, submitLogID).Error)
+	assert.Equal(t, 0, log.PromptTokens)
+	assert.Equal(t, 108872, log.CompletionTokens)
+	assert.Equal(t, preConsumed, log.Quota)
+}
+
 func TestSettle_NonPerCallBilling_AppliesAdaptorAdjustment(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()

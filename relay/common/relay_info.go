@@ -806,6 +806,7 @@ type TaskInfo struct {
 	Url              string                 `json:"url,omitempty"`
 	RemoteUrl        string                 `json:"remote_url,omitempty"`
 	Progress         string                 `json:"progress,omitempty"`
+	PromptTokens     int                    `json:"prompt_tokens,omitempty"`     // 用于异步任务日志和按倍率计费
 	CompletionTokens int                    `json:"completion_tokens,omitempty"` // 用于按倍率计费
 	TotalTokens      int                    `json:"total_tokens,omitempty"`      // 用于按倍率计费
 	ActualCost       float64                `json:"actual_cost,omitempty"`       // 上游返回的实际成本（RMB），用于精确计费

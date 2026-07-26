@@ -638,6 +638,21 @@ func truncateBase64(s string) string {
 //  2. taskResult.TotalTokens > 0 → 按 token 重算
 //  3. 都不满足 → 保持预扣额度不变
 func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) {
+	// 异步视频在提交时还不知道真实用量。完成轮询后先回填日志主字段，
+	// 记录用量与是否需要差额结算是两个独立行为：按次计费、倍率缺失、
+	// 或预扣恰好准确时，也必须在使用日志中展示输入/输出 tokens。
+	promptTokens := taskResult.PromptTokens
+	if promptTokens == 0 && taskResult.TotalTokens >= taskResult.CompletionTokens {
+		promptTokens = taskResult.TotalTokens - taskResult.CompletionTokens
+	}
+	if task.PrivateData.SubmitLogID > 0 && (promptTokens > 0 || taskResult.CompletionTokens > 0) {
+		model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, task.Quota, map[string]interface{}{
+			"prompt_tokens":     promptTokens,
+			"completion_tokens": taskResult.CompletionTokens,
+			"use_time_seconds":  taskUseTimeSeconds(task),
+		})
+	}
+
 	// 0. 按次计费的任务不做差额结算
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
