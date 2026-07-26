@@ -313,6 +313,11 @@ export interface ExportUsageLogsParams extends GetLogsParams {
   format: UsageLogExportFormat
 }
 
+export interface UsageLogExportOptions {
+  usernames: string[]
+  tokens: string[]
+}
+
 export interface GetLogsResponse {
   success: boolean
   message?: string

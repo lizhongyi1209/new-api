@@ -726,6 +726,29 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	return logs, total, err
 }
 
+type UsageLogExportOptions struct {
+	Usernames []string `json:"usernames"`
+	Tokens    []string `json:"tokens"`
+}
+
+func GetUsageLogExportOptions(startTimestamp int64, endTimestamp int64, username string) (options UsageLogExportOptions, err error) {
+	usernameQuery := LOG_DB.Model(&Log{}).
+		Where("created_at >= ? AND created_at <= ? AND username <> ?", startTimestamp, endTimestamp, "")
+	if err = usernameQuery.Distinct("username").Order("username").Limit(200).Pluck("username", &options.Usernames).Error; err != nil {
+		return options, err
+	}
+
+	tokenQuery := LOG_DB.Model(&Log{}).
+		Where("created_at >= ? AND created_at <= ? AND token_name <> ?", startTimestamp, endTimestamp, "")
+	if username != "" {
+		tokenQuery = tokenQuery.Where("username = ?", username)
+	}
+	if err = tokenQuery.Distinct("token_name").Order("token_name").Limit(200).Pluck("token_name", &options.Tokens).Error; err != nil {
+		return options, err
+	}
+	return options, nil
+}
+
 const logSearchCountLimit = 10000
 
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {

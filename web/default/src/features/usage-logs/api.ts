@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import axios, { type AxiosResponse } from 'axios'
+
 import { api } from '@/lib/api'
 
 import { buildQueryParams } from './lib/query'
@@ -27,6 +29,7 @@ import type {
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
   ExportUsageLogsParams,
+  UsageLogExportOptions,
   UserInfo,
 } from './types'
 
@@ -93,15 +96,43 @@ export async function exportUsageLogs(
   const queryParams = buildQueryParams(
     params as unknown as Record<string, unknown>
   )
-  const response = await api.get(`${path}?${queryParams}`, {
-    responseType: 'blob',
-  })
+  let response: AxiosResponse<Blob>
+  try {
+    response = await api.get(`${path}?${queryParams}`, {
+      responseType: 'blob',
+      skipErrorHandler: true,
+    })
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+      const body = await error.response.data.text()
+      try {
+        const parsed = JSON.parse(body) as { message?: string }
+        throw new Error(parsed.message || 'Failed to export logs')
+      } catch (parseError) {
+        if (parseError instanceof SyntaxError) {
+          throw new Error('Failed to export logs')
+        }
+        throw parseError
+      }
+    }
+    throw error
+  }
   const disposition = String(response.headers['content-disposition'] || '')
   const filenameMatch = disposition.match(/filename="?([^";]+)"?/i)
   return {
     blob: response.data as Blob,
     filename: filenameMatch?.[1] || `usage-logs.${params.format}`,
   }
+}
+
+export async function getUsageLogExportOptions(params: {
+  start_timestamp: number
+  end_timestamp: number
+  username?: string
+}): Promise<UsageLogExportOptions> {
+  const queryParams = buildQueryParams(params)
+  const response = await api.get(`/api/log/export/options?${queryParams}`)
+  return response.data.data
 }
 
 export async function getUserInfo(

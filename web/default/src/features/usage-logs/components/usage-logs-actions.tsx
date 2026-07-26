@@ -17,11 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { DownloadIcon, Loader2Icon, RefreshCcwIcon } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { ComboboxInput } from '@/components/ui/combobox-input'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -47,8 +49,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { useDebounce } from '@/hooks'
 
-import { exportUsageLogs } from '../api'
+import { exportUsageLogs, getUsageLogExportOptions } from '../api'
 import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
 import type { UsageLogExportFormat } from '../types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
@@ -99,6 +102,9 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
   const [format, setFormat] = useState<UsageLogExportFormat>('csv')
   const [model, setModel] = useState('')
   const [group, setGroup] = useState('')
+  const [username, setUsername] = useState('')
+  const [token, setToken] = useState('')
+  const debouncedUsername = useDebounce(username)
   const defaultRange = useMemo(() => getDefaultTimeRange(), [])
   const [start, setStart] = useState(defaultRange.start)
   const [end, setEnd] = useState(defaultRange.end)
@@ -118,7 +124,47 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
     )
     setModel(String(props.searchParams.model || ''))
     setGroup(String(props.searchParams.group || ''))
+    setUsername(String(props.searchParams.username || ''))
+    setToken(String(props.searchParams.token || ''))
   }, [open, props.searchParams])
+
+  const exportOptionsQuery = useQuery({
+    queryKey: [
+      'usage-log-export-options',
+      start.getTime(),
+      end.getTime(),
+      debouncedUsername,
+    ],
+    queryFn: () =>
+      getUsageLogExportOptions({
+        start_timestamp: Math.floor(start.getTime() / 1000),
+        end_timestamp: Math.floor(end.getTime() / 1000),
+        ...(debouncedUsername ? { username: debouncedUsername } : {}),
+      }),
+    enabled:
+      open &&
+      props.isAdmin &&
+      start.getTime() > 0 &&
+      end.getTime() >= start.getTime() &&
+      end.getTime() - start.getTime() <= 31 * 24 * 60 * 60 * 1000,
+    staleTime: 30_000,
+  })
+  const usernameOptions = useMemo(
+    () =>
+      (exportOptionsQuery.data?.usernames || []).map((value) => ({
+        value,
+        label: value,
+      })),
+    [exportOptionsQuery.data?.usernames]
+  )
+  const tokenOptions = useMemo(
+    () =>
+      (exportOptionsQuery.data?.tokens || []).map((value) => ({
+        value,
+        label: value,
+      })),
+    [exportOptionsQuery.data?.tokens]
+  )
 
   const refreshItems = useMemo(
     () =>
@@ -152,6 +198,8 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
           endTime: end.getTime(),
           model,
           group,
+          username,
+          token,
         },
         isAdmin: props.isAdmin,
       })
@@ -171,12 +219,14 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
       URL.revokeObjectURL(url)
       toast.success(t('Log export downloaded'))
       setOpen(false)
-    } catch {
-      toast.error(t('Failed to export logs'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t('Failed to export logs')
+      )
     } finally {
       setExporting(false)
     }
-  }, [end, format, group, model, props.isAdmin, start, t])
+  }, [end, format, group, model, props.isAdmin, start, t, token, username])
 
   return (
     <div className='flex items-center gap-1'>
@@ -281,6 +331,42 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
                   />
                 </div>
               </div>
+
+              {props.isAdmin && (
+                <div className='grid gap-4 sm:grid-cols-2'>
+                  <div className='space-y-2'>
+                    <Label htmlFor='usage-log-export-username'>
+                      {t('Username')}
+                    </Label>
+                    <ComboboxInput
+                      id='usage-log-export-username'
+                      options={usernameOptions}
+                      value={username}
+                      onValueChange={(value) => {
+                        setUsername(value)
+                        setToken('')
+                      }}
+                      placeholder={t('All users')}
+                      emptyText={t('No data')}
+                      allowCustomValue
+                    />
+                  </div>
+                  <div className='space-y-2'>
+                    <Label htmlFor='usage-log-export-token'>
+                      {t('Token Name')}
+                    </Label>
+                    <ComboboxInput
+                      id='usage-log-export-token'
+                      options={tokenOptions}
+                      value={token}
+                      onValueChange={setToken}
+                      placeholder={t('Token Name')}
+                      emptyText={t('No data')}
+                      allowCustomValue
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className='space-y-3'>
                 <Label>{t('Export Format')}</Label>

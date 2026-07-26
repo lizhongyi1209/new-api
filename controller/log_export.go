@@ -36,19 +36,40 @@ func ExportUserLogs(c *gin.Context) {
 	exportUsageLogs(c, false)
 }
 
-func exportUsageLogs(c *gin.Context, isAdmin bool) {
+func parseUsageLogExportRange(c *gin.Context) (int64, int64, bool) {
 	startTimestamp, err := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	if err != nil || startTimestamp <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "start_timestamp is required"})
-		return
+		return 0, 0, false
 	}
 	endTimestamp, err := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	if err != nil || endTimestamp <= 0 || endTimestamp < startTimestamp {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "valid end_timestamp is required"})
-		return
+		return 0, 0, false
 	}
 	if time.Duration(endTimestamp-startTimestamp)*time.Second > usageLogExportMaxRange {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "export time range cannot exceed 31 days"})
+		return 0, 0, false
+	}
+	return startTimestamp, endTimestamp, true
+}
+
+func GetUsageLogExportOptions(c *gin.Context) {
+	startTimestamp, endTimestamp, ok := parseUsageLogExportRange(c)
+	if !ok {
+		return
+	}
+	options, err := model.GetUsageLogExportOptions(startTimestamp, endTimestamp, c.Query("username"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": options})
+}
+
+func exportUsageLogs(c *gin.Context, isAdmin bool) {
+	startTimestamp, endTimestamp, ok := parseUsageLogExportRange(c)
+	if !ok {
 		return
 	}
 
@@ -67,6 +88,7 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 
 	var logs []*model.Log
 	var total int64
+	var err error
 	if isAdmin {
 		channel, _ := strconv.Atoi(c.Query("channel"))
 		logs, total, err = model.GetAllLogs(
@@ -86,7 +108,7 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 	if total > usageLogExportMaxRows || len(logs) > usageLogExportMaxRows {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"message": fmt.Sprintf("export contains more than %d rows; narrow the filters", usageLogExportMaxRows),
+			"message": fmt.Sprintf("export contains %d rows; narrow the time range or add username/token filters (maximum %d)", total, usageLogExportMaxRows),
 		})
 		return
 	}
