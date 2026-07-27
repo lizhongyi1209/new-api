@@ -83,3 +83,13 @@ func ChannelType2APIType(channelType int) (int, bool) {
 	}
 	return apiType, true
 }
+func IsResponsesCompactAPIType(apiType int) bool {
+	switch apiType {
+	case constant.APITypeOpenAI,
+		constant.APITypeCodex,
+		constant.APITypeAdvancedCustom:
+		return true
+	default:
+		return false
+	}
+}

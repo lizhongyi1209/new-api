@@ -56,6 +56,25 @@ func TestValidateChannelProxy(t *testing.T) {
 	}
 }
 
+func TestResponsesCompactAPITypeSupport(t *testing.T) {
+	tests := []struct {
+		name    string
+		apiType int
+		want    bool
+	}{
+		{name: "OpenAI", apiType: constant.APITypeOpenAI, want: true},
+		{name: "Codex", apiType: constant.APITypeCodex, want: true},
+		{name: "Advanced Custom", apiType: constant.APITypeAdvancedCustom, want: true},
+		{name: "Anthropic", apiType: constant.APITypeAnthropic, want: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, common.IsResponsesCompactAPIType(test.apiType))
+		})
+	}
+}
+
 func TestCopyChannelRejectsInvalidLegacyProxySettings(t *testing.T) {
 	db := setupModelListControllerTestDB(t)
 	settingBytes, err := common.Marshal(dto.ChannelSettings{
