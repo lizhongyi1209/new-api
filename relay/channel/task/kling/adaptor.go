@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -81,6 +82,62 @@ type VideoItem struct {
 
 type WatermarkInfo struct {
 	Enabled bool `json:"enabled"`
+}
+
+type omniVideo30Content struct {
+	Type      string `json:"type"`
+	Text      string `json:"text,omitempty"`
+	URL       string `json:"url,omitempty"`
+	ID        string `json:"id,omitempty"`
+	ElementID string `json:"element_id,omitempty"`
+}
+
+type omniVideo30Settings struct {
+	MultiShot   *bool  `json:"multi_shot,omitempty"`
+	Audio       string `json:"audio,omitempty"`
+	Resolution  string `json:"resolution,omitempty"`
+	AspectRatio string `json:"aspect_ratio,omitempty"`
+	Duration    *int   `json:"duration,omitempty"`
+}
+
+type omniVideo30Options struct {
+	CallbackURL    string         `json:"callback_url,omitempty"`
+	ExternalTaskID string         `json:"external_task_id,omitempty"`
+	WatermarkInfo  *WatermarkInfo `json:"watermark_info,omitempty"`
+}
+
+type omniVideo30Request struct {
+	Contents []omniVideo30Content `json:"contents"`
+	Settings *omniVideo30Settings `json:"settings,omitempty"`
+	Options  *omniVideo30Options  `json:"options,omitempty"`
+}
+
+type omniVideo30SubmitResponse struct {
+	Code      int    `json:"code"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id"`
+	Data      struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+type omniVideo30TaskResponse struct {
+	Code      int    `json:"code"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id"`
+	Data      []struct {
+		ID      string `json:"id"`
+		Status  string `json:"status"`
+		Message string `json:"message"`
+		Outputs []struct {
+			Type string `json:"type"`
+			URL  string `json:"url"`
+		} `json:"outputs"`
+		Billing []struct {
+			ChargeType string `json:"charge_type"`
+			Amount     string `json:"amount"`
+		} `json:"billing"`
+	} `json:"data"`
 }
 
 type requestPayload struct {
@@ -214,6 +271,9 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
+	if strings.Contains(c.Request.URL.Path, "kling-3.0-omni") {
+		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30)
+	}
 	if strings.Contains(c.Request.URL.Path, "motion-control") {
 		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionMotionControl)
 	}
@@ -227,6 +287,8 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	var path string
 	switch info.Action {
+	case constant.TaskActionOmniVideo30:
+		path = "/omni-video/kling-3.0-omni"
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
 	case constant.TaskActionOmniVideo:
@@ -265,6 +327,17 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, fmt.Errorf("request not found in context")
 	}
 	req := v.(relaycommon.TaskSubmitReq)
+	if info.Action == constant.TaskActionOmniVideo30 {
+		var body omniVideo30Request
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+			return nil, errors.Wrap(err, "unmarshal Kling 3.0 Omni request failed")
+		}
+		data, err := common.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(data), nil
+	}
 
 	body, err := a.convertToRequestPayload(&req, info)
 	if err != nil {
@@ -308,6 +381,16 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 
 	resolvedTaskID := kResp.Data.TaskId
+	if resolvedTaskID == "" && info.Action == constant.TaskActionOmniVideo30 {
+		var omniResp omniVideo30SubmitResponse
+		if err := common.Unmarshal(responseBody, &omniResp); err == nil {
+			if omniResp.Code != 0 {
+				taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("%s", omniResp.Message), "task_failed", http.StatusBadRequest)
+				return
+			}
+			resolvedTaskID = omniResp.Data.ID
+		}
+	}
 	if resolvedTaskID == "" {
 		// Official Kling shape didn't yield a task_id — some channels (e.g.
 		// xinhankr) front Kling with a Tencent VCLM-style envelope instead.
@@ -360,6 +443,8 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 	var path string
 	switch action {
+	case constant.TaskActionOmniVideo30:
+		path = "/tasks"
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
 	case constant.TaskActionOmniVideo:
@@ -369,12 +454,15 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	default:
 		path = "/v1/videos/text2video"
 	}
-	url := fmt.Sprintf("%s%s/%s", baseUrl, path, taskID)
+	requestURL := fmt.Sprintf("%s%s/%s", baseUrl, path, taskID)
+	if action == constant.TaskActionOmniVideo30 {
+		requestURL = fmt.Sprintf("%s%s?task_ids=%s", baseUrl, path, url.QueryEscape(taskID))
+	}
 	if isNewAPIRelay(key) {
-		url = fmt.Sprintf("%s/kling%s/%s", baseUrl, path, taskID)
+		requestURL = fmt.Sprintf("%s/kling%s/%s", baseUrl, path, taskID)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +484,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
-	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3"}
+	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3", "kling-video-o1", "kling-v3-omni", "kling-3.0-omni"}
 }
 
 func (a *TaskAdaptor) GetChannelName() string {
@@ -661,6 +749,42 @@ func (a *TaskAdaptor) createJWTTokenWithKey(apiKey string) (string, error) {
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	var omniResp omniVideo30TaskResponse
+	if err := common.Unmarshal(respBody, &omniResp); err == nil && omniResp.RequestID != "" && omniResp.Code != 0 {
+		return nil, fmt.Errorf("Kling task query failed: %s", omniResp.Message)
+	}
+	if len(omniResp.Data) > 0 && omniResp.Data[0].Status != "" {
+		result := omniResp.Data[0]
+		taskInfo := &relaycommon.TaskInfo{Code: omniResp.Code, TaskID: result.ID, Reason: result.Message}
+		switch result.Status {
+		case "submitted":
+			taskInfo.Status = model.TaskStatusSubmitted
+		case "processing":
+			taskInfo.Status = model.TaskStatusInProgress
+		case "succeeded", "succeed":
+			taskInfo.Status = model.TaskStatusSuccess
+			for _, output := range result.Outputs {
+				if output.Type == "video" && output.URL != "" {
+					taskInfo.Url = output.URL
+					break
+				}
+			}
+			for _, billing := range result.Billing {
+				if billing.ChargeType != "cash" {
+					continue
+				}
+				if cost, err := strconv.ParseFloat(billing.Amount, 64); err == nil && cost > 0 {
+					taskInfo.ActualCost += cost
+				}
+			}
+		case "failed":
+			taskInfo.Status = model.TaskStatusFailure
+		default:
+			return nil, fmt.Errorf("unknown task status: %s", result.Status)
+		}
+		return taskInfo, nil
+	}
+
 	taskInfo := &relaycommon.TaskInfo{}
 	resPayload := responsePayload{}
 	err := common.Unmarshal(respBody, &resPayload)

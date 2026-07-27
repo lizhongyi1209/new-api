@@ -153,21 +153,21 @@ func KlingOmniVideoGenerations(c *gin.Context) {
 }
 
 type KlingOmniVideoRequest struct {
-	ModelName      string                   `json:"model_name,omitempty" example:"kling-video-o1"`
-	MultiShot      *bool                    `json:"multi_shot,omitempty" example:"false"`
-	ShotType       string                   `json:"shot_type,omitempty" example:"customize"`
-	Prompt         string                   `json:"prompt,omitempty" example:"Make the person in <<<image_1>>> wave to the camera"`
-	MultiPrompt    []KlingMultiPromptItem   `json:"multi_prompt,omitempty"`
-	ImageList      []KlingImageItem         `json:"image_list,omitempty"`
-	ElementList    []KlingElementItem       `json:"element_list,omitempty"`
-	VideoList      []KlingVideoItem         `json:"video_list,omitempty"`
-	Sound          string                   `json:"sound,omitempty" example:"off"`
-	Mode           string                   `json:"mode,omitempty" example:"pro"`
-	AspectRatio    string                   `json:"aspect_ratio,omitempty" example:"16:9"`
-	Duration       string                   `json:"duration,omitempty" example:"5"`
-	WatermarkInfo  *KlingWatermarkInfo      `json:"watermark_info,omitempty"`
-	CallbackURL    string                   `json:"callback_url,omitempty" example:"https://your.domain/callback"`
-	ExternalTaskId string                   `json:"external_task_id,omitempty" example:"custom-task-003"`
+	ModelName      string                 `json:"model_name,omitempty" example:"kling-video-o1"`
+	MultiShot      *bool                  `json:"multi_shot,omitempty" example:"false"`
+	ShotType       string                 `json:"shot_type,omitempty" example:"customize"`
+	Prompt         string                 `json:"prompt,omitempty" example:"Make the person in <<<image_1>>> wave to the camera"`
+	MultiPrompt    []KlingMultiPromptItem `json:"multi_prompt,omitempty"`
+	ImageList      []KlingImageItem       `json:"image_list,omitempty"`
+	ElementList    []KlingElementItem     `json:"element_list,omitempty"`
+	VideoList      []KlingVideoItem       `json:"video_list,omitempty"`
+	Sound          string                 `json:"sound,omitempty" example:"off"`
+	Mode           string                 `json:"mode,omitempty" example:"pro"`
+	AspectRatio    string                 `json:"aspect_ratio,omitempty" example:"16:9"`
+	Duration       string                 `json:"duration,omitempty" example:"5"`
+	WatermarkInfo  *KlingWatermarkInfo    `json:"watermark_info,omitempty"`
+	CallbackURL    string                 `json:"callback_url,omitempty" example:"https://your.domain/callback"`
+	ExternalTaskId string                 `json:"external_task_id,omitempty" example:"custom-task-003"`
 }
 
 type KlingMultiPromptItem struct {
@@ -205,6 +205,68 @@ type KlingWatermarkInfo struct {
 // @Router /kling/v1/videos/omni-video/{task_id} [get]
 func KlingOmniVideoTaskId(c *gin.Context) {}
 
+// KlingOmniVideo30Generations
+// @Summary 可灵 3.0 Omni 视频生成
+// @Description 调用可灵最新 3.0 Omni 官方接口，支持提示词、首尾帧、参考图片、参考视频、基础视频及 Element 输入
+// @Tags Video
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "用户认证令牌 (Access-Token: sk-xxxx)"
+// @Param request body KlingOmniVideo30Request true "Kling 3.0 Omni 生成请求参数"
+// @Success 200 {object} dto.VideoTaskResponse "任务状态和结果"
+// @Failure 400 {object} dto.OpenAIError "请求参数错误"
+// @Failure 401 {object} dto.OpenAIError "未授权"
+// @Failure 403 {object} dto.OpenAIError "无权限"
+// @Failure 500 {object} dto.OpenAIError "服务器内部错误"
+// @Router /kling/omni-video/kling-3.0-omni [post]
+func KlingOmniVideo30Generations(c *gin.Context) {}
+
+type KlingOmniVideo30Request struct {
+	Contents []KlingOmniVideo30Content `json:"contents" binding:"required"`
+	Settings *KlingOmniVideo30Settings `json:"settings,omitempty"`
+	Options  *KlingOmniVideo30Options  `json:"options,omitempty"`
+}
+
+type KlingOmniVideo30Content struct {
+	Type      string `json:"type" binding:"required" example:"prompt" enums:"prompt,first_frame,last_frame,refer_image,feature_video,base_video,element"`
+	Text      string `json:"text,omitempty" example:"A cinematic product video"`
+	URL       string `json:"url,omitempty" example:"https://example.com/reference.png"`
+	ID        string `json:"id,omitempty" example:"image_1"`
+	ElementID string `json:"element_id,omitempty" example:"162"`
+}
+
+type KlingOmniVideo30Settings struct {
+	MultiShot   *bool  `json:"multi_shot,omitempty" example:"true"`
+	Audio       string `json:"audio,omitempty" example:"native" enums:"native,original,off"`
+	Resolution  string `json:"resolution,omitempty" example:"1080p" enums:"720p,1080p,4k"`
+	AspectRatio string `json:"aspect_ratio,omitempty" example:"1:1" enums:"16:9,9:16,1:1"`
+	Duration    *int   `json:"duration,omitempty" example:"5"`
+}
+
+type KlingOmniVideo30Options struct {
+	CallbackURL    string                     `json:"callback_url,omitempty" example:"https://example.com/callback"`
+	ExternalTaskID string                     `json:"external_task_id,omitempty" example:"custom-task-003"`
+	WatermarkInfo  *KlingOmniVideo30Watermark `json:"watermark_info,omitempty"`
+}
+
+type KlingOmniVideo30Watermark struct {
+	Enabled bool `json:"enabled" example:"false"`
+}
+
+// KlingOmniVideo30TaskId godoc
+// @Summary 查询可灵 3.0 Omni 视频任务
+// @Description 根据 New API 返回的任务 ID 查询 Kling 3.0 Omni 任务状态和结果
+// @Tags Video
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "用户认证令牌 (Access-Token: sk-xxxx)"
+// @Param task_id path string true "Task ID"
+// @Success 200 {object} dto.VideoTaskResponse "任务状态和结果"
+// @Failure 400 {object} dto.OpenAIError "请求参数错误"
+// @Failure 401 {object} dto.OpenAIError "未授权"
+// @Router /kling/omni-video/kling-3.0-omni/{task_id} [get]
+func KlingOmniVideo30TaskId(c *gin.Context) {}
+
 // KlingMotionControlGenerations
 // @Summary 可灵动作控制
 // @Description 调用可灵 Motion Control 接口，根据参考图片和动作视频生成视频
@@ -223,17 +285,17 @@ func KlingMotionControlGenerations(c *gin.Context) {
 }
 
 type KlingMotionControlRequest struct {
-	ModelName            string                 `json:"model_name,omitempty" example:"kling-v2-6"`
-	Prompt               string                 `json:"prompt,omitempty" example:"The girl is wearing a loose gray T-shirt"`
-	ImageUrl             string                 `json:"image_url" binding:"required" example:"https://example.com/reference.jpg"`
-	VideoUrl             string                 `json:"video_url" binding:"required" example:"https://example.com/motion.mp4"`
-	ElementList          []KlingElementItem     `json:"element_list,omitempty"`
-	KeepOriginalSound    string                 `json:"keep_original_sound,omitempty" example:"yes"`
-	CharacterOrientation string                 `json:"character_orientation" binding:"required" example:"image"`
-	Mode                 string                 `json:"mode" binding:"required" example:"pro"`
-	WatermarkInfo        *KlingWatermarkInfo    `json:"watermark_info,omitempty"`
-	CallbackURL          string                 `json:"callback_url,omitempty" example:"https://your.domain/callback"`
-	ExternalTaskId       string                 `json:"external_task_id,omitempty" example:"custom-task-004"`
+	ModelName            string              `json:"model_name,omitempty" example:"kling-v2-6"`
+	Prompt               string              `json:"prompt,omitempty" example:"The girl is wearing a loose gray T-shirt"`
+	ImageUrl             string              `json:"image_url" binding:"required" example:"https://example.com/reference.jpg"`
+	VideoUrl             string              `json:"video_url" binding:"required" example:"https://example.com/motion.mp4"`
+	ElementList          []KlingElementItem  `json:"element_list,omitempty"`
+	KeepOriginalSound    string              `json:"keep_original_sound,omitempty" example:"yes"`
+	CharacterOrientation string              `json:"character_orientation" binding:"required" example:"image"`
+	Mode                 string              `json:"mode" binding:"required" example:"pro"`
+	WatermarkInfo        *KlingWatermarkInfo `json:"watermark_info,omitempty"`
+	CallbackURL          string              `json:"callback_url,omitempty" example:"https://your.domain/callback"`
+	ExternalTaskId       string              `json:"external_task_id,omitempty" example:"custom-task-004"`
 }
 
 // KlingMotionControlTaskId godoc

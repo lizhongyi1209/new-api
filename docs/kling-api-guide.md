@@ -12,6 +12,7 @@
 | 文生视频 | `/kling/v1/videos/text2video` | 根据文本描述直接生成视频 |
 | 运动控制 | `/kling/v1/videos/motion-control` | 对现有视频进行运动控制处理 |
 | 全能视频 | `/kling/v1/videos/omni-video` | 高级功能：多图片、自定义元素、声音绑定等 |
+| 3.0 Omni | `/kling/omni-video/kling-3.0-omni` | 最新官方多模态接口，支持图片、视频、Element、原生音频、4K 与 1:1 |
 
 ---
 
@@ -549,6 +550,48 @@ response = requests.post(
 ### 3.4 查询任务状态
 
 **端点：** `GET /kling/v1/videos/omni-video/{task_id}`
+
+### 3.5 Kling 3.0 Omni 官方接口（额外支持）
+
+该接口与上面的旧版 Omni Video 接口并存，不会替换或改变旧接口行为。
+
+**创建端点：** `POST /kling/omni-video/kling-3.0-omni`
+
+```json
+{
+  "contents": [
+    {
+      "type": "prompt",
+      "text": "一款香水在镜面展台上缓慢旋转，柔和电影灯光"
+    },
+    {
+      "type": "refer_image",
+      "url": "https://example.com/product.png",
+      "id": "image_1"
+    }
+  ],
+  "settings": {
+    "multi_shot": false,
+    "audio": "native",
+    "resolution": "1080p",
+    "aspect_ratio": "1:1",
+    "duration": 5
+  },
+  "options": {
+    "callback_url": "https://example.com/callback",
+    "external_task_id": "product-video-001",
+    "watermark_info": {
+      "enabled": false
+    }
+  }
+}
+```
+
+`contents[].type` 支持 `prompt`、`first_frame`、`last_frame`、`refer_image`、`feature_video`、`base_video` 和 `element`。分辨率支持 `720p`、`1080p`、`4k`，画面比例支持 `16:9`、`9:16` 和 `1:1`。
+
+**查询端点：** `GET /kling/omni-video/kling-3.0-omni/{task_id}`
+
+查询时使用创建接口返回的 New API 任务 ID。网关在上游通过 Kling 官方 `GET /tasks?task_ids=...` 协议轮询任务，并继续沿用现有的任务归属校验、计费和结果代理机制。
 
 ---
 

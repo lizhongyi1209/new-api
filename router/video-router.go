@@ -81,6 +81,16 @@ func SetVideoRouter(router *gin.Engine) {
 		klingOmniVideoRouter.GET("/videos/omni-video/:task_id", controller.RelayTaskFetch)
 	}
 
+	// Kling 3.0 Omni official API. Keep the model in the path to match Kling's
+	// current contract while reusing New API's task accounting and polling.
+	klingOmniVideo30Router := router.Group("/kling")
+	klingOmniVideo30Router.Use(middleware.RouteTag("relay"))
+	klingOmniVideo30Router.Use(middleware.KlingOmniVideo30Convert(), middleware.TokenAuth(), middleware.Distribute())
+	{
+		klingOmniVideo30Router.POST("/omni-video/kling-3.0-omni", controller.RelayTask)
+		klingOmniVideo30Router.GET("/omni-video/kling-3.0-omni/:task_id", controller.RelayTaskFetch)
+	}
+
 	// Kling Official Element Management API (2024 New Version)
 	klingElementRouter := router.Group("/kling/v1/general")
 	klingElementRouter.Use(middleware.RouteTag("relay"))
