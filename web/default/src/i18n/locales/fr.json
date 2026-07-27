@@ -527,7 +527,7 @@
     "Auto group behavior": "Comportement du groupe auto",
     "Auto Group Chain": "Chaîne de groupes automatique",
     "Auto negotiates HTTP/2 when available. HTTP/1.1 forces multiple keep-alive connections under concurrency.": "Le mode Auto négocie HTTP/2 lorsque c’est disponible. HTTP/1.1 force plusieurs connexions keep-alive en concurrence.",
-    "Auto refresh": "Actualisation auto",
+    "Auto refresh": "Actualisation automatique",
     "Auto Sync Upstream Models": "Synchronisation automatique des modèles en amont",
     "Auto-disable rules": "Règles de désactivation automatique",
     "Auto-disable status codes": "Codes de statut de désactivation auto",
