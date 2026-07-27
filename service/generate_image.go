@@ -622,8 +622,9 @@ func defaultImageRetryAfterSeconds(status int) int {
 // doGenerateImageRequestWithStatusRetry applies the global relay retry policy to
 // unified asynchronous image requests. Retries stay on the channel selected when
 // the task was created so task attribution and billing remain consistent.
-func doGenerateImageRequestWithStatusRetry(ctx context.Context, request func() (any, error)) (*http.Response, *types.NewAPIError, error) {
+func doGenerateImageRequestWithStatusRetry(ctx context.Context, task *model.Task, request func() (any, error)) (*http.Response, *types.NewAPIError, error) {
 	for retry := 0; ; retry++ {
+		task.PrivateData.UsedChannels = append(task.PrivateData.UsedChannels, strconv.Itoa(task.ChannelId))
 		resp, err := request()
 		if err != nil {
 			return nil, nil, err
@@ -643,10 +644,14 @@ func doGenerateImageRequestWithStatusRetry(ctx context.Context, request func() (
 
 		_ = httpResp.Body.Close()
 		logger.LogInfo(ctx, fmt.Sprintf(
-			"generate_image: retrying upstream after status=%d, retry=%d/%d",
-			httpResp.StatusCode, retry+1, common.RetryTimes,
+			"generate_image: task=%s channel=%d retrying upstream after status=%d, retry=%d/%d",
+			task.TaskID, task.ChannelId, httpResp.StatusCode, retry+1, common.RetryTimes,
 		))
 	}
+}
+
+func imageTaskAdminInfo(task *model.Task) map[string]interface{} {
+	return map[string]interface{}{"use_channel": task.PrivateData.UsedChannels}
 }
 
 // newAsyncGinContext 构造一个用于异步执行的最小 gin.Context，并写入用户名供日志使用。
@@ -811,7 +816,7 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 	logger.LogInfo(ctx, fmt.Sprintf("generate_image(gemini): model=%s, baseUrl=%s, bodyLen=%d",
 		relayInfo.UpstreamModelName, relayInfo.ChannelBaseUrl, len(jsonData)))
 
-	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, func() (any, error) {
+	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, task, func() (any, error) {
 		return adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
 	})
 	if err != nil {
@@ -1008,7 +1013,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		relayInfo.UpstreamModelName, relayInfo.ChannelBaseUrl, requestBodyLen))
 
 	firstRequestBody := requestBody
-	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, func() (any, error) {
+	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, task, func() (any, error) {
 		if firstRequestBody != nil {
 			body := firstRequestBody
 			firstRequestBody = nil
@@ -1267,6 +1272,7 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	otherUpdates := map[string]interface{}{
 		"task_status":           "SUCCESS",
 		"generated_image_count": len(images),
+		"admin_info":            imageTaskAdminInfo(task),
 	}
 	for k, v := range tokenDetails {
 		otherUpdates[k] = v

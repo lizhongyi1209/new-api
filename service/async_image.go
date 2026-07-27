@@ -1745,7 +1745,9 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 		relayInfo.ChannelMeta.UpstreamModelName, relayInfo.ChannelMeta.ChannelBaseUrl, relayInfo.ChannelMeta.ApiType))
 	logger.LogInfo(ctx, fmt.Sprintf("async_gemini: request body length=%d bytes", len(jsonData)))
 
-	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, task, func() (any, error) {
+		return adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+	})
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("async_gemini: DoRequest failed: %v", err))
 		task.Status = model.TaskStatusFailure
@@ -1756,21 +1758,11 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 		return
 	}
 
-	httpResp := resp.(*http.Response)
 	defer httpResp.Body.Close()
 
-	if httpResp.StatusCode != http.StatusOK {
-		// Debug: log response details
-		bodyPreview, _ := io.ReadAll(httpResp.Body)
-		httpResp.Body = io.NopCloser(bytes.NewReader(bodyPreview))
-		logger.LogError(ctx, fmt.Sprintf("async_gemini: upstream error status=%d, body=%s", httpResp.StatusCode, string(bodyPreview)))
-
-		relayErr := RelayErrorHandler(ctx, httpResp, false)
-		task.Status = model.TaskStatusFailure
-		task.FailReason = fmt.Sprintf("上游返回错误: %s", relayErr.Error())
-		task.Progress = "100%"
-		task.FinishTime = time.Now().Unix()
-		_ = task.Update()
+	if relayErr != nil {
+		logger.LogError(ctx, fmt.Sprintf("async_gemini: upstream error status=%d: %s", httpResp.StatusCode, relayErr.Error()))
+		failGenerateImageTaskWithRelayError(task, relayErr, httpResp.Header)
 		return
 	}
 
@@ -1912,6 +1904,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 	otherUpdates := map[string]interface{}{
 		"task_status":           "SUCCESS",
 		"generated_image_count": imageCount,
+		"admin_info":            imageTaskAdminInfo(task),
 	}
 	for k, v := range tokenDetails {
 		otherUpdates[k] = v

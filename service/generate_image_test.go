@@ -18,6 +18,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -750,7 +751,8 @@ func TestGenerateImageStatusRetryUsesGlobalPolicy(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			attempts := 0
-			resp, relayErr, err := doGenerateImageRequestWithStatusRetry(context.Background(), func() (any, error) {
+			task := &model.Task{ChannelId: 292, TaskID: "task-retry-test"}
+			resp, relayErr, err := doGenerateImageRequestWithStatusRetry(context.Background(), task, func() (any, error) {
 				status := tc.statuses[attempts]
 				attempts++
 				return &http.Response{
@@ -763,6 +765,10 @@ func TestGenerateImageStatusRetryUsesGlobalPolicy(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, resp)
 			assert.Equal(t, tc.wantAttempts, attempts)
+			assert.Equal(t, tc.wantAttempts, len(task.PrivateData.UsedChannels))
+			for _, channelID := range task.PrivateData.UsedChannels {
+				assert.Equal(t, "292", channelID)
+			}
 			assert.Equal(t, tc.wantStatus, resp.StatusCode)
 			assert.Equal(t, tc.wantRelayErr, relayErr != nil)
 		})

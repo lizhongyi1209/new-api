@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"time"
 
@@ -112,6 +113,7 @@ type TaskPrivateData struct {
 	NodeName       string              `json:"node_name,omitempty"`       // 发起任务的节点名，轮询结算阶段据此归属日志而非最后查询节点
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
 	SubmitLogID    int                 `json:"submit_log_id,omitempty"`   // 提交时消费日志的 ID，任务完成后更新
+	UsedChannels   []string            `json:"used_channels,omitempty"`   // 每次真实上游尝试使用的渠道，保留重复项用于展示重试链路
 }
 
 type TaskErrorDetail struct {
@@ -236,7 +238,7 @@ func (p *TaskPrivateData) Scan(val interface{}) error {
 }
 
 func (p TaskPrivateData) Value() (driver.Value, error) {
-	if (p == TaskPrivateData{}) {
+	if reflect.ValueOf(p).IsZero() {
 		return nil, nil
 	}
 	return common.Marshal(p)
