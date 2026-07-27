@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -692,5 +693,78 @@ func TestBuildGenerateImageTaskErrorDetailUsesDefaultRetryAfter(t *testing.T) {
 	}
 	if detail.RetryAfterSeconds != 60 || detail.RetryAction != imageRetryActionResubmit {
 		t.Fatalf("retry hint = (%d, %q)", detail.RetryAfterSeconds, detail.RetryAction)
+	}
+}
+
+func TestGenerateImageStatusRetryUsesGlobalPolicy(t *testing.T) {
+	originalRetryTimes := common.RetryTimes
+	originalRanges := operation_setting.AutomaticRetryStatusCodeRanges
+	t.Cleanup(func() {
+		common.RetryTimes = originalRetryTimes
+		operation_setting.AutomaticRetryStatusCodeRanges = originalRanges
+	})
+	common.RetryTimes = 2
+	operation_setting.AutomaticRetryStatusCodeRanges = []operation_setting.StatusCodeRange{
+		{Start: http.StatusTooManyRequests, End: http.StatusTooManyRequests},
+		{Start: http.StatusBadGateway, End: http.StatusBadGateway},
+		{Start: http.StatusGatewayTimeout, End: http.StatusGatewayTimeout},
+	}
+
+	tests := []struct {
+		name         string
+		statuses     []int
+		wantAttempts int
+		wantStatus   int
+		wantRelayErr bool
+	}{
+		{
+			name:         "retryable status eventually succeeds",
+			statuses:     []int{http.StatusBadGateway, http.StatusTooManyRequests, http.StatusOK},
+			wantAttempts: 3,
+			wantStatus:   http.StatusOK,
+			wantRelayErr: false,
+		},
+		{
+			name:         "retry budget is exhausted",
+			statuses:     []int{http.StatusBadGateway, http.StatusBadGateway, http.StatusBadGateway},
+			wantAttempts: 3,
+			wantStatus:   http.StatusBadGateway,
+			wantRelayErr: true,
+		},
+		{
+			name:         "status outside configured ranges is not retried",
+			statuses:     []int{http.StatusBadRequest},
+			wantAttempts: 1,
+			wantStatus:   http.StatusBadRequest,
+			wantRelayErr: true,
+		},
+		{
+			name:         "always skipped timeout is not retried",
+			statuses:     []int{http.StatusGatewayTimeout},
+			wantAttempts: 1,
+			wantStatus:   http.StatusGatewayTimeout,
+			wantRelayErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			attempts := 0
+			resp, relayErr, err := doGenerateImageRequestWithStatusRetry(context.Background(), func() (any, error) {
+				status := tc.statuses[attempts]
+				attempts++
+				return &http.Response{
+					StatusCode: status,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"upstream error"}}`)),
+				}, nil
+			})
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Equal(t, tc.wantAttempts, attempts)
+			assert.Equal(t, tc.wantStatus, resp.StatusCode)
+			assert.Equal(t, tc.wantRelayErr, relayErr != nil)
+		})
 	}
 }

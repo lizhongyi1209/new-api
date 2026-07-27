@@ -25,6 +25,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	xdraw "golang.org/x/image/draw"
@@ -618,6 +619,36 @@ func defaultImageRetryAfterSeconds(status int) int {
 	}
 }
 
+// doGenerateImageRequestWithStatusRetry applies the global relay retry policy to
+// unified asynchronous image requests. Retries stay on the channel selected when
+// the task was created so task attribution and billing remain consistent.
+func doGenerateImageRequestWithStatusRetry(ctx context.Context, request func() (any, error)) (*http.Response, *types.NewAPIError, error) {
+	for retry := 0; ; retry++ {
+		resp, err := request()
+		if err != nil {
+			return nil, nil, err
+		}
+		httpResp, ok := resp.(*http.Response)
+		if !ok || httpResp == nil {
+			return nil, nil, fmt.Errorf("上游返回了无效的 HTTP 响应")
+		}
+		if httpResp.StatusCode == http.StatusOK {
+			return httpResp, nil, nil
+		}
+
+		relayErr := RelayErrorHandler(ctx, httpResp, false)
+		if retry >= common.RetryTimes || !operation_setting.ShouldRetryByStatusCode(httpResp.StatusCode) {
+			return httpResp, relayErr, nil
+		}
+
+		_ = httpResp.Body.Close()
+		logger.LogInfo(ctx, fmt.Sprintf(
+			"generate_image: retrying upstream after status=%d, retry=%d/%d",
+			httpResp.StatusCode, retry+1, common.RetryTimes,
+		))
+	}
+}
+
 // newAsyncGinContext 构造一个用于异步执行的最小 gin.Context，并写入用户名供日志使用。
 func newAsyncGinContext(userId int) *gin.Context {
 	c := &gin.Context{
@@ -780,18 +811,16 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 	logger.LogInfo(ctx, fmt.Sprintf("generate_image(gemini): model=%s, baseUrl=%s, bodyLen=%d",
 		relayInfo.UpstreamModelName, relayInfo.ChannelBaseUrl, len(jsonData)))
 
-	resp, err := adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, func() (any, error) {
+		return adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+	})
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("请求上游失败: %v", err))
 		return
 	}
-	httpResp := resp.(*http.Response)
 	defer httpResp.Body.Close()
-	if httpResp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(httpResp.Body)
-		httpResp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		logger.LogError(ctx, fmt.Sprintf("generate_image(gemini): upstream error status=%d body=%s", httpResp.StatusCode, string(bodyBytes)))
-		relayErr := RelayErrorHandler(ctx, httpResp, false)
+	if relayErr != nil {
+		logger.LogError(ctx, fmt.Sprintf("generate_image(gemini): upstream error status=%d: %s", httpResp.StatusCode, relayErr.Error()))
 		failGenerateImageTaskWithRelayError(task, relayErr, httpResp.Header)
 		return
 	}
@@ -978,18 +1007,26 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 	logger.LogInfo(ctx, fmt.Sprintf("generate_image(openai): model=%s, baseUrl=%s, bodyLen=%d",
 		relayInfo.UpstreamModelName, relayInfo.ChannelBaseUrl, requestBodyLen))
 
-	resp, err := adaptor.DoRequest(c, relayInfo, requestBody)
+	firstRequestBody := requestBody
+	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, func() (any, error) {
+		if firstRequestBody != nil {
+			body := firstRequestBody
+			firstRequestBody = nil
+			return adaptor.DoRequest(c, relayInfo, body)
+		}
+		requestBody, _, buildErr := buildAsyncOpenAIImageRequestBody(c, adaptor, relayInfo, upstreamImageReq)
+		if buildErr != nil {
+			return nil, buildErr
+		}
+		return adaptor.DoRequest(c, relayInfo, requestBody)
+	})
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("请求上游失败: %v", err))
 		return
 	}
-	httpResp := resp.(*http.Response)
 	defer httpResp.Body.Close()
-	if httpResp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(httpResp.Body)
-		httpResp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		logger.LogError(ctx, fmt.Sprintf("generate_image(openai): upstream error status=%d body=%s", httpResp.StatusCode, string(bodyBytes)))
-		relayErr := RelayErrorHandler(ctx, httpResp, false)
+	if relayErr != nil {
+		logger.LogError(ctx, fmt.Sprintf("generate_image(openai): upstream error status=%d: %s", httpResp.StatusCode, relayErr.Error()))
 		failGenerateImageTaskWithRelayError(task, relayErr, httpResp.Header)
 		return
 	}
