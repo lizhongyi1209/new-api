@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +28,7 @@ type FileInfo struct {
 // ListUploadedFiles lists all files in the uploads directory
 func ListUploadedFiles(c *gin.Context) {
 	category := c.Query("category") // optional filter: uploads/elements/temp
-	page := c.GetInt("p")
+	page, _ := strconv.Atoi(c.DefaultQuery("p", "1"))
 	if page < 1 {
 		page = 1
 	}
@@ -89,14 +91,10 @@ func ListUploadedFiles(c *gin.Context) {
 		return
 	}
 
-	// Sort by modification time (newest first)
-	for i := 0; i < len(allFiles)-1; i++ {
-		for j := i + 1; j < len(allFiles); j++ {
-			if allFiles[i].ModTime < allFiles[j].ModTime {
-				allFiles[i], allFiles[j] = allFiles[j], allFiles[i]
-			}
-		}
-	}
+	// Sort by modification time (newest first).
+	sort.Slice(allFiles, func(i, j int) bool {
+		return allFiles[i].ModTime > allFiles[j].ModTime
+	})
 
 	// Calculate pagination
 	total := len(allFiles)
@@ -136,20 +134,22 @@ func ListUploadedFiles(c *gin.Context) {
 
 // DeleteUploadedFile deletes a file from the uploads directory
 func DeleteUploadedFile(c *gin.Context) {
-	path := c.PostForm("path")
-	if path == "" {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Path == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
 		return
 	}
 
 	// Security: prevent directory traversal
-	if strings.Contains(path, "..") || strings.HasPrefix(path, "/") {
+	if strings.Contains(req.Path, "..") || filepath.IsAbs(req.Path) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
 	}
 
 	uploadDir := getUploadDir()
-	fullPath := filepath.Join(uploadDir, path)
+	fullPath := filepath.Join(uploadDir, req.Path)
 
 	// Check if file exists
 	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
@@ -270,30 +270,30 @@ func GetUploadStats(c *gin.Context) {
 
 // CleanOldFiles cleans files older than specified days in a category
 func CleanOldFiles(c *gin.Context) {
-	category := c.PostForm("category")
-	daysStr := c.PostForm("days")
-
-	if category == "" || daysStr == "" {
+	var req struct {
+		Category string `json:"category"`
+		Days     int    `json:"days"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.Category == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "category and days are required"})
 		return
 	}
 
 	// Prevent cleaning elements directory
-	if category == "elements" {
+	if req.Category == "elements" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot auto-clean elements directory"})
 		return
 	}
 
-	var days int
-	if _, err := fmt.Sscanf(daysStr, "%d", &days); err != nil || days < 1 {
+	if req.Days < 1 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid days value"})
 		return
 	}
 
 	uploadDir := getUploadDir()
-	categoryPath := filepath.Join(uploadDir, category)
+	categoryPath := filepath.Join(uploadDir, req.Category)
 
-	cutoffTime := time.Now().AddDate(0, 0, -days)
+	cutoffTime := time.Now().AddDate(0, 0, -req.Days)
 	deleted := 0
 	var deletedSize int64
 
@@ -320,6 +320,43 @@ func CleanOldFiles(c *gin.Context) {
 		"success": true,
 		"deleted": deleted,
 		"size":    deletedSize,
-		"message": fmt.Sprintf("Deleted %d files older than %d days", deleted, days),
+		"message": fmt.Sprintf("Deleted %d files older than %d days", deleted, req.Days),
+	})
+}
+
+// ClearUploadedFiles removes every file managed by the local upload directory.
+// The upload root itself is preserved so subsequent uploads continue to work.
+func ClearUploadedFiles(c *gin.Context) {
+	uploadDir := getUploadDir()
+	deleted := 0
+	failed := 0
+	var deletedSize int64
+
+	err := filepath.Walk(uploadDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			failed++
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if err := os.Remove(path); err != nil {
+			failed++
+			return nil
+		}
+		deleted++
+		deletedSize += info.Size()
+		return nil
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to clear uploaded files"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"deleted": deleted,
+		"failed":  failed,
+		"size":    deletedSize,
 	})
 }

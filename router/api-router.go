@@ -244,7 +244,6 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.DELETE("/:id", controller.DeleteToken)
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
-			tokenRoute.POST("/batch/group", controller.UpdateTokenBatchGroup)
 		}
 
 		// Kling (Tencent VCLM) 主体管理. Callable by API-token clients and console
@@ -346,6 +345,7 @@ func SetApiRouter(router *gin.Engine) {
 			uploadManagementRoute.POST("/batch-delete", controller.BatchDeleteUploadedFiles)
 			uploadManagementRoute.GET("/stats", controller.GetUploadStats)
 			uploadManagementRoute.POST("/clean", controller.CleanOldFiles)
+			uploadManagementRoute.POST("/clear", controller.ClearUploadedFiles)
 		}
 
 		dataRoute := apiRouter.Group("/data")

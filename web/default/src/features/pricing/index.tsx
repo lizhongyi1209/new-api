@@ -32,7 +32,6 @@ import {
   ModelCardGrid,
   ModelDetailsDrawer,
 } from './components'
-import { KlingPricingCards } from './components/kling-pricing-cards'
 import { EXCLUDED_GROUPS, VIEW_MODES } from './constants'
 import { useFilters } from './hooks/use-filters'
 import { usePricingData } from './hooks/use-pricing-data'

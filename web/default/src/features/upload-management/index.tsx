@@ -1,390 +1,529 @@
-import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import {
-  getUploadedFiles,
-  deleteFile,
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { FileImage, FolderOpen, RefreshCw, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+
+import { SectionPageLayout } from "@/components/layout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogMedia,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { toIntlLocale } from "@/i18n/languages";
+
+import {
   batchDeleteFiles,
+  clearUploadedFiles,
+  deleteFile,
+  getUploadedFiles,
   getUploadStats,
-  cleanOldFiles,
   type FileInfo,
-  type StatsResponse,
-} from './api';
+  type StorageStats,
+  type UploadCategory,
+} from "./api";
+
+const PAGE_SIZE = 50;
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+}
+
+function StatCard(props: {
+  title: string;
+  value?: { count: number; size: number };
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-muted-foreground text-sm font-medium">
+          {props.title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {props.value ? (
+          <div className="flex items-end justify-between gap-3">
+            <span className="text-2xl font-semibold tabular-nums">
+              {props.value.count}
+            </span>
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {formatFileSize(props.value.size)}
+            </span>
+          </div>
+        ) : (
+          <Skeleton className="h-8 w-full" />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FilePreview(props: { file: FileInfo; fileLabel: string }) {
+  if (!props.file.is_image) {
+    return (
+      <div className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-md">
+        <FileImage className="size-5" aria-hidden="true" />
+        <span className="sr-only">{props.fileLabel}</span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={props.file.thumbnail_url}
+      alt={props.file.name}
+      className="size-12 rounded-md object-cover"
+      loading="lazy"
+      decoding="async"
+    />
+  );
+}
 
 export default function UploadManagement() {
-  const { t } = useTranslation();
-  const [files, setFiles] = useState<FileInfo[]>([]);
-  const [stats, setStats] = useState<StatsResponse['data'] | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
+  const [category, setCategory] = useState<UploadCategory>("");
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [cleanDays, setCleanDays] = useState(90);
-  const [showCleanDialog, setShowCleanDialog] = useState(false);
+  const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
 
-  const loadFiles = async () => {
-    setLoading(true);
-    try {
-      const response = await getUploadedFiles({
-        category: selectedCategory || undefined,
-        p: page,
-      });
-      setFiles(response.data || []);
-      setTotal(response.total || 0);
-    } catch (error: any) {
-      toast.error(error.message || '加载文件列表失败');
-      setFiles([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
+  const filesQuery = useQuery({
+    queryKey: ["upload-management", "files", category, page],
+    queryFn: () => getUploadedFiles({ category: category || undefined, page }),
+    placeholderData: keepPreviousData,
+  });
+  const statsQuery = useQuery({
+    queryKey: ["upload-management", "stats"],
+    queryFn: getUploadStats,
+  });
+
+  const files = filesQuery.data?.data ?? [];
+  const total = filesQuery.data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const allPageSelected =
+    files.length > 0 && files.every((file) => selectedPaths.has(file.path));
+
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["upload-management", "files"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["upload-management", "stats"],
+      }),
+    ]);
   };
 
-  const loadStats = async () => {
-    try {
-      const response = await getUploadStats();
-      setStats(response.data);
-    } catch (error: any) {
-      toast.error(error.message || '加载统计信息失败');
-      setStats(null);
-    }
+  const deleteMutation = useMutation({
+    mutationFn: deleteFile,
+    onSuccess: async () => {
+      toast.success(t("File deleted"));
+      await refresh();
+    },
+    onError: () => toast.error(t("Failed to delete file")),
+  });
+  const batchDeleteMutation = useMutation({
+    mutationFn: batchDeleteFiles,
+    onSuccess: async (result) => {
+      toast.success(t("{{deleted}} files deleted, {{failed}} failed", result));
+      setSelectedPaths(new Set());
+      await refresh();
+    },
+    onError: () => toast.error(t("Failed to delete selected files")),
+  });
+  const clearMutation = useMutation({
+    mutationFn: clearUploadedFiles,
+    onSuccess: async (result) => {
+      toast.success(t("{{count}} files deleted", { count: result.deleted }));
+      setSelectedPaths(new Set());
+      setPage(1);
+      await refresh();
+    },
+    onError: () => toast.error(t("Failed to clear uploaded files")),
+  });
+
+  const togglePath = (path: string) => {
+    setSelectedPaths((current) => {
+      const next = new Set(current);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
   };
 
-  useEffect(() => {
-    loadFiles();
-  }, [selectedCategory, page]);
-
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const handleDelete = async (path: string) => {
-    if (!confirm('确定要删除这个文件吗？')) {
-      return;
-    }
-
-    try {
-      await deleteFile(path);
-      toast.success('删除成功');
-      loadFiles();
-      loadStats();
-    } catch (error: any) {
-      toast.error(error.message || '删除失败');
-    }
-  };
-
-  const handleBatchDelete = async () => {
-    if (selectedFiles.size === 0) {
-      toast.error('请先选择要删除的文件');
-      return;
-    }
-
-    if (!confirm(`确定要删除选中的 ${selectedFiles.size} 个文件吗？`)) {
-      return;
-    }
-
-    try {
-      const result = await batchDeleteFiles(Array.from(selectedFiles));
-      toast.success(`删除成功 ${result.deleted} 个文件，失败 ${result.failed} 个`);
-      setSelectedFiles(new Set());
-      loadFiles();
-      loadStats();
-    } catch (error: any) {
-      toast.error(error.message || '批量删除失败');
-    }
-  };
-
-  const handleCleanOld = async () => {
-    if (selectedCategory === 'elements') {
-      toast.error('不能自动清理 elements 目录');
-      return;
-    }
-
-    if (!selectedCategory) {
-      toast.error('请先选择一个目录');
-      return;
-    }
-
-    try {
-      const result = await cleanOldFiles({
-        category: selectedCategory,
-        days: cleanDays,
-      });
-      toast.success(result.message);
-      setShowCleanDialog(false);
-      loadFiles();
-      loadStats();
-    } catch (error: any) {
-      toast.error(error.message || '清理失败');
-    }
-  };
-
-  const toggleFileSelection = (path: string) => {
-    const newSelected = new Set(selectedFiles);
-    if (newSelected.has(path)) {
-      newSelected.delete(path);
-    } else {
-      newSelected.add(path);
-    }
-    setSelectedFiles(newSelected);
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedFiles.size === files.length) {
-      setSelectedFiles(new Set());
-    } else {
-      setSelectedFiles(new Set(files.map((f) => f.path)));
-    }
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  };
-
-  const formatDate = (timestamp: number): string => {
-    return new Date(timestamp * 1000).toLocaleString('zh-CN');
-  };
+  const stats: StorageStats | undefined = statsQuery.data;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">素材管理</h1>
-
-      {/* Statistics */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
-            <div className="text-sm text-gray-600 dark:text-gray-400">总文件数</div>
-            <div className="text-2xl font-bold">{stats.total.count}</div>
-            <div className="text-xs text-gray-500">{formatFileSize(stats.total.size)}</div>
-          </div>
-          <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
-            <div className="text-sm text-gray-600 dark:text-gray-400">普通上传</div>
-            <div className="text-2xl font-bold">{stats.uploads.count}</div>
-            <div className="text-xs text-gray-500">{formatFileSize(stats.uploads.size)}</div>
-          </div>
-          <div className="bg-purple-50 dark:bg-purple-900/20 p-4 rounded-lg">
-            <div className="text-sm text-gray-600 dark:text-gray-400">可灵元素 🔒</div>
-            <div className="text-2xl font-bold">{stats.elements.count}</div>
-            <div className="text-xs text-gray-500">{formatFileSize(stats.elements.size)}</div>
-          </div>
-          <div className="bg-gray-50 dark:bg-gray-900/20 p-4 rounded-lg">
-            <div className="text-sm text-gray-600 dark:text-gray-400">临时文件</div>
-            <div className="text-2xl font-bold">{stats.temp.count}</div>
-            <div className="text-xs text-gray-500">{formatFileSize(stats.temp.size)}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-4">
-        <div className="flex flex-wrap gap-4 items-center">
-          <select
-            className="px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-            value={selectedCategory}
-            onChange={(e) => {
-              setSelectedCategory(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">全部目录</option>
-            <option value="uploads">普通上传 (uploads)</option>
-            <option value="elements">可灵元素 (elements) 🔒</option>
-            <option value="temp">临时文件 (temp)</option>
-          </select>
-
-          <button
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
-            onClick={handleBatchDelete}
-            disabled={selectedFiles.size === 0}
-          >
-            删除选中 ({selectedFiles.size})
-          </button>
-
-          {selectedCategory && selectedCategory !== 'elements' && (
-            <button
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-              onClick={() => setShowCleanDialog(true)}
-            >
-              清理旧文件
-            </button>
-          )}
-
-          <button
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            onClick={loadFiles}
-          >
-            刷新
-          </button>
-        </div>
-      </div>
-
-      {/* File List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700">
-              <tr>
-                <th className="px-4 py-3 text-left">
-                  <input
-                    type="checkbox"
-                    checked={files.length > 0 && selectedFiles.size === files.length}
-                    onChange={toggleSelectAll}
-                  />
-                </th>
-                <th className="px-4 py-3 text-left">预览</th>
-                <th className="px-4 py-3 text-left">文件名</th>
-                <th className="px-4 py-3 text-left">目录</th>
-                <th className="px-4 py-3 text-left">大小</th>
-                <th className="px-4 py-3 text-left">修改时间</th>
-                <th className="px-4 py-3 text-left">操作</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y dark:divide-gray-700">
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                    加载中...
-                  </td>
-                </tr>
-              ) : files.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                    暂无文件
-                  </td>
-                </tr>
-              ) : (
-                files.map((file) => (
-                  <tr key={file.path} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedFiles.has(file.path)}
-                        onChange={() => toggleFileSelection(file.path)}
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      {file.is_image ? (
-                        <img
-                          src={file.thumbnail_url}
-                          alt={file.name}
-                          className="w-16 h-16 object-cover rounded"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="w-16 h-16 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
-                          <span className="text-xs text-gray-500">文件</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <a
-                        href={file.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline truncate max-w-xs block"
-                      >
-                        {file.name}
-                      </a>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          file.category === 'elements'
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
-                            : file.category === 'uploads'
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                        }`}
-                      >
-                        {file.category}
-                        {file.category === 'elements' && ' 🔒'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">{formatFileSize(file.size)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                      {formatDate(file.mod_time)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        className="text-red-600 hover:text-red-800 text-sm"
-                        onClick={() => handleDelete(file.path)}
-                      >
-                        删除
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {total > 50 && (
-          <div className="px-4 py-3 border-t dark:border-gray-700 flex justify-between items-center">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              共 {total} 个文件，第 {page} 页
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-              >
-                上一页
-              </button>
-              <button
-                className="px-3 py-1 border rounded hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={page * 50 >= total}
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Clean Old Files Dialog */}
-      {showCleanDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">清理旧文件</h2>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              将删除 <span className="font-bold">{selectedCategory}</span> 目录中超过指定天数的文件
-            </p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">保留天数</label>
-              <input
-                type="number"
-                className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                value={cleanDays}
-                onChange={(e) => setCleanDays(parseInt(e.target.value) || 90)}
-                min="1"
+    <SectionPageLayout fixedContent>
+      <SectionPageLayout.Title>
+        {t("Upload Management")}
+      </SectionPageLayout.Title>
+      <SectionPageLayout.Actions>
+        <AlertDialog>
+          <AlertDialogTrigger
+            render={
+              <Button
+                variant="destructive"
+                disabled={total === 0 || clearMutation.isPending}
               />
-              <p className="text-xs text-gray-500 mt-1">删除超过此天数的文件</p>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <button
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                onClick={() => setShowCleanDialog(false)}
+            }
+          >
+            <Trash2 data-icon="inline-start" />
+            {t("Clear all uploaded files")}
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogMedia>
+                <Trash2 aria-hidden="true" />
+              </AlertDialogMedia>
+              <AlertDialogTitle>
+                {t("Clear all uploaded files?")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t(
+                  "This permanently deletes all {{count}} uploaded files and cannot be undone.",
+                  { count: stats?.total.count ?? total },
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={() => clearMutation.mutate()}
               >
-                取消
-              </button>
-              <button
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-                onClick={handleCleanOld}
-              >
-                确认清理
-              </button>
-            </div>
+                {t("Delete all")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </SectionPageLayout.Actions>
+      <SectionPageLayout.Content>
+        <div className="flex h-full min-h-0 flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <StatCard title={t("Total files")} value={stats?.total} />
+            <StatCard title={t("Regular uploads")} value={stats?.uploads} />
+            <StatCard title={t("Element assets")} value={stats?.elements} />
+            <StatCard title={t("Temporary files")} value={stats?.temp} />
           </div>
+
+          <Card className="min-h-0 flex-1 overflow-hidden">
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b">
+              <Select
+                value={category || "all"}
+                onValueChange={(value) => {
+                  setCategory(value === "all" ? "" : (value as UploadCategory));
+                  setPage(1);
+                  setSelectedPaths(new Set());
+                }}
+              >
+                <SelectTrigger className="w-full sm:w-56">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="all">{t("All directories")}</SelectItem>
+                    <SelectItem value="uploads">
+                      {t("Regular uploads")}
+                    </SelectItem>
+                    <SelectItem value="elements">
+                      {t("Element assets")}
+                    </SelectItem>
+                    <SelectItem value="temp">{t("Temporary files")}</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="destructive"
+                  disabled={
+                    selectedPaths.size === 0 || batchDeleteMutation.isPending
+                  }
+                  onClick={() => batchDeleteMutation.mutate([...selectedPaths])}
+                >
+                  <Trash2 data-icon="inline-start" />
+                  {t("Delete selected")} ({selectedPaths.size})
+                </Button>
+                <Button variant="outline" onClick={() => void refresh()}>
+                  <RefreshCw data-icon="inline-start" />
+                  {t("Refresh")}
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+              <div className="h-[min(58vh,640px)] overflow-auto">
+                {filesQuery.isPending && (
+                  <div className="grid gap-3 p-4">
+                    {Array.from({ length: 7 }, (_, index) => (
+                      <Skeleton key={index} className="h-16 w-full" />
+                    ))}
+                  </div>
+                )}
+                {filesQuery.isError && (
+                  <Empty className="h-full">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <FolderOpen />
+                      </EmptyMedia>
+                      <EmptyTitle>
+                        {t("Failed to load uploaded files")}
+                      </EmptyTitle>
+                      <EmptyDescription>
+                        {t("Refresh the page and try again.")}
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
+                )}
+                {!filesQuery.isPending &&
+                  !filesQuery.isError &&
+                  files.length === 0 && (
+                    <Empty className="h-full">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <FolderOpen />
+                        </EmptyMedia>
+                        <EmptyTitle>{t("No uploaded files")}</EmptyTitle>
+                        <EmptyDescription>
+                          {t("Files will appear here after they are uploaded.")}
+                        </EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  )}
+                {!filesQuery.isPending &&
+                  !filesQuery.isError &&
+                  files.length > 0 && (
+                    <>
+                      <div className="hidden min-w-[760px] md:block">
+                        <Table>
+                          <TableHeader className="bg-background sticky top-0 z-10">
+                            <TableRow>
+                              <TableHead className="w-12">
+                                <Checkbox
+                                  checked={allPageSelected}
+                                  aria-label={t("Select current page")}
+                                  onCheckedChange={() => {
+                                    setSelectedPaths((current) => {
+                                      const next = new Set(current);
+                                      for (const file of files) {
+                                        if (allPageSelected) {
+                                          next.delete(file.path);
+                                        } else {
+                                          next.add(file.path);
+                                        }
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                />
+                              </TableHead>
+                              <TableHead>{t("Preview")}</TableHead>
+                              <TableHead>{t("File name")}</TableHead>
+                              <TableHead>{t("Directory")}</TableHead>
+                              <TableHead>{t("Size")}</TableHead>
+                              <TableHead>{t("Modified time")}</TableHead>
+                              <TableHead className="text-right">
+                                {t("Actions")}
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {files.map((file) => (
+                              <TableRow key={file.path}>
+                                <TableCell>
+                                  <Checkbox
+                                    checked={selectedPaths.has(file.path)}
+                                    onCheckedChange={() =>
+                                      togglePath(file.path)
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell>
+                                  <FilePreview
+                                    file={file}
+                                    fileLabel={t("File")}
+                                  />
+                                </TableCell>
+                                <TableCell className="max-w-64">
+                                  <a
+                                    href={file.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block truncate font-medium hover:underline"
+                                  >
+                                    {file.name}
+                                  </a>
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">
+                                    {file.category}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="tabular-nums">
+                                  {formatFileSize(file.size)}
+                                </TableCell>
+                                <TableCell className="text-muted-foreground whitespace-nowrap">
+                                  {new Intl.DateTimeFormat(
+                                    toIntlLocale(i18n.resolvedLanguage),
+                                    { dateStyle: "medium", timeStyle: "short" },
+                                  ).format(file.mod_time * 1000)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      deleteMutation.mutate(file.path)
+                                    }
+                                  >
+                                    {t("Delete")}
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+
+                      <div className="grid gap-2 p-3 md:hidden">
+                        {files.map((file) => (
+                          <div
+                            key={file.path}
+                            className="flex min-w-0 items-center gap-3 rounded-lg border p-3"
+                          >
+                            <Checkbox
+                              checked={selectedPaths.has(file.path)}
+                              onCheckedChange={() => togglePath(file.path)}
+                            />
+                            <FilePreview file={file} fileLabel={t("File")} />
+                            <div className="min-w-0 flex-1">
+                              <a
+                                href={file.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="block truncate text-sm font-medium"
+                              >
+                                {file.name}
+                              </a>
+                              <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
+                                <Badge variant="secondary">
+                                  {file.category}
+                                </Badge>
+                                <span>{formatFileSize(file.size)}</span>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={t("Delete")}
+                              onClick={() => deleteMutation.mutate(file.path)}
+                            >
+                              <Trash2 />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+              </div>
+
+              <div className="flex flex-col gap-2 border-t p-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-muted-foreground text-sm">
+                  {t("{{total}} files, page {{page}} of {{pages}}", {
+                    total,
+                    page,
+                    pages: totalPages,
+                  })}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page <= 1 || filesQuery.isFetching}
+                    onClick={() =>
+                      setPage((current) => Math.max(1, current - 1))
+                    }
+                  >
+                    {t("Previous")}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page >= totalPages || filesQuery.isFetching}
+                    onClick={() => setPage((current) => current + 1)}
+                  >
+                    {t("Next")}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-      )}
-    </div>
+      </SectionPageLayout.Content>
+    </SectionPageLayout>
   );
 }

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import i18n from 'i18next'
+import LanguageDetector from 'i18next-browser-languagedetector'
 import { initReactI18next } from 'react-i18next'
 
 import { convertDetectedLanguage } from './languages'
@@ -25,8 +26,8 @@ import fr from './locales/fr.json'
 import ja from './locales/ja.json'
 import ru from './locales/ru.json'
 import vi from './locales/vi.json'
-import zhCN from './locales/zh.json'
 import zhTW from './locales/zh-TW.json'
+import zhCN from './locales/zh.json'
 
 export const resources = {
   en,
@@ -35,37 +36,11 @@ export const resources = {
   ru,
   ja,
   vi,
-  zhTW
+  zhTW,
 } as const
 
-// Simple language detector without Chrome Built-in AI dependency
-const storageKey = 'i18nextLng'
-const customLanguageDetector = {
-  name: 'customDetector',
-  lookup() {
-    try {
-      const stored = localStorage.getItem(storageKey)
-      if (stored) return stored
-    } catch { /* empty */ }
-    if (typeof navigator !== 'undefined' && navigator.language) {
-      // Browsers report `zh-CN`/`zh-TW`/`zh`; map them onto our `zhCN`/`zhTW`
-      // codes (non-Chinese codes pass through for normal supportedLngs matching).
-      return convertDetectedLanguage(navigator.language)
-    }
-    return undefined
-  },
-  cacheUserLanguage(lng: string) {
-    try { localStorage.setItem(storageKey, lng) } catch { /* empty */ }
-  },
-}
-
 i18n
-  .use({
-    type: 'languageDetector' as const,
-    init: () => {},
-    detect: () => customLanguageDetector.lookup(),
-    cacheUserLanguage: (lng: string) => customLanguageDetector.cacheUserLanguage(lng),
-  })
+  .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources,
@@ -73,10 +48,14 @@ i18n
     supportedLngs: ['en', 'zhCN', 'fr', 'ru', 'ja', 'vi', 'zhTW'],
     load: 'currentOnly',
     nsSeparator: false, // Allow literal colons in keys (e.g., URLs, labels)
-    showSupportNotice: false,
     debug: import.meta.env.DEV,
     interpolation: {
       escapeValue: false, // not needed for react as it escapes by default
+    },
+    detection: {
+      order: ['localStorage', 'navigator'],
+      caches: ['localStorage'],
+      convertDetectedLanguage,
     },
   })
 

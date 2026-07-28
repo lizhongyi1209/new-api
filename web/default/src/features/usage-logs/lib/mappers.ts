@@ -27,8 +27,6 @@ import {
   TASK_ACTION_MAPPINGS,
   TASK_STATUS_MAPPINGS,
   TASK_PLATFORM_MAPPINGS,
-  ASYNC_IMAGE_PLATFORM_MAPPINGS,
-  ASYNC_IMAGE_ACTION_MAPPINGS,
 } from '../constants'
 import { createStatusMapper } from './status'
 
@@ -71,17 +69,3 @@ export const taskStatusMapper = createStatusMapper(TASK_STATUS_MAPPINGS)
  * Task platform mapper
  */
 export const taskPlatformMapper = createStatusMapper(TASK_PLATFORM_MAPPINGS)
-
-// ============================================================================
-// Async Image Logs Mappers
-// ============================================================================
-
-/**
- * Async image platform mapper
- */
-export const asyncImagePlatformMapper = createStatusMapper(ASYNC_IMAGE_PLATFORM_MAPPINGS)
-
-/**
- * Async image action mapper
- */
-export const asyncImageActionMapper = createStatusMapper(ASYNC_IMAGE_ACTION_MAPPINGS)

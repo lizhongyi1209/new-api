@@ -16,6 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { TFunction } from 'i18next'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import {
   Copy,
   Check,
@@ -53,8 +72,6 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
-  isLegacyTieredRecalcContent,
-  getLegacyTieredRecalcTier,
   getFirstResponseTimeColor,
   getResponseTimeColor,
   renderAuditContent,
@@ -64,7 +81,7 @@ import {
   isPerCallBilling,
   isTimingLogType,
 } from '../../lib/utils'
-import type { LogOtherData } from '../../types'
+import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -152,6 +169,52 @@ function formatRatio(ratio: number | undefined): string {
   return ratio.toFixed(4)
 }
 
+function getUsageBillingPathLabel(
+  t: TFunction,
+  adminInfo: LogOtherData['admin_info']
+): string {
+  switch (adminInfo?.usage_billing_path) {
+    case USAGE_BILLING_PATH.LOCAL:
+      return t('Local Billing')
+    case USAGE_BILLING_PATH.OPENAI:
+      return t('Upstream Response (billing-usage-openai)')
+    case USAGE_BILLING_PATH.OPENAI_ESTIMATED:
+      return t('Upstream Response (billing-usage-openai-estimated)')
+    case USAGE_BILLING_PATH.ANTHROPIC:
+      return t('Upstream Response (billing-usage-anthropic)')
+    case USAGE_BILLING_PATH.ANTHROPIC_ESTIMATED:
+      return t('Upstream Response (billing-usage-anthropic-estimated)')
+    case USAGE_BILLING_PATH.GEMINI:
+      return t('Upstream Response (billing-usage-gemini)')
+    case USAGE_BILLING_PATH.GEMINI_ESTIMATED:
+      return t('Upstream Response (billing-usage-gemini-estimated)')
+    case USAGE_BILLING_PATH.UPSTREAM:
+      return t('Upstream Response')
+    default:
+      return adminInfo?.local_count_tokens
+        ? t('Local Billing')
+        : t('Upstream Response')
+  }
+}
+
+function isUsageBillingPathLocal(
+  adminInfo: LogOtherData['admin_info']
+): boolean {
+  if (adminInfo?.usage_billing_path) {
+    return adminInfo.usage_billing_path === USAGE_BILLING_PATH.LOCAL
+  }
+  return adminInfo?.local_count_tokens === true
+}
+
+function quotaSaturationKindLabel(
+  kind: 'overflow' | 'underflow' | 'nan',
+  t: (key: string) => string
+): string {
+  if (kind === 'overflow') return t('Overflow')
+  if (kind === 'underflow') return t('Underflow')
+  return t('Invalid (NaN)')
+}
+
 function BillingBreakdown(props: {
   log: UsageLog
   other: LogOtherData
@@ -159,14 +222,9 @@ function BillingBreakdown(props: {
 }) {
   const { t } = useTranslation()
   const { log, other, isAdmin } = props
-  const isPerCall = isPerCallBilling(other.model_price, other.per_call_billing)
+  const isPerCall = isPerCallBilling(other.model_price)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
-  const isLegacyTieredRecalc = isLegacyTieredRecalcContent(
-    log.content,
-    other
-  )
-  const legacyTier = getLegacyTieredRecalcTier(log.content)
   const tieredSummary = getTieredBillingSummary(other)
 
   const rows: Array<{ label: string; value: string }> = []
@@ -174,7 +232,7 @@ function BillingBreakdown(props: {
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
   const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
 
-  if (isTieredExpr || isLegacyTieredRecalc) {
+  if (isTieredExpr) {
     rows.push({
       label: t('Billing Mode'),
       value: t('Dynamic Pricing'),
@@ -192,11 +250,6 @@ function BillingBreakdown(props: {
           value: `${fmtPrice(entry.price)}/M`,
         })
       }
-    } else if (isLegacyTieredRecalc) {
-      rows.push({
-        label: t('Matched Tier'),
-        value: legacyTier || '-',
-      })
     } else {
       rows.push({
         label: t('Matched Tier'),
@@ -329,10 +382,8 @@ function BillingBreakdown(props: {
 
   if (isAdmin && other.admin_info) {
     rows.push({
-      label: t('Billing Source'),
-      value: other.admin_info.local_count_tokens
-        ? t('Local Billing')
-        : t('Upstream Response'),
+      label: t('Billing Path'),
+      value: getUsageBillingPathLabel(t, other.admin_info),
     })
   }
 
@@ -429,7 +480,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const other = parseLogOther(props.log.other)
-  // 优先显示用户友好的计费说明，否则显示原始 content
   const details = other?.billing_explanation ?? props.log.content ?? ''
   const typeConfig = getLogTypeConfig(props.log.type)
 
@@ -730,6 +780,41 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DetailSection>
         )}
 
+        {/* Quota saturation marker (admin only) */}
+        {props.isAdmin && other?.admin_info?.quota_saturation && (
+          <DetailSection
+            icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
+            label={t('Quota clamped')}
+            variant='danger'
+          >
+            <p className='mb-1 text-xs wrap-break-word'>
+              {t('Quota saturation protection triggered')}
+            </p>
+            <DetailRow
+              label={t('Kind')}
+              value={quotaSaturationKindLabel(
+                other.admin_info.quota_saturation.kind,
+                t
+              )}
+            />
+            <DetailRow
+              label={t('Original value')}
+              value={String(other.admin_info.quota_saturation.original)}
+              mono
+            />
+            <DetailRow
+              label={t('Clamped to')}
+              value={String(other.admin_info.quota_saturation.clamped)}
+              mono
+            />
+            <DetailRow
+              label={t('Operation')}
+              value={other.admin_info.quota_saturation.op}
+              mono
+            />
+          </DetailSection>
+        )}
+
         {/* Reject reason (admin only) */}
         {props.isAdmin && other?.reject_reason && (
           <DetailSection
@@ -1006,18 +1091,16 @@ export function DetailsDialog(props: DetailsDialogProps) {
           props.log.type !== 6 &&
           other?.admin_info && (
             <DetailRow
-              label={t('Billing Source')}
+              label={t('Billing Path')}
               value={
                 <span className='flex items-center gap-1'>
-                  {other.admin_info.local_count_tokens ? (
+                  {isUsageBillingPathLocal(other.admin_info) ? (
                     <Monitor className='size-3 text-blue-500' />
                   ) : (
                     <Cloud className='size-3 text-emerald-500' />
                   )}
                   <span className='text-xs'>
-                    {other.admin_info.local_count_tokens
-                      ? t('Local Billing')
-                      : t('Upstream Response')}
+                    {getUsageBillingPathLabel(t, other.admin_info)}
                   </span>
                 </span>
               }
@@ -1064,24 +1147,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     {other.stream_status.errors.join('\n')}
                   </pre>
                 )}
-            </DetailSection>
-          )}
-
-        {/* Video task request params (image/video generation) */}
-        {other &&
-          (other.prompt || other.mode || other.size || other.duration) && (
-            <DetailSection label={t('Video Params')}>
-              {other.prompt && (
-                <DetailRow label={t('Prompt')} value={other.prompt} />
-              )}
-              {other.mode && <DetailRow label={t('Mode')} value={other.mode} />}
-              {other.size && <DetailRow label={t('Size')} value={other.size} />}
-              {other.duration != null && (
-                <DetailRow
-                  label={t('Duration')}
-                  value={`${other.duration}s`}
-                />
-              )}
             </DetailSection>
           )}
 
@@ -1132,6 +1197,24 @@ export function DetailsDialog(props: DetailsDialogProps) {
             )}
           </DetailSection>
         )}
+
+        {/* Custom extension: provider-specific video request fields. */}
+        {other &&
+          (other.prompt ||
+            other.mode ||
+            other.size ||
+            other.duration != null) && (
+            <DetailSection label={t('Video Params')}>
+              {other.prompt && (
+                <DetailRow label={t('Prompt')} value={other.prompt} />
+              )}
+              {other.mode && <DetailRow label={t('Mode')} value={other.mode} />}
+              {other.size && <DetailRow label={t('Size')} value={other.size} />}
+              {other.duration != null && (
+                <DetailRow label={t('Duration')} value={`${other.duration}s`} />
+              )}
+            </DetailSection>
+          )}
 
         {/* Param override */}
         {other?.po && Array.isArray(other.po) && other.po.length > 0 && (
