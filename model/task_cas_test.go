@@ -355,3 +355,26 @@ func TestHasTaskPollingWork_IgnoresFailedTaskQuota(t *testing.T) {
 	insertTask(t, refundable)
 	assert.False(t, HasTaskPollingWork())
 }
+
+func TestTaskLogsExcludeImagePlatforms(t *testing.T) {
+	truncateTables(t)
+
+	tasks := []*Task{
+		{TaskID: "video", Platform: "50", Status: TaskStatusSuccess},
+		{TaskID: "legacy-image", Platform: "async_image", Status: TaskStatusSuccess},
+		{TaskID: "generated-image", Platform: "generate_image", Status: TaskStatusSuccess},
+		{TaskID: "unified-image", Platform: "unified_image", Status: TaskStatusSuccess},
+	}
+	for _, task := range tasks {
+		require.NoError(t, DB.Create(task).Error)
+	}
+
+	query := SyncTaskQueryParams{
+		ExcludePlatform: "async_image,generate_image,unified_image",
+	}
+	listed := TaskGetAllTasks(0, 10, query)
+
+	require.Len(t, listed, 1)
+	assert.Equal(t, "video", listed[0].TaskID)
+	assert.EqualValues(t, 1, TaskCountAllTasks(query))
+}

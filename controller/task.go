@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const taskLogExcludedPlatforms = "async_image,generate_image,unified_image"
+
 func GetAllTask(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 
@@ -21,7 +23,7 @@ func GetAllTask(c *gin.Context) {
 	// 解析其他查询参数
 	queryParams := model.SyncTaskQueryParams{
 		Platform:        constant.TaskPlatform(c.Query("platform")),
-		ExcludePlatform: constant.TaskPlatform(c.Query("exclude_platform")),
+		ExcludePlatform: constant.TaskPlatform(taskLogExcludedPlatforms),
 		TaskID:          c.Query("task_id"),
 		Status:          c.Query("status"),
 		Action:          c.Query("action"),
@@ -47,7 +49,7 @@ func GetUserTask(c *gin.Context) {
 
 	queryParams := model.SyncTaskQueryParams{
 		Platform:        constant.TaskPlatform(c.Query("platform")),
-		ExcludePlatform: constant.TaskPlatform(c.Query("exclude_platform")),
+		ExcludePlatform: constant.TaskPlatform(taskLogExcludedPlatforms),
 		TaskID:          c.Query("task_id"),
 		Status:          c.Query("status"),
 		Action:          c.Query("action"),
