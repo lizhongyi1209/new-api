@@ -92,37 +92,6 @@ function isOptionalProxyURL(value: string | undefined): boolean {
   }
 }
 
-export const HTTP_PROTOCOL_AUTO = 'auto'
-export const HTTP_PROTOCOL_HTTP1 = 'http1'
-export const MAX_HTTP2_CONNECTION_SHARDS = 8
-
-export function normalizeHttpProtocol(
-  value: string | undefined | null
-): 'auto' | 'http1' {
-  const normalized = String(value || '')
-    .trim()
-    .toLowerCase()
-  if (normalized === HTTP_PROTOCOL_HTTP1) {
-    return HTTP_PROTOCOL_HTTP1
-  }
-  return HTTP_PROTOCOL_AUTO
-}
-
-export function normalizeHttp2ConnectionShards(
-  value: number | undefined | null
-): number {
-  if (value == null || Number.isNaN(value) || value === 0) {
-    return 1
-  }
-  if (value < 1) {
-    return 1
-  }
-  if (value > MAX_HTTP2_CONNECTION_SHARDS) {
-    return MAX_HTTP2_CONNECTION_SHARDS
-  }
-  return value
-}
-
 function parseOptionalJson(value: string | undefined): unknown {
   if (!value?.trim()) return undefined
   return JSON.parse(value)
