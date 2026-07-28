@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,6 +51,7 @@ func TestKlingOmniVideo30ConvertInjectsModelForTaskQuery(t *testing.T) {
 		var request relaycommon.TaskSubmitReq
 		require.NoError(t, common.UnmarshalBodyReusable(c, &request))
 		assert.Equal(t, "kling-3.0-omni", request.Model)
+		assert.Equal(t, relayconstant.RelayModeVideoFetchByID, c.GetInt("relay_mode"))
 		c.Status(http.StatusNoContent)
 	})
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 
 	"github.com/gin-gonic/gin"
 )
@@ -176,6 +177,7 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 		// have no body, but the distributor still needs the internal model name
 		// to authorize the token and resolve the task's channel.
 		if c.Request.Method == http.MethodGet {
+			c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
 			jsonData, err := common.Marshal(map[string]interface{}{
 				"model": "kling-3.0-omni",
 			})
