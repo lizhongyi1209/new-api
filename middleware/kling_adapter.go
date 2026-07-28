@@ -3,6 +3,7 @@ package middleware
 import (
 	"bytes"
 	"io"
+	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -171,6 +172,27 @@ func KlingOmniVideoConvert() func(c *gin.Context) {
 // contract and promotes the prompt/model fields needed by the common task flow.
 func KlingOmniVideo30Convert() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		// The model is encoded in the route for Kling's 3.0 API. GET requests
+		// have no body, but the distributor still needs the internal model name
+		// to authorize the token and resolve the task's channel.
+		if c.Request.Method == http.MethodGet {
+			jsonData, err := common.Marshal(map[string]interface{}{
+				"model": "kling-3.0-omni",
+			})
+			if err != nil {
+				c.Next()
+				return
+			}
+			c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+			c.Request.Header.Set("Content-Type", "application/json")
+			if bs, err := common.CreateBodyStorage(jsonData); err == nil {
+				c.Set(common.KeyBodyStorage, bs)
+			}
+			c.Set(common.KeyRequestBody, jsonData)
+			c.Next()
+			return
+		}
+
 		var originalReq struct {
 			Contents []struct {
 				Type string `json:"type"`
@@ -199,6 +221,17 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 			"model":    "kling-3.0-omni",
 			"prompt":   prompt,
 			"metadata": metadata,
+		}
+		if settings, ok := metadata["settings"].(map[string]interface{}); ok {
+			if duration, ok := settings["duration"].(float64); ok {
+				unifiedReq["duration"] = int(duration)
+			}
+			if aspectRatio, ok := settings["aspect_ratio"].(string); ok && aspectRatio != "" {
+				unifiedReq["size"] = aspectRatio
+			}
+			if resolution, ok := settings["resolution"].(string); ok && resolution != "" {
+				unifiedReq["mode"] = resolution
+			}
 		}
 		jsonData, err := common.Marshal(unifiedReq)
 		if err != nil {

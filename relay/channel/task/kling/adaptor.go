@@ -272,7 +272,85 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
 	if strings.Contains(c.Request.URL.Path, "kling-3.0-omni") {
-		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30)
+		if taskErr := relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30); taskErr != nil {
+			return taskErr
+		}
+		req, err := relaycommon.GetTaskRequest(c)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		var body omniVideo30Request
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if len(body.Contents) == 0 {
+			return service.TaskErrorWrapperLocal(errors.New("contents is required"), "invalid_contents", http.StatusBadRequest)
+		}
+
+		hasFirstFrame := false
+		hasLastFrame := false
+		hasFeatureVideo := false
+		hasBaseVideo := false
+		contentIDs := make(map[string]struct{}, len(body.Contents))
+		for _, content := range body.Contents {
+			switch content.Type {
+			case "prompt":
+				if strings.TrimSpace(content.Text) == "" {
+					return service.TaskErrorWrapperLocal(errors.New("prompt text is required"), "invalid_contents", http.StatusBadRequest)
+				}
+			case "first_frame", "last_frame", "refer_image", "feature_video", "base_video":
+				if strings.TrimSpace(content.URL) == "" {
+					return service.TaskErrorWrapperLocal(fmt.Errorf("url is required for content type %s", content.Type), "invalid_contents", http.StatusBadRequest)
+				}
+			case "element":
+				if strings.TrimSpace(content.ElementID) == "" || strings.TrimSpace(content.ID) == "" {
+					return service.TaskErrorWrapperLocal(errors.New("element_id and id are required for element content"), "invalid_contents", http.StatusBadRequest)
+				}
+			default:
+				return service.TaskErrorWrapperLocal(fmt.Errorf("unsupported content type %q", content.Type), "invalid_contents", http.StatusBadRequest)
+			}
+			if content.ID != "" {
+				if _, exists := contentIDs[content.ID]; exists {
+					return service.TaskErrorWrapperLocal(fmt.Errorf("duplicate content id %q", content.ID), "invalid_contents", http.StatusBadRequest)
+				}
+				contentIDs[content.ID] = struct{}{}
+			}
+			hasFirstFrame = hasFirstFrame || content.Type == "first_frame"
+			hasLastFrame = hasLastFrame || content.Type == "last_frame"
+			hasFeatureVideo = hasFeatureVideo || content.Type == "feature_video"
+			hasBaseVideo = hasBaseVideo || content.Type == "base_video"
+		}
+
+		if hasLastFrame && !hasFirstFrame {
+			return service.TaskErrorWrapperLocal(errors.New("last_frame requires first_frame"), "invalid_contents", http.StatusBadRequest)
+		}
+		if body.Settings != nil {
+			settings := body.Settings
+			if settings.Duration != nil && (*settings.Duration < 3 || *settings.Duration > 15) {
+				return service.TaskErrorWrapperLocal(errors.New("duration must be between 3 and 15 seconds"), "invalid_duration", http.StatusBadRequest)
+			}
+			if settings.Audio != "" && settings.Audio != "native" && settings.Audio != "original" && settings.Audio != "off" {
+				return service.TaskErrorWrapperLocal(errors.New("audio must be native, original, or off"), "invalid_audio", http.StatusBadRequest)
+			}
+			if settings.Resolution != "" && settings.Resolution != "720p" && settings.Resolution != "1080p" && settings.Resolution != "4k" {
+				return service.TaskErrorWrapperLocal(errors.New("resolution must be 720p, 1080p, or 4k"), "invalid_resolution", http.StatusBadRequest)
+			}
+			if settings.AspectRatio != "" && settings.AspectRatio != "16:9" && settings.AspectRatio != "9:16" && settings.AspectRatio != "1:1" {
+				return service.TaskErrorWrapperLocal(errors.New("aspect_ratio must be 16:9, 9:16, or 1:1"), "invalid_aspect_ratio", http.StatusBadRequest)
+			}
+			if !hasFirstFrame && !hasFeatureVideo && !hasBaseVideo && settings.AspectRatio == "" {
+				return service.TaskErrorWrapperLocal(errors.New("aspect_ratio is required without a first frame or video input"), "invalid_aspect_ratio", http.StatusBadRequest)
+			}
+			if hasFeatureVideo && (settings.MultiShot == nil || !*settings.MultiShot || settings.Audio == "native") {
+				return service.TaskErrorWrapperLocal(errors.New("feature_video requires multi_shot=true and does not support native audio"), "invalid_settings", http.StatusBadRequest)
+			}
+			if hasBaseVideo && ((settings.MultiShot != nil && *settings.MultiShot) || settings.Audio == "native" || hasFirstFrame || hasLastFrame) {
+				return service.TaskErrorWrapperLocal(errors.New("base_video does not support multi-shot, native audio, or first/last frames"), "invalid_settings", http.StatusBadRequest)
+			}
+		} else if !hasFirstFrame && !hasFeatureVideo && !hasBaseVideo {
+			return service.TaskErrorWrapperLocal(errors.New("settings.aspect_ratio is required without a first frame or video input"), "invalid_aspect_ratio", http.StatusBadRequest)
+		}
+		return nil
 	}
 	if strings.Contains(c.Request.URL.Path, "motion-control") {
 		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionMotionControl)
@@ -770,7 +848,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 				}
 			}
 			for _, billing := range result.Billing {
-				if billing.ChargeType != "cash" {
+				if billing.ChargeType != "cash" && billing.ChargeType != "unit" {
 					continue
 				}
 				if cost, err := strconv.ParseFloat(billing.Amount, 64); err == nil && cost > 0 {
@@ -912,8 +990,10 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 }
 
 // AdjustBillingOnComplete implements differential settlement for Kling tasks.
-// Kling returns final_unit_deduction (in RMB) which represents the actual cost.
-// We convert this to quota units and return it to trigger delta settlement.
+// Kling's legacy API returns final_unit_deduction and the 3.0 API returns
+// billing[].amount. Both are deduction units (10 product credits per unit),
+// which this gateway has historically exposed as one display-currency unit.
+// Convert that value to quota and trigger differential settlement.
 func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
 	// Only adjust billing for successful tasks
 	if taskResult.Status != model.TaskStatusSuccess {
@@ -923,23 +1003,23 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 	// Parse final_unit_deduction directly from task.Data to preserve precision
 	// (taskResult.CompletionTokens is rounded, losing decimal precision)
 	// Priority 1: Use ActualCost if available (preserves decimal precision)
-	var rmbCost float64
+	var deductionUnits float64
 	if taskResult.ActualCost > 0 {
-		rmbCost = taskResult.ActualCost
+		deductionUnits = taskResult.ActualCost
 	} else {
 		// Fallback: parse from task.Data or use rounded CompletionTokens
 		var klingResp responsePayload
 		if err := common.Unmarshal(task.Data, &klingResp); err == nil {
 			if cost, err := strconv.ParseFloat(klingResp.Data.FinalUnitDeduction, 64); err == nil && cost > 0 {
-				rmbCost = cost
+				deductionUnits = cost
 			}
 		}
-		if rmbCost <= 0 && taskResult.CompletionTokens > 0 {
-			rmbCost = float64(taskResult.CompletionTokens)
+		if deductionUnits <= 0 && taskResult.CompletionTokens > 0 {
+			deductionUnits = float64(taskResult.CompletionTokens)
 		}
 	}
 
-	if rmbCost <= 0 {
+	if deductionUnits <= 0 {
 		return 0
 	}
 
@@ -967,7 +1047,7 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		groupRatio = bc.GroupRatio
 	}
 
-	actualQuota := int(math.Ceil(rmbCost * common.QuotaPerUnit / usdExchangeRate * groupRatio))
+	actualQuota := common.QuotaFromFloat(math.Ceil(deductionUnits * common.QuotaPerUnit / usdExchangeRate * groupRatio))
 
 	return actualQuota
 }

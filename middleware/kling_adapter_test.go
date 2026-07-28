@@ -41,3 +41,21 @@ func TestKlingOmniVideo30ConvertPreservesOfficialRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, response.Code)
 }
+
+func TestKlingOmniVideo30ConvertInjectsModelForTaskQuery(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(KlingOmniVideo30Convert())
+	router.GET("/kling/omni-video/kling-3.0-omni/:task_id", func(c *gin.Context) {
+		var request relaycommon.TaskSubmitReq
+		require.NoError(t, common.UnmarshalBodyReusable(c, &request))
+		assert.Equal(t, "kling-3.0-omni", request.Model)
+		c.Status(http.StatusNoContent)
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/kling/omni-video/kling-3.0-omni/task-1", nil)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusNoContent, response.Code)
+}

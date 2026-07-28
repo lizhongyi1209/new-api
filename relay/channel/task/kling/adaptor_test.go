@@ -2,6 +2,7 @@ package kling
 
 import (
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,7 +114,7 @@ func TestKling30OmniUpstreamPathsAndTaskResult(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/tasks", r.URL.Path)
 		assert.Equal(t, "upstream-task-1", r.URL.Query().Get("task_ids"))
-		_, _ = io.WriteString(w, `{"code":0,"data":[{"id":"upstream-task-1","status":"succeeded","outputs":[{"type":"video","url":"https://example.com/result.mp4"}],"billing":[{"charge_type":"cash","amount":"1.25"}]}]}`)
+		_, _ = io.WriteString(w, `{"code":0,"data":[{"id":"upstream-task-1","status":"succeeded","outputs":[{"type":"video","url":"https://example.com/result.mp4"}],"billing":[{"charge_type":"unit","amount":"3"}]}]}`)
 	}))
 	defer server.Close()
 
@@ -129,8 +131,19 @@ func TestKling30OmniUpstreamPathsAndTaskResult(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, model.TaskStatusSuccess, taskInfo.Status)
 	assert.Equal(t, "https://example.com/result.mp4", taskInfo.Url)
-	assert.InDelta(t, 1.25, taskInfo.ActualCost, 0.0001)
+	assert.InDelta(t, 3, taskInfo.ActualCost, 0.0001)
 	assert.False(t, strings.Contains(string(responseBody), "direct-token"))
+
+	task := &model.Task{Quota: 250000}
+	task.PrivateData.BillingContext = &model.TaskBillingContext{GroupRatio: 1}
+	expectedQuota := common.QuotaFromFloat(math.Ceil(3 * common.QuotaPerUnit / operation_setting.USDExchangeRate))
+	assert.Equal(t, expectedQuota, adaptor.AdjustBillingOnComplete(task, taskInfo))
+}
+
+func TestKling30OmniTaskResultSumsCashAndUnitDeductions(t *testing.T) {
+	taskInfo, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{"code":0,"data":[{"id":"upstream-task-1","status":"succeeded","outputs":[{"type":"video","url":"https://example.com/result.mp4"}],"billing":[{"charge_type":"cash","amount":"1.25"},{"charge_type":"unit","amount":"2"}]}]}`))
+	require.NoError(t, err)
+	assert.InDelta(t, 3.25, taskInfo.ActualCost, 0.0001)
 }
 
 func TestKling30OmniTaskQueryError(t *testing.T) {
