@@ -463,22 +463,11 @@ func HasUnfinishedSyncTasks() bool {
 	return err == nil && id != 0
 }
 
-// HasTaskPollingWork reports whether polling has either an unfinished task or
-// a failed task with a pending, non-legacy refund. The latter keeps the system
-// task scheduler active when reconciliation is the only work left.
+// HasTaskPollingWork reports whether an unfinished async task needs polling.
+// A failed task's non-zero quota is historical billing data and must never be
+// interpreted as a pending refund marker.
 func HasTaskPollingWork() bool {
-	if HasUnfinishedSyncTasks() {
-		return true
-	}
-
-	var id int64
-	err := DB.Model(&Task{}).
-		Where("status = ?", TaskStatusFailure).
-		Where("quota != ?", 0).
-		Where("(submit_time <= ? OR submit_time >= ?)", 0, TaskRefundLegacyCutoff).
-		Limit(1).
-		Pluck("id", &id).Error
-	return err == nil && id != 0
+	return HasUnfinishedSyncTasks()
 }
 
 func GetByOnlyTaskId(taskId string) (*Task, bool, error) {

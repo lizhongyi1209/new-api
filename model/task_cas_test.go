@@ -329,7 +329,7 @@ func TestRestoreQuotaAfterFailedRefund_OnlyRestoresClaimedMarker(t *testing.T) {
 	assert.Equal(t, task.Quota, reloaded.Quota)
 }
 
-func TestHasTaskPollingWork_IncludesOnlyRefundableFailedTasks(t *testing.T) {
+func TestHasTaskPollingWork_IgnoresFailedTaskQuota(t *testing.T) {
 	truncateTables(t)
 	assert.False(t, HasTaskPollingWork())
 
@@ -353,5 +353,5 @@ func TestHasTaskPollingWork_IncludesOnlyRefundableFailedTasks(t *testing.T) {
 		Data:       json.RawMessage(`{}`),
 	}
 	insertTask(t, refundable)
-	assert.True(t, HasTaskPollingWork())
+	assert.False(t, HasTaskPollingWork())
 }
