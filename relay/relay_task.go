@@ -404,6 +404,14 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		return
 	}
 
+	if strings.HasPrefix(originTask.Properties.OriginModelName, "seedance-2.0") {
+		respBody, err = common.Marshal(BuildSeedance20VideoTaskResponse(originTask))
+		if err != nil {
+			taskResp = service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
 	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
@@ -588,6 +596,35 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		Properties: task.Properties,
 		Username:   task.Username,
 		Data:       task.Data,
+	}
+}
+
+// BuildSeedance20VideoTaskResponse exposes the compact client-facing contract
+// for Seedance 2.0 task queries without leaking internal task or billing data.
+func BuildSeedance20VideoTaskResponse(task *model.Task) map[string]any {
+	status := "processing"
+	switch task.Status {
+	case model.TaskStatusSuccess:
+		status = "success"
+	case model.TaskStatusFailure:
+		status = "failed"
+	}
+
+	progress, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimSpace(task.Progress), "%"))
+	var upstream struct {
+		ID string `json:"id"`
+	}
+	_ = common.Unmarshal(task.Data, &upstream)
+
+	return map[string]any{
+		"status":       status,
+		"task_id":      task.TaskID,
+		"video_id":     upstream.ID,
+		"model":        task.Properties.OriginModelName,
+		"progress":     progress,
+		"video_url":    task.GetResultURL(),
+		"created_at":   task.CreatedAt,
+		"completed_at": task.FinishTime,
 	}
 }
 
