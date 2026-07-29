@@ -46,7 +46,11 @@ check_release() {
 
 build_release() {
   check_release
-  go test ./middleware ./relay/common ./relay ./router ./relay/channel/task/kling
+  local go_command=${GO_COMMAND:-go}
+  if [[ -x /usr/local/go/bin/go && -z "${GO_COMMAND:-}" ]]; then
+    go_command=/usr/local/go/bin/go
+  fi
+  "${go_command}" test ./middleware ./relay/common ./relay ./router ./relay/channel/task/kling
 
   export GIT_COMMIT="${head_sha}"
   export BUILD_TIME="${build_time}"
