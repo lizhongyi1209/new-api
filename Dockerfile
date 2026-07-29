@@ -26,6 +26,8 @@ ENV GOTOOLCHAIN=go1.25.11
 
 ARG TARGETOS
 ARG TARGETARCH
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
 ENV GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64}
 
 WORKDIR /build
@@ -37,9 +39,15 @@ COPY . .
 COPY --from=builder /build/web/default/dist ./web/default/dist
 COPY --from=builder-classic /build/web/classic/dist ./web/classic/dist
 RUN go mod tidy
-RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)'" -o new-api
+RUN go build -ldflags "-s -w -X 'github.com/QuantumNous/new-api/common.Version=$(cat VERSION)' -X 'github.com/QuantumNous/new-api/common.GitCommit=${GIT_COMMIT}' -X 'github.com/QuantumNous/new-api/common.BuildTime=${BUILD_TIME}'" -o new-api
 
 FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a
+
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+LABEL org.opencontainers.image.revision="${GIT_COMMIT}" \
+      org.opencontainers.image.created="${BUILD_TIME}" \
+      org.opencontainers.image.source="https://github.com/QuantumNous/new-api"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tzdata libasan8 wget webp \

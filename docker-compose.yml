@@ -13,6 +13,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     container_name: new-api
     restart: always
     command: --log-dir /app/logs
