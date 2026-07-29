@@ -4,6 +4,7 @@ set -Eeuo pipefail
 readonly production_branch="custom"
 readonly production_container="new-api"
 readonly production_service="new-api"
+readonly production_image="new-api-new-api:latest"
 readonly production_tag_prefix="production-"
 readonly deploy_confirmation="DEPLOY_NEW_API_PRODUCTION"
 
@@ -60,9 +61,8 @@ build_release() {
   [[ "${build_status}" -eq 0 ]] || fail "Docker build failed with status ${build_status}"
 
   local image_id image_revision
-  image_id=$(docker compose images -q "${production_service}")
-  [[ -n "${image_id}" ]] || fail "built image was not found"
-  image_revision=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${image_id}")
+  image_id=$(docker image inspect --format '{{.Id}}' "${production_image}")
+  image_revision=$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${production_image}")
   [[ "${image_revision}" == "${head_sha}" ]] || fail "image revision ${image_revision} does not match ${head_sha}"
   echo "Built image: ${image_id} (${image_revision})"
 }
