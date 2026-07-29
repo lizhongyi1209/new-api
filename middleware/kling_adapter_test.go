@@ -22,6 +22,8 @@ func TestKlingOmniVideo30ConvertPreservesOfficialRequest(t *testing.T) {
 		require.NoError(t, common.UnmarshalBodyReusable(c, &request))
 		assert.Equal(t, "kling-3.0-omni", request.Model)
 		assert.Equal(t, "A square-format product video", request.Prompt)
+		assert.Equal(t, 5, request.Duration)
+		assert.Equal(t, "1:1", request.Size)
 
 		settings, ok := request.Metadata["settings"].(map[string]interface{})
 		require.True(t, ok)
@@ -40,6 +42,37 @@ func TestKlingOmniVideo30ConvertPreservesOfficialRequest(t *testing.T) {
 	router.ServeHTTP(response, request)
 
 	assert.Equal(t, http.StatusNoContent, response.Code)
+}
+
+func TestKling30ConvertersPrepareTaskFetch(t *testing.T) {
+	tests := []struct {
+		name       string
+		path       string
+		middleware gin.HandlerFunc
+		model      string
+	}{
+		{name: "omni", path: "/kling/omni-video/kling-3.0-omni/task-1", middleware: KlingOmniVideo30Convert(), model: "kling-3.0-omni"},
+		{name: "motion control", path: "/kling/motion-control/kling-3.0/task-1", middleware: KlingMotionControl30Convert(), model: "kling-3.0"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			router := gin.New()
+			router.Use(test.middleware)
+			router.GET(test.path, func(c *gin.Context) {
+				var request relaycommon.TaskSubmitReq
+				require.NoError(t, common.UnmarshalBodyReusable(c, &request))
+				assert.Equal(t, test.model, request.Model)
+				assert.NotZero(t, c.GetInt("relay_mode"))
+				c.Status(http.StatusNoContent)
+			})
+
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			assert.Equal(t, http.StatusNoContent, response.Code)
+		})
+	}
 }
 
 func TestKlingMotionControl30ConvertPreservesOfficialRequest(t *testing.T) {

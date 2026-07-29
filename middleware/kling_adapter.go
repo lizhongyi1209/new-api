@@ -3,9 +3,11 @@ package middleware
 import (
 	"bytes"
 	"io"
+	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 
 	"github.com/gin-gonic/gin"
 )
@@ -171,6 +173,10 @@ func KlingOmniVideoConvert() func(c *gin.Context) {
 // contract and promotes the prompt/model fields needed by the common task flow.
 func KlingOmniVideo30Convert() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		if c.Request.Method == http.MethodGet {
+			prepareKling30TaskFetch(c, "kling-3.0-omni")
+			return
+		}
 		var originalReq struct {
 			Contents []struct {
 				Type string `json:"type"`
@@ -200,6 +206,17 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 			"prompt":   prompt,
 			"metadata": metadata,
 		}
+		if settings, ok := metadata["settings"].(map[string]interface{}); ok {
+			if duration, ok := settings["duration"].(float64); ok {
+				unifiedReq["duration"] = int(duration)
+			}
+			if aspectRatio, ok := settings["aspect_ratio"].(string); ok && aspectRatio != "" {
+				unifiedReq["size"] = aspectRatio
+			}
+			if resolution, ok := settings["resolution"].(string); ok && resolution != "" {
+				unifiedReq["mode"] = resolution
+			}
+		}
 		jsonData, err := common.Marshal(unifiedReq)
 		if err != nil {
 			c.Next()
@@ -219,6 +236,10 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 // contract and promotes the prompt/model fields needed by the common task flow.
 func KlingMotionControl30Convert() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		if c.Request.Method == http.MethodGet {
+			prepareKling30TaskFetch(c, "kling-3.0")
+			return
+		}
 		var originalReq struct {
 			Contents []struct {
 				Type string `json:"type"`
@@ -261,4 +282,20 @@ func KlingMotionControl30Convert() func(c *gin.Context) {
 		c.Set(common.KeyRequestBody, jsonData)
 		c.Next()
 	}
+}
+
+func prepareKling30TaskFetch(c *gin.Context, model string) {
+	c.Set("relay_mode", relayconstant.RelayModeVideoFetchByID)
+	jsonData, err := common.Marshal(map[string]interface{}{"model": model})
+	if err != nil {
+		c.Next()
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+	c.Request.Header.Set("Content-Type", "application/json")
+	if bs, err := common.CreateBodyStorage(jsonData); err == nil {
+		c.Set(common.KeyBodyStorage, bs)
+	}
+	c.Set(common.KeyRequestBody, jsonData)
+	c.Next()
 }

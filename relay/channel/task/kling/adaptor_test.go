@@ -2,6 +2,7 @@ package kling
 
 import (
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,6 +138,57 @@ func TestKling30OmniUpstreamPathsAndTaskResult(t *testing.T) {
 func TestKling30OmniTaskQueryError(t *testing.T) {
 	_, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{"code":1201,"message":"invalid task id","request_id":"request-1","data":[]}`))
 	require.EqualError(t, err, "Kling task query failed: invalid task id")
+}
+
+func TestKling30OmniTaskResultIncludesUnitBilling(t *testing.T) {
+	taskInfo, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{"code":0,"data":[{"id":"upstream-task-1","status":"succeeded","outputs":[{"type":"video","url":"https://example.com/result.mp4"}],"billing":[{"charge_type":"cash","amount":"1.25"},{"charge_type":"unit","amount":"2"}]}]}`))
+	require.NoError(t, err)
+	assert.InDelta(t, 3.25, taskInfo.ActualCost, 0.0001)
+
+	task := &model.Task{Quota: 250000}
+	task.PrivateData.BillingContext = &model.TaskBillingContext{GroupRatio: 1}
+	exchangeRate := operation_setting.USDExchangeRate
+	if exchangeRate <= 0 {
+		exchangeRate = 1
+	}
+	expectedQuota := common.QuotaFromFloat(math.Ceil(3.25 * common.QuotaPerUnit / exchangeRate))
+	assert.Equal(t, expectedQuota, (&TaskAdaptor{}).AdjustBillingOnComplete(task, taskInfo))
+}
+
+func TestValidateOmniVideo30Request(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{
+			name: "valid feature video",
+			body: `{"contents":[{"type":"prompt","text":"Follow the motion"},{"type":"feature_video","url":"https://example.com/a.mp4","id":"video_1"}],"settings":{"multi_shot":true,"audio":"off","resolution":"4k"}}`,
+		},
+		{
+			name:    "last frame requires first frame",
+			body:    `{"contents":[{"type":"prompt","text":"Transition"},{"type":"last_frame","url":"https://example.com/end.png","id":"image_1"}],"settings":{"aspect_ratio":"16:9"}}`,
+			wantErr: "last_frame requires first_frame",
+		},
+		{
+			name:    "feature video rejects native audio",
+			body:    `{"contents":[{"type":"prompt","text":"Follow the motion"},{"type":"feature_video","url":"https://example.com/a.mp4","id":"video_1"}],"settings":{"multi_shot":true,"audio":"native"}}`,
+			wantErr: "feature_video requires multi_shot=true and does not support native audio",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var req omniVideo30Request
+			require.NoError(t, common.Unmarshal([]byte(test.body), &req))
+			err := validateOmniVideo30Request(req)
+			if test.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, test.wantErr)
+		})
+	}
 }
 
 func TestBuildRequestBodyForKling30MotionControlPreservesOfficialContract(t *testing.T) {

@@ -302,7 +302,21 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
 	if strings.Contains(c.Request.URL.Path, "kling-3.0-omni") {
-		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30)
+		if taskErr := relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30); taskErr != nil {
+			return taskErr
+		}
+		req, err := relaycommon.GetTaskRequest(c)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		var body omniVideo30Request
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if err := validateOmniVideo30Request(body); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		return nil
 	}
 	if strings.Contains(c.Request.URL.Path, "motion-control/kling-3.0") {
 		var req relaycommon.TaskSubmitReq
@@ -551,6 +565,80 @@ func (a *TaskAdaptor) GetChannelName() string {
 // ============================
 // helpers
 // ============================
+
+func validateOmniVideo30Request(req omniVideo30Request) error {
+	if len(req.Contents) == 0 {
+		return fmt.Errorf("contents is required")
+	}
+
+	hasFirstFrame := false
+	hasLastFrame := false
+	hasFeatureVideo := false
+	hasBaseVideo := false
+	contentIDs := make(map[string]struct{}, len(req.Contents))
+	for _, content := range req.Contents {
+		switch content.Type {
+		case "prompt":
+			if strings.TrimSpace(content.Text) == "" {
+				return fmt.Errorf("prompt text is required")
+			}
+		case "first_frame", "last_frame", "refer_image", "feature_video", "base_video":
+			if strings.TrimSpace(content.URL) == "" {
+				return fmt.Errorf("url is required for content type %s", content.Type)
+			}
+		case "element":
+			if strings.TrimSpace(content.ElementID) == "" || strings.TrimSpace(content.ID) == "" {
+				return fmt.Errorf("element_id and id are required for element content")
+			}
+		default:
+			return fmt.Errorf("unsupported content type %q", content.Type)
+		}
+		if content.ID != "" {
+			if _, exists := contentIDs[content.ID]; exists {
+				return fmt.Errorf("duplicate content id %q", content.ID)
+			}
+			contentIDs[content.ID] = struct{}{}
+		}
+		hasFirstFrame = hasFirstFrame || content.Type == "first_frame"
+		hasLastFrame = hasLastFrame || content.Type == "last_frame"
+		hasFeatureVideo = hasFeatureVideo || content.Type == "feature_video"
+		hasBaseVideo = hasBaseVideo || content.Type == "base_video"
+	}
+
+	if hasLastFrame && !hasFirstFrame {
+		return fmt.Errorf("last_frame requires first_frame")
+	}
+	if req.Settings == nil {
+		if !hasFirstFrame && !hasFeatureVideo && !hasBaseVideo {
+			return fmt.Errorf("settings.aspect_ratio is required without a first frame or video input")
+		}
+		return nil
+	}
+
+	settings := req.Settings
+	if settings.Duration != nil && (*settings.Duration < 3 || *settings.Duration > 15) {
+		return fmt.Errorf("duration must be between 3 and 15 seconds")
+	}
+	if settings.Audio != "" && settings.Audio != "native" && settings.Audio != "original" && settings.Audio != "off" {
+		return fmt.Errorf("audio must be native, original, or off")
+	}
+	if settings.Resolution != "" && settings.Resolution != "720p" && settings.Resolution != "1080p" && settings.Resolution != "4k" {
+		return fmt.Errorf("resolution must be 720p, 1080p, or 4k")
+	}
+	if settings.AspectRatio != "" && settings.AspectRatio != "16:9" && settings.AspectRatio != "9:16" && settings.AspectRatio != "1:1" {
+		return fmt.Errorf("aspect_ratio must be 16:9, 9:16, or 1:1")
+	}
+	if !hasFirstFrame && !hasFeatureVideo && !hasBaseVideo && settings.AspectRatio == "" {
+		return fmt.Errorf("aspect_ratio is required without a first frame or video input")
+	}
+	if hasFeatureVideo && (settings.MultiShot == nil || !*settings.MultiShot || settings.Audio == "native") {
+		return fmt.Errorf("feature_video requires multi_shot=true and does not support native audio")
+	}
+	if hasBaseVideo && ((settings.MultiShot != nil && *settings.MultiShot) || settings.Audio == "native" || hasFirstFrame || hasLastFrame) {
+		return fmt.Errorf("base_video does not support multi-shot, native audio, or first/last frames")
+	}
+	return nil
+}
 
 func validateMotionControl30Request(req motionControl30Request) error {
 	if len(req.Contents) == 0 {
@@ -881,7 +969,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 				}
 			}
 			for _, billing := range result.Billing {
-				if billing.ChargeType != "cash" {
+				if billing.ChargeType != "cash" && billing.ChargeType != "unit" {
 					continue
 				}
 				if cost, err := strconv.ParseFloat(billing.Amount, 64); err == nil && cost > 0 {
@@ -1026,8 +1114,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 }
 
 // AdjustBillingOnComplete implements differential settlement for Kling tasks.
-// Kling returns final_unit_deduction (in RMB) which represents the actual cost.
-// We convert this to quota units and return it to trigger delta settlement.
+// Kling's legacy API returns final_unit_deduction and the 3.0 API returns
+// billing[].amount. This gateway treats both cash and resource-package unit
+// deductions as the final billable amount and converts them to quota.
 func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
 	// Only adjust billing for successful tasks
 	if taskResult.Status != model.TaskStatusSuccess {
