@@ -41,3 +41,36 @@ func TestKlingOmniVideo30ConvertPreservesOfficialRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, response.Code)
 }
+
+func TestKlingMotionControl30ConvertPreservesOfficialRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(KlingMotionControl30Convert())
+	router.POST("/kling/motion-control/kling-3.0", func(c *gin.Context) {
+		var request relaycommon.TaskSubmitReq
+		require.NoError(t, common.UnmarshalBodyReusable(c, &request))
+		assert.Equal(t, "kling-3.0", request.Model)
+		assert.Equal(t, "Keep the outfit unchanged", request.Prompt)
+
+		settings, ok := request.Metadata["settings"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "video", settings["character_orientation"])
+		assert.Equal(t, "original", settings["audio"])
+		c.Status(http.StatusNoContent)
+	})
+
+	body := `{
+		"contents":[
+			{"type":"prompt","text":"Keep the outfit unchanged"},
+			{"type":"image","url":"https://example.com/character.png"},
+			{"type":"video","url":"https://example.com/motion.mp4"}
+		],
+		"settings":{"character_orientation":"video","audio":"original","resolution":"1080p"}
+	}`
+	request := httptest.NewRequest(http.MethodPost, "/kling/motion-control/kling-3.0", strings.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusNoContent, response.Code)
+}

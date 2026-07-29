@@ -267,6 +267,62 @@ type KlingOmniVideo30Watermark struct {
 // @Router /kling/omni-video/kling-3.0-omni/{task_id} [get]
 func KlingOmniVideo30TaskId(c *gin.Context) {}
 
+// KlingMotionControl30Generations
+// @Summary 可灵 3.0 动作控制
+// @Description 调用可灵最新 3.0 动作控制官方接口，根据形象参考图或主体以及动作参考视频生成视频
+// @Tags Video
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "用户认证令牌 (Access-Token: sk-xxxx)"
+// @Param request body KlingMotionControl30Request true "Kling 3.0 动作控制请求参数"
+// @Success 200 {object} dto.VideoTaskResponse "任务状态和结果"
+// @Failure 400 {object} dto.OpenAIError "请求参数错误"
+// @Failure 401 {object} dto.OpenAIError "未授权"
+// @Failure 403 {object} dto.OpenAIError "无权限"
+// @Failure 500 {object} dto.OpenAIError "服务器内部错误"
+// @Router /kling/motion-control/kling-3.0 [post]
+func KlingMotionControl30Generations(c *gin.Context) {}
+
+type KlingMotionControl30Request struct {
+	Contents []KlingMotionControl30Content `json:"contents" binding:"required"`
+	Settings KlingMotionControl30Settings  `json:"settings" binding:"required"`
+	Options  *KlingMotionControl30Options  `json:"options,omitempty"`
+}
+
+type KlingMotionControl30Content struct {
+	Type      string `json:"type" binding:"required" example:"prompt" enums:"prompt,image,video,element"`
+	Text      string `json:"text,omitempty" example:"The character follows the reference motion"`
+	URL       string `json:"url,omitempty" example:"https://example.com/reference.mp4"`
+	ElementID string `json:"element_id,omitempty" example:"162"`
+	ID        string `json:"id,omitempty" example:"character_1"`
+}
+
+type KlingMotionControl30Settings struct {
+	CharacterOrientation string `json:"character_orientation" binding:"required" example:"video" enums:"image,video"`
+	Audio                string `json:"audio,omitempty" example:"original" enums:"original,off"`
+	Resolution           string `json:"resolution,omitempty" example:"1080p" enums:"720p,1080p"`
+}
+
+type KlingMotionControl30Options struct {
+	CallbackURL    string                     `json:"callback_url,omitempty" example:"https://example.com/callback"`
+	ExternalTaskID string                     `json:"external_task_id,omitempty" example:"custom-task-004"`
+	WatermarkInfo  *KlingOmniVideo30Watermark `json:"watermark_info,omitempty"`
+}
+
+// KlingMotionControl30TaskId godoc
+// @Summary 查询可灵 3.0 动作控制任务
+// @Description 根据 New API 返回的任务 ID 查询 Kling 3.0 动作控制任务状态和结果
+// @Tags Video
+// @Accept json
+// @Produce json
+// @Param Authorization header string true "用户认证令牌 (Access-Token: sk-xxxx)"
+// @Param task_id path string true "Task ID"
+// @Success 200 {object} dto.VideoTaskResponse "任务状态和结果"
+// @Failure 400 {object} dto.OpenAIError "请求参数错误"
+// @Failure 401 {object} dto.OpenAIError "未授权"
+// @Router /kling/motion-control/kling-3.0/{task_id} [get]
+func KlingMotionControl30TaskId(c *gin.Context) {}
+
 // KlingMotionControlGenerations
 // @Summary 可灵动作控制
 // @Description 调用可灵 Motion Control 接口，根据参考图片和动作视频生成视频

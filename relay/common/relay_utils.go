@@ -241,6 +241,16 @@ func isKnownTaskField(field string) bool {
 }
 
 func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *dto.TaskError {
+	return validateBasicTaskRequest(c, info, action, true)
+}
+
+// ValidateTaskRequestWithOptionalPrompt validates and stores task requests whose
+// provider contract allows non-text reference inputs without a prompt.
+func ValidateTaskRequestWithOptionalPrompt(c *gin.Context, info *RelayInfo, action string) *dto.TaskError {
+	return validateBasicTaskRequest(c, info, action, false)
+}
+
+func validateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string, requirePrompt bool) *dto.TaskError {
 	var err error
 	contentType := c.GetHeader("Content-Type")
 	var req TaskSubmitReq
@@ -268,7 +278,7 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 			}
 		}
 	}
-	if !isMultiShot {
+	if requirePrompt && !isMultiShot {
 		// Fallback: check metadata for backward compatibility
 		if metaMultiShot, ok := req.Metadata["multi_shot"].(string); ok {
 			isMultiShot = metaMultiShot == "true"

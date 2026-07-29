@@ -140,6 +140,36 @@ type omniVideo30TaskResponse struct {
 	} `json:"data"`
 }
 
+type motionControl30Content struct {
+	Type      string  `json:"type"`
+	Text      *string `json:"text,omitempty"`
+	URL       *string `json:"url,omitempty"`
+	ElementID *string `json:"element_id,omitempty"`
+	ID        *string `json:"id,omitempty"`
+}
+
+type motionControl30Settings struct {
+	CharacterOrientation string  `json:"character_orientation"`
+	Audio                *string `json:"audio,omitempty"`
+	Resolution           *string `json:"resolution,omitempty"`
+}
+
+type motionControl30WatermarkInfo struct {
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+type motionControl30Options struct {
+	CallbackURL    *string                       `json:"callback_url,omitempty"`
+	ExternalTaskID *string                       `json:"external_task_id,omitempty"`
+	WatermarkInfo  *motionControl30WatermarkInfo `json:"watermark_info,omitempty"`
+}
+
+type motionControl30Request struct {
+	Contents []motionControl30Content `json:"contents"`
+	Settings *motionControl30Settings `json:"settings,omitempty"`
+	Options  *motionControl30Options  `json:"options,omitempty"`
+}
+
 type requestPayload struct {
 	Prompt         string            `json:"prompt,omitempty"`
 	Image          string            `json:"image,omitempty"`
@@ -274,6 +304,20 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.Contains(c.Request.URL.Path, "kling-3.0-omni") {
 		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30)
 	}
+	if strings.Contains(c.Request.URL.Path, "motion-control/kling-3.0") {
+		var req relaycommon.TaskSubmitReq
+		if err := common.UnmarshalBodyReusable(c, &req); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		var body motionControl30Request
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if err := validateMotionControl30Request(body); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		return relaycommon.ValidateTaskRequestWithOptionalPrompt(c, info, constant.TaskActionMotionControl30)
+	}
 	if strings.Contains(c.Request.URL.Path, "motion-control") {
 		return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionMotionControl)
 	}
@@ -289,6 +333,8 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	switch info.Action {
 	case constant.TaskActionOmniVideo30:
 		path = "/omni-video/kling-3.0-omni"
+	case constant.TaskActionMotionControl30:
+		path = "/motion-control/kling-3.0"
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
 	case constant.TaskActionOmniVideo:
@@ -327,7 +373,18 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, fmt.Errorf("request not found in context")
 	}
 	req := v.(relaycommon.TaskSubmitReq)
-	if info.Action == constant.TaskActionOmniVideo30 {
+	if info.Action == constant.TaskActionOmniVideo30 || info.Action == constant.TaskActionMotionControl30 {
+		if info.Action == constant.TaskActionMotionControl30 {
+			var body motionControl30Request
+			if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+				return nil, errors.Wrap(err, "unmarshal Kling 3.0 Motion Control request failed")
+			}
+			data, err := common.Marshal(body)
+			if err != nil {
+				return nil, err
+			}
+			return bytes.NewReader(data), nil
+		}
 		var body omniVideo30Request
 		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
 			return nil, errors.Wrap(err, "unmarshal Kling 3.0 Omni request failed")
@@ -381,7 +438,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 
 	resolvedTaskID := kResp.Data.TaskId
-	if resolvedTaskID == "" && info.Action == constant.TaskActionOmniVideo30 {
+	if resolvedTaskID == "" && (info.Action == constant.TaskActionOmniVideo30 || info.Action == constant.TaskActionMotionControl30) {
 		var omniResp omniVideo30SubmitResponse
 		if err := common.Unmarshal(responseBody, &omniResp); err == nil {
 			if omniResp.Code != 0 {
@@ -443,7 +500,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 	var path string
 	switch action {
-	case constant.TaskActionOmniVideo30:
+	case constant.TaskActionOmniVideo30, constant.TaskActionMotionControl30:
 		path = "/tasks"
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
@@ -455,7 +512,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		path = "/v1/videos/text2video"
 	}
 	requestURL := fmt.Sprintf("%s%s/%s", baseUrl, path, taskID)
-	if action == constant.TaskActionOmniVideo30 {
+	if action == constant.TaskActionOmniVideo30 || action == constant.TaskActionMotionControl30 {
 		requestURL = fmt.Sprintf("%s%s?task_ids=%s", baseUrl, path, url.QueryEscape(taskID))
 	}
 	if isNewAPIRelay(key) {
@@ -484,7 +541,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
-	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3", "kling-video-o1", "kling-v3-omni", "kling-3.0-omni"}
+	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3", "kling-video-o1", "kling-v3-omni", "kling-3.0-omni", "kling-3.0"}
 }
 
 func (a *TaskAdaptor) GetChannelName() string {
@@ -494,6 +551,60 @@ func (a *TaskAdaptor) GetChannelName() string {
 // ============================
 // helpers
 // ============================
+
+func validateMotionControl30Request(req motionControl30Request) error {
+	if len(req.Contents) == 0 {
+		return fmt.Errorf("contents is required")
+	}
+	if req.Settings == nil || (req.Settings.CharacterOrientation != "image" && req.Settings.CharacterOrientation != "video") {
+		return fmt.Errorf("settings.character_orientation must be image or video")
+	}
+	if req.Settings.Audio != nil && *req.Settings.Audio != "original" && *req.Settings.Audio != "off" {
+		return fmt.Errorf("settings.audio must be original or off")
+	}
+	if req.Settings.Resolution != nil && *req.Settings.Resolution != "720p" && *req.Settings.Resolution != "1080p" {
+		return fmt.Errorf("settings.resolution must be 720p or 1080p")
+	}
+
+	imageCount := 0
+	videoCount := 0
+	elementCount := 0
+	for _, content := range req.Contents {
+		switch content.Type {
+		case "prompt":
+			if content.Text == nil || strings.TrimSpace(*content.Text) == "" || len([]rune(*content.Text)) > 2500 {
+				return fmt.Errorf("prompt text must contain 1 to 2500 characters")
+			}
+		case "image":
+			imageCount++
+			if content.URL == nil || strings.TrimSpace(*content.URL) == "" {
+				return fmt.Errorf("image url is required")
+			}
+		case "video":
+			videoCount++
+			if content.URL == nil || strings.TrimSpace(*content.URL) == "" {
+				return fmt.Errorf("video url is required")
+			}
+		case "element":
+			elementCount++
+			if content.ElementID == nil || strings.TrimSpace(*content.ElementID) == "" || content.ID == nil || strings.TrimSpace(*content.ID) == "" {
+				return fmt.Errorf("element_id and id are required for element content")
+			}
+		default:
+			return fmt.Errorf("unsupported content type %q", content.Type)
+		}
+	}
+	if videoCount != 1 {
+		return fmt.Errorf("exactly one video content is required")
+	}
+	if imageCount+elementCount != 1 {
+		return fmt.Errorf("exactly one image or element content is required")
+	}
+	if elementCount == 1 && req.Settings.CharacterOrientation != "video" {
+		return fmt.Errorf("element content requires video character orientation")
+	}
+	return nil
+}
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*requestPayload, error) {
 	modelName := info.UpstreamModelName

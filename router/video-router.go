@@ -91,6 +91,16 @@ func SetVideoRouter(router *gin.Engine) {
 		klingOmniVideo30Router.GET("/omni-video/kling-3.0-omni/:task_id", controller.RelayTaskFetch)
 	}
 
+	// Kling 3.0 Motion Control official API. This is additive; the legacy
+	// /kling/v1/videos/motion-control contract remains available.
+	klingMotionControl30Router := router.Group("/kling")
+	klingMotionControl30Router.Use(middleware.RouteTag("relay"))
+	klingMotionControl30Router.Use(middleware.KlingMotionControl30Convert(), middleware.TokenAuth(), middleware.Distribute())
+	{
+		klingMotionControl30Router.POST("/motion-control/kling-3.0", controller.RelayTask)
+		klingMotionControl30Router.GET("/motion-control/kling-3.0/:task_id", controller.RelayTaskFetch)
+	}
+
 	// Kling Official Element Management API (2024 New Version)
 	klingElementRouter := router.Group("/kling/v1/general")
 	klingElementRouter.Use(middleware.RouteTag("relay"))

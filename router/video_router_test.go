@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestVideoRouterRegistersDoubaoFacade(t *testing.T) {
+func TestVideoRouterRegistersSpecializedVideoRoutes(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	engine := gin.New()
 	SetVideoRouter(engine)
@@ -19,4 +19,8 @@ func TestVideoRouterRegistersDoubaoFacade(t *testing.T) {
 
 	assert.True(t, routes["POST /api/v3/contents/generations/tasks"])
 	assert.True(t, routes["GET /api/v3/contents/generations/tasks/:task_id"])
+	assert.True(t, routes["POST /kling/motion-control/kling-3.0"])
+	assert.True(t, routes["GET /kling/motion-control/kling-3.0/:task_id"])
+	assert.True(t, routes["POST /kling/v1/videos/motion-control"])
+	assert.True(t, routes["GET /kling/v1/videos/motion-control/:task_id"])
 }

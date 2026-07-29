@@ -214,3 +214,51 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 		c.Next()
 	}
 }
+
+// KlingMotionControl30Convert accepts Kling's current contents/settings/options
+// contract and promotes the prompt/model fields needed by the common task flow.
+func KlingMotionControl30Convert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		var originalReq struct {
+			Contents []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"contents"`
+		}
+		if err := common.UnmarshalBodyReusable(c, &originalReq); err != nil {
+			c.Next()
+			return
+		}
+
+		prompt := ""
+		for _, content := range originalReq.Contents {
+			if content.Type == "prompt" {
+				prompt = content.Text
+				break
+			}
+		}
+
+		var metadata map[string]interface{}
+		if err := common.UnmarshalBodyReusable(c, &metadata); err != nil {
+			c.Next()
+			return
+		}
+		unifiedReq := map[string]interface{}{
+			"model":    "kling-3.0",
+			"prompt":   prompt,
+			"metadata": metadata,
+		}
+		jsonData, err := common.Marshal(unifiedReq)
+		if err != nil {
+			c.Next()
+			return
+		}
+
+		c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+		if bs, err := common.CreateBodyStorage(jsonData); err == nil {
+			c.Set(common.KeyBodyStorage, bs)
+		}
+		c.Set(common.KeyRequestBody, jsonData)
+		c.Next()
+	}
+}

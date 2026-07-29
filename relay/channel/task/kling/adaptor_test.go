@@ -137,3 +137,110 @@ func TestKling30OmniTaskQueryError(t *testing.T) {
 	_, err := (&TaskAdaptor{}).ParseTaskResult([]byte(`{"code":1201,"message":"invalid task id","request_id":"request-1","data":[]}`))
 	require.EqualError(t, err, "Kling task query failed: invalid task id")
 }
+
+func TestBuildRequestBodyForKling30MotionControlPreservesOfficialContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/kling/motion-control/kling-3.0", nil)
+	c.Set("task_request", relaycommon.TaskSubmitReq{Metadata: map[string]interface{}{
+		"contents": []interface{}{
+			map[string]interface{}{"type": "image", "url": "https://example.com/character.png"},
+			map[string]interface{}{"type": "video", "url": "https://example.com/motion.mp4"},
+		},
+		"settings": map[string]interface{}{
+			"character_orientation": "video",
+			"audio":                 "off",
+			"resolution":            "1080p",
+		},
+		"options": map[string]interface{}{
+			"watermark_info": map[string]interface{}{"enabled": false},
+		},
+	}})
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: "kling-3.0"},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{Action: constant.TaskActionMotionControl30},
+	}
+
+	body, err := (&TaskAdaptor{}).BuildRequestBody(c, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var payload map[string]interface{}
+	require.NoError(t, common.Unmarshal(data, &payload))
+	assert.NotContains(t, payload, "model")
+	settings := payload["settings"].(map[string]interface{})
+	assert.Equal(t, "video", settings["character_orientation"])
+	assert.Equal(t, "off", settings["audio"])
+	options := payload["options"].(map[string]interface{})
+	assert.Equal(t, false, options["watermark_info"].(map[string]interface{})["enabled"])
+}
+
+func TestKling30MotionControlUpstreamPaths(t *testing.T) {
+	service.InitHttpClient()
+	adaptor := &TaskAdaptor{}
+	info := &relaycommon.RelayInfo{
+		ChannelMeta:   &relaycommon.ChannelMeta{},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{Action: constant.TaskActionMotionControl30},
+	}
+
+	requestURL, err := adaptor.BuildRequestURL(info)
+	require.NoError(t, err)
+	assert.Equal(t, "/motion-control/kling-3.0", requestURL)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/tasks", r.URL.Path)
+		assert.Equal(t, "motion-task-1", r.URL.Query().Get("task_ids"))
+		_, _ = io.WriteString(w, `{"code":0,"data":[{"id":"motion-task-1","status":"processing"}]}`)
+	}))
+	defer server.Close()
+
+	resp, err := adaptor.FetchTask(server.URL, "direct-token", map[string]any{
+		"task_id": "motion-task-1",
+		"action":  constant.TaskActionMotionControl30,
+	}, "")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	responseBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	taskInfo, err := adaptor.ParseTaskResult(responseBody)
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusInProgress, taskInfo.Status)
+}
+
+func TestValidateMotionControl30Request(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{
+			name: "image and video without optional prompt",
+			body: `{"contents":[{"type":"image","url":"https://example.com/a.png"},{"type":"video","url":"https://example.com/a.mp4"}],"settings":{"character_orientation":"image"}}`,
+		},
+		{
+			name:    "element requires video orientation",
+			body:    `{"contents":[{"type":"element","element_id":"162","id":"role_1"},{"type":"video","url":"https://example.com/a.mp4"}],"settings":{"character_orientation":"image"}}`,
+			wantErr: "element content requires video character orientation",
+		},
+		{
+			name:    "rejects unsupported resolution",
+			body:    `{"contents":[{"type":"image","url":"https://example.com/a.png"},{"type":"video","url":"https://example.com/a.mp4"}],"settings":{"character_orientation":"video","resolution":"4k"}}`,
+			wantErr: "settings.resolution must be 720p or 1080p",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var req motionControl30Request
+			require.NoError(t, common.Unmarshal([]byte(test.body), &req))
+			err := validateMotionControl30Request(req)
+			if test.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.EqualError(t, err, test.wantErr)
+		})
+	}
+}

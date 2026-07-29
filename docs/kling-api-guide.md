@@ -13,6 +13,7 @@
 | 运动控制 | `/kling/v1/videos/motion-control` | 对现有视频进行运动控制处理 |
 | 全能视频 | `/kling/v1/videos/omni-video` | 高级功能：多图片、自定义元素、声音绑定等 |
 | 3.0 Omni | `/kling/omni-video/kling-3.0-omni` | 最新官方多模态接口，支持图片、视频、Element、原生音频、4K 与 1:1 |
+| 3.0 动作控制 | `/kling/motion-control/kling-3.0` | 最新官方动作控制接口，支持形象参考图或主体与动作参考视频 |
 
 ---
 
@@ -592,6 +593,49 @@ response = requests.post(
 **查询端点：** `GET /kling/omni-video/kling-3.0-omni/{task_id}`
 
 查询时使用创建接口返回的 New API 任务 ID。网关在上游通过 Kling 官方 `GET /tasks?task_ids=...` 协议轮询任务，并继续沿用现有的任务归属校验、计费和结果代理机制。
+
+### 3.6 Kling 3.0 动作控制官方接口（额外支持）
+
+该接口与 `/kling/v1/videos/motion-control` 并存，不会替换或改变旧版动作控制接口行为。
+
+**创建端点：** `POST /kling/motion-control/kling-3.0`
+
+```json
+{
+  "contents": [
+    {
+      "type": "prompt",
+      "text": "人物服装保持不变，跟随参考视频完成动作"
+    },
+    {
+      "type": "image",
+      "url": "https://example.com/character.png"
+    },
+    {
+      "type": "video",
+      "url": "https://example.com/motion.mp4"
+    }
+  ],
+  "settings": {
+    "character_orientation": "video",
+    "audio": "original",
+    "resolution": "1080p"
+  },
+  "options": {
+    "callback_url": "https://example.com/callback",
+    "external_task_id": "motion-video-001",
+    "watermark_info": {
+      "enabled": false
+    }
+  }
+}
+```
+
+形象素材支持 `image` 或最多一个 `element`，动作素材使用一个 `video`。`character_orientation` 必须为 `image` 或 `video`；使用主体时只能选择 `video`。参考视频的官方时长限制为：图片朝向最多 10 秒，视频朝向最多 30 秒，最短均为 3 秒。
+
+**查询端点：** `GET /kling/motion-control/kling-3.0/{task_id}`
+
+查询使用创建接口返回的 New API 任务 ID，上游轮询协议为 Kling 官方 `GET /tasks?task_ids=...`。
 
 ---
 

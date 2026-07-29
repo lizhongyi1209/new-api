@@ -186,6 +186,7 @@ export const TASK_ACTIONS = {
   REFERENCE_GENERATE: 'referenceGenerate', // 参照生视频
   REMIX_GENERATE: 'remixGenerate', // 视频 Remix
   MOTION_CONTROL: 'motionControl', // 运动控制视频
+  MOTION_CONTROL_30: 'motionControl30', // Kling 3.0 动作控制
   OMNI_VIDEO: 'omniVideo', // 全能视频（Kling omni-video）
   OMNI_VIDEO_30: 'omniVideo30', // Kling 3.0 Omni
 } as const
@@ -304,6 +305,10 @@ export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
     variant: 'blue',
   },
   [TASK_ACTIONS.MOTION_CONTROL]: {
+    label: 'Motion Control',
+    variant: 'blue',
+  },
+  [TASK_ACTIONS.MOTION_CONTROL_30]: {
     label: 'Motion Control',
     variant: 'blue',
   },

@@ -20,6 +20,7 @@ const (
 	TaskActionReferenceGenerate = "referenceGenerate"
 	TaskActionRemix             = "remixGenerate"
 	TaskActionMotionControl     = "motionControl"
+	TaskActionMotionControl30   = "motionControl30"
 	TaskActionOmniVideo         = "omniVideo"
 	TaskActionOmniVideo30       = "omniVideo30"
 	// NOTE: When adding a new video task action here, you MUST also register it
