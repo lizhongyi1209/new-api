@@ -504,10 +504,10 @@ func RelayDoubaoVideoTaskFetch(c *gin.Context) {
 	c.JSON(http.StatusOK, relay.BuildDoubaoVideoTaskResponse(task))
 }
 
-// RelayKlingOmniVideo30TaskFetch returns the compact public contract for the
-// official Kling 3.0 Omni endpoint. Internal task and upstream billing data
+// RelayKlingVideo30TaskFetch returns the compact public contract shared by
+// Kling 3.0 task endpoints. Internal task fields and raw upstream billing data
 // must not be exposed to clients.
-func RelayKlingOmniVideo30TaskFetch(c *gin.Context) {
+func RelayKlingVideo30TaskFetch(c *gin.Context) {
 	taskID := c.Param("task_id")
 	userID := c.GetInt("id")
 	task, exist, err := model.GetByTaskId(userID, taskID)
@@ -520,7 +520,7 @@ func RelayKlingOmniVideo30TaskFetch(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, relay.BuildKlingOmniVideo30TaskResponse(task))
+	c.JSON(http.StatusOK, relay.BuildKlingVideo30TaskResponse(task))
 }
 
 func RelayTask(c *gin.Context) {

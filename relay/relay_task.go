@@ -637,11 +637,11 @@ func BuildDoubaoVideoTaskResponse(task *model.Task) map[string]any {
 	return response
 }
 
-// BuildKlingOmniVideo30TaskResponse exposes only the client-facing fields for
-// the official Omni API. Cost is the amount charged by this platform after
+// BuildKlingVideo30TaskResponse exposes only the client-facing fields shared by
+// Kling's official 3.0 APIs. Cost is the amount charged by this platform after
 // settlement (including the task's frozen user-group ratio), not Kling's raw
 // billing[].amount.
-func BuildKlingOmniVideo30TaskResponse(task *model.Task) map[string]any {
+func BuildKlingVideo30TaskResponse(task *model.Task) map[string]any {
 	modelName := task.Properties.OriginModelName
 	if modelName == "" {
 		modelName = task.Properties.UpstreamModelName

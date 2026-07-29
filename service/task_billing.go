@@ -66,6 +66,16 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) int {
 		if req.Duration > 0 {
 			other["duration"] = req.Duration
 		}
+		if settings, ok := req.Metadata["settings"].(map[string]interface{}); ok {
+			for _, key := range []string{"character_orientation", "resolution"} {
+				if value, exists := settings[key]; exists {
+					other[key] = value
+				}
+			}
+			if value, exists := settings["audio"]; exists {
+				other["video_audio"] = value
+			}
+		}
 	}
 	attachQuotaSaturation(c, info, other)
 	submitLogID := model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{

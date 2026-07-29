@@ -309,7 +309,7 @@ export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
     variant: 'blue',
   },
   [TASK_ACTIONS.MOTION_CONTROL_30]: {
-    label: 'Motion Control',
+    label: 'Motion Control 3.0',
     variant: 'blue',
   },
   [TASK_ACTIONS.OMNI_VIDEO]: {

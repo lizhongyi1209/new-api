@@ -1203,7 +1203,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
           (other.prompt ||
             other.mode ||
             other.size ||
-            other.duration != null) && (
+            other.duration != null ||
+            other.character_orientation ||
+            other.video_audio ||
+            other.resolution) && (
             <DetailSection label={t('Video Params')}>
               {other.prompt && (
                 <DetailRow label={t('Prompt')} value={other.prompt} />
@@ -1212,6 +1215,18 @@ export function DetailsDialog(props: DetailsDialogProps) {
               {other.size && <DetailRow label={t('Size')} value={other.size} />}
               {other.duration != null && (
                 <DetailRow label={t('Duration')} value={`${other.duration}s`} />
+              )}
+              {other.character_orientation && (
+                <DetailRow
+                  label={t('Character Orientation')}
+                  value={other.character_orientation}
+                />
+              )}
+              {other.video_audio && (
+                <DetailRow label={t('Audio')} value={other.video_audio} />
+              )}
+              {other.resolution && (
+                <DetailRow label={t('Resolution')} value={other.resolution} />
               )}
             </DetailSection>
           )}

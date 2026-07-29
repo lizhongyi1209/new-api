@@ -236,6 +236,9 @@ export interface LogOtherData {
   mode?: string
   size?: string
   duration?: number
+  character_orientation?: string
+  video_audio?: string
+  resolution?: string
   // Subscription billing fields
   subscription_plan_id?: string
   subscription_plan_title?: string

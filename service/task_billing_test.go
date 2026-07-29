@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -14,11 +15,55 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestLogTaskConsumptionRecordsKlingMotionControlSettings(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1, 10_000_000)
+	gin.SetMode(gin.TestMode)
+
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = httptest.NewRequest(http.MethodPost, "/kling/motion-control/kling-3.0", nil)
+	context.Set("task_request", relaycommon.TaskSubmitReq{
+		Prompt: "Follow the reference motion",
+		Metadata: map[string]interface{}{
+			"settings": map[string]interface{}{
+				"character_orientation": "video",
+				"audio":                 "original",
+				"resolution":            "1080p",
+			},
+		},
+	})
+	relayInfo := &relaycommon.RelayInfo{
+		UserId:          1,
+		OriginModelName: "kling-3.0",
+		UsingGroup:      "official",
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: 343},
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{Action: "motionControl30"},
+		PriceData: types.PriceData{
+			Quota:          2_250_000,
+			ModelRatio:     1,
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		},
+	}
+
+	logID := LogTaskConsumption(context, relayInfo)
+	require.NotZero(t, logID)
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, logID).Error)
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "Follow the reference motion", other["prompt"])
+	assert.Equal(t, "video", other["character_orientation"])
+	assert.Equal(t, "original", other["video_audio"])
+	assert.Equal(t, "1080p", other["resolution"])
+}
 
 func TestMain(m *testing.M) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
