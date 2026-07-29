@@ -67,9 +67,10 @@ func getR2Client() (*s3.Client, *s3.PresignClient) {
 }
 
 type PresignResult struct {
-	UploadURL string `json:"upload_url"`
-	PublicURL string `json:"public_url"`
-	ExpiresAt int64  `json:"expires_at"` // Unix timestamp
+	UploadURL string            `json:"upload_url"`
+	PublicURL string            `json:"public_url"`
+	ExpiresAt int64             `json:"expires_at"` // Unix timestamp
+	Headers   map[string]string `json:"headers,omitempty"`
 }
 
 type OSSPresignResult struct {
@@ -206,10 +207,18 @@ func generateR2PresignedUploadURL(prefix, filename, contentType string, maxSize 
 		return nil, err
 	}
 
+	headers := map[string]string{
+		"Content-Type": contentType,
+	}
+	if maxSize > 0 {
+		headers["Content-Length"] = strconv.FormatInt(maxSize, 10)
+	}
+
 	return &PresignResult{
 		UploadURL: req.URL,
 		PublicURL: fmt.Sprintf("%s/%s", publicBase, objectKey),
 		ExpiresAt: time.Now().Add(expiresIn).Unix(),
+		Headers:   headers,
 	}, nil
 }
 
@@ -254,10 +263,6 @@ func GenerateOSSPresignedUploadURL(filename, contentType string, maxSize int64) 
 		if err != nil {
 			return nil, err
 		}
-		headers := make(map[string]string)
-		if contentType != "" {
-			headers["Content-Type"] = contentType
-		}
 		// Derive object_key from public_url so the response matches the OSS shape
 		// (R2's PresignResult does not carry it explicitly).
 		objectKey := ""
@@ -268,7 +273,7 @@ func GenerateOSSPresignedUploadURL(filename, contentType string, maxSize int64) 
 		return &OSSPresignResult{
 			Method:    "PUT",
 			UploadURL: r2Result.UploadURL,
-			Headers:   headers,
+			Headers:   r2Result.Headers,
 			PublicURL: r2Result.PublicURL,
 			ObjectKey: objectKey,
 			ExpiresAt: r2Result.ExpiresAt,

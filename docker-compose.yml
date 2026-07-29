@@ -50,17 +50,17 @@ services:
       - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
       - R2_BUCKET=api-o1key
       - R2_PUBLIC_BASE_URL=${R2_PUBLIC_BASE_URL:-https://assetcache.o1key.com}
-      - R2_STORAGE_HOSTS=${R2_STORAGE_HOSTS:-cf-api.o1key.cn,cf-api.o1key.com}
-      # Local Storage (本地磁盘存储) - 仅 api.o1key.cn 使用
-      - LOCAL_STORAGE_HOSTS=api.o1key.cn
-      # Aliyun OSS Storage (api.o1key.cn)
+      - R2_STORAGE_HOSTS=${R2_STORAGE_HOSTS:-api.o1key.cn,cf-api.o1key.com}
+      # Local Storage (本地磁盘存储) - 当前不按请求域名自动选择
+      - LOCAL_STORAGE_HOSTS=${LOCAL_STORAGE_HOSTS:-local-storage-disabled.invalid}
+      # Aliyun OSS Storage
       - ALIYUN_OSS_ACCESS_KEY_ID=${ALIYUN_OSS_ACCESS_KEY_ID}
       - ALIYUN_OSS_ACCESS_KEY_SECRET=${ALIYUN_OSS_ACCESS_KEY_SECRET}
       - ALIYUN_OSS_BUCKET=${ALIYUN_OSS_BUCKET:-o1key}
       - ALIYUN_OSS_REGION=${ALIYUN_OSS_REGION:-cn-beijing}
       - ALIYUN_OSS_ENDPOINT=${ALIYUN_OSS_ENDPOINT:-oss-cn-beijing.aliyuncs.com}
       - ALIYUN_OSS_PUBLIC_BASE_URL=${ALIYUN_OSS_PUBLIC_BASE_URL:-https://img.o1key.cn}
-      - ALIYUN_OSS_STORAGE_HOSTS=${ALIYUN_OSS_STORAGE_HOSTS:-api.o1key.cn}
+      - ALIYUN_OSS_STORAGE_HOSTS=${ALIYUN_OSS_STORAGE_HOSTS:-}
       # Kill-switch: when true, every upload that would target Aliyun OSS is redirected to R2
       - DISABLE_ALIYUN_OSS=${DISABLE_ALIYUN_OSS:-false}
       # 统一生图 /async/v1/generateImage：true 时上游 base64 原样返回，不走云存储。
