@@ -88,7 +88,7 @@ func SetVideoRouter(router *gin.Engine) {
 	klingOmniVideo30Router.Use(middleware.KlingOmniVideo30Convert(), middleware.TokenAuth(), middleware.Distribute())
 	{
 		klingOmniVideo30Router.POST("/omni-video/kling-3.0-omni", controller.RelayTask)
-		klingOmniVideo30Router.GET("/omni-video/kling-3.0-omni/:task_id", controller.RelayTaskFetch)
+		klingOmniVideo30Router.GET("/omni-video/kling-3.0-omni/:task_id", controller.RelayKlingOmniVideo30TaskFetch)
 	}
 
 	// Kling 3.0 Motion Control official API. This is additive; the legacy

@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -539,6 +540,71 @@ func TestRecalculate_Subscription_NegativeDelta(t *testing.T) {
 
 	// 单日志结算：差额调整不产生新日志行
 	assert.Equal(t, int64(0), countLogs(t))
+}
+
+func TestRecalculateTaskQuotaByTokensUsesFrozenGroupRatio(t *testing.T) {
+	originalModelRatios := ratio_setting.ModelRatio2JSONString()
+	require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"dreamina-seedance-2-0-260128":1}`))
+	t.Cleanup(func() {
+		require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(originalModelRatios))
+	})
+
+	cases := []struct {
+		name              string
+		billingContext    *model.TaskBillingContext
+		wantQuota         int
+		wantGroupInReason string
+	}{
+		{
+			name: "discount special ratio",
+			billingContext: &model.TaskBillingContext{
+				GroupRatio:      0.85,
+				OriginModelName: "dreamina-seedance-2-0-260128",
+			},
+			wantQuota:         850,
+			wantGroupInReason: "groupRatio=0.85",
+		},
+		{
+			name: "premium special ratio",
+			billingContext: &model.TaskBillingContext{
+				GroupRatio:      1.15,
+				OriginModelName: "dreamina-seedance-2-0-260128",
+			},
+			wantQuota:         1150,
+			wantGroupInReason: "groupRatio=1.15",
+		},
+		{
+			name:              "legacy task without billing context",
+			billingContext:    nil,
+			wantQuota:         1000,
+			wantGroupInReason: "groupRatio=1.00",
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			truncate(t)
+			userID := 30 + i
+			seedUser(t, userID, 10000)
+
+			task := makeTask(userID, 0, 1000, 0, BillingSourceWallet, 0)
+			task.Properties.OriginModelName = "dreamina-seedance-2-0-260128"
+			task.PrivateData.BillingContext = tc.billingContext
+			require.NoError(t, model.DB.Create(task).Error)
+			task.PrivateData.SubmitLogID = seedConsumeLog(t, task, task.Quota, map[string]interface{}{})
+
+			RecalculateTaskQuotaByTokens(context.Background(), task, 1000)
+
+			assert.Equal(t, tc.wantQuota, task.Quota)
+			assert.Equal(t, 10000-(tc.wantQuota-1000), getUserQuota(t, userID))
+
+			var log model.Log
+			require.NoError(t, model.LOG_DB.First(&log, task.PrivateData.SubmitLogID).Error)
+			other, err := common.StrToMap(log.Other)
+			require.NoError(t, err)
+			assert.Contains(t, other["settlement_reason"], tc.wantGroupInReason)
+		})
+	}
 }
 
 // ===========================================================================

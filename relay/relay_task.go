@@ -19,7 +19,9 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 type TaskSubmitResult struct {
@@ -633,4 +635,58 @@ func BuildDoubaoVideoTaskResponse(task *model.Task) map[string]any {
 		response["usage"] = upstreamData.Usage
 	}
 	return response
+}
+
+// BuildKlingOmniVideo30TaskResponse exposes only the client-facing fields for
+// the official Omni API. Cost is the amount charged by this platform after
+// settlement (including the task's frozen user-group ratio), not Kling's raw
+// billing[].amount.
+func BuildKlingOmniVideo30TaskResponse(task *model.Task) map[string]any {
+	modelName := task.Properties.OriginModelName
+	if modelName == "" {
+		modelName = task.Properties.UpstreamModelName
+	}
+
+	var upstream struct {
+		RequestID string `json:"request_id"`
+		Data      []struct {
+			Outputs []struct {
+				Type     string `json:"type"`
+				Duration string `json:"duration"`
+			} `json:"outputs"`
+		} `json:"data"`
+	}
+	_ = common.Unmarshal(task.Data, &upstream)
+
+	duration := 0.0
+	if len(upstream.Data) > 0 {
+		for _, output := range upstream.Data[0].Outputs {
+			if output.Type != "video" {
+				continue
+			}
+			duration, _ = strconv.ParseFloat(output.Duration, 64)
+			break
+		}
+	}
+
+	cost := decimal.Zero
+	if common.QuotaPerUnit > 0 {
+		exchangeRate := operation_setting.USDExchangeRate
+		if exchangeRate <= 0 {
+			exchangeRate = 1
+		}
+		cost = decimal.NewFromInt(int64(task.Quota)).
+			Div(decimal.NewFromFloat(common.QuotaPerUnit)).
+			Mul(decimal.NewFromFloat(exchangeRate))
+	}
+
+	return map[string]any{
+		"task_id":    task.TaskID,
+		"status":     string(task.Status),
+		"video_url":  task.GetResultURL(),
+		"duration":   duration,
+		"model":      modelName,
+		"cost":       cost.String(),
+		"request_id": upstream.RequestID,
+	}
 }

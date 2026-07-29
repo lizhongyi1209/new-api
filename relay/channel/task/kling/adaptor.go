@@ -1170,7 +1170,7 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		groupRatio = bc.GroupRatio
 	}
 
-	actualQuota := int(math.Ceil(rmbCost * common.QuotaPerUnit / usdExchangeRate * groupRatio))
+	actualQuota := common.QuotaFromFloat(math.Ceil(rmbCost * common.QuotaPerUnit / usdExchangeRate * groupRatio))
 
 	return actualQuota
 }

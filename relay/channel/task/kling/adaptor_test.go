@@ -145,14 +145,16 @@ func TestKling30OmniTaskResultIncludesUnitBilling(t *testing.T) {
 	require.NoError(t, err)
 	assert.InDelta(t, 3.25, taskInfo.ActualCost, 0.0001)
 
-	task := &model.Task{Quota: 250000}
-	task.PrivateData.BillingContext = &model.TaskBillingContext{GroupRatio: 1}
 	exchangeRate := operation_setting.USDExchangeRate
 	if exchangeRate <= 0 {
 		exchangeRate = 1
 	}
-	expectedQuota := common.QuotaFromFloat(math.Ceil(3.25 * common.QuotaPerUnit / exchangeRate))
-	assert.Equal(t, expectedQuota, (&TaskAdaptor{}).AdjustBillingOnComplete(task, taskInfo))
+	for _, groupRatio := range []float64{0.85, 1, 1.15} {
+		task := &model.Task{Quota: 250000}
+		task.PrivateData.BillingContext = &model.TaskBillingContext{GroupRatio: groupRatio}
+		expectedQuota := common.QuotaFromFloat(math.Ceil(3.25 * common.QuotaPerUnit / exchangeRate * groupRatio))
+		assert.Equal(t, expectedQuota, (&TaskAdaptor{}).AdjustBillingOnComplete(task, taskInfo))
+	}
 }
 
 func TestValidateOmniVideo30Request(t *testing.T) {
