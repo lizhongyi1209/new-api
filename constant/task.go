@@ -23,6 +23,8 @@ const (
 	TaskActionMotionControl30   = "motionControl30"
 	TaskActionOmniVideo         = "omniVideo"
 	TaskActionOmniVideo30       = "omniVideo30"
+	TaskActionVideoEdit         = "videoEdit"
+	TaskActionVideoExtend       = "videoExtend"
 	// NOTE: When adding a new video task action here, you MUST also register it
 	// in the frontend "is this a video task?" allowlists, or the Task Logs page
 	// will silently show "-" instead of a "preview video" link even when the

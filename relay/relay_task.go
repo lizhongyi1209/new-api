@@ -599,6 +599,50 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 	}
 }
 
+// BuildGrokVideoTaskResponse exposes the xAI deferred video response contract.
+// Task.Data contains the most recent upstream polling response after the first
+// poll, so provider fields such as respect_moderation remain intact.
+func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
+	var upstream map[string]any
+	_ = common.Unmarshal(task.Data, &upstream)
+
+	status := "pending"
+	switch task.Status {
+	case model.TaskStatusSuccess:
+		status = "done"
+	case model.TaskStatusFailure:
+		status = "failed"
+		if rawStatus, ok := upstream["status"].(string); ok && rawStatus == "expired" {
+			status = "expired"
+		}
+	}
+
+	response := map[string]any{"status": status}
+	if modelName := strings.TrimSpace(task.Properties.OriginModelName); modelName != "" {
+		response["model"] = modelName
+	}
+	if status == "done" {
+		if video, ok := upstream["video"].(map[string]any); ok {
+			response["video"] = video
+		} else if resultURL := task.GetResultURL(); resultURL != "" {
+			response["video"] = map[string]any{"url": resultURL}
+		}
+	}
+	for _, field := range []string{"progress", "usage"} {
+		if value, ok := upstream[field]; ok {
+			response[field] = value
+		}
+	}
+	if status == "failed" || status == "expired" {
+		if upstreamError, ok := upstream["error"].(map[string]any); ok {
+			response["error"] = upstreamError
+		} else if task.FailReason != "" {
+			response["error"] = map[string]any{"message": task.FailReason}
+		}
+	}
+	return response
+}
+
 // BuildSeedance20VideoTaskResponse exposes the compact client-facing contract
 // for Seedance 2.0 task queries without leaking internal task or billing data.
 func BuildSeedance20VideoTaskResponse(task *model.Task) map[string]any {

@@ -35,6 +35,18 @@ func SetVideoRouter(router *gin.Engine) {
 		videoV1Router.GET("/video/generations/:task_id", controller.RelayTaskFetch)
 		videoV1Router.POST("/videos/:video_id/remix", controller.RelayTask)
 	}
+
+	// xAI Grok video API compatibility. The /grok prefix keeps xAI's response
+	// contract independent from the OpenAI-compatible /v1/videos routes.
+	grokVideoRouter := router.Group("/grok/v1")
+	grokVideoRouter.Use(middleware.RouteTag("relay"))
+	grokVideoRouter.Use(middleware.TokenAuth(), middleware.Distribute())
+	{
+		grokVideoRouter.POST("/videos/generations", controller.RelayTask)
+		grokVideoRouter.POST("/videos/edits", controller.RelayTask)
+		grokVideoRouter.POST("/videos/extensions", controller.RelayTask)
+		grokVideoRouter.GET("/videos/:task_id", controller.RelayGrokVideoTaskFetch)
+	}
 	// openai compatible API video routes
 	// docs: https://platform.openai.com/docs/api-reference/videos/create
 	{

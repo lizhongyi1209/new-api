@@ -523,6 +523,24 @@ func RelayKlingVideo30TaskFetch(c *gin.Context) {
 	c.JSON(http.StatusOK, relay.BuildKlingVideo30TaskResponse(task))
 }
 
+// RelayGrokVideoTaskFetch returns the xAI video status contract while keeping
+// the upstream request ID private.
+func RelayGrokVideoTaskFetch(c *gin.Context) {
+	taskID := c.Param("task_id")
+	userID := c.GetInt("id")
+	task, exist, err := model.GetByTaskId(userID, taskID)
+	if err != nil {
+		respondTaskError(c, service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError))
+		return
+	}
+	if !exist {
+		respondTaskError(c, service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest))
+		return
+	}
+
+	c.JSON(http.StatusOK, relay.BuildGrokVideoTaskResponse(task))
+}
+
 func RelayTask(c *gin.Context) {
 	relayInfo, err := relaycommon.GenRelayInfo(c, types.RelayFormatTask, nil, nil)
 	if err != nil {

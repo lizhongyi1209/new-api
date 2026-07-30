@@ -189,6 +189,8 @@ export const TASK_ACTIONS = {
   MOTION_CONTROL_30: 'motionControl30', // Kling 3.0 动作控制
   OMNI_VIDEO: 'omniVideo', // 全能视频（Kling omni-video）
   OMNI_VIDEO_30: 'omniVideo30', // Kling 3.0 Omni
+  VIDEO_EDIT: 'videoEdit', // 视频编辑
+  VIDEO_EXTEND: 'videoExtend', // 视频扩展
 } as const
 
 /**
@@ -318,6 +320,14 @@ export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
   },
   [TASK_ACTIONS.OMNI_VIDEO_30]: {
     label: 'Omni Video',
+    variant: 'blue',
+  },
+  [TASK_ACTIONS.VIDEO_EDIT]: {
+    label: 'Video Editing',
+    variant: 'blue',
+  },
+  [TASK_ACTIONS.VIDEO_EXTEND]: {
+    label: 'Video Extension',
     variant: 'blue',
   },
 }

@@ -23,4 +23,8 @@ func TestVideoRouterRegistersSpecializedVideoRoutes(t *testing.T) {
 	assert.True(t, routes["GET /kling/motion-control/kling-3.0/:task_id"])
 	assert.True(t, routes["POST /kling/v1/videos/motion-control"])
 	assert.True(t, routes["GET /kling/v1/videos/motion-control/:task_id"])
+	assert.True(t, routes["POST /grok/v1/videos/generations"])
+	assert.True(t, routes["POST /grok/v1/videos/edits"])
+	assert.True(t, routes["POST /grok/v1/videos/extensions"])
+	assert.True(t, routes["GET /grok/v1/videos/:task_id"])
 }

@@ -51,7 +51,7 @@ build_release() {
   if [[ -x /usr/local/go/bin/go && -z "${GO_COMMAND:-}" ]]; then
     go_command=/usr/local/go/bin/go
   fi
-  "${go_command}" test ./middleware ./relay/common ./relay ./router ./relay/channel/task/kling
+  "${go_command}" test ./middleware ./relay/common ./relay ./router ./relay/channel/task/kling ./relay/channel/task/xai
 
   export GIT_COMMIT="${head_sha}"
   export BUILD_TIME="${build_time}"
@@ -73,7 +73,7 @@ smoke_test() {
   status_body=$(curl --fail --silent --show-error "${base_url}/api/status")
   [[ "${status_body}" == *"\"git_commit\":\"${head_sha}\""* ]] || fail "status endpoint does not report ${head_sha}"
 
-  for route in /kling/omni-video/kling-3.0-omni /kling/motion-control/kling-3.0; do
+  for route in /kling/omni-video/kling-3.0-omni /kling/motion-control/kling-3.0 /grok/v1/videos/generations /grok/v1/videos/edits /grok/v1/videos/extensions; do
     route_body=$(curl --silent --show-error --request POST --header 'Content-Type: application/json' --data '{}' "${base_url}${route}")
     [[ "${route_body}" != *"<html"* && "${route_body}" != *"<!DOCTYPE html"* ]] || fail "${route} was handled by an HTML fallback"
   done

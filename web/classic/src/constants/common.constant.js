@@ -46,3 +46,5 @@ export const TASK_ACTION_REFERENCE_GENERATE = 'referenceGenerate';
 export const TASK_ACTION_REMIX_GENERATE = 'remixGenerate';
 export const TASK_ACTION_MOTION_CONTROL = 'motionControl';
 export const TASK_ACTION_OMNI_VIDEO = 'omniVideo';
+export const TASK_ACTION_VIDEO_EDIT = 'videoEdit';
+export const TASK_ACTION_VIDEO_EXTEND = 'videoExtend';

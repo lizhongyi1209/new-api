@@ -246,7 +246,9 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           log.action === TASK_ACTIONS.MOTION_CONTROL ||
           log.action === TASK_ACTIONS.MOTION_CONTROL_30 ||
           log.action === TASK_ACTIONS.OMNI_VIDEO ||
-          log.action === TASK_ACTIONS.OMNI_VIDEO_30
+          log.action === TASK_ACTIONS.OMNI_VIDEO_30 ||
+          log.action === TASK_ACTIONS.VIDEO_EDIT ||
+          log.action === TASK_ACTIONS.VIDEO_EXTEND
         const isSuccess = status === TASK_STATUS.SUCCESS
         // 视频链接可能在 result_url（成功任务的标准来源），也可能历史上被塞进 fail_reason。
         const hasVideoUrl =
