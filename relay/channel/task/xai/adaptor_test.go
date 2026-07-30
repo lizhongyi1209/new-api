@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,13 +127,40 @@ func TestEstimateBillingUsesOfficialDurationAndResolutionDefaults(t *testing.T) 
 	}{
 		{body: `{"model":"grok-imagine-video","prompt":"orbit"}`, want: map[string]float64{"seconds": 8, "resolution": 1}},
 		{body: `{"model":"grok-imagine-video","prompt":"orbit","duration":5,"resolution":"720p"}`, want: map[string]float64{"seconds": 5, "resolution": 1.4}},
-		{body: `{"model":"grok-imagine-video-1.5","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"720p"}`, want: map[string]float64{"seconds": 5, "resolution": 1.75}},
+		{body: `{"model":"grok-imagine-video-1.5","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"720p"}`, want: map[string]float64{"seconds": 5, "resolution": 1.75, "image_input": 0.71 / 0.7}},
 	}
 	for _, test := range tests {
 		context, info := newVideoContext(test.body)
 		adaptor := &TaskAdaptor{}
 		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
 		assert.Equal(t, test.want, adaptor.EstimateBilling(context, info))
+	}
+}
+
+func TestVideoBillingMatchesOfficialPerSecondPrices(t *testing.T) {
+	tests := []struct {
+		model string
+		body  string
+		price float64
+	}{
+		{model: "grok-imagine-video", body: `{"model":"grok-imagine-video","prompt":"orbit","duration":5,"resolution":"480p"}`, price: 0.25},
+		{model: "grok-imagine-video", body: `{"model":"grok-imagine-video","prompt":"orbit","duration":5,"resolution":"720p"}`, price: 0.35},
+		{model: "grok-imagine-video-1.5", body: `{"model":"grok-imagine-video-1.5","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"480p"}`, price: 0.41},
+		{model: "grok-imagine-video-1.5-preview", body: `{"model":"grok-imagine-video-1.5-preview","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"720p"}`, price: 0.71},
+		{model: "grok-imagine-video-1.5-2026-05-30", body: `{"model":"grok-imagine-video-1.5-2026-05-30","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"1080p"}`, price: 1.26},
+	}
+
+	for _, test := range tests {
+		context, info := newVideoContext(test.body)
+		adaptor := &TaskAdaptor{}
+		require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+		ratios := adaptor.EstimateBilling(context, info)
+		basePrice := ratio_setting.GetDefaultModelPriceMap()[test.model]
+		total := basePrice
+		for _, ratio := range ratios {
+			total *= ratio
+		}
+		assert.InDelta(t, test.price, total, 1e-9)
 	}
 }
 

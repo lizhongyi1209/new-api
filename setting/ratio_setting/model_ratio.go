@@ -321,6 +321,12 @@ var defaultModelPrice = map[string]float64{
 	"veo-3.0-fast-generate-001":      0.15,
 	"veo-3.1-generate-preview":       0.4,
 	"veo-3.1-fast-generate-preview":  0.15,
+	// xAI video prices use the 480p output rate as the per-second base.
+	// Resolution multipliers are applied by the xAI task adaptor.
+	"grok-imagine-video":                0.05,
+	"grok-imagine-video-1.5":            0.08,
+	"grok-imagine-video-1.5-preview":    0.08,
+	"grok-imagine-video-1.5-2026-05-30": 0.08,
 }
 
 var defaultAudioRatio = map[string]float64{

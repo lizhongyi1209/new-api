@@ -245,7 +245,22 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	} else if requestData.Resolution == "720p" {
 		ratio = 1.4
 	}
-	return map[string]float64{"seconds": float64(seconds), "resolution": ratio}
+	ratios := map[string]float64{"seconds": float64(seconds), "resolution": ratio}
+	imageCount := len(requestData.ReferenceImages)
+	if requestData.Image != nil {
+		imageCount++
+	}
+	if imageCount > 0 {
+		basePrice := 0.05
+		imagePrice := 0.002
+		if isVideo15Model(requestData.Model) {
+			basePrice = 0.08
+			imagePrice = 0.01
+		}
+		outputPrice := basePrice * float64(seconds) * ratio
+		ratios["image_input"] = (outputPrice + imagePrice*float64(imageCount)) / outputPrice
+	}
+	return ratios
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
