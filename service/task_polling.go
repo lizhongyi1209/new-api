@@ -498,6 +498,14 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	task.Data = redactVideoResponseBody(responseBody)
+	if ch.Type == constant.ChannelTypeXai && taskResult.Status == model.TaskStatusSuccess && taskResult.Url != "" {
+		cachedURL, cacheErr := CacheRemoteVideoToR2(ctx, taskResult.Url)
+		if cacheErr != nil {
+			logger.LogWarn(ctx, fmt.Sprintf("Failed to cache xAI video for task %s: %v", task.TaskID, cacheErr))
+		} else {
+			taskResult.Url = cachedURL
+		}
+	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask taskResult: %+v", taskResult)
 

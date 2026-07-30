@@ -11,6 +11,9 @@ import (
 func TestBuildGrokVideoTaskResponse(t *testing.T) {
 	task := &model.Task{
 		Status: model.TaskStatusSuccess,
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "https://assetcache.o1key.com/output/cached-video.mp4",
+		},
 		Properties: model.Properties{
 			OriginModelName: "grok-imagine-video",
 		},
@@ -22,7 +25,7 @@ func TestBuildGrokVideoTaskResponse(t *testing.T) {
 	assert.Equal(t, "grok-imagine-video", response["model"])
 	video, ok := response["video"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "https://vidgen.x.ai/video.mp4", video["url"])
+	assert.Equal(t, "https://assetcache.o1key.com/output/cached-video.mp4", video["url"])
 	assert.Equal(t, float64(8), video["duration"])
 	assert.Equal(t, map[string]any{"file_id": "file-video"}, video["file_output"])
 	assert.Equal(t, float64(100), response["progress"])

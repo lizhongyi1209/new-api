@@ -628,6 +628,9 @@ func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 					publicVideo[key] = value
 				}
 			}
+			if resultURL := strings.TrimSpace(task.GetResultURL()); resultURL != "" {
+				publicVideo["url"] = resultURL
+			}
 			response["video"] = publicVideo
 		} else if resultURL := task.GetResultURL(); resultURL != "" {
 			response["video"] = map[string]any{"url": resultURL}
