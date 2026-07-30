@@ -599,9 +599,8 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 	}
 }
 
-// BuildGrokVideoTaskResponse exposes the xAI deferred video response contract.
-// Task.Data contains the most recent upstream polling response after the first
-// poll, so provider fields such as respect_moderation remain intact.
+// BuildGrokVideoTaskResponse exposes the xAI deferred video response contract
+// without leaking the upstream request ID, provider cost, or moderation detail.
 func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 	var upstream map[string]any
 	_ = common.Unmarshal(task.Data, &upstream)
@@ -623,15 +622,19 @@ func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 	}
 	if status == "done" {
 		if video, ok := upstream["video"].(map[string]any); ok {
-			response["video"] = video
+			publicVideo := make(map[string]any, len(video))
+			for key, value := range video {
+				if key != "respect_moderation" {
+					publicVideo[key] = value
+				}
+			}
+			response["video"] = publicVideo
 		} else if resultURL := task.GetResultURL(); resultURL != "" {
 			response["video"] = map[string]any{"url": resultURL}
 		}
 	}
-	for _, field := range []string{"progress", "usage"} {
-		if value, ok := upstream[field]; ok {
-			response[field] = value
-		}
+	if progress, ok := upstream["progress"]; ok {
+		response["progress"] = progress
 	}
 	if status == "failed" || status == "expired" {
 		if upstreamError, ok := upstream["error"].(map[string]any); ok {

@@ -14,7 +14,7 @@ func TestBuildGrokVideoTaskResponse(t *testing.T) {
 		Properties: model.Properties{
 			OriginModelName: "grok-imagine-video",
 		},
-		Data: []byte(`{"status":"done","video":{"url":"https://vidgen.x.ai/video.mp4","duration":8,"respect_moderation":true,"file_output":{"file_id":"file-video"}},"usage":{"cost_in_usd_ticks":500000000},"progress":100}`),
+		Data: []byte(`{"request_id":"upstream-secret","status":"done","video":{"url":"https://vidgen.x.ai/video.mp4","duration":8,"respect_moderation":true,"file_output":{"file_id":"file-video"}},"usage":{"cost_in_usd_ticks":500000000},"progress":100}`),
 	}
 
 	response := BuildGrokVideoTaskResponse(task)
@@ -24,10 +24,11 @@ func TestBuildGrokVideoTaskResponse(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "https://vidgen.x.ai/video.mp4", video["url"])
 	assert.Equal(t, float64(8), video["duration"])
-	assert.Equal(t, true, video["respect_moderation"])
 	assert.Equal(t, map[string]any{"file_id": "file-video"}, video["file_output"])
 	assert.Equal(t, float64(100), response["progress"])
-	assert.Equal(t, map[string]any{"cost_in_usd_ticks": float64(500000000)}, response["usage"])
+	assert.NotContains(t, video, "respect_moderation")
+	assert.NotContains(t, response, "usage")
+	assert.NotContains(t, response, "request_id")
 }
 
 func TestBuildGrokVideoTaskResponsePreservesExpired(t *testing.T) {
