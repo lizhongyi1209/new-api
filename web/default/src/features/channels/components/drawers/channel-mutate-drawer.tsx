@@ -256,6 +256,7 @@ const ADVANCED_SETTINGS_SECTION_IDS = {
   internalNotes: 'channel-section-advanced-internal-notes',
   overrideRules: 'channel-section-advanced-override-rules',
   extraSettings: 'channel-section-advanced-extra-settings',
+  imageOutput: 'channel-section-advanced-image-output',
   fieldPassthrough: 'channel-section-advanced-field-passthrough',
   upstreamModelDetection: 'channel-section-advanced-upstream-model-detection',
 } as const
@@ -280,6 +281,7 @@ const SENSITIVE_FORM_FIELDS = [
   'vertex_key_type',
   'aws_key_type',
   'azure_responses_version',
+  'image_output_strategy',
   'force_format',
   'thinking_to_content',
   'proxy',
@@ -4230,9 +4232,7 @@ export function ChannelMutateDrawer({
                                         <SelectValue />
                                       </SelectTrigger>
                                     </FormControl>
-                                    <SelectContent
-                                      alignItemWithTrigger={false}
-                                    >
+                                    <SelectContent alignItemWithTrigger={false}>
                                       <SelectGroup>
                                         <SelectItem value='auto'>
                                           {t('Auto')}
@@ -4360,6 +4360,80 @@ export function ChannelMutateDrawer({
                                       onCheckedChange={field.onChange}
                                     />
                                   </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </fieldset>
+                        </div>
+
+                        <div
+                          id={ADVANCED_SETTINGS_SECTION_IDS.imageOutput}
+                          className={sideDrawerSectionClassName('scroll-mt-4')}
+                        >
+                          <CardHeading
+                            title={t('Image output strategy')}
+                            icon={<Sparkles className='h-4 w-4' />}
+                            iconTone='chart-3'
+                          />
+                          <fieldset
+                            disabled={sensitiveLocked}
+                            className='disabled:opacity-60'
+                          >
+                            <FormField
+                              control={form.control}
+                              name='image_output_strategy'
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    {t('Generated image output')}
+                                  </FormLabel>
+                                  <Select
+                                    items={[
+                                      {
+                                        value: 'oss',
+                                        label: t('Aliyun OSS URL'),
+                                      },
+                                      {
+                                        value: 'r2',
+                                        label: t('Cloudflare R2 URL'),
+                                      },
+                                      {
+                                        value: 'passthrough',
+                                        label: t('Upstream passthrough'),
+                                      },
+                                    ]}
+                                    value={field.value ?? null}
+                                    onValueChange={field.onChange}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue
+                                          placeholder={t(
+                                            'Keep current output behavior'
+                                          )}
+                                        />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent alignItemWithTrigger={false}>
+                                      <SelectGroup>
+                                        <SelectItem value='oss'>
+                                          {t('Aliyun OSS URL')}
+                                        </SelectItem>
+                                        <SelectItem value='r2'>
+                                          {t('Cloudflare R2 URL')}
+                                        </SelectItem>
+                                        <SelectItem value='passthrough'>
+                                          {t('Upstream passthrough')}
+                                        </SelectItem>
+                                      </SelectGroup>
+                                    </SelectContent>
+                                  </Select>
+                                  <FormDescription>
+                                    {t(
+                                      'Only explicitly configured channels change behavior; existing channels remain unchanged.'
+                                    )}
+                                  </FormDescription>
+                                  <FormMessage />
                                 </FormItem>
                               )}
                             />

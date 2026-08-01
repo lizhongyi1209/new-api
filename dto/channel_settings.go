@@ -62,6 +62,7 @@ const (
 )
 
 type ChannelOtherSettings struct {
+	ImageOutputStrategy                   string                `json:"image_output_strategy,omitempty"`
 	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`
 	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"` // "json" or "api_key"
 	OpenRouterEnterprise                  *bool                 `json:"openrouter_enterprise,omitempty"`
@@ -86,6 +87,24 @@ type ChannelOtherSettings struct {
 	ServiceInferenceAssetPollIntervalMS   int                   `json:"service_inference_asset_poll_interval_ms,omitempty"`
 	ServiceInferenceAssetPollAttempts     int                   `json:"service_inference_asset_poll_attempts,omitempty"`
 	AdvancedCustom                        *AdvancedCustomConfig `json:"advanced_custom,omitempty"`
+}
+
+const (
+	ImageOutputStrategyOSS         = "oss"
+	ImageOutputStrategyR2          = "r2"
+	ImageOutputStrategyPassthrough = "passthrough"
+)
+
+func (s *ChannelOtherSettings) ValidateImageOutputStrategy() error {
+	if s == nil {
+		return nil
+	}
+	switch s.ImageOutputStrategy {
+	case "", ImageOutputStrategyOSS, ImageOutputStrategyR2, ImageOutputStrategyPassthrough:
+		return nil
+	default:
+		return fmt.Errorf("invalid image_output_strategy: %s", s.ImageOutputStrategy)
+	}
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

@@ -632,6 +632,21 @@ func TestPrepareGenerateImageResultsUploadsBase64WhenSwitchOff(t *testing.T) {
 	assert.Empty(t, images[0].B64Json)
 }
 
+func TestPrepareGenerateImageResultsPassthroughPreservesUpstreamShape(t *testing.T) {
+	t.Setenv("GENERATE_IMAGE_RETURN_BASE64", "false")
+
+	images, err := prepareGenerateImageResultsWithStrategy([]dto.GenerateImageData{
+		{B64Json: "AQID", MimeType: "image/png"},
+		{Url: "https://upstream.example/image.png"},
+	}, "origin", "api.o1key.cn", dto.ImageOutputStrategyPassthrough)
+	require.NoError(t, err)
+	require.Len(t, images, 2)
+	assert.Equal(t, "AQID", images[0].B64Json)
+	assert.Empty(t, images[0].Url)
+	assert.Equal(t, "https://upstream.example/image.png", images[1].Url)
+	assert.Empty(t, images[1].B64Json)
+}
+
 func TestImageUpstreamUsageDetail(t *testing.T) {
 	cases := []struct {
 		name             string

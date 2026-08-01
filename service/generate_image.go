@@ -847,7 +847,7 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
-	images, err = prepareGenerateImageResults(images, imageCompression, task.Properties.RequestHost)
+	images, err = prepareGenerateImageResultsWithStrategy(images, imageCompression, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
 		return
@@ -1065,7 +1065,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
-	images, err = prepareGenerateImageResults(images, asyncReq.ImageCompression, task.Properties.RequestHost)
+	images, err = prepareGenerateImageResultsWithStrategy(images, asyncReq.ImageCompression, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
 		return
@@ -1084,10 +1084,29 @@ func generateImageReturnBase64() bool {
 }
 
 func prepareGenerateImageResults(images []dto.GenerateImageData, compression, requestHost string) ([]dto.GenerateImageData, error) {
+	return prepareGenerateImageResultsWithStrategy(images, compression, requestHost, "")
+}
+
+func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, compression, requestHost, strategy string) ([]dto.GenerateImageData, error) {
 	returnBase64 := generateImageReturnBase64()
+	if strategy == dto.ImageOutputStrategyPassthrough {
+		returnBase64 = true
+	}
 	out := make([]dto.GenerateImageData, 0, len(images))
 	for _, image := range images {
 		if image.Url != "" {
+			if strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 {
+				mimeType, base64Data, err := GetImageFromUrl(image.Url)
+				if err != nil {
+					return nil, err
+				}
+				url, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, compression, strategy, requestHost)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, dto.GenerateImageData{Url: url, MimeType: mimeType})
+				continue
+			}
 			out = append(out, dto.GenerateImageData{
 				Url:      image.Url,
 				MimeType: image.MimeType,
@@ -1109,7 +1128,13 @@ func prepareGenerateImageResults(images []dto.GenerateImageData, compression, re
 			})
 			continue
 		}
-		url, err := uploadGenerateImageBase64(mimeType, image.B64Json, compression, requestHost)
+		var url string
+		var err error
+		if strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 {
+			url, err = UploadBase64ImageWithOutputStrategy(mimeType, image.B64Json, compression, strategy, requestHost)
+		} else {
+			url, err = uploadGenerateImageBase64(mimeType, image.B64Json, compression, requestHost)
+		}
 		if err != nil {
 			return nil, err
 		}

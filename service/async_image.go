@@ -752,6 +752,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			ApiKey:               key,
 			UpstreamModelName:    upstreamModelName,
 			IsModelMapped:        isModelMapped,
+			ChannelOtherSettings: channel.GetOtherSettings(),
 		},
 	}
 	relayInfo.RequestURLPath = asyncImageRequestURLPath(relayInfo.RelayMode, upstreamModelName)
@@ -889,7 +890,10 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	var uploadedURLs []string
 	var resultData map[string]interface{}
 
-	if responseFormat == "b64_json" {
+	strategy := relayInfo.ChannelOtherSettings.ImageOutputStrategy
+	if strategy == dto.ImageOutputStrategyPassthrough {
+		resultData = map[string]interface{}{"data": imageResp.Data}
+	} else if responseFormat == "b64_json" && strategy == "" {
 		// Return base64 directly
 		b64List := []string{}
 		for _, imgData := range imageResp.Data {
@@ -907,7 +911,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			if imgData.B64Json != "" {
 				// Detect actual mime type from base64 data
 				mimeType := detectImageMimeType(imgData.B64Json)
-				publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, imgData.B64Json, compression, task.Properties.RequestHost)
+				publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, imgData.B64Json, compression, strategy, task.Properties.RequestHost)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: storage upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -931,7 +935,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 					_ = task.Update()
 					return
 				}
-				publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, b64Data, compression, task.Properties.RequestHost)
+				publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, b64Data, compression, strategy, task.Properties.RequestHost)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: storage upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -1168,6 +1172,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 			ApiKey:               key,
 			UpstreamModelName:    upstreamModelName,
 			IsModelMapped:        isModelMapped,
+			ChannelOtherSettings: channel.GetOtherSettings(),
 		},
 	}
 
@@ -1285,7 +1290,8 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	// Strip thoughtSignature before storing
 	stripThoughtSignature(geminiResp)
 
-	// Extract images from Gemini response and upload to the Host-selected storage provider.
+	strategy := relayInfo.ChannelOtherSettings.ImageOutputStrategy
+	// Extract images from Gemini response and apply the channel output strategy.
 	var uploadedURLs []string
 	imageCount := 0
 	if candidates, ok := geminiResp["candidates"].([]interface{}); ok && len(candidates) > 0 {
@@ -1306,11 +1312,16 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 							}
 							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
 								if base64Data, ok := inlineData["data"].(string); ok {
+									if strategy == dto.ImageOutputStrategyPassthrough {
+										imageCount++
+										filteredParts = append(filteredParts, part)
+										continue
+									}
 									mimeType := "image/png"
 									if mt, ok := inlineData["mimeType"].(string); ok {
 										mimeType = mt
 									}
-									publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, geminiCompression, task.Properties.RequestHost)
+									publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, geminiCompression, strategy, task.Properties.RequestHost)
 									if err != nil {
 										logger.LogError(ctx, fmt.Sprintf("unified_image: storage upload failed: %v", err))
 										task.Status = model.TaskStatusFailure
@@ -1348,6 +1359,9 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	// Store result with standard urls format for fetch
 	resultData := map[string]interface{}{
 		"urls": uploadedURLs,
+	}
+	if strategy == dto.ImageOutputStrategyPassthrough {
+		resultData = geminiResp
 	}
 	task.SetData(resultData)
 	if len(uploadedURLs) > 0 {
@@ -1710,6 +1724,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 			ApiKey:               key,
 			UpstreamModelName:    upstreamModelName,
 			IsModelMapped:        isModelMapped,
+			ChannelOtherSettings: channel.GetOtherSettings(),
 		},
 	}
 
@@ -1823,7 +1838,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 	// Strip thoughtSignature from parts before storing (it can be megabytes of base64)
 	stripThoughtSignature(geminiResp)
 
-	// Strip thought parts and upload final images to the Host-selected storage provider.
+	strategy := relayInfo.ChannelOtherSettings.ImageOutputStrategy
+	// Strip thought parts and apply the channel output strategy.
 	// Thought parts (text + images) are internal model artifacts — discard them.
 	var firstImageURL string
 	imageCount := 0
@@ -1847,11 +1863,16 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 							// Upload final image to object storage
 							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
 								if base64Data, ok := inlineData["data"].(string); ok {
+									if strategy == dto.ImageOutputStrategyPassthrough {
+										imageCount++
+										filteredParts = append(filteredParts, part)
+										continue
+									}
 									mimeType := "image/png"
 									if mt, ok := inlineData["mimeType"].(string); ok {
 										mimeType = mt
 									}
-									publicURL, err := UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, geminiCompression, task.Properties.RequestHost)
+									publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, geminiCompression, strategy, task.Properties.RequestHost)
 									if err != nil {
 										logger.LogError(ctx, fmt.Sprintf("async_gemini: storage upload failed: %v", err))
 										task.Status = model.TaskStatusFailure

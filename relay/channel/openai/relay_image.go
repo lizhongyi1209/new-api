@@ -47,9 +47,16 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 	// stable R2 url here so the browser only ever holds a tiny string. On any
 	// failure we fall back to the original body so a generation never fails just
 	// because the rewrite/upload did.
-	if strings.EqualFold(c.Query("image_format"), "url") {
-		if rewritten, err := uploadOpenAIImagesToR2(c, responseBody); err != nil {
-			logger.LogError(c, "openai image r2 upload failed, falling back to raw response: "+err.Error())
+	strategy := info.ChannelOtherSettings.ImageOutputStrategy
+	shouldRewrite := strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 ||
+		(strategy == "" && strings.EqualFold(c.Query("image_format"), "url"))
+	if shouldRewrite {
+		uploadStrategy := strategy
+		if uploadStrategy == "" {
+			uploadStrategy = dto.ImageOutputStrategyR2
+		}
+		if rewritten, err := uploadOpenAIImagesToStorage(c, responseBody, uploadStrategy); err != nil {
+			logger.LogError(c, "openai image storage upload failed, falling back to raw response: "+err.Error())
 			service.IOCopyBytesGracefully(c, resp, responseBody)
 		} else {
 			service.IOCopyBytesGracefully(c, resp, rewritten)
@@ -309,9 +316,8 @@ func writeOpenaiImageStreamDone(c *gin.Context) error {
 	return helper.StringData(c, "[DONE]")
 }
 
-// uploadOpenAIImagesToR2 rewrites an OpenAI image response body so every image
-// in data[] is served from R2 as a stable url. Two upstream shapes are handled:
-//   - data[i].b64_json : decoded and uploaded to R2 directly.
+// uploadOpenAIImagesToStorage rewrites an OpenAI image response body so every image
+// in data[] is served from the configured storage as a stable URL.
 //   - data[i].url      : a transient upstream url; downloaded then re-uploaded
 //     to R2 so the link does not expire out from under the browser.
 //
@@ -321,7 +327,7 @@ func writeOpenaiImageStreamDone(c *gin.Context) error {
 // Compression follows the same image_compression query as the Gemini path
 // (defaults to "origin"). Returns an error only when the body cannot be parsed
 // or an upload fails, in which case the caller falls back to the raw response.
-func uploadOpenAIImagesToR2(c *gin.Context, body []byte) ([]byte, error) {
+func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) ([]byte, error) {
 	var root map[string]json.RawMessage
 	if err := common.Unmarshal(body, &root); err != nil {
 		return nil, fmt.Errorf("parse image response: %w", err)
@@ -359,9 +365,9 @@ func uploadOpenAIImagesToR2(c *gin.Context, body []byte) ([]byte, error) {
 			continue // nothing to upload for this entry
 		}
 
-		url, err := service.UploadBase64ImageToR2Compressed(mimeType, b64, compression)
+		url, err := service.UploadBase64ImageWithOutputStrategy(mimeType, b64, compression, strategy, c.Request.Host)
 		if err != nil {
-			return nil, fmt.Errorf("r2 upload: %w", err)
+			return nil, fmt.Errorf("image storage upload: %w", err)
 		}
 		items[i].Url = url
 		items[i].B64Json = ""

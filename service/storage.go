@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -145,6 +146,17 @@ func UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, compression,
 		return UploadBase64ImageToLocalCompressed(mimeType, base64Data, compression)
 	default:
 		return UploadBase64ImageToR2Compressed(mimeType, base64Data, compression)
+	}
+}
+
+func UploadBase64ImageWithOutputStrategy(mimeType, base64Data, compression, strategy, requestHost string) (string, error) {
+	switch strategy {
+	case dto.ImageOutputStrategyOSS:
+		return UploadBase64ImageToOSSCompressed(mimeType, base64Data, compression)
+	case dto.ImageOutputStrategyR2:
+		return UploadBase64ImageToR2Compressed(mimeType, base64Data, compression)
+	default:
+		return UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, compression, requestHost)
 	}
 }
 
