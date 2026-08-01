@@ -548,6 +548,34 @@ func TestPrepareGenerateImageResultsPreservesUpstreamShapeWithoutStorageStrategy
 	}
 }
 
+func TestBuildGenerateImageRelayInfoPreservesChannelImageOutputStrategy(t *testing.T) {
+	channel := &model.Channel{
+		Type:    1,
+		Name:    "generate-image-output-strategy-test",
+		Key:     "test-key",
+		BaseURL: testStringPtr("https://upstream.example"),
+		Models:  "banana2",
+		Group:   "test",
+		Status:  common.ChannelStatusEnabled,
+	}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{ImageOutputStrategy: dto.ImageOutputStrategyOSS})
+	require.NoError(t, model.DB.Create(channel).Error)
+	t.Cleanup(func() {
+		require.NoError(t, model.DB.Delete(&model.Channel{}, channel.Id).Error)
+	})
+
+	c, _ := gin.CreateTestContext(nil)
+	relayInfo, err := buildGenerateImageRelayInfo(c, &model.Task{
+		ChannelId: channel.Id,
+		Group:     "test",
+		Properties: model.Properties{
+			OriginModelName: "banana2",
+		},
+	}, relayconstant.RelayModeImagesGenerations)
+	require.NoError(t, err)
+	assert.Equal(t, dto.ImageOutputStrategyOSS, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+}
+
 func TestImageUpstreamUsageDetail(t *testing.T) {
 	cases := []struct {
 		name             string

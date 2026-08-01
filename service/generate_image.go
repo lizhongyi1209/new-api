@@ -736,6 +736,7 @@ func buildGenerateImageRelayInfo(c *gin.Context, task *model.Task, relayMode int
 			ApiKey:               key,
 			UpstreamModelName:    upstreamModelName,
 			IsModelMapped:        upstreamModelName != task.Properties.OriginModelName,
+			ChannelOtherSettings: channel.GetOtherSettings(),
 		},
 	}
 	// 异步 goroutine 没有真实 HTTP 请求,必须显式设置 RequestURLPath 供适配器拼 URL
