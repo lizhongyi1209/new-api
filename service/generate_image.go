@@ -41,8 +41,6 @@ const (
 	imageProviderOpenAIImage  imageProvider = "openai_image"
 )
 
-var uploadGenerateImageBase64 = UploadBase64ImageToHostStorageCompressed
-
 const imageRetryActionResubmit = "resubmit"
 
 const (
@@ -1075,23 +1073,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		relayInfo.UpstreamModelName, relayInfo.IsModelMapped, modelVersion)
 }
 
-// generateImageReturnBase64 是一个可快速回退的运行时开关。打开时（环境变量
-// GENERATE_IMAGE_RETURN_BASE64=true），上游返回的 base64 图片原样以 b64_json
-// 返回，不再上传对象存储；上游本就是 URL 的图片仍原样返回。
-// 回退：把该环境变量改回 false（或删除）再重启即可，无需重新编译。
-func generateImageReturnBase64() bool {
-	return common.GetEnvOrDefaultBool("GENERATE_IMAGE_RETURN_BASE64", false)
-}
-
-func prepareGenerateImageResults(images []dto.GenerateImageData, compression, requestHost string) ([]dto.GenerateImageData, error) {
-	return prepareGenerateImageResultsWithStrategy(images, compression, requestHost, "")
-}
-
 func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, compression, requestHost, strategy string) ([]dto.GenerateImageData, error) {
-	returnBase64 := generateImageReturnBase64()
-	if strategy == dto.ImageOutputStrategyPassthrough {
-		returnBase64 = true
-	}
 	out := make([]dto.GenerateImageData, 0, len(images))
 	for _, image := range images {
 		if image.Url != "" {
@@ -1120,21 +1102,14 @@ func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, com
 		if mimeType == "" {
 			mimeType = detectImageMimeType(image.B64Json)
 		}
-		if returnBase64 {
-			// 开关打开：不走云存储，base64 原样返回。
+		if strategy == "" || strategy == dto.ImageOutputStrategyPassthrough {
 			out = append(out, dto.GenerateImageData{
 				B64Json:  image.B64Json,
 				MimeType: mimeType,
 			})
 			continue
 		}
-		var url string
-		var err error
-		if strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 {
-			url, err = UploadBase64ImageWithOutputStrategy(mimeType, image.B64Json, compression, strategy, requestHost)
-		} else {
-			url, err = uploadGenerateImageBase64(mimeType, image.B64Json, compression, requestHost)
-		}
+		url, err := UploadBase64ImageWithOutputStrategy(mimeType, image.B64Json, compression, strategy, requestHost)
 		if err != nil {
 			return nil, err
 		}

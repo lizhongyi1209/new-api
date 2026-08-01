@@ -530,121 +530,22 @@ func readMultipartForm(t *testing.T, body *bytes.Buffer, boundary string) *multi
 	return form
 }
 
-func TestPrepareGenerateImageResultsPreservesUpstreamURL(t *testing.T) {
-	oldUpload := uploadGenerateImageBase64
-	uploadGenerateImageBase64 = func(mimeType, base64Data, compression, requestHost string) (string, error) {
-		t.Fatalf("upload should not be called for upstream URL")
-		return "", nil
+func TestPrepareGenerateImageResultsPreservesUpstreamShapeWithoutStorageStrategy(t *testing.T) {
+	for _, strategy := range []string{"", dto.ImageOutputStrategyPassthrough} {
+		t.Run(strategy, func(t *testing.T) {
+			images, err := prepareGenerateImageResultsWithStrategy([]dto.GenerateImageData{
+				{B64Json: "AQID", MimeType: "image/png"},
+				{Url: "https://upstream.example/image.png"},
+			}, "origin", "api.o1key.cn", strategy)
+			require.NoError(t, err)
+			require.Len(t, images, 2)
+			assert.Equal(t, "AQID", images[0].B64Json)
+			assert.Equal(t, "image/png", images[0].MimeType)
+			assert.Empty(t, images[0].Url)
+			assert.Equal(t, "https://upstream.example/image.png", images[1].Url)
+			assert.Empty(t, images[1].B64Json)
+		})
 	}
-	defer func() { uploadGenerateImageBase64 = oldUpload }()
-
-	images, err := prepareGenerateImageResults([]dto.GenerateImageData{
-		{Url: "https://upstream.example/image.png"},
-	}, "", "api.o1key.cn")
-	if err != nil {
-		t.Fatalf("prepareGenerateImageResults returned error: %v", err)
-	}
-	if len(images) != 1 || images[0].Url != "https://upstream.example/image.png" {
-		t.Fatalf("images = %#v, want upstream URL preserved", images)
-	}
-	if images[0].B64Json != "" {
-		t.Fatalf("B64Json should be empty in final URL result: %#v", images[0])
-	}
-}
-
-func TestPrepareGenerateImageResultsUploadsBase64(t *testing.T) {
-	oldUpload := uploadGenerateImageBase64
-	var gotMimeType, gotBase64, gotCompression, gotRequestHost string
-	uploadGenerateImageBase64 = func(mimeType, base64Data, compression, requestHost string) (string, error) {
-		gotMimeType = mimeType
-		gotBase64 = base64Data
-		gotCompression = compression
-		gotRequestHost = requestHost
-		return "https://img.o1key.cn/uploads/oss/generated.png", nil
-	}
-	defer func() { uploadGenerateImageBase64 = oldUpload }()
-
-	images, err := prepareGenerateImageResults([]dto.GenerateImageData{
-		{B64Json: "AQID", MimeType: "image/png"},
-	}, "origin", "api.o1key.cn")
-	if err != nil {
-		t.Fatalf("prepareGenerateImageResults returned error: %v", err)
-	}
-	if gotMimeType != "image/png" || gotBase64 != "AQID" || gotCompression != "origin" {
-		t.Fatalf("upload args = (%q, %q, %q), want image/png, AQID, origin", gotMimeType, gotBase64, gotCompression)
-	}
-	if gotRequestHost != "api.o1key.cn" {
-		t.Fatalf("requestHost = %q, want api.o1key.cn", gotRequestHost)
-	}
-	if len(images) != 1 || images[0].Url != "https://img.o1key.cn/uploads/oss/generated.png" {
-		t.Fatalf("images = %#v, want uploaded URL", images)
-	}
-	if images[0].B64Json != "" {
-		t.Fatalf("B64Json should be empty after upload: %#v", images[0])
-	}
-}
-
-func TestPrepareGenerateImageResultsReturnsBase64WhenSwitchOn(t *testing.T) {
-	t.Setenv("GENERATE_IMAGE_RETURN_BASE64", "true")
-
-	oldUpload := uploadGenerateImageBase64
-	uploadGenerateImageBase64 = func(mimeType, base64Data, compression, requestHost string) (string, error) {
-		t.Fatalf("upload must not be called when GENERATE_IMAGE_RETURN_BASE64=true")
-		return "", nil
-	}
-	defer func() { uploadGenerateImageBase64 = oldUpload }()
-
-	images, err := prepareGenerateImageResults([]dto.GenerateImageData{
-		{B64Json: "AQID", MimeType: "image/png"},
-		{Url: "https://upstream.example/image.png"},
-	}, "origin", "api.o1key.cn")
-	require.NoError(t, err)
-	require.Len(t, images, 2)
-
-	// 上游 base64 原样返回，不上传，不带 URL。
-	assert.Equal(t, "AQID", images[0].B64Json)
-	assert.Equal(t, "image/png", images[0].MimeType)
-	assert.Empty(t, images[0].Url)
-
-	// 上游本就是 URL 的图片仍原样返回。
-	assert.Equal(t, "https://upstream.example/image.png", images[1].Url)
-	assert.Empty(t, images[1].B64Json)
-}
-
-func TestPrepareGenerateImageResultsUploadsBase64WhenSwitchOff(t *testing.T) {
-	t.Setenv("GENERATE_IMAGE_RETURN_BASE64", "false")
-
-	oldUpload := uploadGenerateImageBase64
-	uploadCalled := false
-	uploadGenerateImageBase64 = func(mimeType, base64Data, compression, requestHost string) (string, error) {
-		uploadCalled = true
-		return "https://img.o1key.cn/uploads/oss/generated.png", nil
-	}
-	defer func() { uploadGenerateImageBase64 = oldUpload }()
-
-	images, err := prepareGenerateImageResults([]dto.GenerateImageData{
-		{B64Json: "AQID", MimeType: "image/png"},
-	}, "origin", "api.o1key.cn")
-	require.NoError(t, err)
-	require.Len(t, images, 1)
-	assert.True(t, uploadCalled, "switch off must keep uploading base64 to storage")
-	assert.Equal(t, "https://img.o1key.cn/uploads/oss/generated.png", images[0].Url)
-	assert.Empty(t, images[0].B64Json)
-}
-
-func TestPrepareGenerateImageResultsPassthroughPreservesUpstreamShape(t *testing.T) {
-	t.Setenv("GENERATE_IMAGE_RETURN_BASE64", "false")
-
-	images, err := prepareGenerateImageResultsWithStrategy([]dto.GenerateImageData{
-		{B64Json: "AQID", MimeType: "image/png"},
-		{Url: "https://upstream.example/image.png"},
-	}, "origin", "api.o1key.cn", dto.ImageOutputStrategyPassthrough)
-	require.NoError(t, err)
-	require.Len(t, images, 2)
-	assert.Equal(t, "AQID", images[0].B64Json)
-	assert.Empty(t, images[0].Url)
-	assert.Equal(t, "https://upstream.example/image.png", images[1].Url)
-	assert.Empty(t, images[1].B64Json)
 }
 
 func TestImageUpstreamUsageDetail(t *testing.T) {

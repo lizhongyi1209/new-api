@@ -745,7 +745,7 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 }
 
 // ClearGenerateImageDataWindow blanks the heavy `data` column (which holds
-// returned base64 image payloads when GENERATE_IMAGE_RETURN_BASE64 is enabled)
+// returned base64 image payloads for passthrough or unconfigured channels)
 // for terminal generate_image tasks whose finish_time falls in the window
 // (since, cutoff]. Rows are kept for billing/audit; only the consumed base64 is
 // dropped.

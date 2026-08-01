@@ -63,9 +63,6 @@ services:
       - ALIYUN_OSS_STORAGE_HOSTS=${ALIYUN_OSS_STORAGE_HOSTS:-}
       # Kill-switch: when true, every upload that would target Aliyun OSS is redirected to R2
       - DISABLE_ALIYUN_OSS=${DISABLE_ALIYUN_OSS:-false}
-      # 统一生图 /async/v1/generateImage：true 时上游 base64 原样返回，不走云存储。
-      # 快速回退：改回 false（或删除）再 docker compose up -d 即可，无需重新编译。
-      - GENERATE_IMAGE_RETURN_BASE64=${GENERATE_IMAGE_RETURN_BASE64:-true}
       # Tencent VCLM (Kling -t models) post-paid markup over actual cost.
       # FinalUnitDeduction is RMB (1 credit = ¥1); 1.0 = sell at cost, 1.5 = +50%.
       - TENCENT_VIDEO_MARKUP=${TENCENT_VIDEO_MARKUP:-1.0}
