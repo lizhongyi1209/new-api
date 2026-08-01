@@ -9,6 +9,8 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Claude Sonnet-style tiered expression: standard vs long-context
@@ -521,6 +523,27 @@ func TestBuildTieredTokenParams_Claude_WithCache(t *testing.T) {
 	if math.Abs(got-want) > 0.01 {
 		t.Fatalf("quota = %f, want %f", got, want)
 	}
+}
+
+func TestBuildTieredTokenParams_ClaudeDefaultsAggregateCacheCreationToFiveMinutes(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokens:     2,
+		CompletionTokens: 2731,
+		UsageSemantic:    "anthropic",
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:         1_000_000,
+			CachedCreationTokens: 547_661,
+		},
+	}
+
+	params := BuildTieredTokenParams(usage, true, map[string]bool{
+		"cr": true,
+		"cc": true,
+	})
+
+	require.Equal(t, float64(547_661), params.CC)
+	assert.Zero(t, params.CC1h)
+	assert.Equal(t, float64(1_547_663), params.Len)
 }
 
 func TestBuildTieredTokenParams_GPT_AudioOutput(t *testing.T) {
