@@ -28,12 +28,13 @@ const (
 
 const (
 	maxLogCount = 1000000
-	maxLogAge   = 72 * time.Hour // auto-delete log files older than 3 days
+	maxLogAge   = 72 * time.Hour    // auto-delete log files older than 3 days
 	maxLogSize  = 500 * 1024 * 1024 // rotate when file exceeds 500MB
 )
 
 var logCount int
 var logSizeBytes int64
+var logStateMu sync.Mutex
 var setupLogLock sync.Mutex
 var setupLogWorking bool
 var currentLogPath string
@@ -48,7 +49,9 @@ func GetCurrentLogPath() string {
 
 func SetupLogger() {
 	defer func() {
+		logStateMu.Lock()
 		setupLogWorking = false
+		logStateMu.Unlock()
 	}()
 	if *common.LogDir != "" {
 		CleanupOldLogFiles()
@@ -73,7 +76,9 @@ func SetupLogger() {
 
 		// If re-opening an existing oversized file, record current size to trigger rotation
 		if info, err := fd.Stat(); err == nil && info.Size() > maxLogSize {
+			logStateMu.Lock()
 			logSizeBytes = info.Size()
+			logStateMu.Unlock()
 		}
 		common.LogWriterMu.Lock()
 		gin.DefaultWriter = io.MultiWriter(os.Stdout, fd)
@@ -122,13 +127,17 @@ func logHelper(ctx context.Context, level string, msg string) {
 	line := fmt.Sprintf("[%s] %v | %s | %s \n", level, now.Format("2006/01/02 - 15:04:05"), id, msg)
 	_, _ = io.WriteString(writer, line)
 	common.LogWriterMu.RUnlock()
+	logStateMu.Lock()
 	logCount++
 	logSizeBytes += int64(len(line))
-	shouldRotate := logCount > maxLogCount || logSizeBytes > maxLogSize
-	if shouldRotate && !setupLogWorking {
+	shouldRotate := (logCount > maxLogCount || logSizeBytes > maxLogSize) && !setupLogWorking
+	if shouldRotate {
 		logCount = 0
 		logSizeBytes = 0
 		setupLogWorking = true
+	}
+	logStateMu.Unlock()
+	if shouldRotate {
 		gopool.Go(func() {
 			SetupLogger()
 		})

@@ -235,6 +235,7 @@ func (a *TaskAdaptor) GetModelList() []string {
 // motion-control API (carries a "-motion" suffix).
 func isMotionControlModel(name string) bool {
 	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, "-t")
 	return strings.HasSuffix(n, "-motion")
 }
 
@@ -250,6 +251,7 @@ func isOmniModel(name string) bool {
 // codes used by image2video.
 func modelNameToMotionModel(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
+	n = strings.TrimSuffix(n, "-t")
 	n = strings.TrimSuffix(n, "-motion")
 	// Strip tencent- prefix to get the base version
 	n = strings.TrimPrefix(n, "tencent-")
@@ -260,8 +262,8 @@ func modelNameToMotionModel(name string) string {
 		return "kling-v3"
 	default:
 		// If already in kling-* format, use it
-		if strings.HasPrefix(name, "kling-") {
-			return name
+		if strings.HasPrefix(n, "kling-") {
+			return n
 		}
 		return "kling-" + n
 	}
@@ -298,6 +300,7 @@ func modelNameToTencentCode(name string) string {
 	n = strings.TrimPrefix(n, "tencent-")
 	// Also support legacy kling- prefix for backwards compatibility
 	n = strings.TrimPrefix(n, "kling-")
+	n = strings.TrimSuffix(n, "-t")
 	switch n {
 	case "v1", "v1-0":
 		return "v1.0"
