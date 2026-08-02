@@ -198,6 +198,10 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		addUsedChannel(c, channel.Id)
+		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
+			newAPIError = billingErr
+			break
+		}
 		bodyStorage, bodyErr := common.GetBodyStorage(c)
 		if bodyErr != nil {
 			// Ensure consistent 413 for oversized bodies even when error occurs later (e.g., retry path)
@@ -305,9 +309,6 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		}, nil
 	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
-
-	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-
 	if err != nil {
 		return nil, types.NewError(fmt.Errorf("获取分组 %s 下模型 %s 的可用渠道失败（retry）: %s", selectGroup, info.OriginModelName, err.Error()), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
@@ -322,6 +323,7 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	// 同步 relayInfo.UsingGroup：SetupContextForSelectedChannel 已将渠道分组写入 Gin context，
 	// 但 relayInfo 是在此之前创建的，需同步更新，否则后续 HandleGroupRatio 会使用错误的倍率。
 	info.UsingGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 	return channel, nil
 }
 
