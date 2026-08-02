@@ -54,6 +54,7 @@ export function CommonLogsStats() {
   const { isAdminView: isAdmin } = useLogsViewScope()
   const searchParams = route.useSearch()
   const { sensitiveVisible } = useUsageLogsContext()
+  const showRefundQuota = !isAdmin || isSuperAdmin
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['usage-logs-stats', isAdmin, isSuperAdmin, searchParams],
@@ -94,7 +95,7 @@ export function CommonLogsStats() {
         value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
         accent='bg-sky-500/70'
       />
-      {isSuperAdmin && (
+      {showRefundQuota && (
         <StatBadge
           label={t('Refund quota')}
           value={

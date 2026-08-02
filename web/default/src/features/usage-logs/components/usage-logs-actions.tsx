@@ -50,6 +50,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useDebounce } from '@/hooks'
+import { cn } from '@/lib/utils'
 
 import { exportUsageLogs, getUsageLogExportOptions } from '../api'
 import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
@@ -177,6 +178,8 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
   const activeRefreshLabel =
     refreshItems.find((option) => option.value === String(props.autoRefreshMs))
       ?.label || t('Off')
+  const compactRefreshLabel =
+    props.autoRefreshMs === 0 ? '—' : activeRefreshLabel
 
   const handleExport = useCallback(async () => {
     if (end.getTime() < start.getTime()) {
@@ -220,9 +223,9 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
       toast.success(t('Log export downloaded'))
       setOpen(false)
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t('Failed to export logs')
-      )
+      const message =
+        error instanceof Error ? error.message : 'Failed to export logs'
+      toast.error(t(message))
     } finally {
       setExporting(false)
     }
@@ -230,33 +233,37 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
 
   return (
     <div className='flex items-center gap-1'>
-      <div className='bg-background/70 flex items-center rounded-lg border'>
-        <RefreshCcwIcon className='text-muted-foreground ml-2 size-3.5' />
-        <Select
-          items={refreshItems}
-          value={String(props.autoRefreshMs)}
-          onValueChange={(value) =>
-            props.onAutoRefreshChange(Number(value || 0))
-          }
+      <Select
+        items={refreshItems}
+        value={String(props.autoRefreshMs)}
+        onValueChange={(value) => props.onAutoRefreshChange(Number(value || 0))}
+      >
+        <SelectTrigger
+          size='sm'
+          className='border-border/70 bg-background/70 hover:bg-muted/50 h-7 min-w-0 gap-1 rounded-lg px-1.5 text-xs shadow-none'
+          aria-label={`${t('Auto refresh')}: ${activeRefreshLabel}`}
+          title={`${t('Auto refresh')}: ${activeRefreshLabel}`}
         >
-          <SelectTrigger
-            size='sm'
-            className='h-7 w-[4.75rem] border-0 bg-transparent shadow-none'
-            aria-label={t('Auto refresh')}
-          >
-            <SelectValue>{activeRefreshLabel}</SelectValue>
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectGroup>
-              {refreshItems.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
+          <RefreshCcwIcon
+            className={cn(
+              'size-3.5',
+              props.autoRefreshMs > 0 ? 'text-primary' : 'text-muted-foreground'
+            )}
+          />
+          <SelectValue className='flex-none font-medium tabular-nums'>
+            {compactRefreshLabel}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          <SelectGroup>
+            {refreshItems.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
 
       {props.showExport && (
         <Sheet open={open} onOpenChange={setOpen}>

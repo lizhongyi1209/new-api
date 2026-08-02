@@ -145,14 +145,20 @@ func GetLogsSelfStat(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	refundQuota, err := model.SumQuotaByLogType(model.LogTypeRefund, startTimestamp, endTimestamp, modelName, username, tokenName, channel, group)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	//tokenNum := model.SumUsedToken(logType, startTimestamp, endTimestamp, modelName, username, tokenName)
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"quota": quotaNum.Quota,
-			"rpm":   quotaNum.Rpm,
-			"tpm":   quotaNum.Tpm,
+			"quota":        quotaNum.Quota,
+			"rpm":          quotaNum.Rpm,
+			"tpm":          quotaNum.Tpm,
+			"refund_quota": refundQuota,
 			//"token": tokenNum,
 		},
 	})
