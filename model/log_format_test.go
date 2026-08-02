@@ -33,3 +33,24 @@ func TestFormatUserLogsStripsQuotaSaturation(t *testing.T) {
 	// Non-admin billing fields remain visible.
 	require.Contains(t, parsed, "model_price")
 }
+
+func TestFormatUserLogsPreservesStreamStatus(t *testing.T) {
+	streamStatus := map[string]interface{}{
+		"status":      "error",
+		"end_reason":  "upstream_error",
+		"error_count": float64(1),
+	}
+	logs := []*Log{{
+		Other: common.MapToJsonStr(map[string]interface{}{
+			"stream_status": streamStatus,
+			"admin_info":    map[string]interface{}{"channel_id": 12},
+		}),
+	}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.NotContains(t, parsed, "admin_info")
+	require.Equal(t, streamStatus, parsed["stream_status"])
+}
