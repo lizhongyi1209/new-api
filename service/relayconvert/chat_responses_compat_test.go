@@ -1,6 +1,7 @@
 package relayconvert
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/QuantumNous/new-api/dto"
@@ -12,8 +13,10 @@ import (
 
 func TestChatCompletionsRequestToResponsesRequestInstructionsAndTools(t *testing.T) {
 	req := &dto.GeneralOpenAIRequest{
-		Model: "gpt-test",
-		N:     lo.ToPtr(1),
+		Model:          "gpt-test",
+		N:              lo.ToPtr(1),
+		EnableThinking: json.RawMessage(`true`),
+		ThinkingBudget: json.RawMessage(`0`),
 		Messages: []dto.Message{
 			{Role: "system", Content: "system rules"},
 			{Role: "developer", Content: "developer rules"},
@@ -35,6 +38,8 @@ func TestChatCompletionsRequestToResponsesRequestInstructionsAndTools(t *testing
 	assert.Equal(t, "function_call", gjson.GetBytes(got.Input, "2.type").String())
 	assert.Equal(t, "call_1", gjson.GetBytes(got.Input, "2.call_id").String())
 	assert.Equal(t, "function_call_output", gjson.GetBytes(got.Input, "3.type").String())
+	assert.Equal(t, `true`, string(got.EnableThinking))
+	assert.Equal(t, `0`, string(got.ThinkingBudget))
 }
 
 func TestChatCompletionsRequestToResponsesRequestRejectsMultipleChoices(t *testing.T) {

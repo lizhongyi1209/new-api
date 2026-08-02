@@ -34,6 +34,8 @@ func TestResponsesRequestToChatCompletionsRequestInstructionsAndScalarInput(t *t
 		PromptCacheKey:       mustRawMessage(t, "cache-key"),
 		PromptCacheRetention: mustRawMessage(t, "24h"),
 		Reasoning:            &dto.Reasoning{Effort: "medium"},
+		EnableThinking:       mustRawMessage(t, true),
+		ThinkingBudget:       mustRawMessage(t, 0),
 	})
 	require.NoError(t, err)
 
@@ -53,6 +55,8 @@ func TestResponsesRequestToChatCompletionsRequestInstructionsAndScalarInput(t *t
 	assert.Equal(t, `"user-1"`, string(got.User))
 	assert.Equal(t, `false`, string(got.Store))
 	assert.Equal(t, "abc", gjson.GetBytes(got.Metadata, "trace").String())
+	assert.Equal(t, `true`, string(got.EnableThinking))
+	assert.Equal(t, `0`, string(got.ThinkingBudget))
 }
 
 func TestResponsesRequestToChatCompletionsRequestMultimodalInput(t *testing.T) {
