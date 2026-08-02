@@ -77,10 +77,20 @@ export function R2PublicUploadSection() {
   return (
     <SettingsSection title={t('R2 Upload Whitelist')}>
       <div className='space-y-5'>
-        <div className='rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground'>
-          <p>{t('Allow trusted downstream servers to request short-lived Cloudflare R2 upload URLs.')}</p>
-          <p className='mt-2 font-mono text-xs text-foreground'>POST /v1/storage/public/presign</p>
-          <p className='mt-2'>{t('Each request must include the allowed Origin and a valid HMAC signature.')}</p>
+        <div className='bg-muted/30 text-muted-foreground rounded-lg border p-4 text-sm'>
+          <p>
+            {t(
+              'Allow trusted downstream servers to request short-lived Cloudflare R2 upload URLs.'
+            )}
+          </p>
+          <p className='text-foreground mt-2 font-mono text-xs'>
+            POST /v1/storage/public/presign
+          </p>
+          <p className='mt-2'>
+            {t(
+              'Each request must include the allowed Origin and a valid HMAC signature.'
+            )}
+          </p>
         </div>
 
         {clients.map((client, index) => (
@@ -89,7 +99,9 @@ export function R2PublicUploadSection() {
               <Input
                 aria-label={t('Downstream name')}
                 value={client.name}
-                onChange={(event) => updateClient(index, { name: event.target.value })}
+                onChange={(event) =>
+                  updateClient(index, { name: event.target.value })
+                }
                 className='max-w-sm font-medium'
               />
               <div className='flex items-center gap-2'>
@@ -97,14 +109,20 @@ export function R2PublicUploadSection() {
                 <Switch
                   id={`r2-client-${index}`}
                   checked={client.enabled}
-                  onCheckedChange={(enabled) => updateClient(index, { enabled })}
+                  onCheckedChange={(enabled) =>
+                    updateClient(index, { enabled })
+                  }
                 />
                 <Button
                   type='button'
                   variant='ghost'
                   size='icon'
                   aria-label={t('Remove downstream')}
-                  onClick={() => setClients((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  onClick={() =>
+                    setClients((current) =>
+                      current.filter((_, itemIndex) => itemIndex !== index)
+                    )
+                  }
                 >
                   <Trash2 className='size-4' />
                 </Button>
@@ -114,24 +132,57 @@ export function R2PublicUploadSection() {
             <div className='grid gap-4 md:grid-cols-2'>
               <div className='space-y-2'>
                 <Label>{t('Downstream ID')}</Label>
-                <Input value={client.id} onChange={(event) => updateClient(index, { id: event.target.value.toLowerCase() })} />
+                <Input
+                  value={client.id}
+                  onChange={(event) =>
+                    updateClient(index, {
+                      id: event.target.value.toLowerCase(),
+                    })
+                  }
+                />
               </div>
               <div className='space-y-2'>
                 <Label>{t('Allowed origins')}</Label>
                 <Textarea
                   value={client.origins.join('\n')}
-                  onChange={(event) => updateClient(index, { origins: event.target.value.split('\n') })}
+                  onChange={(event) =>
+                    updateClient(index, {
+                      origins: event.target.value.split('\n'),
+                    })
+                  }
                   placeholder='https://api.example.com'
                 />
-                <p className='text-xs text-muted-foreground'>{t('One HTTPS origin per line.')}</p>
+                <p className='text-muted-foreground text-xs'>
+                  {t('One HTTPS origin per line.')}
+                </p>
               </div>
               <div className='space-y-2'>
                 <Label>{t('Max file size (MB)')}</Label>
-                <Input type='number' min={1} max={100} value={client.max_file_size_mb} onChange={(event) => updateClient(index, { max_file_size_mb: Number(event.target.value) })} />
+                <Input
+                  type='number'
+                  min={1}
+                  max={100}
+                  value={client.max_file_size_mb}
+                  onChange={(event) =>
+                    updateClient(index, {
+                      max_file_size_mb: Number(event.target.value),
+                    })
+                  }
+                />
               </div>
               <div className='space-y-2'>
                 <Label>{t('Requests per minute')}</Label>
-                <Input type='number' min={1} max={600} value={client.requests_per_minute} onChange={(event) => updateClient(index, { requests_per_minute: Number(event.target.value) })} />
+                <Input
+                  type='number'
+                  min={1}
+                  max={600}
+                  value={client.requests_per_minute}
+                  onChange={(event) =>
+                    updateClient(index, {
+                      requests_per_minute: Number(event.target.value),
+                    })
+                  }
+                />
               </div>
             </div>
 
@@ -142,20 +193,49 @@ export function R2PublicUploadSection() {
                 disabled={!client.has_secret || rotateMutation.isPending}
                 onClick={() => setRotateClientId(client.id)}
               >
-                {client.has_secret ? <RotateCw className='size-4' /> : <Copy className='size-4' />}
+                {client.has_secret ? (
+                  <RotateCw className='size-4' />
+                ) : (
+                  <Copy className='size-4' />
+                )}
                 {t('Rotate and copy signing secret')}
               </Button>
-              <span className='text-xs text-muted-foreground'>{t('The secret is returned only once. Rotation immediately invalidates the old secret.')}</span>
+              <span className='text-muted-foreground text-xs'>
+                {t(
+                  'The secret is returned only once. Rotation immediately invalidates the old secret.'
+                )}
+              </span>
             </div>
           </div>
         ))}
 
         <div className='flex flex-wrap justify-between gap-3'>
-          <Button type='button' variant='outline' onClick={() => setClients((current) => [...current, { id: `downstream-${current.length + 1}`, name: t('New downstream'), origins: [''], enabled: true, max_file_size_mb: 100, requests_per_minute: 20, has_secret: false }])}>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() =>
+              setClients((current) => [
+                ...current,
+                {
+                  id: `downstream-${current.length + 1}`,
+                  name: t('New downstream'),
+                  origins: [''],
+                  enabled: true,
+                  max_file_size_mb: 100,
+                  requests_per_minute: 20,
+                  has_secret: false,
+                },
+              ])
+            }
+          >
             <Plus className='size-4' />
             {t('Add downstream')}
           </Button>
-          <Button type='button' disabled={query.isLoading || saveMutation.isPending} onClick={() => saveMutation.mutate(clients)}>
+          <Button
+            type='button'
+            disabled={query.isLoading || saveMutation.isPending}
+            onClick={() => saveMutation.mutate(clients)}
+          >
             {t('Save whitelist')}
           </Button>
         </div>
@@ -163,10 +243,14 @@ export function R2PublicUploadSection() {
           open={rotateClientId !== null}
           onOpenChange={(open) => !open && setRotateClientId(null)}
           title={t('Rotate and copy signing secret')}
-          desc={t('The secret is returned only once. Rotation immediately invalidates the old secret.')}
+          desc={t(
+            'The secret is returned only once. Rotation immediately invalidates the old secret.'
+          )}
           confirmText={t('Rotate and copy signing secret')}
           isLoading={rotateMutation.isPending}
-          handleConfirm={() => rotateClientId && rotateMutation.mutate(rotateClientId)}
+          handleConfirm={() =>
+            rotateClientId && rotateMutation.mutate(rotateClientId)
+          }
         />
       </div>
     </SettingsSection>

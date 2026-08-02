@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
-import { type Cell, type ColumnDef } from '@tanstack/react-table'
+/* eslint-disable react-refresh/only-export-components */
+import type { Cell, ColumnDef } from '@tanstack/react-table'
 import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { GroupBadge } from '@/components/group-badge'
@@ -205,11 +206,14 @@ function buildDetailSegments(
       })
     }
   } else {
-    const isPerCall = isPerCallBilling(other.model_price, other.per_call_billing)
+    const isPerCall = isPerCallBilling(
+      other.model_price,
+      other.per_call_billing
+    )
     if (isPerCall) {
       if (other.model_price != null && other.model_price > 0) {
         segments.push({
-          text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(other.model_price!, priceOpts)}`,
+          text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(other.model_price, priceOpts)}`,
         })
       } else {
         segments.push({ text: t('Per-call') })
@@ -288,6 +292,40 @@ function DetailsPreviewCell(props: {
   const segments = buildDetailSegments(props.log, other, props.t)
   const primary = segments[0]
   const hasMore = segments.length > 1
+  let primaryContent = <span className='text-muted-foreground/40'>—</span>
+
+  if (props.log.content) {
+    primaryContent = (
+      <span className='text-muted-foreground truncate group-hover:underline'>
+        {props.log.content}
+      </span>
+    )
+  }
+
+  if (primary) {
+    let primaryTextClassName = 'text-foreground'
+    if (primary.muted) {
+      primaryTextClassName = 'text-muted-foreground/60'
+    } else if (primary.danger) {
+      primaryTextClassName = 'text-red-600 dark:text-red-400'
+    }
+
+    primaryContent = (
+      <span
+        className={cn(
+          'truncate leading-snug group-hover:underline',
+          primaryTextClassName
+        )}
+      >
+        {primary.text}
+        {hasMore && (
+          <span className='text-muted-foreground/40 ml-0.5'>
+            +{segments.length - 1}
+          </span>
+        )}
+      </span>
+    )
+  }
 
   return (
     <>
@@ -300,31 +338,7 @@ function DetailsPreviewCell(props: {
         onClick={() => setDialogOpen(true)}
         title={props.t('Click to view full details')}
       >
-        {primary ? (
-          <span
-            className={cn(
-              'truncate leading-snug group-hover:underline',
-              primary.muted
-                ? 'text-muted-foreground/60'
-                : primary.danger
-                  ? 'text-red-600 dark:text-red-400'
-                  : 'text-foreground'
-            )}
-          >
-            {primary.text}
-            {hasMore && (
-              <span className='text-muted-foreground/40 ml-0.5'>
-                +{segments.length - 1}
-              </span>
-            )}
-          </span>
-        ) : props.log.content ? (
-          <span className='text-muted-foreground truncate group-hover:underline'>
-            {props.log.content}
-          </span>
-        ) : (
-          <span className='text-muted-foreground/40'>—</span>
-        )}
+        {primaryContent}
       </button>
       <DetailsDialog
         log={props.log}

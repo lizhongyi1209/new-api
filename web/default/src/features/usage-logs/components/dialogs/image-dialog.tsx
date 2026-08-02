@@ -106,9 +106,11 @@ export function ImageDialog({
           {/* Prompt */}
           {prompt && (
             <div className='mt-4 space-y-1'>
-              <p className='text-muted-foreground text-xs font-medium'>{t('Prompt')}</p>
+              <p className='text-muted-foreground text-xs font-medium'>
+                {t('Prompt')}
+              </p>
               <div className='bg-muted rounded-md p-3'>
-                <p className='text-foreground text-sm whitespace-pre-wrap break-all'>
+                <p className='text-foreground text-sm break-all whitespace-pre-wrap'>
                   {prompt}
                 </p>
               </div>
