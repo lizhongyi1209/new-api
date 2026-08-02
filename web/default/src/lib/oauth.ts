@@ -16,6 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  getOAuthSessionStorage,
+  markOAuthBindPopup,
+} from '@/features/auth/lib/oauth-callback-mode'
+
 import { api } from './api'
 
 // ============================================================================
@@ -96,26 +101,61 @@ export async function getOAuthState(): Promise<string | null> {
   }
 }
 
+export type OAuthFlowMode = 'login' | 'bind'
+
+async function startOAuthFlow(
+  provider: string,
+  buildUrl: (state: string) => string,
+  mode: OAuthFlowMode
+): Promise<void> {
+  const popup = mode === 'bind' ? window.open('about:blank', '_blank') : null
+  if (mode === 'bind' && !popup) return
+
+  const state = await getOAuthState()
+  if (!state) {
+    popup?.close()
+    return
+  }
+
+  const url = buildUrl(state)
+  if (mode === 'bind' && popup) {
+    if (!markOAuthBindPopup(getOAuthSessionStorage(popup), provider, state)) {
+      popup.close()
+      return
+    }
+    popup.location.replace(url)
+    return
+  }
+
+  window.open(url, '_blank')
+}
+
 /**
  * Handle GitHub OAuth binding/login
  */
-export async function handleGitHubOAuth(clientId: string): Promise<void> {
-  const state = await getOAuthState()
-  if (!state) return
-
-  const url = buildGitHubOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+export async function handleGitHubOAuth(
+  clientId: string,
+  mode: OAuthFlowMode = 'login'
+): Promise<void> {
+  return startOAuthFlow(
+    'github',
+    (state) => buildGitHubOAuthUrl(clientId, state),
+    mode
+  )
 }
 
 /**
  * Handle Discord OAuth binding/login
  */
-export async function handleDiscordOAuth(clientId: string): Promise<void> {
-  const state = await getOAuthState()
-  if (!state) return
-
-  const url = buildDiscordOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+export async function handleDiscordOAuth(
+  clientId: string,
+  mode: OAuthFlowMode = 'login'
+): Promise<void> {
+  return startOAuthFlow(
+    'discord',
+    (state) => buildDiscordOAuthUrl(clientId, state),
+    mode
+  )
 }
 
 /**
@@ -123,22 +163,26 @@ export async function handleDiscordOAuth(clientId: string): Promise<void> {
  */
 export async function handleOIDCOAuth(
   authUrl: string,
-  clientId: string
+  clientId: string,
+  mode: OAuthFlowMode = 'login'
 ): Promise<void> {
-  const state = await getOAuthState()
-  if (!state) return
-
-  const url = buildOIDCOAuthUrl(authUrl, clientId, state)
-  window.open(url, '_blank')
+  return startOAuthFlow(
+    'oidc',
+    (state) => buildOIDCOAuthUrl(authUrl, clientId, state),
+    mode
+  )
 }
 
 /**
  * Handle LinuxDO OAuth binding/login
  */
-export async function handleLinuxDOOAuth(clientId: string): Promise<void> {
-  const state = await getOAuthState()
-  if (!state) return
-
-  const url = buildLinuxDOOAuthUrl(clientId, state)
-  window.open(url, '_blank')
+export async function handleLinuxDOOAuth(
+  clientId: string,
+  mode: OAuthFlowMode = 'login'
+): Promise<void> {
+  return startOAuthFlow(
+    'linuxdo',
+    (state) => buildLinuxDOOAuthUrl(clientId, state),
+    mode
+  )
 }
