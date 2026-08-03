@@ -96,6 +96,34 @@ type NewAPIError struct {
 	errorCode      ErrorCode
 	StatusCode     int
 	Metadata       json.RawMessage
+	rawUpstream    *RawUpstreamResponse
+}
+
+// RawUpstreamResponse is the exact error response returned by an upstream.
+// It is kept separate from the normalized error used for retry, billing and
+// channel health decisions.
+type RawUpstreamResponse struct {
+	StatusCode  int
+	ContentType string
+	Body        []byte
+}
+
+func (e *NewAPIError) SetRawUpstreamResponse(statusCode int, contentType string, body []byte) {
+	if e == nil {
+		return
+	}
+	e.rawUpstream = &RawUpstreamResponse{
+		StatusCode:  statusCode,
+		ContentType: contentType,
+		Body:        append([]byte(nil), body...),
+	}
+}
+
+func (e *NewAPIError) GetRawUpstreamResponse() *RawUpstreamResponse {
+	if e == nil {
+		return nil
+	}
+	return e.rawUpstream
 }
 
 // Unwrap enables errors.Is / errors.As to work with NewAPIError by exposing the underlying error.

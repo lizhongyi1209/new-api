@@ -29,6 +29,13 @@ func updateOpenAIImageCount(info *relaycommon.RelayInfo, count int64) {
 	info.PriceData.AddOtherRatio("n", float64(count))
 }
 
+func preserveGPTImage2UpstreamError(info *relaycommon.RelayInfo, resp *http.Response, body []byte, relayErr *types.NewAPIError) *types.NewAPIError {
+	if relayErr != nil && resp != nil && relaycommon.IsGPTImage2(info) {
+		relayErr.SetRawUpstreamResponse(resp.StatusCode, resp.Header.Get("Content-Type"), body)
+	}
+	return relayErr
+}
+
 // OpenaiImageHandler handles non-streaming OpenAI image responses
 // (generations/edits), returning the parsed usage for billing.
 func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.NewAPIError) {
@@ -42,11 +49,13 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 	var usageResp dto.SimpleResponse
 	err = common.Unmarshal(responseBody, &usageResp)
 	if err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		relayErr := types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		return nil, preserveGPTImage2UpstreamError(info, resp, responseBody, relayErr)
 	}
 
 	if oaiError := usageResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		relayErr := types.WithOpenAIError(*oaiError, resp.StatusCode)
+		return nil, preserveGPTImage2UpstreamError(info, resp, responseBody, relayErr)
 	}
 
 	updateOpenAIImageCount(info, gjson.GetBytes(responseBody, "data.#").Int())
@@ -281,10 +290,12 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	// re-marshaled for every SSE event.
 	var usageResp dto.SimpleResponse
 	if err := common.Unmarshal(responseBody, &usageResp); err != nil {
-		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		relayErr := types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		return nil, preserveGPTImage2UpstreamError(info, resp, responseBody, relayErr)
 	}
 	if oaiError := usageResp.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
-		return nil, types.WithOpenAIError(*oaiError, resp.StatusCode)
+		relayErr := types.WithOpenAIError(*oaiError, resp.StatusCode)
+		return nil, preserveGPTImage2UpstreamError(info, resp, responseBody, relayErr)
 	}
 	normalizeOpenAIUsage(&usageResp.Usage)
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)

@@ -409,6 +409,37 @@ func TestOpenaiImageHandlersReturnJSONError(t *testing.T) {
 		require.Empty(t, recorder.Body.String())
 		require.NotContains(t, recorder.Header().Get("Content-Type"), "text/event-stream")
 	})
+
+	t.Run("gpt image 2 preserves exact upstream response", func(t *testing.T) {
+		c, recorder, resp, info := newImageTestContext(t, body, "application/json", false)
+		info.OriginModelName = "gpt-image-2-c"
+		info.ChannelMeta = &relaycommon.ChannelMeta{UpstreamModelName: "gpt-image-2"}
+
+		usage, err := OpenaiImageHandler(c, info, resp)
+		require.Nil(t, usage)
+		require.NotNil(t, err)
+		raw := err.GetRawUpstreamResponse()
+		require.NotNil(t, raw)
+		require.Equal(t, http.StatusOK, raw.StatusCode)
+		require.Equal(t, "application/json", raw.ContentType)
+		require.Equal(t, body, string(raw.Body))
+		require.Empty(t, recorder.Body.String())
+	})
+}
+
+func TestOpenaiImageHandlerPreservesMalformedGPTImage2Response(t *testing.T) {
+	body := []byte{'{', '"', 'e', 'r', 'r', 'o', 'r', '"', ':', 0xff, '}'}
+	c, recorder, resp, info := newImageTestContext(t, string(body), "application/octet-stream", false)
+	info.OriginModelName = "gpt-image-2"
+
+	usage, err := OpenaiImageHandler(c, info, resp)
+	require.Nil(t, usage)
+	require.NotNil(t, err)
+	raw := err.GetRawUpstreamResponse()
+	require.NotNil(t, raw)
+	require.Equal(t, body, raw.Body)
+	require.Equal(t, "application/octet-stream", raw.ContentType)
+	require.Empty(t, recorder.Body.String())
 }
 
 // TestOpenaiImageStreamHandlerRecordsUpstreamErrorEvent verifies that an error

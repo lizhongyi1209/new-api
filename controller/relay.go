@@ -89,20 +89,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	defer func() {
 		if newAPIError != nil {
 			logger.LogError(c, fmt.Sprintf("relay error: %s", common.LocalLogPreview(newAPIError.Error())))
-			newAPIError.SetMessage(common.MessageWithRequestId(newAPIError.Error(), requestId))
-			switch relayFormat {
-			case types.RelayFormatOpenAIRealtime:
-				helper.WssError(c, ws, newAPIError.ToOpenAIError())
-			case types.RelayFormatClaude:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"type":  "error",
-					"error": newAPIError.ToClaudeError(),
-				})
-			default:
-				c.JSON(newAPIError.StatusCode, gin.H{
-					"error": newAPIError.ToOpenAIError(),
-				})
-			}
+			respondRelayError(c, relayFormat, ws, newAPIError, requestId)
 		}
 	}()
 
@@ -248,6 +235,28 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	if newAPIError != nil {
 		gopool.Go(func() {
 			perfmetrics.RecordRelaySample(relayInfo, false, 0)
+		})
+	}
+}
+
+func respondRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *websocket.Conn, relayErr *types.NewAPIError, requestId string) {
+	if raw := relayErr.GetRawUpstreamResponse(); raw != nil {
+		c.Data(raw.StatusCode, raw.ContentType, raw.Body)
+		return
+	}
+
+	relayErr.SetMessage(common.MessageWithRequestId(relayErr.Error(), requestId))
+	switch relayFormat {
+	case types.RelayFormatOpenAIRealtime:
+		helper.WssError(c, ws, relayErr.ToOpenAIError())
+	case types.RelayFormatClaude:
+		c.JSON(relayErr.StatusCode, gin.H{
+			"type":  "error",
+			"error": relayErr.ToClaudeError(),
+		})
+	default:
+		c.JSON(relayErr.StatusCode, gin.H{
+			"error": relayErr.ToOpenAIError(),
 		})
 	}
 }
