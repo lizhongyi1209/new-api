@@ -13,10 +13,10 @@ import (
 )
 
 // ProxySeedanceAssetAPI transparently forwards ServiceInference asset-management
-// calls (/v1/asset-groups*, /v1/assets*) to the upstream provider using this
-// instance's type-60 channel credentials. Sub-stations point their type-60
-// channel at this gateway with a gateway token, so the real upstream key never
-// leaves the main site.
+// calls (/v1/asset-groups*, /v1/assets*, /v1/sd/assets*) to the upstream provider
+// using this instance's type-60 channel credentials. Sub-stations point their
+// type-60 channel at this gateway with a gateway token, so the real upstream key
+// never leaves the main site.
 func ProxySeedanceAssetAPI(c *gin.Context) {
 	channel, err := getServiceInferenceChannel(0, 0)
 	if err != nil {

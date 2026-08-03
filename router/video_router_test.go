@@ -27,4 +27,6 @@ func TestVideoRouterRegistersSpecializedVideoRoutes(t *testing.T) {
 	assert.True(t, routes["POST /grok/v1/videos/edits"])
 	assert.True(t, routes["POST /grok/v1/videos/extensions"])
 	assert.True(t, routes["GET /grok/v1/videos/:task_id"])
+	assert.True(t, routes["POST /v1/sd/assets"])
+	assert.True(t, routes["GET /v1/sd/assets/:asset_id"])
 }

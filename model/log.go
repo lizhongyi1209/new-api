@@ -132,6 +132,25 @@ func formatUserLogs(logs []*Log, startIdx int) {
 	assignDisplayLogIds(logs, startIdx)
 }
 
+// stripServerOnlyLogSnapshots keeps upstream request/response snapshots in the
+// log database while preventing them from leaving the server through admin log
+// list and export APIs. Other administrator diagnostics remain available.
+func stripServerOnlyLogSnapshots(logs []*Log) {
+	for i := range logs {
+		otherMap, err := common.StrToMap(logs[i].Other)
+		if err != nil || otherMap == nil {
+			continue
+		}
+		adminInfo, ok := otherMap["admin_info"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		delete(adminInfo, "upstream_request")
+		delete(adminInfo, "upstream_response")
+		logs[i].Other = common.MapToJsonStr(otherMap)
+	}
+}
+
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	order := "id desc"
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
@@ -726,6 +745,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 			logs[i].ChannelName = channelMap[logs[i].ChannelId]
 		}
 	}
+	stripServerOnlyLogSnapshots(logs)
 
 	return logs, total, err
 }

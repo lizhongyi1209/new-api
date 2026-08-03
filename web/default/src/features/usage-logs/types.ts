@@ -152,37 +152,6 @@ export interface TaskLifecycleAudit {
   refund_status?: string
 }
 
-export interface UpstreamRequestPart {
-  kind: 'field' | 'file' | string
-  name: string
-  value?: string
-  filename?: string
-  content_type?: string
-  size?: number
-  sha256?: string
-  omitted?: boolean
-  omitted_reason?: string
-  original_bytes?: number
-}
-
-export interface UpstreamRequestSnapshot {
-  schema_version: number
-  method: string
-  path: string
-  content_type: string
-  content_length: number
-  parts: UpstreamRequestPart[]
-}
-
-export interface UpstreamResponseSnapshot {
-  schema_version: number
-  status_code: number
-  content_type?: string
-  body?: unknown
-  original_bytes: number
-  truncated?: boolean
-}
-
 export interface LogOtherData {
   billing_explanation?: string
   admin_info?: {
@@ -210,8 +179,6 @@ export interface LogOtherData {
       original: number
       clamped: number
     }
-    upstream_request?: UpstreamRequestSnapshot
-    upstream_response?: UpstreamResponseSnapshot
   }
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.

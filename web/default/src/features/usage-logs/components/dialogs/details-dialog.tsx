@@ -517,14 +517,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const showAdminIp =
     !!props.log.ip && (showTiming || (props.isAdmin && isTopup))
   const adminInfo = other?.admin_info
-  const upstreamRequestText = adminInfo?.upstream_request
-    ? JSON.stringify(adminInfo.upstream_request, null, 2)
-    : ''
-  const upstreamResponseText = adminInfo?.upstream_response
-    ? JSON.stringify(adminInfo.upstream_response, null, 2)
-    : ''
-  const hasUpstreamAudit =
-    props.isAdmin && (!!upstreamRequestText || !!upstreamResponseText)
   const topupAuditFields =
     isTopup && props.isAdmin && adminInfo
       ? ([
@@ -656,9 +648,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
       contentClassName={cn(
         'min-w-0 overflow-hidden',
         'max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-[calc(100vw-1.5rem)] max-sm:max-w-[calc(100vw-1.5rem)] max-sm:p-4',
-        isTieredBilling || hasUpstreamAudit
-          ? 'sm:max-w-4xl lg:max-w-5xl'
-          : 'sm:max-w-lg'
+        isTieredBilling ? 'sm:max-w-4xl lg:max-w-5xl' : 'sm:max-w-lg'
       )}
       headerClassName='max-sm:gap-1'
       titleClassName='flex items-center gap-2 text-base'
@@ -804,66 +794,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   </span>
                 </div>
               </div>
-            </div>
-          </DetailSection>
-        )}
-
-        {props.isAdmin && upstreamRequestText && (
-          <DetailSection
-            icon={<Route className='size-3.5' aria-hidden='true' />}
-            label={t('Upstream Request Snapshot')}
-          >
-            <p className='text-muted-foreground text-xs wrap-break-word'>
-              {t(
-                'Captured after request conversion. Image binary and Base64 content are omitted.'
-              )}
-            </p>
-            <div className='relative min-w-0'>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='absolute top-1 right-1 h-6 w-6 p-0'
-                onClick={() => copyToClipboard(upstreamRequestText)}
-                title={t('Copy to clipboard')}
-                aria-label={t('Copy to clipboard')}
-              >
-                {copiedText === upstreamRequestText ? (
-                  <Check className='size-3 text-green-600' />
-                ) : (
-                  <Copy className='size-3' />
-                )}
-              </Button>
-              <pre className='bg-muted max-h-72 max-w-full overflow-auto rounded-md p-2 pr-9 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap'>
-                {upstreamRequestText}
-              </pre>
-            </div>
-          </DetailSection>
-        )}
-
-        {props.isAdmin && upstreamResponseText && (
-          <DetailSection
-            icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
-            label={t('Upstream Response Snapshot')}
-            variant='danger'
-          >
-            <div className='relative min-w-0'>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='absolute top-1 right-1 h-6 w-6 p-0'
-                onClick={() => copyToClipboard(upstreamResponseText)}
-                title={t('Copy to clipboard')}
-                aria-label={t('Copy to clipboard')}
-              >
-                {copiedText === upstreamResponseText ? (
-                  <Check className='size-3 text-green-600' />
-                ) : (
-                  <Copy className='size-3' />
-                )}
-              </Button>
-              <pre className='bg-destructive/5 max-h-72 max-w-full overflow-auto rounded-md p-2 pr-9 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap'>
-                {upstreamResponseText}
-              </pre>
             </div>
           </DetailSection>
         )}

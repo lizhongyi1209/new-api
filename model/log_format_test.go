@@ -66,3 +66,29 @@ func TestFormatUserLogsStripsUpstreamRequestID(t *testing.T) {
 	require.Equal(t, "request-public", logs[0].RequestId)
 	require.Empty(t, logs[0].UpstreamRequestId)
 }
+
+func TestStripServerOnlyLogSnapshotsPreservesOtherAdminInfo(t *testing.T) {
+	logs := []*Log{{
+		Other: common.MapToJsonStr(map[string]interface{}{
+			"model_price": 0.004,
+			"admin_info": map[string]interface{}{
+				"use_channel":      []int{12, 18},
+				"upstream_request": map[string]interface{}{"path": "/v1/images/edits"},
+				"upstream_response": map[string]interface{}{
+					"status_code": 400,
+				},
+			},
+		}),
+	}}
+
+	stripServerOnlyLogSnapshots(logs)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, 0.004, parsed["model_price"])
+	adminInfo, ok := parsed["admin_info"].(map[string]interface{})
+	require.True(t, ok)
+	require.NotContains(t, adminInfo, "upstream_request")
+	require.NotContains(t, adminInfo, "upstream_response")
+	require.Contains(t, adminInfo, "use_channel")
+}
