@@ -21,6 +21,7 @@ import (
 )
 
 func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
+	relaycommon.ClearUpstreamAuditSnapshots(c)
 	info.InitChannelMeta(c)
 
 	imageReq, ok := info.Request.(*dto.ImageRequest)
@@ -95,8 +96,13 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
 	var httpResp *http.Response
+	var responseCapture *relaycommon.UpstreamResponseCapture
 	if resp != nil {
 		httpResp = resp.(*http.Response)
+		if httpResp.Body != nil {
+			responseCapture = relaycommon.NewUpstreamResponseCapture(httpResp.Body)
+			httpResp.Body = responseCapture
+		}
 		info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
 		if httpResp.StatusCode != http.StatusOK {
 			if httpResp.StatusCode == http.StatusCreated && info.ApiType == constant.APITypeReplicate {
@@ -109,6 +115,7 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 					newAPIError = gptImage2UpstreamError(c, httpResp)
 				} else {
 					newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+					responseCapture.StoreSnapshot(c, httpResp.StatusCode, httpResp.Header.Get("Content-Type"))
 				}
 				// reset status code 重置状态码
 				service.ResetStatusCode(newAPIError, statusCodeMappingStr)
@@ -119,6 +126,9 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 
 	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
 	if newAPIError != nil {
+		if responseCapture != nil && httpResp != nil {
+			responseCapture.StoreSnapshot(c, httpResp.StatusCode, httpResp.Header.Get("Content-Type"))
+		}
 		// gpt-image-2 专属报错封装：上游返回 200 但响应体解析失败（如非 UTF-8 / 损坏 JSON）时，
 		// 改写为友好提示。仅命中该系列模型生效，其他模型行为零变化。
 		if isGptImage2(info.OriginModelName) {

@@ -106,10 +106,13 @@ func (m Properties) Value() (driver.Value, error) {
 }
 
 type TaskPrivateData struct {
-	Key            string           `json:"key,omitempty"`
-	UpstreamTaskID string           `json:"upstream_task_id,omitempty"` // 上游真实 task ID
-	ResultURL      string           `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
-	ErrorDetail    *TaskErrorDetail `json:"error_detail,omitempty"`     // 任务失败时的结构化错误信息
+	Key             string               `json:"key,omitempty"`
+	UpstreamTaskID  string               `json:"upstream_task_id,omitempty"` // 上游真实 task ID
+	RequestID       string               `json:"request_id,omitempty"`       // 网关请求 ID，用于任务与消费日志关联
+	RequestSnapshot *TaskRequestSnapshot `json:"request_snapshot,omitempty"` // 脱敏后的原始/生效请求参数
+	SubmitResponse  json.RawMessage      `json:"submit_response,omitempty"`  // 脱敏后的上游提交响应
+	ResultURL       string               `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	ErrorDetail     *TaskErrorDetail     `json:"error_detail,omitempty"`     // 任务失败时的结构化错误信息
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
@@ -118,6 +121,26 @@ type TaskPrivateData struct {
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
 	SubmitLogID    int                 `json:"submit_log_id,omitempty"`   // 提交时消费日志的 ID，任务完成后更新
 	UsedChannels   []string            `json:"used_channels,omitempty"`   // 每次真实上游尝试使用的渠道，保留重复项用于展示重试链路
+}
+
+// TaskRequestSnapshot 是异步任务的审计请求快照，只保存计费与排障需要的参数，
+// 不保存图片、音频、视频正文、上传地址或其他凭据。
+type TaskRequestSnapshot struct {
+	SchemaVersion       int    `json:"schema_version"`
+	Model               string `json:"model,omitempty"`
+	Action              string `json:"action,omitempty"`
+	Prompt              string `json:"prompt,omitempty"`
+	Mode                string `json:"mode,omitempty"`
+	Size                string `json:"size,omitempty"`
+	Duration            int    `json:"duration,omitempty"`
+	AspectRatio         string `json:"aspect_ratio,omitempty"`
+	ResolutionRequested string `json:"resolution_requested,omitempty"`
+	ResolutionEffective string `json:"resolution_effective,omitempty"`
+	ResolutionDefaulted bool   `json:"resolution_defaulted,omitempty"`
+	ImageCount          int    `json:"image_count,omitempty"`
+	ReferenceImageCount int    `json:"reference_image_count,omitempty"`
+	ReferenceAudioCount int    `json:"reference_audio_count,omitempty"`
+	HasVideo            bool   `json:"has_video,omitempty"`
 }
 
 type TaskErrorDetail struct {

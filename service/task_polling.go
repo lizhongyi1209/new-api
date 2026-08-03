@@ -534,6 +534,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	shouldRefund := false
 	shouldSettle := false
+	shouldFinalize := false
 	quota := task.Quota
 
 	task.Status = model.TaskStatus(taskResult.Status)
@@ -594,6 +595,8 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			logger.LogWarn(ctx, fmt.Sprintf("Task %s CAS lost or no-op update, skip billing", task.TaskID))
 			shouldRefund = false
 			shouldSettle = false
+		} else {
+			shouldFinalize = true
 		}
 	} else if !snap.Equal(task.Snapshot()) {
 		if _, err := task.UpdateWithStatus(snap.Status); err != nil {
@@ -607,8 +610,23 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if shouldSettle {
 		settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
 	}
+	refundedQuota := 0
+	refundStatus := "not_applicable"
 	if shouldRefund {
-		RefundTaskQuota(ctx, task, task.FailReason)
+		refundStatus = "failed"
+		if RefundTaskQuota(ctx, task, task.FailReason) {
+			refundedQuota = quota
+			refundStatus = "succeeded"
+		}
+	} else if shouldFinalize && task.Status == model.TaskStatusFailure {
+		refundStatus = "not_required"
+	}
+	if shouldFinalize {
+		chargedQuota := task.Quota
+		if refundedQuota > 0 {
+			chargedQuota = quota
+		}
+		FinalizeTaskConsumptionLog(task, chargedQuota, refundedQuota, refundStatus, taskResult)
 	}
 
 	return nil
@@ -661,7 +679,7 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	if promptTokens == 0 && taskResult.TotalTokens >= taskResult.CompletionTokens {
 		promptTokens = taskResult.TotalTokens - taskResult.CompletionTokens
 	}
-	if task.PrivateData.SubmitLogID > 0 && (promptTokens > 0 || taskResult.CompletionTokens > 0) {
+	if task.PrivateData.SubmitLogID > 0 {
 		model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, task.Quota, map[string]interface{}{
 			"prompt_tokens":     promptTokens,
 			"completion_tokens": taskResult.CompletionTokens,

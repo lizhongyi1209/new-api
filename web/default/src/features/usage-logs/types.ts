@@ -112,6 +112,77 @@ export interface ToolSurchargeItem {
   price: number
 }
 
+export interface TaskRequestParams {
+  schema_version?: number
+  model?: string
+  action?: string
+  prompt?: string
+  mode?: string
+  size?: string
+  duration?: number
+  aspect_ratio?: string
+  resolution_requested?: string
+  resolution_effective?: string
+  resolution_defaulted?: boolean
+  image_count?: number
+  reference_image_count?: number
+  reference_audio_count?: number
+  has_video?: boolean
+}
+
+export interface TaskBillingAudit {
+  model_price?: number
+  model_ratio?: number
+  group_ratio?: number
+  user_group_ratio?: number
+  other_ratios?: Record<string, number>
+  formula?: string
+  quota?: number
+  per_call_billing?: boolean
+}
+
+export interface TaskLifecycleAudit {
+  status?: string
+  finished_at?: number
+  use_time_seconds?: number
+  response_body_available?: boolean
+  charged_quota?: number
+  refunded_quota?: number
+  net_quota?: number
+  refund_status?: string
+}
+
+export interface UpstreamRequestPart {
+  kind: 'field' | 'file' | string
+  name: string
+  value?: string
+  filename?: string
+  content_type?: string
+  size?: number
+  sha256?: string
+  omitted?: boolean
+  omitted_reason?: string
+  original_bytes?: number
+}
+
+export interface UpstreamRequestSnapshot {
+  schema_version: number
+  method: string
+  path: string
+  content_type: string
+  content_length: number
+  parts: UpstreamRequestPart[]
+}
+
+export interface UpstreamResponseSnapshot {
+  schema_version: number
+  status_code: number
+  content_type?: string
+  body?: unknown
+  original_bytes: number
+  truncated?: boolean
+}
+
 export interface LogOtherData {
   billing_explanation?: string
   admin_info?: {
@@ -139,6 +210,8 @@ export interface LogOtherData {
       original: number
       clamped: number
     }
+    upstream_request?: UpstreamRequestSnapshot
+    upstream_response?: UpstreamResponseSnapshot
   }
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.
@@ -230,6 +303,17 @@ export interface LogOtherData {
   // Task-related fields (for refund logs, type=6)
   is_task?: boolean
   task_id?: string
+  task_status?: string
+  task_log_schema_version?: number
+  request_params?: TaskRequestParams
+  billing?: TaskBillingAudit
+  task_lifecycle?: TaskLifecycleAudit
+  response_body_available?: boolean
+  charged_quota?: number
+  refunded_quota?: number
+  net_quota?: number
+  refund_status?: string
+  finished_at?: number
   reason?: string
   // Video task request params (image/video generation), non-sensitive only.
   prompt?: string
@@ -239,6 +323,9 @@ export interface LogOtherData {
   character_orientation?: string
   video_audio?: string
   resolution?: string
+  effective_resolution?: string
+  resolution_defaulted?: boolean
+  aspect_ratio?: string
   // Subscription billing fields
   subscription_plan_id?: string
   subscription_plan_title?: string

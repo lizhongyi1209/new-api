@@ -54,3 +54,15 @@ func TestFormatUserLogsPreservesStreamStatus(t *testing.T) {
 	require.NotContains(t, parsed, "admin_info")
 	require.Equal(t, streamStatus, parsed["stream_status"])
 }
+
+func TestFormatUserLogsStripsUpstreamRequestID(t *testing.T) {
+	logs := []*Log{{
+		RequestId:         "request-public",
+		UpstreamRequestId: "upstream-private",
+	}}
+
+	formatUserLogs(logs, 0)
+
+	require.Equal(t, "request-public", logs[0].RequestId)
+	require.Empty(t, logs[0].UpstreamRequestId)
+}

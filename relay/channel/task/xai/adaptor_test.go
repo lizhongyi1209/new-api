@@ -137,6 +137,54 @@ func TestEstimateBillingUsesOfficialDurationAndResolutionDefaults(t *testing.T) 
 	}
 }
 
+func TestRequestAuditCapturesRequestedAndEffectiveResolution(t *testing.T) {
+	tests := []struct {
+		name            string
+		body            string
+		requested       string
+		effective       string
+		defaulted       bool
+		imageCount      int
+		referenceAudios int
+	}{
+		{
+			name:      "official 480p default",
+			body:      `{"model":"grok-imagine-video","prompt":"orbit"}`,
+			effective: "480p",
+			defaulted: true,
+		},
+		{
+			name:       "explicit 720p image input",
+			body:       `{"model":"grok-imagine-video-1.5","image":{"url":"https://example.com/a.png"},"resolution":"720p"}`,
+			requested:  "720p",
+			effective:  "720p",
+			imageCount: 1,
+		},
+		{
+			name:            "reference counts",
+			body:            `{"model":"grok-imagine-video","prompt":"orbit","reference_images":[{"file_id":"1"},{"file_id":"2"}],"reference_audios":[{"url":"data:audio/wav;base64,AAAA"}]}`,
+			effective:       "480p",
+			defaulted:       true,
+			imageCount:      2,
+			referenceAudios: 1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			context, info := newVideoContext(test.body)
+			require.Nil(t, (&TaskAdaptor{}).ValidateRequestAndSetAction(context, info))
+			request, err := relaycommon.GetTaskRequest(context)
+			require.NoError(t, err)
+			assert.Equal(t, test.requested, request.Resolution)
+			assert.Equal(t, test.effective, request.EffectiveResolution)
+			assert.Equal(t, test.defaulted, request.ResolutionDefaulted)
+			assert.Equal(t, test.imageCount, request.ImageCount)
+			assert.Equal(t, test.referenceAudios, request.ReferenceAudioCount)
+		})
+	}
+}
+
 func TestVideoBillingMatchesOfficialPerSecondPrices(t *testing.T) {
 	tests := []struct {
 		model string

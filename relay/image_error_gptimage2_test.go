@@ -1,12 +1,42 @@
 package relay
 
 import (
+	"io"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGptImage2UpstreamErrorCapturesSanitizedResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	body := `{"error":{"message":"invalid value","param":"response_format"},"api_key":"secret"}`
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(body)),
+	}
+
+	err := gptImage2UpstreamError(c, resp)
+
+	require.NotNil(t, err)
+	snapshot := relaycommon.GetUpstreamResponseSnapshot(c)
+	require.NotNil(t, snapshot)
+	require.Equal(t, http.StatusBadRequest, snapshot.StatusCode)
+	require.Equal(t, "application/json", snapshot.ContentType)
+	responseBody, ok := snapshot.Body.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "[redacted]", responseBody["api_key"])
+	errorBody, ok := responseBody["error"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "response_format", errorBody["param"])
+}
 
 // TestIsGptImage2 锁定隔离边界：只有 gpt-image-2 系列命中封装，
 // 其他模型（尤其 gpt-image-1、gpt-image 前缀的其他模型）必须不命中，

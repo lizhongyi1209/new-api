@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 
@@ -38,14 +39,17 @@ func isGptImage2(originModelName string) bool {
 // 读取响应体后会关闭它，与 RelayErrorHandler 的行为保持一致。
 func gptImage2UpstreamError(c *gin.Context, resp *http.Response) *types.NewAPIError {
 	status := http.StatusInternalServerError
+	contentType := ""
 	var body []byte
 	if resp != nil {
 		status = resp.StatusCode
+		contentType = resp.Header.Get("Content-Type")
 		if resp.Body != nil {
 			body, _ = io.ReadAll(resp.Body)
 			service.CloseResponseBodyGracefully(resp)
 		}
 	}
+	relaycommon.SetUpstreamResponseSnapshot(c, status, contentType, body)
 
 	bodyText := string(body)
 	// 保留原始上游响应到日志，便于排查（不回传给客户端）。

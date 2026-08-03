@@ -2,6 +2,8 @@ package openai
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -435,8 +437,12 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 		var requestBody bytes.Buffer
 		writer := multipart.NewWriter(&requestBody)
+		snapshot := relaycommon.NewUpstreamMultipartRequestSnapshot(c.Request.Method, info.RequestURLPath)
 
-		writer.WriteField("model", request.Model)
+		if err := writer.WriteField("model", request.Model); err != nil {
+			return nil, fmt.Errorf("write model field failed: %w", err)
+		}
+		snapshot.AddField("model", request.Model)
 		// 使用已解析的 multipart 表单，避免重复解析
 		mf := c.Request.MultipartForm
 		if mf == nil {
@@ -456,7 +462,10 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 					continue
 				}
 				for _, value := range values {
-					writer.WriteField(key, value)
+					if err := writer.WriteField(key, value); err != nil {
+						return nil, fmt.Errorf("write form field %q failed: %w", key, err)
+					}
+					snapshot.AddField(key, value)
 				}
 			}
 		}
@@ -512,12 +521,16 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 					return nil, fmt.Errorf("create form part failed for image %d: %w", i, err)
 				}
 
-				if _, err := io.Copy(part, file); err != nil {
-					return nil, fmt.Errorf("copy file failed for image %d: %w", i, err)
+				hasher := sha256.New()
+				written, copyErr := io.Copy(io.MultiWriter(part, hasher), file)
+				closeErr := file.Close()
+				if copyErr != nil {
+					return nil, fmt.Errorf("copy file failed for image %d: %w", i, copyErr)
 				}
-
-				// 复制完立即关闭，避免在循环内使用 defer 占用资源
-				_ = file.Close()
+				if closeErr != nil {
+					return nil, fmt.Errorf("close image file %d failed: %w", i, closeErr)
+				}
+				snapshot.AddFile(fieldName, fileHeader.Filename, mimeType, written, hex.EncodeToString(hasher.Sum(nil)))
 			}
 
 			// Handle mask file if present
@@ -541,18 +554,30 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 					return nil, errors.New("create form file failed for mask")
 				}
 
-				if _, err := io.Copy(maskPart, maskFile); err != nil {
+				hasher := sha256.New()
+				written, copyErr := io.Copy(io.MultiWriter(maskPart, hasher), maskFile)
+				closeErr := maskFile.Close()
+				if copyErr != nil {
 					return nil, errors.New("copy mask file failed")
 				}
-				_ = maskFile.Close()
+				if closeErr != nil {
+					return nil, errors.New("close mask file failed")
+				}
+				snapshot.AddFile("mask", maskFiles[0].Filename, mimeType, written, hex.EncodeToString(hasher.Sum(nil)))
 			}
 		} else {
 			return nil, errors.New("no multipart form data found")
 		}
 
 		// 关闭 multipart 编写器以设置分界线
-		writer.Close()
-		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		if err := writer.Close(); err != nil {
+			return nil, fmt.Errorf("close multipart writer failed: %w", err)
+		}
+		contentType := writer.FormDataContentType()
+		c.Request.Header.Set("Content-Type", contentType)
+		snapshot.ContentType = contentType
+		snapshot.ContentLength = int64(requestBody.Len())
+		relaycommon.SetUpstreamRequestSnapshot(c, snapshot)
 		return &requestBody, nil
 
 	default:

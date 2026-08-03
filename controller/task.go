@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"net/http"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
@@ -8,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -100,7 +102,7 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 				task.Username = user.Username
 			}
 		}
-		taskDto := relay.TaskModel2Dto(task)
+		taskDto := relay.TaskModel2Dto(task, fillUser)
 		if channelType, ok := channelTypeMap[task.ChannelId]; ok {
 			taskDto.ChannelType = channelType
 			taskDto.ChannelTypeName = constant.GetChannelTypeName(channelType)
@@ -108,4 +110,46 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 		result[i] = taskDto
 	}
 	return result
+}
+
+// GetTaskAudit returns the sanitized request, billing, submit response, and
+// latest upstream response retained for an asynchronous task. The route is
+// administrator-only; provider credentials are never included.
+func GetTaskAudit(c *gin.Context) {
+	task, exists, err := model.GetByOnlyTaskId(c.Param("task_id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if !exists || task == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"message": "task not found",
+		})
+		return
+	}
+
+	common.ApiSuccess(c, gin.H{
+		"schema_version":   1,
+		"request_id":       task.PrivateData.RequestID,
+		"task_id":          task.TaskID,
+		"upstream_task_id": task.PrivateData.UpstreamTaskID,
+		"platform":         task.Platform,
+		"model":            task.Properties.OriginModelName,
+		"action":           task.Action,
+		"status":           task.Status,
+		"fail_reason":      task.FailReason,
+		"channel_id":       task.ChannelId,
+		"used_channels":    task.PrivateData.UsedChannels,
+		"quota":            task.Quota,
+		"submit_time":      task.SubmitTime,
+		"start_time":       task.StartTime,
+		"finish_time":      task.FinishTime,
+		"request":          task.PrivateData.RequestSnapshot,
+		"billing":          task.PrivateData.BillingContext,
+		"responses": gin.H{
+			"submit": task.PrivateData.SubmitResponse,
+			"final":  service.SanitizeTaskAuditResponse(task.Data),
+		},
+	})
 }

@@ -710,6 +710,16 @@ type TaskSubmitReq struct {
 	AspectRatio    string          `json:"aspect_ratio,omitempty"` // Kling official field
 	InputReference string          `json:"input_reference,omitempty"`
 
+	// Audit-only effective parameters. These fields are populated by adaptors
+	// after validation and must never be forwarded to upstream providers.
+	Resolution          string `json:"-"`
+	EffectiveResolution string `json:"-"`
+	ResolutionDefaulted bool   `json:"-"`
+	ImageCount          int    `json:"-"`
+	ReferenceImageCount int    `json:"-"`
+	ReferenceAudioCount int    `json:"-"`
+	HasVideo            bool   `json:"-"`
+
 	// Kling-specific fields (top-level passthrough)
 	// Note: these use json.RawMessage to avoid type conversion issues
 	// Actual parsing happens in the specific adaptor

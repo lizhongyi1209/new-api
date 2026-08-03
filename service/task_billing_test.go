@@ -43,17 +43,20 @@ func TestLogTaskConsumptionRecordsKlingMotionControlSettings(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          1,
 		OriginModelName: "kling-3.0",
+		UserGroup:       "vip",
 		UsingGroup:      "official",
 		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: 343},
 		TaskRelayInfo:   &relaycommon.TaskRelayInfo{Action: "motionControl30"},
 		PriceData: types.PriceData{
 			Quota:          2_250_000,
+			ModelPrice:     0.05,
 			ModelRatio:     1,
+			OtherRatios:    map[string]float64{"resolution": 1.75, "seconds": 5},
 			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
 		},
 	}
 
-	logID := LogTaskConsumption(context, relayInfo)
+	logID := LogTaskConsumption(context, relayInfo, "task-audit-1")
 	require.NotZero(t, logID)
 	var log model.Log
 	require.NoError(t, model.LOG_DB.First(&log, logID).Error)
@@ -63,6 +66,54 @@ func TestLogTaskConsumptionRecordsKlingMotionControlSettings(t *testing.T) {
 	assert.Equal(t, "video", other["character_orientation"])
 	assert.Equal(t, "original", other["video_audio"])
 	assert.Equal(t, "1080p", other["resolution"])
+	assert.Equal(t, "task-audit-1", other["task_id"])
+	assert.Equal(t, "SUBMITTED", other["task_status"])
+	assert.Equal(t, "vip", other["user_group"])
+	billing, ok := other["billing"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, 1.75, billing["other_ratios"].(map[string]interface{})["resolution"])
+	assert.Equal(t, "model_price(0.05) × group_ratio(1) × resolution(1.75) × seconds(5)", billing["formula"])
+	assert.Contains(t, log.Content, "resolution: 1.75, seconds: 5")
+}
+
+func TestFinalizeTaskConsumptionLogRecordsTerminalLifecycle(t *testing.T) {
+	truncate(t)
+	const chargedQuota = 4000
+	task := makeTask(1, 1, chargedQuota, 0, BillingSourceWallet, 0)
+	task.Status = model.TaskStatusFailure
+	task.SubmitTime = 100
+	task.FinishTime = 220
+	task.Data = []byte(`{"status":"failed"}`)
+	task.PrivateData.SubmitLogID = seedConsumeLog(t, task, chargedQuota, map[string]interface{}{
+		"task_status": "SUBMITTED",
+	})
+
+	FinalizeTaskConsumptionLog(task, chargedQuota, chargedQuota, "succeeded", &relaycommon.TaskInfo{})
+
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, task.PrivateData.SubmitLogID).Error)
+	assert.Equal(t, 120, log.UseTime)
+	assert.Equal(t, chargedQuota, log.Quota)
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "FAILURE", other["task_status"])
+	assert.Equal(t, float64(chargedQuota), other["refunded_quota"])
+	assert.Equal(t, float64(0), other["net_quota"])
+	assert.Equal(t, "succeeded", other["refund_status"])
+	assert.Equal(t, true, other["response_body_available"])
+}
+
+func TestSanitizeTaskAuditResponseRedactsSecretsAndMediaBodies(t *testing.T) {
+	body := []byte(`{"request_id":"req-upstream","authorization":"Bearer secret","nested":{"api_key":"sk-secret"},"image":"data:image/png;base64,AAAA","usage":{"cost_in_usd_ticks":50000000}}`)
+
+	sanitized := SanitizeTaskAuditResponse(body)
+	var result map[string]interface{}
+	require.NoError(t, common.Unmarshal(sanitized, &result))
+	assert.Equal(t, "req-upstream", result["request_id"])
+	assert.Equal(t, "[redacted]", result["authorization"])
+	assert.Equal(t, "[redacted]", result["nested"].(map[string]interface{})["api_key"])
+	assert.Equal(t, "[omitted 26 bytes]", result["image"])
+	assert.Equal(t, float64(50_000_000), result["usage"].(map[string]interface{})["cost_in_usd_ticks"])
 }
 
 func TestMain(m *testing.M) {

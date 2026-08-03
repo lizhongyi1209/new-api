@@ -2,6 +2,8 @@ package openai
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -30,6 +32,12 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		require.NoError(t, writer.WriteField("prompt", prompt))
 		require.NoError(t, writer.WriteField("stream", "true"))
 		require.NoError(t, writer.WriteField("partial_images", "3"))
+		require.NoError(t, writer.WriteField("response_format", "b64_json"))
+		require.NoError(t, writer.WriteField("quality", "low"))
+		require.NoError(t, writer.WriteField("size", "1536x1024"))
+		require.NoError(t, writer.WriteField("tag", "first"))
+		require.NoError(t, writer.WriteField("tag", "second"))
+		require.NoError(t, writer.WriteField("image_reference", "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"))
 		part, err := writer.CreateFormFile("image", "input.png")
 		require.NoError(t, err)
 		_, err = part.Write([]byte("fake image"))
@@ -44,7 +52,8 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 
 	convertAndReplay := func(t *testing.T, c *gin.Context, prompt string) {
 		info := &relaycommon.RelayInfo{
-			RelayMode: relayconstant.RelayModeImagesEdits,
+			RelayMode:      relayconstant.RelayModeImagesEdits,
+			RequestURLPath: "/v1/images/edits",
 		}
 		request := dto.ImageRequest{
 			Model:  "gpt-image-1",
@@ -65,6 +74,10 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		require.Equal(t, prompt, replayedRequest.PostForm.Get("prompt"))
 		require.Equal(t, "true", replayedRequest.PostForm.Get("stream"))
 		require.Equal(t, "3", replayedRequest.PostForm.Get("partial_images"))
+		require.Equal(t, "b64_json", replayedRequest.PostForm.Get("response_format"))
+		require.Equal(t, "low", replayedRequest.PostForm.Get("quality"))
+		require.Equal(t, "1536x1024", replayedRequest.PostForm.Get("size"))
+		require.Equal(t, []string{"first", "second"}, replayedRequest.PostForm["tag"])
 		require.Len(t, replayedRequest.MultipartForm.File["image"], 1)
 
 		file, err := replayedRequest.MultipartForm.File["image"][0].Open()
@@ -73,6 +86,43 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		fileBytes, err := io.ReadAll(file)
 		require.NoError(t, err)
 		require.Equal(t, []byte("fake image"), fileBytes)
+
+		snapshot := relaycommon.GetUpstreamRequestSnapshot(c)
+		require.NotNil(t, snapshot)
+		require.Equal(t, http.MethodPost, snapshot.Method)
+		require.Equal(t, "/v1/images/edits", snapshot.Path)
+		require.Equal(t, int64(convertedBody.Len()), snapshot.ContentLength)
+		require.Contains(t, snapshot.ContentType, "multipart/form-data; boundary=")
+
+		values := make(map[string][]string)
+		var imagePart *relaycommon.UpstreamRequestPart
+		var base64Part *relaycommon.UpstreamRequestPart
+		for i := range snapshot.Parts {
+			part := &snapshot.Parts[i]
+			if part.Kind == "field" && !part.Omitted {
+				values[part.Name] = append(values[part.Name], part.Value)
+			}
+			if part.Kind == "file" && part.Name == "image" {
+				imagePart = part
+			}
+			if part.Name == "image_reference" {
+				base64Part = part
+			}
+		}
+		require.Equal(t, []string{"b64_json"}, values["response_format"])
+		require.Equal(t, []string{"first", "second"}, values["tag"])
+		require.NotNil(t, imagePart)
+		require.Equal(t, int64(len("fake image")), imagePart.Size)
+		require.Equal(t, "input.png", imagePart.Filename)
+		require.Equal(t, "image/png", imagePart.ContentType)
+		require.Equal(t, fmt.Sprintf("%x", sha256.Sum256([]byte("fake image"))), imagePart.SHA256)
+		require.NotNil(t, base64Part)
+		require.Equal(t, "base64_image", base64Part.OmittedReason)
+		require.Empty(t, base64Part.Value)
+
+		encodedSnapshot, err := common.Marshal(snapshot)
+		require.NoError(t, err)
+		require.NotContains(t, string(encodedSnapshot), "data:image/png;base64")
 	}
 
 	t.Run("with pre-parsed form", func(t *testing.T) {

@@ -3,6 +3,7 @@ package relay
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,4 +44,26 @@ func TestBuildGrokVideoTaskResponsePreservesExpired(t *testing.T) {
 
 	response := BuildGrokVideoTaskResponse(task)
 	assert.Equal(t, "expired", response["status"])
+}
+
+func TestTaskModel2DtoHidesGrokUpstreamDataFromUsers(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task-public",
+		Status: model.TaskStatusSuccess,
+		Properties: model.Properties{
+			OriginModelName: "grok-imagine-video-1.5",
+		},
+		PrivateData: model.TaskPrivateData{ResultURL: "https://cache.example/video.mp4"},
+		Data:        []byte(`{"request_id":"upstream-secret","status":"done","video":{"url":"https://upstream.example/video.mp4","respect_moderation":true},"usage":{"cost_in_usd_ticks":50000000}}`),
+	}
+
+	userDto := TaskModel2Dto(task, false)
+	var userData map[string]any
+	require.NoError(t, common.Unmarshal(userDto.Data, &userData))
+	assert.Equal(t, "done", userData["status"])
+	assert.NotContains(t, userData, "request_id")
+	assert.NotContains(t, userData, "usage")
+
+	adminDto := TaskModel2Dto(task, true)
+	assert.JSONEq(t, string(task.Data), string(adminDto.Data))
 }

@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -16,56 +19,213 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
-// 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
-func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) int {
-	tokenName := c.GetString("token_name")
-	logContent := fmt.Sprintf("操作 %s", info.Action)
-	// 支持任务仅按次计费
-	if common.StringsContains(constant.TaskPricePatches, info.OriginModelName) {
-		logContent = fmt.Sprintf("%s，按次计费", logContent)
-	} else {
-		if len(info.PriceData.OtherRatios) > 0 {
-			var contents []string
-			for key, ra := range info.PriceData.OtherRatios {
-				if 1.0 != ra {
-					contents = append(contents, fmt.Sprintf("%s: %.2f", key, ra))
-				}
+// BuildTaskRequestSnapshot builds the sanitized request snapshot shared by the
+// task record and consume log. Media bodies and provider credentials are never
+// copied into the snapshot.
+func BuildTaskRequestSnapshot(c *gin.Context, info *relaycommon.RelayInfo) *model.TaskRequestSnapshot {
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil
+	}
+	modelName := info.OriginModelName
+	if modelName == "" {
+		modelName = req.Model
+	}
+	duration := req.Duration
+	if duration == 0 && req.Seconds != "" {
+		duration, _ = strconv.Atoi(req.Seconds)
+	}
+	requestedResolution := req.Resolution
+	effectiveResolution := req.EffectiveResolution
+	if settings, ok := req.Metadata["settings"].(map[string]interface{}); ok {
+		if resolution, ok := settings["resolution"].(string); ok {
+			if requestedResolution == "" {
+				requestedResolution = resolution
 			}
-			if len(contents) > 0 {
-				logContent = fmt.Sprintf("%s, 计算参数：%s", logContent, strings.Join(contents, ", "))
+			if effectiveResolution == "" {
+				effectiveResolution = resolution
 			}
 		}
 	}
-	other := make(map[string]interface{})
-	other["is_task"] = true
-	other["request_path"] = c.Request.URL.Path
-	other["model_price"] = info.PriceData.ModelPrice
+	imageCount := req.ImageCount
+	if imageCount == 0 {
+		imageCount = len(req.Images) + len(req.ImageList)
+		for _, image := range []string{req.Image, req.ImageUrl, req.ImageTail} {
+			if image != "" {
+				imageCount++
+			}
+		}
+	}
+	return &model.TaskRequestSnapshot{
+		SchemaVersion:       1,
+		Model:               modelName,
+		Action:              info.Action,
+		Prompt:              req.Prompt,
+		Mode:                req.Mode,
+		Size:                req.Size,
+		Duration:            duration,
+		AspectRatio:         req.AspectRatio,
+		ResolutionRequested: requestedResolution,
+		ResolutionEffective: effectiveResolution,
+		ResolutionDefaulted: req.ResolutionDefaulted,
+		ImageCount:          imageCount,
+		ReferenceImageCount: req.ReferenceImageCount,
+		ReferenceAudioCount: req.ReferenceAudioCount,
+		HasVideo:            req.HasVideo,
+	}
+}
+
+func sanitizeTaskAuditValue(current any) any {
+	switch typed := current.(type) {
+	case map[string]any:
+		cleaned := make(map[string]any, len(typed))
+		for key, item := range typed {
+			normalizedKey := strings.ToLower(key)
+			if normalizedKey == "authorization" || normalizedKey == "api_key" ||
+				normalizedKey == "access_token" || normalizedKey == "refresh_token" ||
+				normalizedKey == "password" || normalizedKey == "secret" ||
+				strings.HasSuffix(normalizedKey, "_api_key") {
+				cleaned[key] = "[redacted]"
+				continue
+			}
+			cleaned[key] = sanitizeTaskAuditValue(item)
+		}
+		return cleaned
+	case []any:
+		cleaned := make([]any, len(typed))
+		for i := range typed {
+			cleaned[i] = sanitizeTaskAuditValue(typed[i])
+		}
+		return cleaned
+	case string:
+		if strings.Contains(typed, ";base64,") || len(typed) > 16*1024 {
+			return fmt.Sprintf("[omitted %d bytes]", len(typed))
+		}
+	}
+	return current
+}
+
+// SanitizeTaskAuditResponse keeps an administrator-readable upstream response
+// while removing credentials and oversized media payloads.
+func SanitizeTaskAuditResponse(body []byte) json.RawMessage {
+	if len(body) == 0 {
+		return nil
+	}
+	var value any
+	if err := common.Unmarshal(body, &value); err != nil {
+		preview := string(body)
+		if len(preview) > 16*1024 {
+			preview = preview[:16*1024] + fmt.Sprintf("...[omitted %d bytes]", len(body)-16*1024)
+		}
+		result, _ := common.Marshal(map[string]any{"non_json_response": preview})
+		return result
+	}
+	result, err := common.Marshal(sanitizeTaskAuditValue(value))
+	if err != nil {
+		return nil
+	}
+	if len(result) > 128*1024 {
+		result, _ = common.Marshal(map[string]any{
+			"response_omitted": true,
+			"original_bytes":   len(body),
+		})
+	}
+	return result
+}
+
+// LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
+// 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
+func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID string) int {
+	tokenName := c.GetString("token_name")
+	logContent := fmt.Sprintf("操作 %s", info.Action)
+	// 支持任务仅按次计费
+	perCallBilling := common.StringsContains(constant.TaskPricePatches, info.OriginModelName) || info.PriceData.UsePrice
+	if perCallBilling {
+		logContent = fmt.Sprintf("%s，按次计费", logContent)
+	} else {
+		if len(info.PriceData.OtherRatios) > 0 {
+			keys := make([]string, 0, len(info.PriceData.OtherRatios))
+			for key := range info.PriceData.OtherRatios {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			contents := make([]string, 0, len(keys))
+			for _, key := range keys {
+				contents = append(contents, key+": "+strconv.FormatFloat(info.PriceData.OtherRatios[key], 'g', -1, 64))
+			}
+			logContent = fmt.Sprintf("%s, 计算参数：%s", logContent, strings.Join(contents, ", "))
+		}
+	}
+	requestSnapshot := BuildTaskRequestSnapshot(c, info)
+	otherRatios := make(map[string]float64, len(info.PriceData.OtherRatios))
+	priceLabel := "model_price"
+	priceValue := info.PriceData.ModelPrice
+	if !perCallBilling && priceValue == 0 {
+		priceLabel = "model_ratio"
+		priceValue = info.PriceData.ModelRatio
+	}
+	formulaParts := []string{
+		priceLabel + "(" + strconv.FormatFloat(priceValue, 'g', -1, 64) + ")",
+		"group_ratio(" + strconv.FormatFloat(info.PriceData.GroupRatioInfo.GroupRatio, 'g', -1, 64) + ")",
+	}
+	ratioKeys := make([]string, 0, len(info.PriceData.OtherRatios))
+	for key, ratio := range info.PriceData.OtherRatios {
+		otherRatios[key] = ratio
+		ratioKeys = append(ratioKeys, key)
+	}
+	sort.Strings(ratioKeys)
+	for _, key := range ratioKeys {
+		formulaParts = append(formulaParts, key+"("+strconv.FormatFloat(otherRatios[key], 'g', -1, 64)+")")
+	}
+	other := map[string]interface{}{
+		"task_log_schema_version": 1,
+		"is_task":                 true,
+		"task_id":                 taskID,
+		"task_status":             string(model.TaskStatusSubmitted),
+		"request_path":            c.Request.URL.Path,
+		"request_params":          requestSnapshot,
+		"model_price":             info.PriceData.ModelPrice,
+		"group_ratio":             info.PriceData.GroupRatioInfo.GroupRatio,
+		"billing_source":          info.BillingSource,
+		"user_group":              info.UserGroup,
+		"using_group":             info.UsingGroup,
+		"per_call_billing":        perCallBilling,
+		"billing": map[string]interface{}{
+			"model_price":      info.PriceData.ModelPrice,
+			"model_ratio":      info.PriceData.ModelRatio,
+			"group_ratio":      info.PriceData.GroupRatioInfo.GroupRatio,
+			"other_ratios":     otherRatios,
+			"formula":          strings.Join(formulaParts, " × "),
+			"quota":            info.PriceData.Quota,
+			"per_call_billing": perCallBilling,
+		},
+	}
 	if info.PriceData.ModelRatio > 0 {
 		other["model_ratio"] = info.PriceData.ModelRatio
 	}
-	other["group_ratio"] = info.PriceData.GroupRatioInfo.GroupRatio
 	if info.PriceData.GroupRatioInfo.HasSpecialRatio {
 		other["user_group_ratio"] = info.PriceData.GroupRatioInfo.GroupSpecialRatio
+		billing := other["billing"].(map[string]interface{})
+		billing["user_group_ratio"] = info.PriceData.GroupRatioInfo.GroupSpecialRatio
 	}
 	if info.IsModelMapped {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
-	// 记录非敏感的任务请求参数（mode/size/duration/prompt），便于日志详情查看与审计。
+	if info.TieredBillingSnapshot != nil {
+		InjectTieredBillingInfo(other, info, nil)
+		other["matched_tier"] = info.TieredBillingSnapshot.EstimatedTier
+	}
+	// Keep legacy top-level fields during the schema transition.
 	if req, err := relaycommon.GetTaskRequest(c); err == nil {
-		if req.Prompt != "" {
-			other["prompt"] = req.Prompt
-		}
-		if req.Mode != "" {
-			other["mode"] = req.Mode
-		}
-		if req.Size != "" {
-			other["size"] = req.Size
-		}
-		if req.Duration > 0 {
-			other["duration"] = req.Duration
-		}
+		other["prompt"] = req.Prompt
+		other["mode"] = req.Mode
+		other["size"] = req.Size
+		other["duration"] = req.Duration
+		other["aspect_ratio"] = req.AspectRatio
+		other["resolution"] = req.Resolution
+		other["effective_resolution"] = req.EffectiveResolution
+		other["resolution_defaulted"] = req.ResolutionDefaulted
 		if settings, ok := req.Metadata["settings"].(map[string]interface{}); ok {
 			for _, key := range []string{"character_orientation", "resolution"} {
 				if value, exists := settings[key]; exists {
@@ -111,6 +271,51 @@ func taskUseTimeSeconds(task *model.Task) int {
 		return 0
 	}
 	return int(task.FinishTime - base)
+}
+
+// FinalizeTaskConsumptionLog closes the consume-log lifecycle for a terminal
+// async task, including per-call tasks that do not have token-based settlement.
+func FinalizeTaskConsumptionLog(task *model.Task, chargedQuota int, refundedQuota int, refundStatus string, taskResult *relaycommon.TaskInfo) {
+	if task.PrivateData.SubmitLogID <= 0 {
+		return
+	}
+	promptTokens := 0
+	completionTokens := 0
+	if taskResult != nil {
+		promptTokens = taskResult.PromptTokens
+		completionTokens = taskResult.CompletionTokens
+		if promptTokens == 0 && taskResult.TotalTokens >= completionTokens {
+			promptTokens = taskResult.TotalTokens - completionTokens
+		}
+	}
+	netQuota := chargedQuota - refundedQuota
+	if netQuota < 0 {
+		netQuota = 0
+	}
+	lifecycle := map[string]interface{}{
+		"status":                  string(task.Status),
+		"finished_at":             task.FinishTime,
+		"use_time_seconds":        taskUseTimeSeconds(task),
+		"response_body_available": len(task.Data) > 0,
+		"charged_quota":           chargedQuota,
+		"refunded_quota":          refundedQuota,
+		"net_quota":               netQuota,
+		"refund_status":           refundStatus,
+	}
+	model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, chargedQuota, map[string]interface{}{
+		"task_id":                 task.TaskID,
+		"task_status":             string(task.Status),
+		"finished_at":             task.FinishTime,
+		"use_time_seconds":        taskUseTimeSeconds(task),
+		"response_body_available": len(task.Data) > 0,
+		"charged_quota":           chargedQuota,
+		"refunded_quota":          refundedQuota,
+		"net_quota":               netQuota,
+		"refund_status":           refundStatus,
+		"prompt_tokens":           promptTokens,
+		"completion_tokens":       completionTokens,
+		"task_lifecycle":          lifecycle,
+	})
 }
 
 // resolveTokenKey 通过 TokenId 运行时获取令牌 Key（用于 Redis 缓存操作）。

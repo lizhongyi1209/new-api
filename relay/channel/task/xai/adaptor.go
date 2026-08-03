@@ -52,9 +52,22 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	info.Action = action
 	c.Set("xai_video_request", request)
 	taskRequest := relaycommon.TaskSubmitReq{
-		Model:       request.Model,
-		Prompt:      request.Prompt,
-		AspectRatio: request.AspectRatio,
+		Model:               request.Model,
+		Prompt:              request.Prompt,
+		AspectRatio:         request.AspectRatio,
+		Resolution:          request.Resolution,
+		EffectiveResolution: request.Resolution,
+		ImageCount:          len(request.ReferenceImages),
+		ReferenceImageCount: len(request.ReferenceImages),
+		ReferenceAudioCount: len(request.ReferenceAudios),
+		HasVideo:            request.Video != nil,
+	}
+	if request.Image != nil {
+		taskRequest.ImageCount++
+	}
+	if taskRequest.EffectiveResolution == "" && action != constant.TaskActionVideoEdit && action != constant.TaskActionVideoExtend {
+		taskRequest.EffectiveResolution = "480p"
+		taskRequest.ResolutionDefaulted = true
 	}
 	if request.Duration != nil {
 		taskRequest.Duration = *request.Duration

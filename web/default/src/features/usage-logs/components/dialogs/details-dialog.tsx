@@ -49,6 +49,7 @@ import {
   UserCog,
   Info,
   LogIn,
+  ExternalLink,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -290,6 +291,21 @@ function BillingBreakdown(props: {
     })
   }
 
+  if (other.billing?.formula) {
+    rows.push({
+      label: t('Billing Formula'),
+      value: other.billing.formula,
+    })
+  }
+  for (const [name, ratio] of Object.entries(
+    other.billing?.other_ratios ?? {}
+  ).sort(([left], [right]) => left.localeCompare(right))) {
+    rows.push({
+      label: `${t('Multiplier')} · ${name}`,
+      value: `${String(ratio)}x`,
+    })
+  }
+
   if (!isTieredExpr && isClaude && hasAnyCacheTokens(other)) {
     if (other.cache_ratio != null && other.cache_ratio !== 1) {
       rows.push({
@@ -489,6 +505,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const isTopup = props.log.type === 1
   const isManage = props.log.type === 3
   const isSubscription = other?.billing_source === 'subscription'
+  const taskRequest = other?.request_params
+  const taskLifecycle = other?.task_lifecycle
   const isTieredBilling =
     isConsume &&
     !isViolation &&
@@ -499,6 +517,14 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const showAdminIp =
     !!props.log.ip && (showTiming || (props.isAdmin && isTopup))
   const adminInfo = other?.admin_info
+  const upstreamRequestText = adminInfo?.upstream_request
+    ? JSON.stringify(adminInfo.upstream_request, null, 2)
+    : ''
+  const upstreamResponseText = adminInfo?.upstream_response
+    ? JSON.stringify(adminInfo.upstream_response, null, 2)
+    : ''
+  const hasUpstreamAudit =
+    props.isAdmin && (!!upstreamRequestText || !!upstreamResponseText)
   const topupAuditFields =
     isTopup && props.isAdmin && adminInfo
       ? ([
@@ -630,7 +656,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
       contentClassName={cn(
         'min-w-0 overflow-hidden',
         'max-sm:max-h-[calc(100dvh-1.5rem)] max-sm:w-[calc(100vw-1.5rem)] max-sm:max-w-[calc(100vw-1.5rem)] max-sm:p-4',
-        isTieredBilling ? 'sm:max-w-4xl lg:max-w-5xl' : 'sm:max-w-lg'
+        isTieredBilling || hasUpstreamAudit
+          ? 'sm:max-w-4xl lg:max-w-5xl'
+          : 'sm:max-w-lg'
       )}
       headerClassName='max-sm:gap-1'
       titleClassName='flex items-center gap-2 text-base'
@@ -776,6 +804,66 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   </span>
                 </div>
               </div>
+            </div>
+          </DetailSection>
+        )}
+
+        {props.isAdmin && upstreamRequestText && (
+          <DetailSection
+            icon={<Route className='size-3.5' aria-hidden='true' />}
+            label={t('Upstream Request Snapshot')}
+          >
+            <p className='text-muted-foreground text-xs wrap-break-word'>
+              {t(
+                'Captured after request conversion. Image binary and Base64 content are omitted.'
+              )}
+            </p>
+            <div className='relative min-w-0'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1 right-1 h-6 w-6 p-0'
+                onClick={() => copyToClipboard(upstreamRequestText)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === upstreamRequestText ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <pre className='bg-muted max-h-72 max-w-full overflow-auto rounded-md p-2 pr-9 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap'>
+                {upstreamRequestText}
+              </pre>
+            </div>
+          </DetailSection>
+        )}
+
+        {props.isAdmin && upstreamResponseText && (
+          <DetailSection
+            icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
+            label={t('Upstream Response Snapshot')}
+            variant='danger'
+          >
+            <div className='relative min-w-0'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1 right-1 h-6 w-6 p-0'
+                onClick={() => copyToClipboard(upstreamResponseText)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === upstreamResponseText ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <pre className='bg-destructive/5 max-h-72 max-w-full overflow-auto rounded-md p-2 pr-9 font-mono text-[11px] leading-relaxed break-all whitespace-pre-wrap'>
+                {upstreamResponseText}
+              </pre>
             </div>
           </DetailSection>
         )}
@@ -1196,9 +1284,93 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DetailSection>
         )}
 
+        {/* Async task lifecycle and audit association. */}
+        {isConsume && other?.is_task && other.task_id && (
+          <DetailSection label={t('Task Lifecycle')}>
+            <DetailRow label={t('Task ID')} value={other.task_id} mono />
+            {(taskLifecycle?.status || other.task_status) && (
+              <DetailRow
+                label={t('Status')}
+                value={taskLifecycle?.status || other.task_status}
+                mono
+              />
+            )}
+            {taskLifecycle?.use_time_seconds != null && (
+              <DetailRow
+                label={t('Duration')}
+                value={formatUseTime(taskLifecycle.use_time_seconds)}
+                mono
+              />
+            )}
+            {taskLifecycle?.charged_quota != null && (
+              <DetailRow
+                label={t('Charged Cost')}
+                value={formatLogQuota(taskLifecycle.charged_quota)}
+                mono
+              />
+            )}
+            {taskLifecycle?.refunded_quota != null && (
+              <DetailRow
+                label={t('Refunded Cost')}
+                value={formatLogQuota(taskLifecycle.refunded_quota)}
+                mono
+              />
+            )}
+            {taskLifecycle?.net_quota != null && (
+              <DetailRow
+                label={t('Net Cost')}
+                value={formatLogQuota(taskLifecycle.net_quota)}
+                mono
+              />
+            )}
+            {taskLifecycle?.refund_status && (
+              <DetailRow
+                label={t('Refund Status')}
+                value={taskLifecycle.refund_status}
+                mono
+              />
+            )}
+            {taskLifecycle?.response_body_available != null && (
+              <DetailRow
+                label={t('Response Retained')}
+                value={
+                  taskLifecycle.response_body_available ? t('Yes') : t('No')
+                }
+              />
+            )}
+            {props.isAdmin && (
+              <Button
+                variant='outline'
+                size='sm'
+                className='mt-1 w-fit'
+                render={
+                  <a
+                    href={`/api/task/${encodeURIComponent(other.task_id)}/audit`}
+                    target='_blank'
+                    rel='noreferrer'
+                  />
+                }
+              >
+                <ExternalLink className='size-3.5' aria-hidden='true' />
+                {t('Open Audit Data')}
+              </Button>
+            )}
+          </DetailSection>
+        )}
+
         {/* Custom extension: provider-specific video request fields. */}
         {other &&
-          (other.prompt ||
+          (taskRequest?.prompt ||
+            taskRequest?.mode ||
+            taskRequest?.size ||
+            taskRequest?.duration != null ||
+            taskRequest?.aspect_ratio ||
+            taskRequest?.resolution_requested ||
+            taskRequest?.resolution_effective ||
+            taskRequest?.image_count != null ||
+            taskRequest?.reference_image_count != null ||
+            taskRequest?.reference_audio_count != null ||
+            other.prompt ||
             other.mode ||
             other.size ||
             other.duration != null ||
@@ -1206,13 +1378,35 @@ export function DetailsDialog(props: DetailsDialogProps) {
             other.video_audio ||
             other.resolution) && (
             <DetailSection label={t('Video Params')}>
-              {other.prompt && (
-                <DetailRow label={t('Prompt')} value={other.prompt} />
+              {(taskRequest?.prompt || other.prompt) && (
+                <DetailRow
+                  label={t('Prompt')}
+                  value={taskRequest?.prompt || other.prompt}
+                />
               )}
-              {other.mode && <DetailRow label={t('Mode')} value={other.mode} />}
-              {other.size && <DetailRow label={t('Size')} value={other.size} />}
-              {other.duration != null && (
-                <DetailRow label={t('Duration')} value={`${other.duration}s`} />
+              {(taskRequest?.mode || other.mode) && (
+                <DetailRow
+                  label={t('Mode')}
+                  value={taskRequest?.mode || other.mode}
+                />
+              )}
+              {(taskRequest?.size || other.size) && (
+                <DetailRow
+                  label={t('Size')}
+                  value={taskRequest?.size || other.size}
+                />
+              )}
+              {(taskRequest?.duration ?? other.duration) != null && (
+                <DetailRow
+                  label={t('Duration')}
+                  value={`${taskRequest?.duration ?? other.duration}s`}
+                />
+              )}
+              {taskRequest?.aspect_ratio && (
+                <DetailRow
+                  label={t('Aspect Ratio')}
+                  value={taskRequest.aspect_ratio}
+                />
               )}
               {other.character_orientation && (
                 <DetailRow
@@ -1223,8 +1417,55 @@ export function DetailsDialog(props: DetailsDialogProps) {
               {other.video_audio && (
                 <DetailRow label={t('Audio')} value={other.video_audio} />
               )}
-              {other.resolution && (
-                <DetailRow label={t('Resolution')} value={other.resolution} />
+              {(taskRequest?.resolution_requested || other.resolution) && (
+                <DetailRow
+                  label={t('Requested Resolution')}
+                  value={taskRequest?.resolution_requested || other.resolution}
+                />
+              )}
+              {(taskRequest?.resolution_effective ||
+                other.effective_resolution) && (
+                <DetailRow
+                  label={t('Effective Resolution')}
+                  value={
+                    <span className='inline-flex items-center gap-1.5'>
+                      <span>
+                        {taskRequest?.resolution_effective ||
+                          other.effective_resolution}
+                      </span>
+                      {(taskRequest?.resolution_defaulted ||
+                        other.resolution_defaulted) && (
+                        <StatusBadge
+                          label={t('Defaulted')}
+                          variant='neutral'
+                          size='sm'
+                          copyable={false}
+                        />
+                      )}
+                    </span>
+                  }
+                />
+              )}
+              {taskRequest?.image_count != null && (
+                <DetailRow
+                  label={t('Image Count')}
+                  value={String(taskRequest.image_count)}
+                  mono
+                />
+              )}
+              {taskRequest?.reference_image_count != null && (
+                <DetailRow
+                  label={t('Reference Images')}
+                  value={String(taskRequest.reference_image_count)}
+                  mono
+                />
+              )}
+              {taskRequest?.reference_audio_count != null && (
+                <DetailRow
+                  label={t('Reference Audios')}
+                  value={String(taskRequest.reference_audio_count)}
+                  mono
+                />
               )}
             </DetailSection>
           )}

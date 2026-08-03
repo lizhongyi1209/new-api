@@ -316,12 +316,12 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 
-	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
+	newAPIError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName, selectGroup)
 	if newAPIError != nil {
 		return nil, newAPIError
 	}
-	// 同步 relayInfo.UsingGroup：SetupContextForSelectedChannel 已将渠道分组写入 Gin context，
-	// 但 relayInfo 是在此之前创建的，需同步更新，否则后续 HandleGroupRatio 会使用错误的倍率。
+	// 同步 relayInfo.UsingGroup：SetupContextForSelectedChannel 已将本次实际选择的分组写入
+	// Gin context，但 relayInfo 是在此之前创建的，需同步更新以供计费和日志使用。
 	info.UsingGroup = common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
 	return channel, nil
@@ -395,6 +395,12 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			adminInfo["multi_key_index"] = common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
 		}
 		service.AppendChannelAffinityAdminInfo(c, adminInfo)
+		if snapshot := relaycommon.GetUpstreamRequestSnapshot(c); snapshot != nil {
+			adminInfo["upstream_request"] = snapshot
+		}
+		if snapshot := relaycommon.GetUpstreamResponseSnapshot(c); snapshot != nil {
+			adminInfo["upstream_response"] = snapshot
+		}
 		other["admin_info"] = adminInfo
 		startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 		if startTime.IsZero() {
@@ -581,7 +587,7 @@ func RelayTask(c *gin.Context) {
 		if lockedCh, ok := relayInfo.LockedChannel.(*model.Channel); ok && lockedCh != nil {
 			channel = lockedCh
 			if retryParam.GetRetry() > 0 {
-				if setupErr := middleware.SetupContextForSelectedChannel(c, channel, relayInfo.OriginModelName); setupErr != nil {
+				if setupErr := middleware.SetupContextForSelectedChannel(c, channel, relayInfo.OriginModelName, relayInfo.UsingGroup); setupErr != nil {
 					// 已有上一轮真实错误时保留它，避免被 setup 失败掩盖。
 					if taskErr == nil {
 						taskErr = service.TaskErrorWrapperLocal(setupErr.Err, "setup_locked_channel_failed", http.StatusInternalServerError)
@@ -644,10 +650,14 @@ func RelayTask(c *gin.Context) {
 		if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
 			common.SysError("settle task billing error: " + settleErr.Error())
 		}
-		submitLogID := service.LogTaskConsumption(c, relayInfo)
-
 		task := model.InitTask(result.Platform, relayInfo)
+		c.Set(common.UpstreamRequestIdKey, result.UpstreamTaskID)
+		submitLogID := service.LogTaskConsumption(c, relayInfo, task.TaskID)
+
 		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
+		task.PrivateData.RequestID = c.GetString(common.RequestIdKey)
+		task.PrivateData.RequestSnapshot = service.BuildTaskRequestSnapshot(c, relayInfo)
+		task.PrivateData.SubmitResponse = service.SanitizeTaskAuditResponse(result.TaskData)
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
@@ -660,6 +670,13 @@ func RelayTask(c *gin.Context) {
 			OtherRatios:     relayInfo.PriceData.OtherRatios,
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+		}
+		if relayInfo.TieredBillingSnapshot != nil {
+			if snapshot, err := common.Marshal(relayInfo.TieredBillingSnapshot); err == nil {
+				task.PrivateData.BillingContext.TieredSnapshot = snapshot
+			} else {
+				common.SysError("marshal task tiered billing snapshot error: " + err.Error())
+			}
 		}
 		task.Quota = result.Quota
 		task.Data = result.TaskData
