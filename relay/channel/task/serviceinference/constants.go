@@ -8,6 +8,8 @@ import (
 
 const ChannelName = "TokenMartSeedance"
 
+const seedance25VideoInputPriceRatio = 42.0 / 70.0
+
 var ModelList = []string{
 	"dreamina-seedance-2-0-260128",
 }
@@ -19,17 +21,32 @@ const (
 	defaultAssetPollIntervalMS   = 1000
 )
 
-// doubaoPricingModel 把本渠道的 Seedance 2.0 模型名映射到官方 doubao 价格表的键。
-// TokenMart 上游计费与官方（火山引擎）完全一致：fast 走 fast 档，其余（标准/mini 等）走标准档。
-func doubaoPricingModel(model string) string {
-	if strings.Contains(strings.ToLower(model), "fast") {
-		return "doubao-seedance-2-0-fast-260128"
+// doubaoPricingModel 仅把既有 Seedance 2.0 模型族对应到 doubao 价格表。
+// 未知模型不应默认套用 2.0 价格，避免后续新模型被错误计费。
+func doubaoPricingModel(model string) (string, bool) {
+	normalizedModel := strings.ToLower(strings.TrimSpace(model))
+	if !strings.Contains(normalizedModel, "seedance-2-0") {
+		return "", false
 	}
-	return "doubao-seedance-2-0-260128"
+	if strings.Contains(normalizedModel, "fast") {
+		return "doubao-seedance-2-0-fast-260128", true
+	}
+	return "doubao-seedance-2-0-260128", true
 }
 
-// videoInputRatio 返回给定模型在「输出分辨率 × 是否含视频输入」下相对基准价（720p/480p 不含视频）
-// 的计费倍率。直接复用官方 doubao 的价格表作为唯一来源，不再单独维护一套折扣比率，避免与官方口径分叉。
+// videoInputRatio 返回给定上游模型在「输出分辨率 × 是否含视频输入」下的计费倍率。
+// Seedance 2.5 使用 TokenMart 独立价格；既有 2.0 模型继续复用 doubao 价格表。
 func videoInputRatio(modelName, resolution string, hasVideo bool) (float64, bool) {
-	return doubao.GetVideoInputRatio(doubaoPricingModel(modelName), resolution, hasVideo)
+	normalizedModel := strings.ToLower(strings.TrimSpace(modelName))
+	if strings.Contains(normalizedModel, "seedance-2-5") {
+		if hasVideo {
+			return seedance25VideoInputPriceRatio, true
+		}
+		return 1.0, true
+	}
+	pricingModel, ok := doubaoPricingModel(normalizedModel)
+	if !ok {
+		return 0, false
+	}
+	return doubao.GetVideoInputRatio(pricingModel, resolution, hasVideo)
 }

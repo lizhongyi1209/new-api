@@ -689,7 +689,7 @@ func formatUpstreamError(value any) string {
 }
 
 // EstimateBilling 根据请求 metadata 中的输出分辨率与是否含视频输入，返回相对基准价的计费 OtherRatio。
-// 计费口径完全对齐官方 doubao（火山引擎），倍率为 1.0（基准价）时无需附加 OtherRatio。
+// 具体价格规则由上游模型族决定，倍率为 1.0（基准价）时无需附加 OtherRatio。
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
@@ -697,7 +697,11 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	}
 	resolution, _ := req.Metadata["resolution"].(string)
 	hasVideo := hasVideoInMetadata(req.Metadata)
-	ratio, ok := videoInputRatio(info.OriginModelName, resolution, hasVideo)
+	pricingModelName := info.UpstreamModelName
+	if pricingModelName == "" {
+		pricingModelName = info.OriginModelName
+	}
+	ratio, ok := videoInputRatio(pricingModelName, resolution, hasVideo)
 	if !ok || ratio == 1.0 {
 		return nil
 	}

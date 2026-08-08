@@ -271,9 +271,8 @@ func TestConvertToOpenAIVideoQueuedTaskWithoutData(t *testing.T) {
 	assert.Nil(t, video.Metadata)
 }
 
-// TestVideoInputRatioMirrorsOfficialPricing 锁定本渠道计费与官方 doubao（火山引擎）完全一致：
-// 按「输出分辨率 × 是否含视频输入」相对 720p/480p 不含视频基准价取倍率。
-func TestVideoInputRatioMirrorsOfficialPricing(t *testing.T) {
+// TestVideoInputRatio 锁定 TokenMartSeedance 各模型的视频输入计费倍率。
+func TestVideoInputRatio(t *testing.T) {
 	cases := []struct {
 		name       string
 		model      string
@@ -293,6 +292,12 @@ func TestVideoInputRatioMirrorsOfficialPricing(t *testing.T) {
 		{"fast 720p base", "dreamina-seedance-2-0-fast-260128", "720p", false, 1.0, true},
 		{"fast 720p video", "dreamina-seedance-2-0-fast-260128", "720p", true, 22.0 / 37.0, true},
 		{"fast 1080p falls back to base", "dreamina-seedance-2-0-fast-260128", "1080p", false, 1.0, true},
+		// Seedance 2.5：480p/720p token 单价相同；含视频输入价格为 42/70。
+		{"2.5 480p base", "dreamina-seedance-2-5-ep", "480p", false, 1.0, true},
+		{"2.5 480p video", "dreamina-seedance-2-5-ep", "480p", true, 42.0 / 70.0, true},
+		{"2.5 variant 720p base", "future-provider-seedance-2-5-preview", "720p", false, 1.0, true},
+		{"2.5 variant 720p video", "future-provider-seedance-2-5-preview", "720p", true, 42.0 / 70.0, true},
+		{"unknown future model has no implicit pricing", "future-video-model", "720p", true, 0, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -301,4 +306,26 @@ func TestVideoInputRatioMirrorsOfficialPricing(t *testing.T) {
 			assert.InDelta(t, tc.wantRatio, ratio, 1e-9)
 		})
 	}
+}
+
+func TestEstimateBillingUsesMappedSeedance25UpstreamModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+	info.OriginModelName = "public-seedance-2-5"
+	info.UpstreamModelName = "dreamina-seedance-2-5-ep"
+
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	context := newTaskContext(`{
+		"model": "public-seedance-2-5",
+		"content": [
+			{"type": "text", "text": "extend the scene"},
+			{"type": "video_url", "video_url": {"url": "https://example.com/input.mp4"}}
+		],
+		"resolution": "720p"
+	}`)
+
+	taskErr := adaptor.ValidateRequestAndSetAction(context, info)
+	require.Nil(t, taskErr)
+	assert.Equal(t, map[string]float64{"video_input": 42.0 / 70.0}, adaptor.EstimateBilling(context, info))
 }
