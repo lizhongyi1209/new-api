@@ -159,13 +159,14 @@ type TaskErrorDetail struct {
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
 type TaskBillingContext struct {
-	ModelPrice      float64            `json:"model_price,omitempty"`
-	GroupRatio      float64            `json:"group_ratio,omitempty"`
-	ModelRatio      float64            `json:"model_ratio,omitempty"`
-	OtherRatios     map[string]float64 `json:"other_ratios,omitempty"`
-	OriginModelName string             `json:"origin_model_name,omitempty"`
-	PerCallBilling  bool               `json:"per_call_billing,omitempty"`
-	TieredSnapshot  json.RawMessage    `json:"tiered_snapshot,omitempty"`
+	ModelPrice      float64                          `json:"model_price,omitempty"`
+	GroupRatio      float64                          `json:"group_ratio,omitempty"`
+	ModelRatio      float64                          `json:"model_ratio,omitempty"`
+	OtherRatios     map[string]float64               `json:"other_ratios,omitempty"`
+	OriginModelName string                           `json:"origin_model_name,omitempty"`
+	PerCallBilling  bool                             `json:"per_call_billing,omitempty"`
+	TieredSnapshot  json.RawMessage                  `json:"tiered_snapshot,omitempty"`
+	VideoBilling    *commonRelay.VideoBillingDetails `json:"video_billing,omitempty"`
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -607,6 +608,10 @@ func (Task *Task) Update() error {
 
 func (t *Task) UpdateQuota() error {
 	return DB.Model(t).Update("quota", t.Quota).Error
+}
+
+func (t *Task) UpdatePrivateData() error {
+	return DB.Model(t).Update("private_data", t.PrivateData).Error
 }
 
 // ClaimQuotaForRefund atomically clears an expected non-zero quota. A true

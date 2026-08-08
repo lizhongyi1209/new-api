@@ -82,7 +82,11 @@ import {
   isPerCallBilling,
   isTimingLogType,
 } from '../../lib/utils'
-import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
+import {
+  USAGE_BILLING_PATH,
+  type LogOtherData,
+  type VideoBillingAudit,
+} from '../../types'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -216,6 +220,81 @@ function quotaSaturationKindLabel(
   return t('Invalid (NaN)')
 }
 
+function formatCNY(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: 'CNY',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 4,
+  }).format(value)
+}
+
+function formatSignedLogQuota(value: number): string {
+  if (value === 0) return formatLogQuota(0)
+  const formatted = formatLogQuota(Math.abs(value))
+  return value > 0 ? `+${formatted}` : `-${formatted}`
+}
+
+function buildLegacyMiniMaxVideoBilling(
+  log: UsageLog,
+  other: LogOtherData
+): VideoBillingAudit | undefined {
+  const request = other.request_params
+  if (request?.model?.toLowerCase() !== 'minimax-h3') return undefined
+
+  const outputSeconds = request.duration ?? other.duration ?? 0
+  if (outputSeconds <= 0) return undefined
+
+  const resolution =
+    request.resolution_effective ||
+    request.resolution_requested ||
+    request.size ||
+    other.effective_resolution ||
+    other.resolution ||
+    '768P'
+  const outputUnitRate = resolution.toUpperCase() === '2K' ? 0.8 : 0.5
+  const imageCount = request.image_count ?? 0
+  const freeImageCount = 5
+  const billedImageCount = Math.max(0, imageCount - freeImageCount)
+  const imageUnitRate = 0.2
+  const outputCost = outputSeconds * outputUnitRate
+  const imageSurcharge = billedImageCount * imageUnitRate
+  const providerCost = outputCost + imageSurcharge
+
+  let groupRatio = other.group_ratio ?? 1
+  if (
+    other.user_group_ratio != null &&
+    Number.isFinite(other.user_group_ratio) &&
+    other.user_group_ratio !== -1
+  ) {
+    groupRatio = other.user_group_ratio
+  }
+
+  return {
+    billing_mode: 'video_per_second',
+    currency: 'CNY',
+    resolution,
+    aspect_ratio: request.aspect_ratio,
+    output_unit_rate: outputUnitRate,
+    output_seconds: outputSeconds,
+    output_cost: outputCost,
+    reference_video_input_seconds: 0,
+    reference_video_cost: 0,
+    image_count: imageCount,
+    free_image_count: freeImageCount,
+    billed_image_count: billedImageCount,
+    image_unit_rate: imageUnitRate,
+    image_surcharge: imageSurcharge,
+    provider_cost: providerCost,
+    group_ratio: groupRatio,
+    final_cost: providerCost * groupRatio,
+    pre_consumed_quota: log.quota,
+    settlement_delta_quota: 0,
+    final_quota: log.quota,
+    estimated: true,
+  }
+}
+
 function BillingBreakdown(props: {
   log: UsageLog
   other: LogOtherData
@@ -226,6 +305,11 @@ function BillingBreakdown(props: {
   const isPerCall = isPerCallBilling(other.model_price)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
+  const videoBilling =
+    other.video_billing ?? buildLegacyMiniMaxVideoBilling(log, other)
+  const isVideoPerSecond = videoBilling?.billing_mode === 'video_per_second'
+  const isMinimumEstimate =
+    videoBilling?.estimated === true && other.request_params?.has_video === true
   const tieredSummary = getTieredBillingSummary(other)
 
   const rows: Array<{ label: string; value: string }> = []
@@ -233,7 +317,62 @@ function BillingBreakdown(props: {
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
   const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
 
-  if (isTieredExpr) {
+  if (isVideoPerSecond && videoBilling) {
+    rows.push({
+      label: t('Billing Mode'),
+      value: t('Video per second'),
+    })
+    rows.push({
+      label: t('Output Rate'),
+      value: `${formatCNY(videoBilling.output_unit_rate)}/s`,
+    })
+    rows.push({
+      label: t('Duration'),
+      value: `${videoBilling.output_seconds}s`,
+    })
+    rows.push({
+      label: t('Output Cost'),
+      value: formatCNY(videoBilling.output_cost),
+    })
+    if (videoBilling.reference_video_input_seconds > 0) {
+      rows.push({
+        label: t('Reference Video'),
+        value: `${videoBilling.reference_video_input_seconds}s × ${formatCNY(videoBilling.output_unit_rate)} = ${formatCNY(videoBilling.reference_video_cost)}`,
+      })
+    }
+    if (videoBilling.image_count > 0) {
+      rows.push({
+        label: t('Image Count'),
+        value: String(videoBilling.image_count),
+      })
+      rows.push({
+        label: t('Free Image Allowance'),
+        value: String(videoBilling.free_image_count),
+      })
+    }
+    if (videoBilling.billed_image_count > 0) {
+      rows.push({
+        label: t('Image Surcharge'),
+        value: `${videoBilling.billed_image_count} × ${formatCNY(videoBilling.image_unit_rate)} = ${formatCNY(videoBilling.image_surcharge)}`,
+      })
+    }
+    rows.push({
+      label: t('Provider Cost'),
+      value: `${isMinimumEstimate ? '≥' : ''}${formatCNY(videoBilling.provider_cost)}`,
+    })
+    if (videoBilling.resolution) {
+      rows.push({
+        label: t('Effective Resolution'),
+        value: videoBilling.resolution,
+      })
+    }
+    if (videoBilling.aspect_ratio) {
+      rows.push({
+        label: t('Aspect Ratio'),
+        value: videoBilling.aspect_ratio,
+      })
+    }
+  } else if (isTieredExpr) {
     rows.push({
       label: t('Billing Mode'),
       value: t('Dynamic Pricing'),
@@ -291,19 +430,21 @@ function BillingBreakdown(props: {
     })
   }
 
-  if (other.billing?.formula) {
+  if (!isVideoPerSecond && other.billing?.formula) {
     rows.push({
       label: t('Billing Formula'),
       value: other.billing.formula,
     })
   }
-  for (const [name, ratio] of Object.entries(
-    other.billing?.other_ratios ?? {}
-  ).sort(([left], [right]) => left.localeCompare(right))) {
-    rows.push({
-      label: `${t('Multiplier')} · ${name}`,
-      value: `${String(ratio)}x`,
-    })
+  if (!isVideoPerSecond) {
+    for (const [name, ratio] of Object.entries(
+      other.billing?.other_ratios ?? {}
+    ).sort(([left], [right]) => left.localeCompare(right))) {
+      rows.push({
+        label: `${t('Multiplier')} · ${name}`,
+        value: `${String(ratio)}x`,
+      })
+    }
   }
 
   if (!isTieredExpr && isClaude && hasAnyCacheTokens(other)) {
@@ -342,7 +483,7 @@ function BillingBreakdown(props: {
     }
   }
 
-  if (!isTieredExpr) {
+  if (!isTieredExpr && !isVideoPerSecond) {
     if (other.audio_ratio != null && other.audio_ratio !== 1) {
       rows.push({
         label: t('Audio input'),
@@ -403,10 +544,29 @@ function BillingBreakdown(props: {
     })
   }
 
-  rows.push({
-    label: t('Total Cost'),
-    value: formatLogQuota(log.quota),
-  })
+  if (isVideoPerSecond && videoBilling) {
+    rows.push({
+      label: t('Final Cost'),
+      value: `${isMinimumEstimate ? '≥' : ''}${formatCNY(videoBilling.final_cost)}`,
+    })
+    rows.push({
+      label: t('Pre-consumed'),
+      value: formatLogQuota(videoBilling.pre_consumed_quota),
+    })
+    rows.push({
+      label: t('Settlement Delta'),
+      value: formatSignedLogQuota(videoBilling.settlement_delta_quota),
+    })
+    rows.push({
+      label: t('Final Consumed'),
+      value: formatLogQuota(videoBilling.final_quota),
+    })
+  } else {
+    rows.push({
+      label: t('Total Cost'),
+      value: formatLogQuota(log.quota),
+    })
+  }
 
   if (rows.length === 0) return null
 
@@ -1214,61 +1374,60 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DetailSection>
         )}
 
-        {/* Async task lifecycle and audit association. */}
-        {isConsume && other?.is_task && other.task_id && (
+        {isConsume && other?.is_task === true && other.task_id ? (
           <DetailSection label={t('Task Lifecycle')}>
             <DetailRow label={t('Task ID')} value={other.task_id} mono />
-            {(taskLifecycle?.status || other.task_status) && (
+            {taskLifecycle?.status || other.task_status ? (
               <DetailRow
                 label={t('Status')}
                 value={taskLifecycle?.status || other.task_status}
                 mono
               />
-            )}
-            {taskLifecycle?.use_time_seconds != null && (
+            ) : null}
+            {taskLifecycle?.use_time_seconds != null ? (
               <DetailRow
                 label={t('Duration')}
                 value={formatUseTime(taskLifecycle.use_time_seconds)}
                 mono
               />
-            )}
-            {taskLifecycle?.charged_quota != null && (
+            ) : null}
+            {taskLifecycle?.charged_quota != null ? (
               <DetailRow
                 label={t('Charged Cost')}
                 value={formatLogQuota(taskLifecycle.charged_quota)}
                 mono
               />
-            )}
-            {taskLifecycle?.refunded_quota != null && (
+            ) : null}
+            {taskLifecycle?.refunded_quota != null ? (
               <DetailRow
                 label={t('Refunded Cost')}
                 value={formatLogQuota(taskLifecycle.refunded_quota)}
                 mono
               />
-            )}
-            {taskLifecycle?.net_quota != null && (
+            ) : null}
+            {taskLifecycle?.net_quota != null ? (
               <DetailRow
                 label={t('Net Cost')}
                 value={formatLogQuota(taskLifecycle.net_quota)}
                 mono
               />
-            )}
-            {taskLifecycle?.refund_status && (
+            ) : null}
+            {taskLifecycle?.refund_status ? (
               <DetailRow
                 label={t('Refund Status')}
                 value={taskLifecycle.refund_status}
                 mono
               />
-            )}
-            {taskLifecycle?.response_body_available != null && (
+            ) : null}
+            {taskLifecycle?.response_body_available != null ? (
               <DetailRow
                 label={t('Response Retained')}
                 value={
                   taskLifecycle.response_body_available ? t('Yes') : t('No')
                 }
               />
-            )}
-            {props.isAdmin && (
+            ) : null}
+            {props.isAdmin ? (
               <Button
                 variant='outline'
                 size='sm'
@@ -1284,9 +1443,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 <ExternalLink className='size-3.5' aria-hidden='true' />
                 {t('Open Audit Data')}
               </Button>
-            )}
+            ) : null}
           </DetailSection>
-        )}
+        ) : null}
 
         {/* Custom extension: provider-specific video request fields. */}
         {other &&

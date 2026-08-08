@@ -88,7 +88,17 @@ func TestFinalizeTaskConsumptionLogRecordsTerminalLifecycle(t *testing.T) {
 		"task_status": "SUBMITTED",
 	})
 
-	FinalizeTaskConsumptionLog(task, chargedQuota, chargedQuota, "succeeded", &relaycommon.TaskInfo{})
+	FinalizeTaskConsumptionLog(task, chargedQuota, chargedQuota, "succeeded", &relaycommon.TaskInfo{
+		VideoBilling: &relaycommon.VideoBillingDetails{
+			BillingMode:      "video_per_second",
+			Currency:         "CNY",
+			ProviderCost:     2,
+			GroupRatio:       10,
+			FinalCost:        20,
+			PreConsumedQuota: chargedQuota,
+			FinalQuota:       chargedQuota,
+		},
+	})
 
 	var log model.Log
 	require.NoError(t, model.LOG_DB.First(&log, task.PrivateData.SubmitLogID).Error)
@@ -101,6 +111,12 @@ func TestFinalizeTaskConsumptionLogRecordsTerminalLifecycle(t *testing.T) {
 	assert.Equal(t, float64(0), other["net_quota"])
 	assert.Equal(t, "succeeded", other["refund_status"])
 	assert.Equal(t, true, other["response_body_available"])
+	assert.Equal(t, "video_per_second", other["billing_mode"])
+	videoBilling, ok := other["video_billing"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, float64(2), videoBilling["provider_cost"])
+	assert.Equal(t, float64(20), videoBilling["final_cost"])
+	assert.Equal(t, float64(chargedQuota), videoBilling["final_quota"])
 }
 
 func TestSanitizeTaskAuditResponseRedactsSecretsAndMediaBodies(t *testing.T) {

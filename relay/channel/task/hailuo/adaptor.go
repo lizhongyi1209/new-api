@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -37,10 +38,24 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
+	var nativeRequest struct {
+		Model   string                        `json:"model"`
+		Content []taskcommon.VideoContentItem `json:"content"`
+	}
+	if err := common.UnmarshalBodyReusable(c, &nativeRequest); err == nil {
+		// H3 uses the provider-neutral multimodal content shape. Treat a
+		// non-empty content array as H3 even when the model is mapped later.
+		if isMiniMaxH3Model(nativeRequest.Model) || len(nativeRequest.Content) > 0 {
+			return a.validateMiniMaxH3Request(c, info)
+		}
+	}
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	if isMiniMaxH3Info(info) {
+		return miniMaxH3BaseURL(a.baseURL) + VideoGenerationV2Endpoint, nil
+	}
 	return fmt.Sprintf("%s%s", a.baseURL, TextToVideoEndpoint), nil
 }
 
@@ -59,6 +74,22 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	req, ok := v.(relaycommon.TaskSubmitReq)
 	if !ok {
 		return nil, fmt.Errorf("invalid request type in context")
+	}
+
+	if isMiniMaxH3Info(info) {
+		var body miniMaxH3Request
+		if err := req.UnmarshalMetadata(&body); err != nil {
+			return nil, errors.Wrap(err, "unmarshal minimax h3 request failed")
+		}
+		body.Model = info.UpstreamModelName
+		if body.Model == "" {
+			body.Model = miniMaxH3Model
+		}
+		data, err := common.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(data), nil
 	}
 
 	body, err := a.convertToRequestPayload(&req, info)
@@ -85,6 +116,32 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 	_ = resp.Body.Close()
+	if isMiniMaxH3Info(info) {
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+			taskErr = miniMaxV2TaskError(responseBody, resp.StatusCode)
+			return
+		}
+		var h3Resp miniMaxH3CreateResponse
+		if err := common.Unmarshal(responseBody, &h3Resp); err != nil {
+			taskErr = service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", responseBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
+			return
+		}
+		if strings.TrimSpace(h3Resp.TaskID) == "" {
+			taskErr = service.TaskErrorWrapperLocal(fmt.Errorf("task id is empty"), "invalid_response", http.StatusInternalServerError)
+			return
+		}
+		ov := dto.NewOpenAIVideo()
+		ov.ID = info.PublicTaskID
+		ov.TaskID = info.PublicTaskID
+		ov.CreatedAt = time.Now().Unix()
+		ov.Model = info.OriginModelName
+		c.JSON(http.StatusOK, ov)
+		return h3Resp.TaskID, responseBody, nil
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		taskErr = service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
+		return
+	}
 
 	var hResp VideoResponse
 	if err := common.Unmarshal(responseBody, &hResp); err != nil {
@@ -111,10 +168,34 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	return hResp.TaskID, responseBody, nil
 }
 
+// HandlesUpstreamErrorResponse lets H3 errors retain MiniMax's actionable
+// error type/status. Legacy V1 errors are still classified by the existing
+// response parser below, preserving their response shape.
+func (a *TaskAdaptor) HandlesUpstreamErrorResponse() bool {
+	return true
+}
+
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid task_id")
+	}
+
+	modelName, _ := body["model"].(string)
+	upstreamModelName, _ := body["upstream_model"].(string)
+	if isMiniMaxH3Model(modelName) || isMiniMaxH3Model(upstreamModelName) {
+		uri := miniMaxH3BaseURL(baseUrl) + QueryTaskV2Endpoint + "/" + url.PathEscape(taskID)
+		req, err := http.NewRequest(http.MethodGet, uri, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Authorization", "Bearer "+key)
+		client, err := service.GetHttpClientWithProxy(proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+		return client.Do(req)
 	}
 
 	uri := fmt.Sprintf("%s%s?task_id=%s", baseUrl, QueryTaskEndpoint, taskID)
@@ -182,6 +263,11 @@ func (a *TaskAdaptor) parseResolutionFromSize(size string, modelConfig ModelConf
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	if result, ok, err := parseMiniMaxH3TaskResult(respBody); err != nil {
+		return nil, errors.Wrap(err, "unmarshal minimax h3 task result failed")
+	} else if ok {
+		return result, nil
+	}
 	resTask := QueryTaskResponse{}
 	if err := common.Unmarshal(respBody, &resTask); err != nil {
 		return nil, errors.Wrap(err, "unmarshal task result failed")
@@ -224,6 +310,34 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
+	var h3Resp miniMaxH3TaskResponse
+	if err := common.Unmarshal(originTask.Data, &h3Resp); err == nil && h3Resp.Task != nil {
+		openAIVideo := originTask.ToOpenAIVideo()
+		task := h3Resp.Task
+		openAIVideo.Model = originTask.Properties.OriginModelName
+		if task.Duration > 0 {
+			openAIVideo.Seconds = fmt.Sprintf("%d", task.Duration)
+		}
+		if task.Resolution != "" {
+			openAIVideo.Size = task.Resolution
+		}
+		openAIVideo.SetMetadata("url", task.Content.URL)
+		if task.Ratio != "" {
+			openAIVideo.SetMetadata("ratio", task.Ratio)
+		}
+		if task.Usage != nil {
+			openAIVideo.SetMetadata("usage", task.Usage)
+		}
+		if task.Error != nil {
+			openAIVideo.Error = &dto.OpenAIVideoError{Message: task.Error.Message, Code: task.Error.Code}
+		}
+		jsonData, err := common.Marshal(openAIVideo)
+		if err != nil {
+			return nil, errors.Wrap(err, "marshal openai video failed")
+		}
+		return jsonData, nil
+	}
+
 	var hailuoResp QueryTaskResponse
 	if err := common.Unmarshal(originTask.Data, &hailuoResp); err != nil {
 		return nil, errors.Wrap(err, "unmarshal hailuo task data failed")

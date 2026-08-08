@@ -24,18 +24,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-type MediaURL struct {
-	URL string `json:"url,omitempty"`
-}
-
-type ContentItem struct {
-	Type     string    `json:"type,omitempty"`
-	Text     string    `json:"text,omitempty"`
-	ImageURL *MediaURL `json:"image_url,omitempty"`
-	VideoURL *MediaURL `json:"video_url,omitempty"`
-	AudioURL *MediaURL `json:"audio_url,omitempty"`
-	Role     string    `json:"role,omitempty"`
-}
+type MediaURL = taskcommon.MediaURL
+type ContentItem = taskcommon.VideoContentItem
 
 type requestPayload struct {
 	Model           string        `json:"model"`
@@ -154,7 +144,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.TrimSpace(nativeReq.Model) == "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("model field is required"), "missing_model", http.StatusBadRequest)
 	}
-	prompt := firstTextContent(nativeReq.Content)
+	prompt := taskcommon.FirstTextContent(nativeReq.Content)
 	if strings.TrimSpace(prompt) == "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("content text is required"), "invalid_request", http.StatusBadRequest)
 	}
@@ -433,7 +423,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 			}
 		}
 	}
-	if !hasTextContent(payload.Content) && strings.TrimSpace(req.Prompt) != "" {
+	if !taskcommon.HasTextContent(payload.Content) && strings.TrimSpace(req.Prompt) != "" {
 		payload.Content = append(payload.Content, ContentItem{
 			Type: "text",
 			Text: req.Prompt,
@@ -675,19 +665,6 @@ func parseVideoTask(respBody []byte) (videoTask, error) {
 		return videoTask{}, errors.Wrap(err, "unmarshal direct task result failed")
 	}
 	return direct, nil
-}
-
-func firstTextContent(content []ContentItem) string {
-	for _, item := range content {
-		if item.Type == "text" && strings.TrimSpace(item.Text) != "" {
-			return item.Text
-		}
-	}
-	return ""
-}
-
-func hasTextContent(content []ContentItem) bool {
-	return strings.TrimSpace(firstTextContent(content)) != ""
 }
 
 func formatUpstreamError(value any) string {

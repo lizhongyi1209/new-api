@@ -679,6 +679,7 @@ func RelayTask(c *gin.Context) {
 			OtherRatios:     relayInfo.PriceData.OtherRatios,
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+			VideoBilling:    relayInfo.VideoBilling,
 		}
 		if relayInfo.TieredBillingSnapshot != nil {
 			if snapshot, err := common.Marshal(relayInfo.TieredBillingSnapshot); err == nil {

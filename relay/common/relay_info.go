@@ -173,6 +173,9 @@ type RelayInfo struct {
 	// and again before settlement. Non-nil only when billing mode is "tiered_expr".
 	TieredBillingSnapshot *billingexpr.BillingSnapshot
 	BillingRequestInput   *billingexpr.RequestInput
+	// VideoBilling captures provider-native, non-token billing details for
+	// asynchronous video tasks. Adaptors populate it during estimation.
+	VideoBilling *VideoBillingDetails
 
 	Request dto.Request
 
@@ -827,6 +830,35 @@ type TaskInfo struct {
 	TotalTokens      int                    `json:"total_tokens,omitempty"`      // 用于按倍率计费
 	ActualCost       float64                `json:"actual_cost,omitempty"`       // 上游返回的实际成本（RMB），用于精确计费
 	Metadata         map[string]interface{} `json:"metadata,omitempty"`          // 额外的元数据（如视频时长、分辨率等）
+	QuotaClamp       *common.QuotaClamp     `json:"-"`                           // 完成结算时的额度饱和审计标记
+	VideoBilling     *VideoBillingDetails   `json:"-"`                           // 视频任务完成后的结构化计费明细
+}
+
+// VideoBillingDetails records provider-native video pricing and the gateway
+// settlement result. Monetary fields are denominated by Currency; quota fields
+// use the gateway's internal quota unit.
+type VideoBillingDetails struct {
+	BillingMode                string  `json:"billing_mode"`
+	Currency                   string  `json:"currency"`
+	Resolution                 string  `json:"resolution,omitempty"`
+	AspectRatio                string  `json:"aspect_ratio,omitempty"`
+	OutputUnitRate             float64 `json:"output_unit_rate"`
+	OutputSeconds              int     `json:"output_seconds"`
+	OutputCost                 float64 `json:"output_cost"`
+	ReferenceVideoInputSeconds int     `json:"reference_video_input_seconds"`
+	ReferenceVideoCost         float64 `json:"reference_video_cost"`
+	ImageCount                 int     `json:"image_count"`
+	FreeImageCount             int     `json:"free_image_count"`
+	BilledImageCount           int     `json:"billed_image_count"`
+	ImageUnitRate              float64 `json:"image_unit_rate"`
+	ImageSurcharge             float64 `json:"image_surcharge"`
+	ProviderCost               float64 `json:"provider_cost"`
+	GroupRatio                 float64 `json:"group_ratio"`
+	FinalCost                  float64 `json:"final_cost"`
+	PreConsumedQuota           int     `json:"pre_consumed_quota"`
+	SettlementDeltaQuota       int     `json:"settlement_delta_quota"`
+	FinalQuota                 int     `json:"final_quota"`
+	Estimated                  bool    `json:"estimated"`
 }
 
 func FailTaskInfo(reason string) *TaskInfo {

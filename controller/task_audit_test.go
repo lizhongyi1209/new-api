@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,6 +42,11 @@ func TestGetTaskAuditReturnsSanitizedRetainedData(t *testing.T) {
 				ModelPrice:  0.05,
 				GroupRatio:  1,
 				OtherRatios: map[string]float64{"resolution": 1, "seconds": 8},
+				VideoBilling: &relaycommon.VideoBillingDetails{
+					BillingMode:  "video_per_second",
+					Currency:     "CNY",
+					ProviderCost: 2,
+				},
 			},
 		},
 		Data: []byte(`{"status":"done","authorization":"Bearer secret","usage":{"cost_in_usd_ticks":50000000}}`),
@@ -65,6 +71,10 @@ func TestGetTaskAuditReturnsSanitizedRetainedData(t *testing.T) {
 	assert.Equal(t, "request-upstream", response.Data["upstream_task_id"])
 	request := response.Data["request"].(map[string]interface{})
 	assert.Equal(t, "480p", request["resolution_effective"])
+	billing := response.Data["billing"].(map[string]interface{})
+	videoBilling := billing["video_billing"].(map[string]interface{})
+	assert.Equal(t, "video_per_second", videoBilling["billing_mode"])
+	assert.Equal(t, float64(2), videoBilling["provider_cost"])
 	responses := response.Data["responses"].(map[string]interface{})
 	submitResponse := responses["submit"].(map[string]interface{})
 	assert.Equal(t, "request-upstream", submitResponse["request_id"])

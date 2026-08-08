@@ -141,6 +141,30 @@ export interface TaskBillingAudit {
   per_call_billing?: boolean
 }
 
+export interface VideoBillingAudit {
+  billing_mode: 'video_per_second' | string
+  currency: 'CNY' | string
+  resolution?: string
+  aspect_ratio?: string
+  output_unit_rate: number
+  output_seconds: number
+  output_cost: number
+  reference_video_input_seconds: number
+  reference_video_cost: number
+  image_count: number
+  free_image_count: number
+  billed_image_count: number
+  image_unit_rate: number
+  image_surcharge: number
+  provider_cost: number
+  group_ratio: number
+  final_cost: number
+  pre_consumed_quota: number
+  settlement_delta_quota: number
+  final_quota: number
+  estimated: boolean
+}
+
 export interface TaskLifecycleAudit {
   status?: string
   finished_at?: number
@@ -274,6 +298,7 @@ export interface LogOtherData {
   task_log_schema_version?: number
   request_params?: TaskRequestParams
   billing?: TaskBillingAudit
+  video_billing?: VideoBillingAudit
   task_lifecycle?: TaskLifecycleAudit
   response_body_available?: boolean
   charged_quota?: number

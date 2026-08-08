@@ -216,6 +216,18 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 		InjectTieredBillingInfo(other, info, nil)
 		other["matched_tier"] = info.TieredBillingSnapshot.EstimatedTier
 	}
+	if info.VideoBilling != nil {
+		videoBilling := *info.VideoBilling
+		if info.PriceData.GroupRatioInfo.GroupRatio > 0 {
+			videoBilling.GroupRatio = info.PriceData.GroupRatioInfo.GroupRatio
+		}
+		videoBilling.FinalCost = videoBilling.ProviderCost * videoBilling.GroupRatio
+		videoBilling.PreConsumedQuota = info.PriceData.Quota
+		videoBilling.FinalQuota = info.PriceData.Quota
+		info.VideoBilling = &videoBilling
+		other["billing_mode"] = videoBilling.BillingMode
+		other["video_billing"] = &videoBilling
+	}
 	// Keep legacy top-level fields during the schema transition.
 	if req, err := relaycommon.GetTaskRequest(c); err == nil {
 		other["prompt"] = req.Prompt
@@ -302,7 +314,7 @@ func FinalizeTaskConsumptionLog(task *model.Task, chargedQuota int, refundedQuot
 		"net_quota":               netQuota,
 		"refund_status":           refundStatus,
 	}
-	model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, chargedQuota, map[string]interface{}{
+	otherUpdates := map[string]interface{}{
 		"task_id":                 task.TaskID,
 		"task_status":             string(task.Status),
 		"finished_at":             task.FinishTime,
@@ -315,7 +327,14 @@ func FinalizeTaskConsumptionLog(task *model.Task, chargedQuota int, refundedQuot
 		"prompt_tokens":           promptTokens,
 		"completion_tokens":       completionTokens,
 		"task_lifecycle":          lifecycle,
-	})
+	}
+	if taskResult != nil && taskResult.VideoBilling != nil {
+		taskResult.VideoBilling.FinalQuota = chargedQuota
+		taskResult.VideoBilling.SettlementDeltaQuota = chargedQuota - taskResult.VideoBilling.PreConsumedQuota
+		otherUpdates["billing_mode"] = taskResult.VideoBilling.BillingMode
+		otherUpdates["video_billing"] = taskResult.VideoBilling
+	}
+	model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, chargedQuota, otherUpdates)
 }
 
 // resolveTokenKey 通过 TokenId 运行时获取令牌 Key（用于 Redis 缓存操作）。
@@ -382,6 +401,10 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 			for k, v := range bc.OtherRatios {
 				other[k] = v
 			}
+		}
+		if bc.VideoBilling != nil {
+			other["billing_mode"] = bc.VideoBilling.BillingMode
+			other["video_billing"] = bc.VideoBilling
 		}
 	}
 	props := task.Properties

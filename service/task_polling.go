@@ -465,8 +465,10 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		key = privateData.Key
 	}
 	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
+		"task_id":        task.GetUpstreamTaskID(),
+		"action":         task.Action,
+		"model":          task.Properties.OriginModelName,
+		"upstream_model": task.Properties.UpstreamModelName,
 	}, proxy)
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
@@ -694,7 +696,15 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	}
 	// 1. 优先让 adaptor 决定最终额度
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整")
+		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整", taskResult.QuotaClamp)
+		if taskResult.VideoBilling != nil && task.PrivateData.BillingContext != nil {
+			taskResult.VideoBilling.FinalQuota = task.Quota
+			taskResult.VideoBilling.SettlementDeltaQuota = task.Quota - taskResult.VideoBilling.PreConsumedQuota
+			task.PrivateData.BillingContext.VideoBilling = taskResult.VideoBilling
+			if err := task.UpdatePrivateData(); err != nil {
+				logger.LogError(ctx, fmt.Sprintf("persist video billing audit failed for task %s: %s", task.TaskID, err.Error()))
+			}
+		}
 		return
 	}
 	// 2. 回退到 token 重算

@@ -5,6 +5,7 @@ const (
 )
 
 var ModelList = []string{
+	"MiniMax-H3",
 	"MiniMax-Hailuo-2.3",
 	"MiniMax-Hailuo-2.3-Fast",
 	"MiniMax-Hailuo-02",
@@ -17,8 +18,12 @@ var ModelList = []string{
 }
 
 const (
-	TextToVideoEndpoint = "/v1/video_generation"
-	QueryTaskEndpoint   = "/v1/query/video_generation"
+	TextToVideoEndpoint       = "/v1/video_generation"
+	QueryTaskEndpoint         = "/v1/query/video_generation"
+	VideoGenerationV2Endpoint = "/v2/video_generation"
+	QueryTaskV2Endpoint       = "/v2/query/video_generation"
+	MiniMaxV2BaseURL          = "https://api.minimaxi.com"
+	MiniMaxLegacyBaseURL      = "https://api.minimax.chat"
 )
 
 const (
@@ -44,6 +49,7 @@ const (
 	Resolution720P  = "720P"
 	Resolution768P  = "768P"
 	Resolution1080P = "1080P"
+	Resolution2K    = "2K"
 )
 
 const (

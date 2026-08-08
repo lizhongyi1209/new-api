@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
-import { Music } from 'lucide-react'
+import { ExternalLink, Music } from 'lucide-react'
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -182,7 +182,14 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               className='border-border/60 bg-muted/30 !text-foreground max-w-full truncate rounded-md border px-1.5 py-0.5 font-mono'
             />
             <span className='text-muted-foreground/60 truncate text-[11px]'>
-              {t(log.platform)} · {t(taskActionMapper.getLabel(log.action))}
+              {[
+                log.channel_type_name || t(log.platform),
+                log.properties?.origin_model_name ||
+                  log.properties?.upstream_model_name,
+                t(taskActionMapper.getLabel(log.action)),
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
           </div>
         )
@@ -221,6 +228,19 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         const status = log.status
         const [dialogOpen, setDialogOpen] = useState(false)
 
+        const auditLink = isAdmin ? (
+          <a
+            href={`/api/task/${encodeURIComponent(log.task_id)}/audit`}
+            target='_blank'
+            rel='noopener noreferrer'
+            className='text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs hover:underline'
+            title={t('Open Audit Data')}
+          >
+            <ExternalLink className='size-3' aria-hidden='true' />
+            {t('Open Audit Data')}
+          </a>
+        ) : null
+
         const isSunoSuccess =
           log.platform === 'suno' && status === TASK_STATUS.SUCCESS
         if (isSunoSuccess) {
@@ -257,23 +277,30 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         if (isSuccess && isVideoTask && hasVideoUrl) {
           const videoUrl = `/v1/videos/${log.task_id}/content`
           return (
-            <a
-              href={videoUrl}
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-foreground text-xs hover:underline'
-            >
-              {t('Click to preview video')}
-            </a>
+            <div className='flex flex-col items-start gap-1'>
+              <a
+                href={videoUrl}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='text-foreground text-xs hover:underline'
+              >
+                {t('Click to preview video')}
+              </a>
+              {auditLink}
+            </div>
           )
         }
 
         if (!failReason) {
-          return <span className='text-muted-foreground/60 text-xs'>-</span>
+          return (
+            auditLink ?? (
+              <span className='text-muted-foreground/60 text-xs'>-</span>
+            )
+          )
         }
 
         return (
-          <>
+          <div className='flex flex-col items-start gap-1'>
             <button
               type='button'
               className='group flex max-w-[200px] items-center gap-1 text-left text-xs'
@@ -289,7 +316,8 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
               open={dialogOpen}
               onOpenChange={setDialogOpen}
             />
-          </>
+            {auditLink}
+          </div>
         )
       },
       size: 200,

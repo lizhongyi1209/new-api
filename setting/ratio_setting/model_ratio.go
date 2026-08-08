@@ -263,6 +263,10 @@ var defaultModelRatio = map[string]float64{
 	"deepseek-ai/DeepSeek-R1":                 0.8,
 	"deepseek-ai/DeepSeek-V3-0324":            0.8,
 	"deepseek-ai/DeepSeek-V3.1":               0.8,
+	// MiniMax H3 is settled by its task adaptor from output/input seconds and
+	// image count. This ratio only opens the standard task billing path and
+	// provides the base used for submit-time pre-consumption.
+	"MiniMax-H3": 1,
 	// Tencent VCLM (Kling) image-to-video models — billed post-paid by actual
 	// FinalUnitDeduction in the tencentvideo adaptor's AdjustBillingOnComplete.
 	// The "-t" suffix isolates them from the official Kling channel's model
