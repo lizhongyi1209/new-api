@@ -124,6 +124,25 @@ func formatUserLogs(logs []*Log, startIdx int) {
 			delete(otherMap, "admin_info")
 			// Remove operation-audit details (operator/route info), admin-only.
 			delete(otherMap, "audit_info")
+			// Task lifecycle diagnostics are reserved for administrators. Users
+			// still receive their task result, usage and final charged quota.
+			delete(otherMap, "task_lifecycle")
+			// Video billing stores provider settlement details for audit. User log
+			// responses retain usage and charged quota, but must not expose the
+			// provider's unit rates or costs.
+			if videoBilling, ok := otherMap["video_billing"].(map[string]interface{}); ok {
+				for _, field := range []string{
+					"output_unit_rate",
+					"output_cost",
+					"reference_video_cost",
+					"image_unit_rate",
+					"image_surcharge",
+					"provider_cost",
+					"final_cost",
+				} {
+					delete(videoBilling, field)
+				}
+			}
 			// delete(otherMap, "reject_reason")
 			// Stream status describes the user's own request and remains visible.
 		}

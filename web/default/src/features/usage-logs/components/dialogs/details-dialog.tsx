@@ -82,11 +82,7 @@ import {
   isPerCallBilling,
   isTimingLogType,
 } from '../../lib/utils'
-import {
-  USAGE_BILLING_PATH,
-  type LogOtherData,
-  type VideoBillingAudit,
-} from '../../types'
+import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -174,6 +170,97 @@ function formatRatio(ratio: number | undefined): string {
   return ratio.toFixed(4)
 }
 
+const BILLING_FORMULA_TERM_PATTERN = /([a-zA-Z_][a-zA-Z0-9_]*)\(([^)]*)\)/g
+
+function formatBillingNumber(value: number): string {
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 6,
+  }).format(value)
+}
+
+function getBillingRatioLabel(name: string, t: TFunction): string {
+  if (name === 'video_input') return t('Video Input')
+  if (name === 'resolution') return t('Resolution')
+  if (name === 'seconds') return t('Duration')
+  return name
+}
+
+function formatStoredBillingFormula(
+  formula: string,
+  t: TFunction,
+  formatPrice: (value: number) => string
+): string {
+  return formula.replace(
+    BILLING_FORMULA_TERM_PATTERN,
+    (_term, name: string, rawValue: string) => {
+      const value = Number(rawValue)
+      const displayValue = Number.isFinite(value)
+        ? formatBillingNumber(value)
+        : rawValue
+      if (name === 'model_price') {
+        return `${t('Model Price')} ${Number.isFinite(value) ? formatPrice(value) : rawValue}`
+      }
+      if (name === 'model_ratio') {
+        return `${t('Price')} ${Number.isFinite(value) ? `${formatPrice(value * 2)}/M` : rawValue}`
+      }
+      if (name === 'group_ratio') {
+        return `${t('Group Ratio')} ${displayValue}`
+      }
+      return `${getBillingRatioLabel(name, t)} ${t('Multiplier')} ${displayValue}`
+    }
+  )
+}
+
+function buildReadableTaskBillingFormula(
+  log: UsageLog,
+  other: LogOtherData,
+  t: TFunction,
+  formatPrice: (value: number) => string,
+  effectiveGroupRatio: number | undefined,
+  groupRatioLabel: string
+): string | undefined {
+  const modelRatio = other.billing?.model_ratio ?? other.model_ratio
+  if (other.is_task !== true || modelRatio == null || modelRatio <= 0) {
+    return undefined
+  }
+
+  const inputTokens = log.prompt_tokens || 0
+  const outputTokens = log.completion_tokens || 0
+  if (inputTokens <= 0 && outputTokens <= 0) return undefined
+
+  const inputPrice = modelRatio * 2
+  const outputPrice = inputPrice * (other.completion_ratio ?? 1)
+  const tokenTerms: string[] = []
+  if (inputTokens > 0) {
+    tokenTerms.push(
+      `${t('Input Tokens')} ${inputTokens.toLocaleString()} × ${t('Price')} ${formatPrice(inputPrice)}`
+    )
+  }
+  if (outputTokens > 0) {
+    tokenTerms.push(
+      `${t('Output Tokens')} ${outputTokens.toLocaleString()} × ${t('Price')} ${formatPrice(outputPrice)}`
+    )
+  }
+
+  const tokenExpression =
+    tokenTerms.length > 1 ? `(${tokenTerms.join(' + ')})` : tokenTerms[0]
+  const formulaParts = [`${tokenExpression} ÷ 1,000,000`]
+  if (effectiveGroupRatio != null && Number.isFinite(effectiveGroupRatio)) {
+    formulaParts.push(
+      `${groupRatioLabel} ${formatBillingNumber(effectiveGroupRatio)}`
+    )
+  }
+  for (const [name, ratio] of Object.entries(
+    other.billing?.other_ratios ?? {}
+  ).sort(([left], [right]) => left.localeCompare(right))) {
+    formulaParts.push(
+      `${getBillingRatioLabel(name, t)} ${t('Multiplier')} ${formatBillingNumber(ratio)}`
+    )
+  }
+
+  return `${formulaParts.join(' × ')} = ${formatLogQuota(log.quota)}`
+}
+
 function getUsageBillingPathLabel(
   t: TFunction,
   adminInfo: LogOtherData['admin_info']
@@ -220,81 +307,6 @@ function quotaSaturationKindLabel(
   return t('Invalid (NaN)')
 }
 
-function formatCNY(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'CNY',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 4,
-  }).format(value)
-}
-
-function formatSignedLogQuota(value: number): string {
-  if (value === 0) return formatLogQuota(0)
-  const formatted = formatLogQuota(Math.abs(value))
-  return value > 0 ? `+${formatted}` : `-${formatted}`
-}
-
-function buildLegacyMiniMaxVideoBilling(
-  log: UsageLog,
-  other: LogOtherData
-): VideoBillingAudit | undefined {
-  const request = other.request_params
-  if (request?.model?.toLowerCase() !== 'minimax-h3') return undefined
-
-  const outputSeconds = request.duration ?? other.duration ?? 0
-  if (outputSeconds <= 0) return undefined
-
-  const resolution =
-    request.resolution_effective ||
-    request.resolution_requested ||
-    request.size ||
-    other.effective_resolution ||
-    other.resolution ||
-    '768P'
-  const outputUnitRate = resolution.toUpperCase() === '2K' ? 0.8 : 0.5
-  const imageCount = request.image_count ?? 0
-  const freeImageCount = 5
-  const billedImageCount = Math.max(0, imageCount - freeImageCount)
-  const imageUnitRate = 0.2
-  const outputCost = outputSeconds * outputUnitRate
-  const imageSurcharge = billedImageCount * imageUnitRate
-  const providerCost = outputCost + imageSurcharge
-
-  let groupRatio = other.group_ratio ?? 1
-  if (
-    other.user_group_ratio != null &&
-    Number.isFinite(other.user_group_ratio) &&
-    other.user_group_ratio !== -1
-  ) {
-    groupRatio = other.user_group_ratio
-  }
-
-  return {
-    billing_mode: 'video_per_second',
-    currency: 'CNY',
-    resolution,
-    aspect_ratio: request.aspect_ratio,
-    output_unit_rate: outputUnitRate,
-    output_seconds: outputSeconds,
-    output_cost: outputCost,
-    reference_video_input_seconds: 0,
-    reference_video_cost: 0,
-    image_count: imageCount,
-    free_image_count: freeImageCount,
-    billed_image_count: billedImageCount,
-    image_unit_rate: imageUnitRate,
-    image_surcharge: imageSurcharge,
-    provider_cost: providerCost,
-    group_ratio: groupRatio,
-    final_cost: providerCost * groupRatio,
-    pre_consumed_quota: log.quota,
-    settlement_delta_quota: 0,
-    final_quota: log.quota,
-    estimated: true,
-  }
-}
-
 function BillingBreakdown(props: {
   log: UsageLog
   other: LogOtherData
@@ -305,11 +317,11 @@ function BillingBreakdown(props: {
   const isPerCall = isPerCallBilling(other.model_price)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
-  const videoBilling =
-    other.video_billing ?? buildLegacyMiniMaxVideoBilling(log, other)
-  const isVideoPerSecond = videoBilling?.billing_mode === 'video_per_second'
-  const isMinimumEstimate =
-    videoBilling?.estimated === true && other.request_params?.has_video === true
+  const isVideoPerSecond =
+    other.billing_mode === 'video_per_second' ||
+    other.video_billing?.billing_mode === 'video_per_second' ||
+    (other.request_params?.model?.toLowerCase() === 'minimax-h3' &&
+      (other.request_params.duration ?? other.duration ?? 0) > 0)
   const tieredSummary = getTieredBillingSummary(other)
 
   const rows: Array<{ label: string; value: string }> = []
@@ -317,61 +329,11 @@ function BillingBreakdown(props: {
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
   const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
 
-  if (isVideoPerSecond && videoBilling) {
+  if (isVideoPerSecond) {
     rows.push({
       label: t('Billing Mode'),
       value: t('Video per second'),
     })
-    rows.push({
-      label: t('Output Rate'),
-      value: `${formatCNY(videoBilling.output_unit_rate)}/s`,
-    })
-    rows.push({
-      label: t('Duration'),
-      value: `${videoBilling.output_seconds}s`,
-    })
-    rows.push({
-      label: t('Output Cost'),
-      value: formatCNY(videoBilling.output_cost),
-    })
-    if (videoBilling.reference_video_input_seconds > 0) {
-      rows.push({
-        label: t('Reference Video'),
-        value: `${videoBilling.reference_video_input_seconds}s × ${formatCNY(videoBilling.output_unit_rate)} = ${formatCNY(videoBilling.reference_video_cost)}`,
-      })
-    }
-    if (videoBilling.image_count > 0) {
-      rows.push({
-        label: t('Image Count'),
-        value: String(videoBilling.image_count),
-      })
-      rows.push({
-        label: t('Free Image Allowance'),
-        value: String(videoBilling.free_image_count),
-      })
-    }
-    if (videoBilling.billed_image_count > 0) {
-      rows.push({
-        label: t('Image Surcharge'),
-        value: `${videoBilling.billed_image_count} × ${formatCNY(videoBilling.image_unit_rate)} = ${formatCNY(videoBilling.image_surcharge)}`,
-      })
-    }
-    rows.push({
-      label: t('Provider Cost'),
-      value: `${isMinimumEstimate ? '≥' : ''}${formatCNY(videoBilling.provider_cost)}`,
-    })
-    if (videoBilling.resolution) {
-      rows.push({
-        label: t('Effective Resolution'),
-        value: videoBilling.resolution,
-      })
-    }
-    if (videoBilling.aspect_ratio) {
-      rows.push({
-        label: t('Aspect Ratio'),
-        value: videoBilling.aspect_ratio,
-      })
-    }
   } else if (isTieredExpr) {
     rows.push({
       label: t('Billing Mode'),
@@ -423,17 +385,29 @@ function BillingBreakdown(props: {
   const userGR = other.user_group_ratio
   const isUserGR = userGR != null && Number.isFinite(userGR) && userGR !== -1
   const effectiveGR = isUserGR ? userGR : other.group_ratio
+  const groupRatioLabel = isUserGR
+    ? t('User Exclusive Ratio')
+    : t('Group Ratio')
   if (effectiveGR != null && Number.isFinite(effectiveGR)) {
     rows.push({
-      label: isUserGR ? t('User Exclusive Ratio') : t('Group Ratio'),
+      label: groupRatioLabel,
       value: `${formatRatio(effectiveGR)}x`,
     })
   }
 
   if (!isVideoPerSecond && other.billing?.formula) {
+    const readableFormula =
+      buildReadableTaskBillingFormula(
+        log,
+        other,
+        t,
+        fmtPrice,
+        effectiveGR,
+        groupRatioLabel
+      ) ?? formatStoredBillingFormula(other.billing.formula, t, fmtPrice)
     rows.push({
       label: t('Billing Formula'),
-      value: other.billing.formula,
+      value: readableFormula,
     })
   }
   if (!isVideoPerSecond) {
@@ -441,7 +415,7 @@ function BillingBreakdown(props: {
       other.billing?.other_ratios ?? {}
     ).sort(([left], [right]) => left.localeCompare(right))) {
       rows.push({
-        label: `${t('Multiplier')} · ${name}`,
+        label: `${t('Multiplier')} · ${getBillingRatioLabel(name, t)}`,
         value: `${String(ratio)}x`,
       })
     }
@@ -544,29 +518,10 @@ function BillingBreakdown(props: {
     })
   }
 
-  if (isVideoPerSecond && videoBilling) {
-    rows.push({
-      label: t('Final Cost'),
-      value: `${isMinimumEstimate ? '≥' : ''}${formatCNY(videoBilling.final_cost)}`,
-    })
-    rows.push({
-      label: t('Pre-consumed'),
-      value: formatLogQuota(videoBilling.pre_consumed_quota),
-    })
-    rows.push({
-      label: t('Settlement Delta'),
-      value: formatSignedLogQuota(videoBilling.settlement_delta_quota),
-    })
-    rows.push({
-      label: t('Final Consumed'),
-      value: formatLogQuota(videoBilling.final_quota),
-    })
-  } else {
-    rows.push({
-      label: t('Total Cost'),
-      value: formatLogQuota(log.quota),
-    })
-  }
+  rows.push({
+    label: t('Total Cost'),
+    value: formatLogQuota(log.quota),
+  })
 
   if (rows.length === 0) return null
 
@@ -1374,7 +1329,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DetailSection>
         )}
 
-        {isConsume && other?.is_task === true && other.task_id ? (
+        {props.isAdmin &&
+        isConsume &&
+        other?.is_task === true &&
+        other.task_id ? (
           <DetailSection label={t('Task Lifecycle')}>
             <DetailRow label={t('Task ID')} value={other.task_id} mono />
             {taskLifecycle?.status || other.task_status ? (
@@ -1427,23 +1385,21 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 }
               />
             ) : null}
-            {props.isAdmin ? (
-              <Button
-                variant='outline'
-                size='sm'
-                className='mt-1 w-fit'
-                render={
-                  <a
-                    href={`/api/task/${encodeURIComponent(other.task_id)}/audit`}
-                    target='_blank'
-                    rel='noreferrer'
-                  />
-                }
-              >
-                <ExternalLink className='size-3.5' aria-hidden='true' />
-                {t('Open Audit Data')}
-              </Button>
-            ) : null}
+            <Button
+              variant='outline'
+              size='sm'
+              className='mt-1 w-fit'
+              render={
+                <a
+                  href={`/api/task/${encodeURIComponent(other.task_id)}/audit`}
+                  target='_blank'
+                  rel='noreferrer'
+                />
+              }
+            >
+              <ExternalLink className='size-3.5' aria-hidden='true' />
+              {t('Open Audit Data')}
+            </Button>
           </DetailSection>
         ) : null}
 
@@ -1466,7 +1422,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
             other.character_orientation ||
             other.video_audio ||
             other.resolution) && (
-            <DetailSection label={t('Video Params')}>
+            <DetailSection label={t('Video Parameters')}>
               {(taskRequest?.prompt || other.prompt) && (
                 <DetailRow
                   label={t('Prompt')}
@@ -1494,7 +1450,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
               {taskRequest?.aspect_ratio && (
                 <DetailRow
                   label={t('Aspect Ratio')}
-                  value={taskRequest.aspect_ratio}
+                  value={
+                    taskRequest.aspect_ratio.toLowerCase() === 'adaptive'
+                      ? t('Adaptive')
+                      : taskRequest.aspect_ratio
+                  }
                 />
               )}
               {other.character_orientation && (

@@ -76,6 +76,27 @@ func TestLogTaskConsumptionRecordsKlingMotionControlSettings(t *testing.T) {
 	assert.Contains(t, log.Content, "resolution: 1.75, seconds: 5")
 }
 
+func TestBuildTaskRequestSnapshotRecordsNativeVideoResolution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Set("task_request", relaycommon.TaskSubmitReq{
+		Model: "dreamina-seedance-2-5-ep",
+		Metadata: map[string]interface{}{
+			"resolution": " 480p ",
+		},
+	})
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName: "dreamina-seedance-2-5-ep",
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{},
+	}
+
+	snapshot := BuildTaskRequestSnapshot(context, relayInfo)
+
+	require.NotNil(t, snapshot)
+	assert.Equal(t, "480p", snapshot.ResolutionRequested)
+	assert.Equal(t, "480p", snapshot.ResolutionEffective)
+}
+
 func TestFinalizeTaskConsumptionLogRecordsTerminalLifecycle(t *testing.T) {
 	truncate(t)
 	const chargedQuota = 4000

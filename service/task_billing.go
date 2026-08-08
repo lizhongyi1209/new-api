@@ -37,6 +37,15 @@ func BuildTaskRequestSnapshot(c *gin.Context, info *relaycommon.RelayInfo) *mode
 	}
 	requestedResolution := req.Resolution
 	effectiveResolution := req.EffectiveResolution
+	if resolution, ok := req.Metadata["resolution"].(string); ok {
+		resolution = strings.TrimSpace(resolution)
+		if requestedResolution == "" {
+			requestedResolution = resolution
+		}
+		if effectiveResolution == "" {
+			effectiveResolution = resolution
+		}
+	}
 	if settings, ok := req.Metadata["settings"].(map[string]interface{}); ok {
 		if resolution, ok := settings["resolution"].(string); ok {
 			if requestedResolution == "" {

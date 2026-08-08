@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,6 +66,63 @@ func TestFormatUserLogsStripsUpstreamRequestID(t *testing.T) {
 
 	require.Equal(t, "request-public", logs[0].RequestId)
 	require.Empty(t, logs[0].UpstreamRequestId)
+}
+
+func TestFormatUserLogsStripsTaskLifecycle(t *testing.T) {
+	logs := []*Log{{
+		Other: common.MapToJsonStr(map[string]interface{}{
+			"task_lifecycle": map[string]interface{}{
+				"status":                  "SUCCESS",
+				"response_body_available": true,
+			},
+			"task_id": "task-public",
+		}),
+	}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	assert.NotContains(t, parsed, "task_lifecycle")
+	assert.Equal(t, "task-public", parsed["task_id"])
+}
+
+func TestFormatUserLogsStripsProviderVideoCosts(t *testing.T) {
+	logs := []*Log{{
+		Other: common.MapToJsonStr(map[string]interface{}{
+			"video_billing": map[string]interface{}{
+				"billing_mode":                  "video_per_second",
+				"output_seconds":                5,
+				"output_unit_rate":              0.5,
+				"output_cost":                   2.5,
+				"reference_video_input_seconds": 0,
+				"reference_video_cost":          0,
+				"image_count":                   1,
+				"image_unit_rate":               0.2,
+				"image_surcharge":               0,
+				"provider_cost":                 2.5,
+				"final_cost":                    2.5,
+				"final_quota":                   1_250_000,
+			},
+		}),
+	}}
+
+	formatUserLogs(logs, 0)
+
+	parsed, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	videoBilling, ok := parsed["video_billing"].(map[string]interface{})
+	require.True(t, ok)
+	assert.NotContains(t, videoBilling, "output_unit_rate")
+	assert.NotContains(t, videoBilling, "output_cost")
+	assert.NotContains(t, videoBilling, "reference_video_cost")
+	assert.NotContains(t, videoBilling, "image_unit_rate")
+	assert.NotContains(t, videoBilling, "image_surcharge")
+	assert.NotContains(t, videoBilling, "provider_cost")
+	assert.NotContains(t, videoBilling, "final_cost")
+	assert.Equal(t, float64(5), videoBilling["output_seconds"])
+	assert.Equal(t, float64(1), videoBilling["image_count"])
+	assert.Equal(t, float64(1_250_000), videoBilling["final_quota"])
 }
 
 func TestStripServerOnlyLogSnapshotsPreservesOtherAdminInfo(t *testing.T) {
