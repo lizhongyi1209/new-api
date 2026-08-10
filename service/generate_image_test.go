@@ -129,13 +129,13 @@ func TestFitNanoBananaGenerateContentBodyResizesInlineImages(t *testing.T) {
 
 func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 	req := &dto.GenerateImageRequest{
-		Model:           "gpt-image-1",
+		Model:           "gemini-3.1-flash-image-preview",
 		Prompt:          "draw a cat",
 		Size:            " AUTO ",
 		Quality:         " HIGH ",
 		OutputFormat:    testStringPtr(" WEBP "),
 		MediaResolution: " MEDIA_RESOLUTION_HIGH ",
-		ThinkingLevel:   testStringPtr(" High "),
+		ThinkingLevel:   testStringPtr(" high "),
 		Mask: &dto.ImageReference{
 			ImageURL: testStringPtr(" data:image/png;base64,AAAA "),
 		},
@@ -157,8 +157,8 @@ func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 	if req.MediaResolution != "MEDIA_RESOLUTION_HIGH" {
 		t.Fatalf("MediaResolution = %q, want MEDIA_RESOLUTION_HIGH", req.MediaResolution)
 	}
-	if req.ThinkingLevel == nil || *req.ThinkingLevel != "High" {
-		t.Fatalf("ThinkingLevel = %v, want High", req.ThinkingLevel)
+	if req.ThinkingLevel == nil || *req.ThinkingLevel != "high" {
+		t.Fatalf("ThinkingLevel = %v, want high", req.ThinkingLevel)
 	}
 	if req.Mask == nil || req.Mask.ImageURL == nil || *req.Mask.ImageURL != "data:image/png;base64,AAAA" {
 		t.Fatalf("Mask.ImageURL = %v, want trimmed data URL", req.Mask)
@@ -370,11 +370,11 @@ func TestAsyncImageRequestURLPath(t *testing.T) {
 func TestConvertAsyncImageToGeminiNativeMapsThinkingConfig(t *testing.T) {
 	includeThoughts := false
 	nativeReq, err := ConvertAsyncImageToGeminiNative(context.Background(), &dto.AsyncImageRequest{
-		Model:              "nano-banana-pro",
+		Model:              "gemini-3.1-flash-image-preview",
 		Prompt:             "draw a cat",
 		ResponseModalities: []string{"IMAGE"},
 		MediaResolution:    "MEDIA_RESOLUTION_HIGH",
-		ThinkingLevel:      testStringPtr(" High "),
+		ThinkingLevel:      testStringPtr(" minimal "),
 		IncludeThoughts:    &includeThoughts,
 	})
 	if err != nil {
@@ -392,8 +392,8 @@ func TestConvertAsyncImageToGeminiNativeMapsThinkingConfig(t *testing.T) {
 	if !ok {
 		t.Fatalf("thinkingConfig = %#v, want object", generationConfig["thinkingConfig"])
 	}
-	if thinkingConfig["thinkingLevel"] != "High" {
-		t.Fatalf("thinkingLevel = %#v, want High", thinkingConfig["thinkingLevel"])
+	if thinkingConfig["thinkingLevel"] != "minimal" {
+		t.Fatalf("thinkingLevel = %#v, want minimal", thinkingConfig["thinkingLevel"])
 	}
 	if includeThoughtsValue, ok := thinkingConfig["includeThoughts"].(bool); !ok || includeThoughtsValue {
 		t.Fatalf("includeThoughts = %#v, want explicit false", thinkingConfig["includeThoughts"])

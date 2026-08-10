@@ -22,8 +22,10 @@ type GenerateImageRequest struct {
 	// Gemini 原生：开启 Google Search grounding。默认不传；仅 true 时启用。
 	GoogleSearch *bool `json:"google_search,omitempty"`
 
-	// Gemini 原生：thinkingConfig.thinkingLevel / includeThoughts。
+	// Gemini 3.1 系列原生：thinkingConfig.thinkingLevel，仅支持小写 "minimal" / "high"。
+	// 其他模型不应传入 thinking_level。
 	ThinkingLevel   *string `json:"thinking_level,omitempty"`
+	// Gemini 原生：thinkingConfig.includeThoughts。
 	IncludeThoughts *bool   `json:"include_thoughts,omitempty"`
 
 	OutputFormat *string         `json:"output_format,omitempty"` // "png" / "jpeg" / "webp"

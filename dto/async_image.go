@@ -16,6 +16,7 @@ type AsyncImageRequest struct {
 	AspectRatio        string          `json:"aspect_ratio,omitempty"`
 	ResponseModalities []string        `json:"response_modalities,omitempty"`
 	MediaResolution    string          `json:"media_resolution,omitempty"`
+	// 仅 Gemini 3.1 系列可用；支持小写 "minimal" / "high"。
 	ThinkingLevel      *string         `json:"thinking_level,omitempty"`
 	IncludeThoughts    *bool           `json:"include_thoughts,omitempty"`
 	Image              json.RawMessage `json:"image,omitempty"`
