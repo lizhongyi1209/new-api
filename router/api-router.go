@@ -274,7 +274,6 @@ func SetApiRouter(router *gin.Engine) {
 			seedanceElementRoute.GET("/mine", controller.ListMySeedanceElements)
 			seedanceElementRoute.POST("", controller.CreateSeedanceElement)
 			seedanceElementRoute.POST("/", controller.CreateSeedanceElement)
-			seedanceElementRoute.POST("/upload", controller.UploadAigcElementImage)
 			seedanceElementRoute.DELETE("/:id", controller.DeleteSeedanceElement)
 		}
 
