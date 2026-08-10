@@ -72,6 +72,7 @@ func SetVideoRouter(router *gin.Engine) {
 		// Stable dispatcher for downstream New API sites. Provider-specific routes
 		// above remain available and unchanged.
 		seedanceAssetProxyRouter.POST("/seedance/assets", controller.CreateUnifiedSeedanceAsset)
+		seedanceAssetProxyRouter.GET("/seedance/assets/:asset_id", controller.GetUnifiedSeedanceAsset)
 	}
 
 	klingV1Router := router.Group("/kling/v1")

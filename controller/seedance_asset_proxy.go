@@ -35,27 +35,38 @@ type serviceInferenceHCAssetRequest struct {
 func CreateUnifiedSeedanceAsset(c *gin.Context) {
 	var request UnifiedSeedanceAssetRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": "invalid request body: " + err.Error(),
-				"type":    "invalid_request_error",
-			},
-		})
+		seedanceAssetInvalidRequest(c, "invalid request body: "+err.Error())
 		return
 	}
 
 	upstreamPath, body, err := buildUnifiedSeedanceAssetRequest(request)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": gin.H{
-				"message": err.Error(),
-				"type":    "invalid_request_error",
-			},
-		})
+		seedanceAssetInvalidRequest(c, err.Error())
 		return
 	}
 
-	proxySeedanceAssetAPI(c, upstreamPath, bytes.NewReader(body), "application/json")
+	proxySeedanceAssetAPI(c, upstreamPath, "", bytes.NewReader(body), "application/json")
+}
+
+// GetUnifiedSeedanceAsset dispatches a stable downstream status query to the
+// selected Seedance asset workflow.
+func GetUnifiedSeedanceAsset(c *gin.Context) {
+	upstreamPath, err := buildUnifiedSeedanceAssetQuery(c.Query("type"), c.Param("asset_id"))
+	if err != nil {
+		seedanceAssetInvalidRequest(c, err.Error())
+		return
+	}
+
+	proxySeedanceAssetAPI(c, upstreamPath, "", nil, "")
+}
+
+func seedanceAssetInvalidRequest(c *gin.Context, message string) {
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error": gin.H{
+			"message": message,
+			"type":    "invalid_request_error",
+		},
+	})
 }
 
 func buildUnifiedSeedanceAssetRequest(request UnifiedSeedanceAssetRequest) (string, []byte, error) {
@@ -93,16 +104,28 @@ func buildUnifiedSeedanceAssetRequest(request UnifiedSeedanceAssetRequest) (stri
 	return "/v1/sd/assets", body, nil
 }
 
+func buildUnifiedSeedanceAssetQuery(assetWorkflow string, assetID string) (string, error) {
+	if strings.ToLower(strings.TrimSpace(assetWorkflow)) != "hc" {
+		return "", fmt.Errorf("unsupported type %q; currently supported: hc", assetWorkflow)
+	}
+
+	assetID = strings.TrimSpace(assetID)
+	if assetID == "" {
+		return "", fmt.Errorf("asset_id is required")
+	}
+	return "/v1/sd/assets/" + url.PathEscape(assetID), nil
+}
+
 // ProxySeedanceAssetAPI transparently forwards ServiceInference asset-management
 // calls (/v1/asset-groups*, /v1/assets*, /v1/sd/assets*) to the upstream provider
 // using this instance's type-60 channel credentials. Sub-stations point their
 // type-60 channel at this gateway with a gateway token, so the real upstream key
 // never leaves the main site.
 func ProxySeedanceAssetAPI(c *gin.Context) {
-	proxySeedanceAssetAPI(c, c.Request.URL.Path, c.Request.Body, c.GetHeader("Content-Type"))
+	proxySeedanceAssetAPI(c, c.Request.URL.Path, c.Request.URL.RawQuery, c.Request.Body, c.GetHeader("Content-Type"))
 }
 
-func proxySeedanceAssetAPI(c *gin.Context, upstreamPath string, body io.Reader, contentType string) {
+func proxySeedanceAssetAPI(c *gin.Context, upstreamPath string, rawQuery string, body io.Reader, contentType string) {
 	channel, err := getServiceInferenceChannel(0, 0)
 	if err != nil {
 		common.ApiErrorMsg(c, fmt.Sprintf("无法获取 ServiceInference 渠道: %v", err))
@@ -115,8 +138,8 @@ func proxySeedanceAssetAPI(c *gin.Context, upstreamPath string, body io.Reader, 
 	}
 
 	upstreamURL := baseURL + upstreamPath
-	if c.Request.URL.RawQuery != "" {
-		upstreamURL += "?" + c.Request.URL.RawQuery
+	if rawQuery != "" {
+		upstreamURL += "?" + rawQuery
 	}
 
 	req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, upstreamURL, body)

@@ -95,3 +95,39 @@ func TestBuildUnifiedSeedanceAssetRequestRejectsInvalidInput(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildUnifiedSeedanceAssetQueryHC(t *testing.T) {
+	path, err := buildUnifiedSeedanceAssetQuery(" hc ", " asset 123 ")
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/sd/assets/asset%20123", path)
+}
+
+func TestBuildUnifiedSeedanceAssetQueryRejectsInvalidInput(t *testing.T) {
+	tests := []struct {
+		name          string
+		assetWorkflow string
+		assetID       string
+		wantErr       string
+	}{
+		{
+			name:          "unsupported workflow",
+			assetWorkflow: "standard",
+			assetID:       "asset-123",
+			wantErr:       "currently supported: hc",
+		},
+		{
+			name:          "missing asset id",
+			assetWorkflow: "hc",
+			wantErr:       "asset_id is required",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := buildUnifiedSeedanceAssetQuery(test.assetWorkflow, test.assetID)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.wantErr)
+		})
+	}
+}
