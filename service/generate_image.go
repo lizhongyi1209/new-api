@@ -74,10 +74,9 @@ var imageRoutes = []imageRoute{
 //   - google_search 可选，只有 true 时启用 Google Search grounding；
 //   - 不需要图片预签名上传。
 func isGeminiImageModelName(modelName string) bool {
-	return isNanoBananaModelName(modelName) ||
-		modelName == "gemini-3-pro-image" ||
-		modelName == "gemini-3-pro-image-preview" ||
-		modelName == "gemini-3.1-flash-image-preview"
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	return isNanoBananaModelName(normalizedModelName) ||
+		(strings.HasPrefix(normalizedModelName, "gemini-") && strings.Contains(normalizedModelName, "image"))
 }
 
 func isNanoBananaModelName(modelName string) bool {

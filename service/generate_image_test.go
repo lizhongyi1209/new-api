@@ -41,14 +41,20 @@ func TestIsGeminiImageModelName(t *testing.T) {
 		{model: "nano-banana-2-2k", want: true},
 		{model: "gemini-3-pro-image-preview", want: true},
 		{model: "gemini-3.1-flash-image-preview", want: true},
+		{model: "gemini-2.5-flash-image", want: true},
+		{model: "gemini-3.1-flash-lite-image-c-sd", want: true},
+		{model: "gemini-3.1-flash-image-c-sp", want: true},
+		{model: "gemini-3-pro-image-neil", want: true},
+		{model: " GEMINI-3.1-FLASH-IMAGE-C-SP ", want: true},
+		{model: "gemini-3.5-flash", want: false},
+		{model: "gemini-omni-flash-preview", want: false},
+		{model: "x-gemini-3.1-flash-image", want: false},
 		{model: "gpt-image-1", want: false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.model, func(t *testing.T) {
-			if got := isGeminiImageModelName(test.model); got != test.want {
-				t.Fatalf("isGeminiImageModelName(%q) = %v, want %v", test.model, got, test.want)
-			}
+			assert.Equal(t, test.want, isGeminiImageModelName(test.model))
 		})
 	}
 }
