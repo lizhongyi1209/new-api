@@ -489,10 +489,9 @@ func UploadAigcElementImage(c *gin.Context) {
 		return
 	}
 
-	publicURL, err := service.UploadBase64ImageToHostStorageCompressed(
+	publicURL, err := service.UploadBase64ImageToHostStorage(
 		mimeType,
 		base64.StdEncoding.EncodeToString(processed),
-		"origin",
 		c.Request.Host,
 	)
 	if err != nil {

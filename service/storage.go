@@ -7,14 +7,12 @@ import (
 	"fmt"
 	"image"
 	_ "image/gif" // register GIF decoder
-	"image/jpeg"
 	_ "image/png" // register PNG decoder
 	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path"
 	"strconv"
 	"strings"
@@ -138,25 +136,25 @@ func SelectImageStorageProvider(requestHost string) string {
 	return ImageStorageProviderLocal
 }
 
-func UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, compression, requestHost string) (string, error) {
+func UploadBase64ImageToHostStorage(mimeType, base64Data, requestHost string) (string, error) {
 	switch SelectImageStorageProvider(requestHost) {
 	case ImageStorageProviderAliyunOSS:
-		return UploadBase64ImageToOSSCompressed(mimeType, base64Data, compression)
+		return UploadBase64ImageToOSS(mimeType, base64Data)
 	case ImageStorageProviderLocal:
-		return UploadBase64ImageToLocalCompressed(mimeType, base64Data, compression)
+		return UploadBase64ImageToLocal(mimeType, base64Data)
 	default:
-		return UploadBase64ImageToR2Compressed(mimeType, base64Data, compression)
+		return UploadBase64ImageToR2(mimeType, base64Data)
 	}
 }
 
-func UploadBase64ImageWithOutputStrategy(mimeType, base64Data, compression, strategy, requestHost string) (string, error) {
+func UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, requestHost string) (string, error) {
 	switch strategy {
 	case dto.ImageOutputStrategyOSS:
-		return UploadBase64ImageToOSSCompressed(mimeType, base64Data, compression)
+		return UploadBase64ImageToOSS(mimeType, base64Data)
 	case dto.ImageOutputStrategyR2:
-		return UploadBase64ImageToR2Compressed(mimeType, base64Data, compression)
+		return UploadBase64ImageToR2(mimeType, base64Data)
 	default:
-		return UploadBase64ImageToHostStorageCompressed(mimeType, base64Data, compression, requestHost)
+		return UploadBase64ImageToHostStorage(mimeType, base64Data, requestHost)
 	}
 }
 
@@ -358,8 +356,8 @@ func GenerateOSSPresignedUploadURL(filename, contentType string, maxSize int64) 
 	}, nil
 }
 
-// UploadBase64ImageToOSSCompressed uploads a generated base64 image to Aliyun OSS and returns its public URL.
-func UploadBase64ImageToOSSCompressed(mimeType, base64Data, compression string) (string, error) {
+// UploadBase64ImageToOSS uploads a generated base64 image to Aliyun OSS without re-encoding it.
+func UploadBase64ImageToOSS(mimeType, base64Data string) (string, error) {
 	client, _, err := getAliyunOSSClient()
 	if err != nil {
 		return "", err
@@ -371,7 +369,7 @@ func UploadBase64ImageToOSSCompressed(mimeType, base64Data, compression string) 
 		return "", fmt.Errorf("missing Aliyun OSS config: require ALIYUN_OSS_BUCKET and ALIYUN_OSS_PUBLIC_BASE_URL")
 	}
 
-	uploadBytes, ext, contentType, err := prepareCompressedImageUpload(mimeType, base64Data, compression)
+	uploadBytes, ext, contentType, err := prepareImageUpload(mimeType, base64Data)
 	if err != nil {
 		return "", err
 	}
@@ -418,18 +416,18 @@ func GenerateLocalPresignedUploadURL(filename, contentType string, maxSize int64
 	}, nil
 }
 
-// UploadBase64ImageToLocalCompressed uploads a base64 image to local storage with optional compression.
-func UploadBase64ImageToLocalCompressed(mimeType, base64Data, compression string) (string, error) {
-	return UploadBase64ImageToLocalCompressedWithCategory(mimeType, base64Data, compression, UploadDirGeneral)
+// UploadBase64ImageToLocal uploads a base64 image to local storage without re-encoding it.
+func UploadBase64ImageToLocal(mimeType, base64Data string) (string, error) {
+	return UploadBase64ImageToLocalWithCategory(mimeType, base64Data, UploadDirGeneral)
 }
 
-// UploadBase64ImageToLocalCompressedWithCategory uploads a base64 image to local storage with category.
+// UploadBase64ImageToLocalWithCategory uploads a base64 image to local storage with category.
 // category should be one of: UploadDirGeneral, UploadDirElements, UploadDirTemp
-func UploadBase64ImageToLocalCompressedWithCategory(mimeType, base64Data, compression, category string) (string, error) {
+func UploadBase64ImageToLocalWithCategory(mimeType, base64Data, category string) (string, error) {
 	localPublicBase := normalizeHTTPBaseURL(firstNonEmptyString(os.Getenv("LOCAL_PUBLIC_BASE_URL"), "https://api.o1key.cn"))
 	uploadDir := firstNonEmptyString(os.Getenv("LOCAL_UPLOAD_DIR"), "uploads")
 
-	uploadBytes, ext, contentType, err := prepareCompressedImageUpload(mimeType, base64Data, compression)
+	uploadBytes, ext, contentType, err := prepareImageUpload(mimeType, base64Data)
 	if err != nil {
 		return "", err
 	}
@@ -538,25 +536,14 @@ func sanitizeUploadFilename(filename string) string {
 	}, name)
 }
 
-func prepareCompressedImageUpload(mimeType, base64Data, compression string) ([]byte, string, string, error) {
+func prepareImageUpload(mimeType, base64Data string) ([]byte, string, string, error) {
 	imgBytes, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("base64 decode failed: %w", err)
 	}
 
-	switch compression {
-	case ImageCompressionWebP, ImageCompressionJPG:
-		jpgBytes, err := convertToJPEG(imgBytes, 95)
-		if err != nil {
-			return nil, "", "", fmt.Errorf("jpeg conversion failed: %w", err)
-		}
-		return jpgBytes, "jpg", "image/jpeg", nil
-	case ImageCompressionOrigin, "":
-		ext, contentType := detectImageUploadFormat(imgBytes, mimeType)
-		return imgBytes, ext, contentType, nil
-	default:
-		return imgBytes, "png", firstNonEmptyString(mimeType, "image/png"), nil
-	}
+	ext, contentType := detectImageUploadFormat(imgBytes, mimeType)
+	return imgBytes, ext, contentType, nil
 }
 
 func detectImageUploadFormat(imgBytes []byte, mimeType string) (string, string) {
@@ -582,18 +569,14 @@ func detectImageUploadFormat(imgBytes []byte, mimeType string) (string, string) 
 		format = "jpg"
 	}
 
-	contentType := strings.ToLower(strings.TrimSpace(mimeType))
-	if contentType == "" {
-		switch format {
-		case "jpg":
-			contentType = "image/jpeg"
-		case "webp":
-			contentType = "image/webp"
-		case "gif":
-			contentType = "image/gif"
-		default:
-			contentType = "image/png"
-		}
+	contentType := "image/png"
+	switch format {
+	case "jpg":
+		contentType = "image/jpeg"
+	case "webp":
+		contentType = "image/webp"
+	case "gif":
+		contentType = "image/gif"
 	}
 	return format, contentType
 }
@@ -613,18 +596,18 @@ func UploadBase64ImageToR2(mimeType, base64Data string) (string, error) {
 	bucket := os.Getenv("R2_BUCKET")
 	baseURL := strings.TrimRight(os.Getenv("R2_PUBLIC_BASE_URL"), "/")
 
-	imgBytes, err := base64.StdEncoding.DecodeString(base64Data)
+	uploadBytes, ext, contentType, err := prepareImageUpload(mimeType, base64Data)
 	if err != nil {
-		return "", fmt.Errorf("base64 decode failed: %w", err)
+		return "", err
 	}
 
-	key := fmt.Sprintf("images/%s.png", uuid.New().String())
+	key := fmt.Sprintf("images/%s.%s", uuid.New().String(), ext)
 
 	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
-		Body:        bytes.NewReader(imgBytes),
-		ContentType: aws.String(mimeType),
+		Body:        bytes.NewReader(uploadBytes),
+		ContentType: aws.String(contentType),
 	})
 	if err != nil {
 		return "", fmt.Errorf("r2 upload failed: %w", err)
@@ -710,147 +693,9 @@ func cacheRemoteVideoToR2(ctx context.Context, sourceURL string, httpClient *htt
 	return publicBase + "/" + objectKey, nil
 }
 
-// convertToWebP converts image bytes to WebP using the cwebp CLI tool.
-// quality is 0-100, 85 is recommended for visually lossless results.
-func convertToWebP(imgBytes []byte, quality int) ([]byte, error) {
-	inFile, err := os.CreateTemp("", "r2upload_*.png")
-	if err != nil {
-		return nil, fmt.Errorf("create temp input: %w", err)
-	}
-	defer os.Remove(inFile.Name())
-
-	outFile, err := os.CreateTemp("", "r2upload_*.webp")
-	if err != nil {
-		return nil, fmt.Errorf("create temp output: %w", err)
-	}
-	outPath := outFile.Name()
-	outFile.Close()
-	defer os.Remove(outPath)
-
-	if _, err := inFile.Write(imgBytes); err != nil {
-		inFile.Close()
-		return nil, fmt.Errorf("write temp input: %w", err)
-	}
-	inFile.Close()
-
-	cmd := exec.Command("cwebp", "-q", strconv.Itoa(quality), inFile.Name(), "-o", outPath)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("cwebp: %w: %s", err, stderr.String())
-	}
-
-	webpBytes, err := os.ReadFile(outPath)
-	if err != nil {
-		return nil, fmt.Errorf("read temp output: %w", err)
-	}
-	return webpBytes, nil
-}
-
-const ImageCompressionWebP = "webp"
-const ImageCompressionJPG = "jpg"
-const ImageCompressionOrigin = "origin"
-
 // Upload directory categories for different purposes
 const (
 	UploadDirGeneral  = "uploads"  // General uploads, can be cleaned
 	UploadDirElements = "elements" // Kling/video elements, permanent
 	UploadDirTemp     = "temp"     // Temporary files, aggressive cleanup
 )
-
-// convertToJPEG decodes image bytes in any supported format (PNG, JPEG, GIF, WebP)
-// and re-encodes as JPEG with the given quality (1-100). Returns original bytes
-// if decoding fails, to avoid data loss.
-func convertToJPEG(imgBytes []byte, quality int) ([]byte, error) {
-	img, _, err := image.Decode(bytes.NewReader(imgBytes))
-	if err != nil {
-		// Try WebP decoder for webp source images
-		img, err = webp.Decode(bytes.NewReader(imgBytes))
-		if err != nil {
-			return imgBytes, nil // Return original bytes if unable to decode
-		}
-	}
-	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
-		return imgBytes, nil // Return original bytes if encode fails
-	}
-	// Only use JPEG result if it's smaller or comparable to original
-	result := buf.Bytes()
-	if len(result) > len(imgBytes)*3 {
-		return imgBytes, nil // Don't replace if JPEG is >3x larger (avoid size blowup)
-	}
-	return result, nil
-}
-
-// UploadBase64ImageToR2Compressed uploads a base64 image to R2 with optional compression.
-// compression modes:
-//
-//	"webp"  - convert to JPEG (quality 95, same as "jpg" mode)
-//	"jpg"   - convert to JPEG (quality 95, fallback to original if decode fails)
-//	"origin" - keep original format, detect extension
-//	default  - store as-is with PNG extension
-func UploadBase64ImageToR2Compressed(mimeType, base64Data, compression string) (string, error) {
-	client, _ := getR2Client()
-	bucket := os.Getenv("R2_BUCKET")
-	baseURL := strings.TrimRight(os.Getenv("R2_PUBLIC_BASE_URL"), "/")
-
-	imgBytes, err := base64.StdEncoding.DecodeString(base64Data)
-	if err != nil {
-		return "", fmt.Errorf("base64 decode failed: %w", err)
-	}
-
-	var uploadBytes []byte
-	var ext, contentType string
-
-	switch compression {
-	case ImageCompressionWebP:
-		// Changed: webp mode now uses JPEG quality 95 instead of WebP conversion
-		jpgBytes, err := convertToJPEG(imgBytes, 95)
-		if err != nil {
-			return "", fmt.Errorf("jpeg conversion failed: %w", err)
-		}
-		uploadBytes = jpgBytes
-		ext = "jpg"
-		contentType = "image/jpeg"
-	case ImageCompressionJPG:
-		jpgBytes, err := convertToJPEG(imgBytes, 95)
-		if err != nil {
-			return "", fmt.Errorf("jpeg conversion failed: %w", err)
-		}
-		uploadBytes = jpgBytes
-		ext = "jpg"
-		contentType = "image/jpeg"
-	case ImageCompressionOrigin:
-		// Detect actual format from binary header
-		_, format, _ := image.DecodeConfig(bytes.NewReader(imgBytes))
-		if format == "" {
-			if _, err := webp.DecodeConfig(bytes.NewReader(imgBytes)); err == nil {
-				format = "webp"
-			}
-		}
-		if format == "" {
-			format = "png" // fallback
-		}
-		uploadBytes = imgBytes
-		ext = format
-		contentType = mimeType
-	default:
-		uploadBytes = imgBytes
-		ext = "png"
-		contentType = mimeType
-	}
-
-	key := fmt.Sprintf("images/%s.%s", uuid.New().String(), ext)
-
-	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		Body:        bytes.NewReader(uploadBytes),
-		ContentType: aws.String(contentType),
-	})
-	if err != nil {
-		return "", fmt.Errorf("r2 upload failed: %w", err)
-	}
-
-	return fmt.Sprintf("%s/%s", baseURL, key), nil
-}

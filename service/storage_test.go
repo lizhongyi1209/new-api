@@ -1,6 +1,46 @@
 package service
 
-import "testing"
+import (
+	"bytes"
+	"encoding/base64"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPrepareImageUploadPreservesOriginalBytesAndFormat(t *testing.T) {
+	const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+	wantBytes, err := base64.StdEncoding.DecodeString(pngBase64)
+	require.NoError(t, err)
+
+	uploadBytes, ext, contentType, err := prepareImageUpload("image/jpeg", pngBase64)
+	require.NoError(t, err)
+	assert.Equal(t, wantBytes, uploadBytes)
+	assert.Equal(t, "png", ext)
+	assert.Equal(t, "image/png", contentType)
+}
+
+func TestPrepareImageUploadPreservesJPEGBytesAndFormat(t *testing.T) {
+	var jpegBuffer bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+	img.Set(0, 0, color.RGBA{R: 12, G: 34, B: 56, A: 255})
+	require.NoError(t, jpeg.Encode(&jpegBuffer, img, &jpeg.Options{Quality: 95}))
+
+	wantBytes := jpegBuffer.Bytes()
+	uploadBytes, ext, contentType, err := prepareImageUpload(
+		"image/jpeg",
+		base64.StdEncoding.EncodeToString(wantBytes),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, wantBytes, uploadBytes)
+	assert.Equal(t, "jpg", ext)
+	assert.Equal(t, "image/jpeg", contentType)
+}
 
 func TestSelectImageStorageProviderDefaultHosts(t *testing.T) {
 	t.Setenv("LOCAL_STORAGE_HOSTS", "")

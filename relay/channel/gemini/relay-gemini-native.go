@@ -48,12 +48,11 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 	shouldRewrite := strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 ||
 		(strategy == "" && strings.EqualFold(c.Query("image_format"), "url"))
 	if shouldRewrite {
-		compression := c.Query("image_compression")
 		uploadStrategy := strategy
 		if uploadStrategy == "" {
 			uploadStrategy = dto.ImageOutputStrategyR2
 		}
-		if err := replaceInlineDataWithStorageURLs(c, &geminiResponse, compression, uploadStrategy); err != nil {
+		if err := replaceInlineDataWithStorageURLs(c, &geminiResponse, uploadStrategy); err != nil {
 			logger.LogError(c, "image storage upload failed, falling back to raw response: "+err.Error())
 			service.IOCopyBytesGracefully(c, resp, responseBody)
 			return &usage, nil
@@ -72,23 +71,20 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 	return &usage, nil
 }
 
-// replaceInlineDataWithStorageURLs uploads every image inline_data part to the configured storage and replaces it with a fileData URL.
-// When compression is "webp", images are converted to WebP before upload.
-func replaceInlineDataWithStorageURLs(c *gin.Context, resp *dto.GeminiChatResponse, compression, strategy string) error {
+// replaceInlineDataWithStorageURLs uploads every image inline_data part without re-encoding it
+// and replaces the part with a fileData URL.
+func replaceInlineDataWithStorageURLs(c *gin.Context, resp *dto.GeminiChatResponse, strategy string) error {
 	for ci := range resp.Candidates {
 		for pi := range resp.Candidates[ci].Content.Parts {
 			part := &resp.Candidates[ci].Content.Parts[pi]
 			if part.InlineData == nil || !strings.HasPrefix(part.InlineData.MimeType, "image/") {
 				continue
 			}
-			url, err := service.UploadBase64ImageWithOutputStrategy(part.InlineData.MimeType, part.InlineData.Data, compression, strategy, c.Request.Host)
+			url, err := service.UploadBase64ImageWithOutputStrategy(part.InlineData.MimeType, part.InlineData.Data, strategy, c.Request.Host)
 			if err != nil {
 				return err
 			}
 			mimeType := part.InlineData.MimeType
-			if compression == service.ImageCompressionWebP {
-				mimeType = "image/webp"
-			}
 			part.FileData = &dto.GeminiFileData{
 				MimeType: mimeType,
 				FileUri:  url,

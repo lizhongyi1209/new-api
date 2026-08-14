@@ -387,9 +387,9 @@ func writeOpenaiImageStreamDone(c *gin.Context) error {
 // On success the rewritten body carries data[i].url (pointing at R2) with
 // b64_json cleared; all other top-level fields (created/usage/size/quality/...)
 // are preserved verbatim by editing only the "data" field of the raw object.
-// Compression follows the same image_compression query as the Gemini path
-// (defaults to "origin"). Returns an error only when the body cannot be parsed
-// or an upload fails, in which case the caller falls back to the raw response.
+// Images are uploaded without re-encoding. Returns an error only when the body
+// cannot be parsed or an upload fails, in which case the caller falls back to
+// the raw response.
 func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) ([]byte, error) {
 	var root map[string]json.RawMessage
 	if err := common.Unmarshal(body, &root); err != nil {
@@ -407,7 +407,6 @@ func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) (
 		return nil, fmt.Errorf("image response data is empty")
 	}
 
-	compression := c.Query("image_compression")
 	for i := range items {
 		var mimeType, b64 string
 		switch {
@@ -428,7 +427,7 @@ func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) (
 			continue // nothing to upload for this entry
 		}
 
-		url, err := service.UploadBase64ImageWithOutputStrategy(mimeType, b64, compression, strategy, c.Request.Host)
+		url, err := service.UploadBase64ImageWithOutputStrategy(mimeType, b64, strategy, c.Request.Host)
 		if err != nil {
 			return nil, fmt.Errorf("image storage upload: %w", err)
 		}

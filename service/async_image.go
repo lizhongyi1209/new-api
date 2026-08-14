@@ -906,12 +906,11 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		}
 	} else {
 		// Upload to the storage provider selected by request Host and return URLs.
-		compression := asyncReq.ImageCompression
 		for _, imgData := range imageResp.Data {
 			if imgData.B64Json != "" {
 				// Detect actual mime type from base64 data
 				mimeType := detectImageMimeType(imgData.B64Json)
-				publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, imgData.B64Json, compression, strategy, task.Properties.RequestHost)
+				publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, imgData.B64Json, strategy, task.Properties.RequestHost)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: storage upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -935,7 +934,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 					_ = task.Update()
 					return
 				}
-				publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, b64Data, compression, strategy, task.Properties.RequestHost)
+				publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, b64Data, strategy, task.Properties.RequestHost)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: storage upload failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -1109,8 +1108,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	}
 
 	// Extract client-side params before forwarding to upstream
-	geminiCompression, _ := requestBody["image_compression"].(string)
-	delete(requestBody, "image_compression")
+	delete(requestBody, "image_compression") // 丢弃已废弃的客户端参数，避免透传上游
 
 	// Apply Gemini request normalization (set default role for first content)
 	if contents, ok := requestBody["contents"].([]interface{}); ok && len(contents) > 0 {
@@ -1321,7 +1319,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 									if mt, ok := inlineData["mimeType"].(string); ok {
 										mimeType = mt
 									}
-									publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, geminiCompression, strategy, task.Properties.RequestHost)
+									publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, task.Properties.RequestHost)
 									if err != nil {
 										logger.LogError(ctx, fmt.Sprintf("unified_image: storage upload failed: %v", err))
 										task.Status = model.TaskStatusFailure
@@ -1539,11 +1537,6 @@ func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncIma
 		"generationConfig": generationConfig,
 	}
 
-	// Preserve image_compression for ProcessAsyncGeminiTask
-	if asyncReq.ImageCompression != "" {
-		geminiReq["image_compression"] = asyncReq.ImageCompression
-	}
-
 	return geminiReq, nil
 }
 
@@ -1656,8 +1649,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 	}
 
 	// Extract client-side params before forwarding to upstream
-	geminiCompression, _ := requestBody["image_compression"].(string)
-	delete(requestBody, "image_compression")
+	delete(requestBody, "image_compression") // 丢弃已废弃的客户端参数，避免透传上游
 
 	// Apply Gemini request normalization (set default role for first content)
 	if contents, ok := requestBody["contents"].([]interface{}); ok && len(contents) > 0 {
@@ -1872,7 +1864,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 									if mt, ok := inlineData["mimeType"].(string); ok {
 										mimeType = mt
 									}
-									publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, geminiCompression, strategy, task.Properties.RequestHost)
+									publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, task.Properties.RequestHost)
 									if err != nil {
 										logger.LogError(ctx, fmt.Sprintf("async_gemini: storage upload failed: %v", err))
 										task.Status = model.TaskStatusFailure

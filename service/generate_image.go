@@ -66,7 +66,6 @@ var imageRoutes = []imageRoute{
 // 规则与 controller/async_image.go 中既有的 isGeminiImageModel 保持一致。
 //
 // 客户端参数规则（nano-banana* / Gemini image preview 模型）：
-//   - image_compression 不需要；
 //   - response_modalities 可选，默认不传；
 //   - media_resolution 可选，透传到 generationConfig.mediaResolution；
 //   - 内嵌图片字节会与文本提示、系统指令一起计入 20MB 总请求大小；
@@ -749,7 +748,7 @@ func buildGenerateImageRelayInfo(c *gin.Context, task *model.Task, relayMode int
 }
 
 // processGenerateImageGemini 处理 Gemini 原生 generateContent 路径。
-// 上游 inlineData(base64) 会上传到对象存储后返回 URL。
+// 上游图片可由 inlineData(base64) 或 fileData(URL) 返回，再按渠道图片输出策略处理。
 func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model.Task, requestBody map[string]interface{}) {
 	if requestBody == nil {
 		if err := task.GetData(&requestBody); err != nil {
@@ -761,8 +760,7 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTask(task, "任务请求数据已省略，无法重新处理")
 		return
 	}
-	imageCompression, _ := requestBody["image_compression"].(string)
-	delete(requestBody, "image_compression") // 客户端参数，不透传上游
+	delete(requestBody, "image_compression") // 丢弃已废弃的客户端参数，避免透传上游
 
 	// 规范化：首个 content 缺 role 时补 user
 	if contents, ok := requestBody["contents"].([]interface{}); ok && len(contents) > 0 {
@@ -845,7 +843,7 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
-	images, err = prepareGenerateImageResultsWithStrategy(images, imageCompression, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	images, err = prepareGenerateImageResultsWithStrategy(images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
 		return
@@ -893,7 +891,8 @@ func extractGeminiUsage(geminiResp map[string]interface{}) (promptTokens, comple
 	return promptTokens, completionTokens, details
 }
 
-// extractGeminiImages 从 Gemini 响应的 candidates.parts 提取图片（base64），跳过 thought 部分。
+// extractGeminiImages 从 Gemini 响应的 candidates.parts 提取图片，跳过 thought 部分。
+// 图片既可能以内联 base64（inlineData）返回，也可能以文件 URL（fileData）返回。
 func extractGeminiImages(geminiResp map[string]interface{}) []dto.GenerateImageData {
 	var images []dto.GenerateImageData
 	candidates, ok := geminiResp["candidates"].([]interface{})
@@ -921,19 +920,32 @@ func extractGeminiImages(geminiResp map[string]interface{}) []dto.GenerateImageD
 			if isThought, _ := partMap["thought"].(bool); isThought {
 				continue
 			}
-			inlineData, ok := partMap["inlineData"].(map[string]interface{})
+			if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
+				b64, _ := inlineData["data"].(string)
+				if b64 != "" {
+					mimeType := "image/png"
+					if mt, ok := inlineData["mimeType"].(string); ok && mt != "" {
+						mimeType = mt
+					}
+					images = append(images, dto.GenerateImageData{B64Json: b64, MimeType: mimeType})
+					continue
+				}
+			}
+
+			fileData, ok := partMap["fileData"].(map[string]interface{})
 			if !ok {
 				continue
 			}
-			b64, ok := inlineData["data"].(string)
-			if !ok || b64 == "" {
+			fileURI, _ := fileData["fileUri"].(string)
+			fileURI = strings.TrimSpace(fileURI)
+			if fileURI == "" {
 				continue
 			}
 			mimeType := "image/png"
-			if mt, ok := inlineData["mimeType"].(string); ok && mt != "" {
-				mimeType = mt
+			if mt, ok := fileData["mimeType"].(string); ok && strings.TrimSpace(mt) != "" {
+				mimeType = strings.TrimSpace(mt)
 			}
-			images = append(images, dto.GenerateImageData{B64Json: b64, MimeType: mimeType})
+			images = append(images, dto.GenerateImageData{Url: fileURI, MimeType: mimeType})
 		}
 	}
 	return images
@@ -1063,7 +1075,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
-	images, err = prepareGenerateImageResultsWithStrategy(images, asyncReq.ImageCompression, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	images, err = prepareGenerateImageResultsWithStrategy(images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
 		return
@@ -1073,7 +1085,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		relayInfo.UpstreamModelName, relayInfo.IsModelMapped, modelVersion)
 }
 
-func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, compression, requestHost, strategy string) ([]dto.GenerateImageData, error) {
+func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, requestHost, strategy string) ([]dto.GenerateImageData, error) {
 	out := make([]dto.GenerateImageData, 0, len(images))
 	for _, image := range images {
 		if image.Url != "" {
@@ -1082,7 +1094,7 @@ func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, com
 				if err != nil {
 					return nil, err
 				}
-				url, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, compression, strategy, requestHost)
+				url, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, requestHost)
 				if err != nil {
 					return nil, err
 				}
@@ -1109,7 +1121,7 @@ func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, com
 			})
 			continue
 		}
-		url, err := UploadBase64ImageWithOutputStrategy(mimeType, image.B64Json, compression, strategy, requestHost)
+		url, err := UploadBase64ImageWithOutputStrategy(mimeType, image.B64Json, strategy, requestHost)
 		if err != nil {
 			return nil, err
 		}

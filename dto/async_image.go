@@ -12,21 +12,16 @@ type AsyncImageRequest struct {
 	OutputFormat       *string         `json:"output_format,omitempty"`
 	Style              json.RawMessage `json:"style,omitempty"`
 	User               json.RawMessage `json:"user,omitempty"`
-	ImageCompression   string          `json:"image_compression,omitempty"`
 	AspectRatio        string          `json:"aspect_ratio,omitempty"`
 	ResponseModalities []string        `json:"response_modalities,omitempty"`
 	MediaResolution    string          `json:"media_resolution,omitempty"`
 	// 仅 Gemini 3.1 系列可用；支持小写 "minimal" / "high"。
-	ThinkingLevel      *string         `json:"thinking_level,omitempty"`
-	IncludeThoughts    *bool           `json:"include_thoughts,omitempty"`
-	Image              json.RawMessage `json:"image,omitempty"`
-	Images             []string        `json:"images,omitempty"`
-	Mask               *ImageReference `json:"mask,omitempty"`
+	ThinkingLevel   *string         `json:"thinking_level,omitempty"`
+	IncludeThoughts *bool           `json:"include_thoughts,omitempty"`
+	Image           json.RawMessage `json:"image,omitempty"`
+	Images          []string        `json:"images,omitempty"`
+	Mask            *ImageReference `json:"mask,omitempty"`
 }
-
-const ImageCompressionWebP = "webp"
-const ImageCompressionJPG = "jpg"
-const ImageCompressionOrigin = "origin"
 
 type AsyncTaskResponse struct {
 	TaskID string `json:"task_id"`

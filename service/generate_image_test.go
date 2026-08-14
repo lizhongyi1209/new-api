@@ -542,7 +542,7 @@ func TestPrepareGenerateImageResultsPreservesUpstreamShapeWithoutStorageStrategy
 			images, err := prepareGenerateImageResultsWithStrategy([]dto.GenerateImageData{
 				{B64Json: "AQID", MimeType: "image/png"},
 				{Url: "https://upstream.example/image.png"},
-			}, "origin", "api.o1key.cn", strategy)
+			}, "api.o1key.cn", strategy)
 			require.NoError(t, err)
 			require.Len(t, images, 2)
 			assert.Equal(t, "AQID", images[0].B64Json)
@@ -552,6 +552,46 @@ func TestPrepareGenerateImageResultsPreservesUpstreamShapeWithoutStorageStrategy
 			assert.Empty(t, images[1].B64Json)
 		})
 	}
+}
+
+func TestExtractGeminiImagesSupportsInlineAndFileData(t *testing.T) {
+	const fileURI = "https://flowapi.gaorui.cc/tmp/d357508ddebea305feeacad77a63e34a.jpg"
+	geminiResp := map[string]interface{}{
+		"candidates": []interface{}{
+			map[string]interface{}{
+				"content": map[string]interface{}{
+					"parts": []interface{}{
+						map[string]interface{}{
+							"inlineData": map[string]interface{}{
+								"mimeType": "image/png",
+								"data":     "AQID",
+							},
+						},
+						map[string]interface{}{
+							"fileData": map[string]interface{}{
+								"mimeType": "image/jpeg",
+								"fileUri":  fileURI,
+							},
+						},
+						map[string]interface{}{"text": fileURI},
+						map[string]interface{}{
+							"thought": true,
+							"fileData": map[string]interface{}{
+								"mimeType": "image/jpeg",
+								"fileUri":  "https://example.com/thought.jpg",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	images := extractGeminiImages(geminiResp)
+
+	require.Len(t, images, 2)
+	assert.Equal(t, dto.GenerateImageData{B64Json: "AQID", MimeType: "image/png"}, images[0])
+	assert.Equal(t, dto.GenerateImageData{Url: fileURI, MimeType: "image/jpeg"}, images[1])
 }
 
 func TestBuildGenerateImageRelayInfoPreservesChannelImageOutputStrategy(t *testing.T) {
