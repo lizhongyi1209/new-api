@@ -76,6 +76,7 @@ type UpstreamRatioSyncProps = {
     ImageRatio: string
     AudioRatio: string
     AudioCompletionRatio: string
+    VideoCompletionRatio: string
     'billing_setting.billing_mode': string
     'billing_setting.billing_expr': string
   }
@@ -300,6 +301,9 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       AudioCompletionRatio: parseJsonRecord<number>(
         modelRatios.AudioCompletionRatio
       ),
+      VideoCompletionRatio: parseJsonRecord<number>(
+        modelRatios.VideoCompletionRatio
+      ),
       ModelPrice: parseJsonRecord<number>(modelRatios.ModelPrice),
       'billing_setting.billing_mode': parseJsonRecord<string>(
         modelRatios['billing_setting.billing_mode']
@@ -324,7 +328,8 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
       currentRatios.CreateCacheRatio[model] !== undefined ||
       currentRatios.ImageRatio[model] !== undefined ||
       currentRatios.AudioRatio[model] !== undefined ||
-      currentRatios.AudioCompletionRatio[model] !== undefined
+      currentRatios.AudioCompletionRatio[model] !== undefined ||
+      currentRatios.VideoCompletionRatio[model] !== undefined
     ) {
       return 'ratio'
     }
@@ -341,6 +346,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
         ImageRatio: { ...currentRatios.ImageRatio },
         AudioRatio: { ...currentRatios.AudioRatio },
         AudioCompletionRatio: { ...currentRatios.AudioCompletionRatio },
+        VideoCompletionRatio: { ...currentRatios.VideoCompletionRatio },
         ModelPrice: { ...currentRatios.ModelPrice },
         'billing_setting.billing_mode': {
           ...currentRatios['billing_setting.billing_mode'],
@@ -365,6 +371,7 @@ export function UpstreamRatioSync({ modelRatios }: UpstreamRatioSyncProps) {
           delete finalRatios.ImageRatio[model]
           delete finalRatios.AudioRatio[model]
           delete finalRatios.AudioCompletionRatio[model]
+          delete finalRatios.VideoCompletionRatio[model]
         }
         if (hasRatio) {
           delete finalRatios.ModelPrice[model]

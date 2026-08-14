@@ -481,8 +481,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 	logger.LogDebug(ctx, "updateVideoSingleTask response: %s", responseBody)
 
-	snap := task.Snapshot()
-
 	taskResult := &relaycommon.TaskInfo{}
 	// try parse as New API response format
 	var responseItems dto.TaskResponse[model.Task]
@@ -499,7 +497,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	}
 
-	task.Data = redactVideoResponseBody(responseBody)
 	if ch.Type == constant.ChannelTypeXai && taskResult.Status == model.TaskStatusSuccess && taskResult.Url != "" {
 		cachedURL, cacheErr := CacheRemoteVideoToR2(ctx, taskResult.Url)
 		if cacheErr != nil {
@@ -508,6 +505,19 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			taskResult.Url = cachedURL
 		}
 	}
+	return ApplyVideoTaskPollingResult(ctx, adaptor, task, taskResult, responseBody)
+}
+
+// ApplyVideoTaskPollingResult atomically persists a parsed video-task poll,
+// settles terminal usage, and finalizes the original consumption log. Both the
+// background poller and request-time Gemini/Vertex refreshes use this path so a
+// client status check cannot move a task to terminal state without billing it.
+func ApplyVideoTaskPollingResult(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo, responseBody []byte) error {
+	if task == nil || taskResult == nil {
+		return fmt.Errorf("task and task result are required")
+	}
+	snap := task.Snapshot()
+	task.Data = redactVideoResponseBody(responseBody)
 
 	logger.LogDebug(ctx, "updateVideoSingleTask taskResult: %+v", taskResult)
 
@@ -515,7 +525,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	if taskResult.Status == "" {
 		//taskResult = relaycommon.FailTaskInfo("upstream returned empty status")
 		errorResult := &dto.GeneralErrorResponse{}
-		if err = common.Unmarshal(responseBody, &errorResult); err == nil {
+		if err := common.Unmarshal(responseBody, &errorResult); err == nil {
 			openaiError := errorResult.TryToOpenAIError()
 			if openaiError != nil {
 				// 返回规范的 OpenAI 错误格式，提取错误信息，判断错误是否为任务失败
@@ -528,7 +538,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 				taskResult = relaycommon.FailTaskInfo("upstream returned error")
 			} else {
 				// unknown error format, log original response
-				logger.LogError(ctx, fmt.Sprintf("Task %s returned empty status with unrecognized error format, response: %s", taskId, string(responseBody)))
+				logger.LogError(ctx, fmt.Sprintf("Task %s returned empty status with unrecognized error format, response: %s", task.TaskID, string(responseBody)))
 				taskResult = relaycommon.FailTaskInfo("upstream returned unrecognized message")
 			}
 		}
@@ -567,7 +577,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		}
 		shouldSettle = true
 	case model.TaskStatusFailure:
-		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
+		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", task.TaskID), task)
 		task.Status = model.TaskStatusFailure
 		task.Progress = taskcommon.ProgressComplete
 		if task.FinishTime == 0 {
@@ -609,12 +619,12 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		logger.LogDebug(ctx, "No update needed for task %s", task.TaskID)
 	}
 
-	if shouldSettle {
+	if shouldSettle && shouldFinalize {
 		settleTaskBillingOnComplete(ctx, adaptor, task, taskResult)
 	}
 	refundedQuota := 0
 	refundStatus := "not_applicable"
-	if shouldRefund {
+	if shouldRefund && shouldFinalize {
 		refundStatus = "failed"
 		if RefundTaskQuota(ctx, task, task.FailReason) {
 			refundedQuota = quota

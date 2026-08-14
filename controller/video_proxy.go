@@ -126,7 +126,9 @@ func VideoProxy(c *gin.Context) {
 			videoProxyError(c, http.StatusBadGateway, "server_error", "Failed to resolve Gemini video URL")
 			return
 		}
-		req.Header.Set("x-goog-api-key", apiKey)
+		if !isGeminiOmniTask(task) {
+			req.Header.Set("x-goog-api-key", apiKey)
+		}
 	case constant.ChannelTypeVertexAi:
 		videoURL, err = getVertexVideoURL(channel, task)
 		if err != nil {

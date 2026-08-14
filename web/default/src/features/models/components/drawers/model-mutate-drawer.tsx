@@ -105,6 +105,7 @@ const extendedModelFormSchema = z.object({
   imageRatio: z.string().optional(),
   audioRatio: z.string().optional(),
   audioCompletionRatio: z.string().optional(),
+  videoCompletionRatio: z.string().optional(),
 })
 
 type ExtendedModelFormValues = z.infer<typeof extendedModelFormSchema>
@@ -121,6 +122,7 @@ type PricingFields = Pick<
   | 'imageRatio'
   | 'audioRatio'
   | 'audioCompletionRatio'
+  | 'videoCompletionRatio'
 >
 
 // Form state describing the pricing currently configured for one model name.
@@ -140,6 +142,7 @@ const EMPTY_PRICING_FIELDS: PricingFields = {
   imageRatio: '',
   audioRatio: '',
   audioCompletionRatio: '',
+  videoCompletionRatio: '',
 }
 
 const EMPTY_PRICING_CONFIG: PricingConfig = {
@@ -180,6 +183,10 @@ function readPricingConfig(
     settings.AudioCompletionRatio,
     modelName
   )
+  const videoCompletionRatio = lookupModelRatio(
+    settings.VideoCompletionRatio,
+    modelName
+  )
 
   // A fixed per-request price wins outright at billing time (see
   // GetModelRatioOrPrice), so a name that has one is shown, and saved back, as
@@ -212,6 +219,7 @@ function readPricingConfig(
       imageRatio: imageRatio?.toString() || '',
       audioRatio: audioRatio?.toString() || '',
       audioCompletionRatio: audioCompletionRatio?.toString() || '',
+      videoCompletionRatio: videoCompletionRatio?.toString() || '',
     },
     promptPrice,
     completionPrice,
@@ -222,6 +230,7 @@ function readPricingConfig(
       imageRatio,
       audioRatio,
       audioCompletionRatio,
+      videoCompletionRatio,
     ].some((value) => value !== undefined && value !== null),
   }
 }
@@ -310,6 +319,7 @@ export function ModelMutateDrawer({
       ImageRatio: '',
       AudioRatio: '',
       AudioCompletionRatio: '',
+      VideoCompletionRatio: '',
       ExposeRatioEnabled: false,
       'billing_setting.billing_mode': '{}',
       'billing_setting.billing_expr': '{}',
@@ -375,6 +385,7 @@ export function ModelMutateDrawer({
       imageRatio: '',
       audioRatio: '',
       audioCompletionRatio: '',
+      videoCompletionRatio: '',
     },
   })
 
@@ -487,6 +498,7 @@ export function ModelMutateDrawer({
           imageRatio,
           audioRatio,
           audioCompletionRatio,
+          videoCompletionRatio,
           ...modelData
         } = submitData
 
@@ -508,7 +520,8 @@ export function ModelMutateDrawer({
                 values.completionRatio ||
                 values.imageRatio ||
                 values.audioRatio ||
-                values.audioCompletionRatio))
+                values.audioCompletionRatio ||
+                values.videoCompletionRatio))
 
           // Always process system settings updates if we have modelSettings
           // This ensures we can remove stale entries even when clearing all pricing fields
@@ -542,6 +555,10 @@ export function ModelMutateDrawer({
               modelSettings.AudioCompletionRatio,
               { fallback: {}, silent: true }
             )
+            const videoCompletionMap = safeJsonParse<Record<string, number>>(
+              modelSettings.VideoCompletionRatio,
+              { fallback: {}, silent: true }
+            )
 
             // Remove old model name entries if model name changed (always, even if no new config)
             if (isEditing && oldModelName && oldModelName !== finalModelName) {
@@ -552,6 +569,7 @@ export function ModelMutateDrawer({
               delete imageMap[oldModelName]
               delete audioMap[oldModelName]
               delete audioCompletionMap[oldModelName]
+              delete videoCompletionMap[oldModelName]
             }
 
             // Rebuild this model name's entries from the form, but only when
@@ -571,6 +589,7 @@ export function ModelMutateDrawer({
               delete imageMap[finalModelName]
               delete audioMap[finalModelName]
               delete audioCompletionMap[finalModelName]
+              delete videoCompletionMap[finalModelName]
             }
 
             // Only add new entries if user provided new configuration
@@ -611,6 +630,14 @@ export function ModelMutateDrawer({
                 ) {
                   audioCompletionMap[finalModelName] = Number.parseFloat(
                     values.audioCompletionRatio
+                  )
+                }
+                if (
+                  values.videoCompletionRatio &&
+                  values.videoCompletionRatio !== ''
+                ) {
+                  videoCompletionMap[finalModelName] = Number.parseFloat(
+                    values.videoCompletionRatio
                   )
                 }
               }
@@ -677,6 +704,19 @@ export function ModelMutateDrawer({
               updates.push({
                 key: 'AudioCompletionRatio',
                 value: newAudioCompletionRatio,
+              })
+            }
+
+            const newVideoCompletionRatio = normalizeJsonString(
+              JSON.stringify(videoCompletionMap)
+            )
+            if (
+              newVideoCompletionRatio !==
+              normalizeJsonString(modelSettings.VideoCompletionRatio)
+            ) {
+              updates.push({
+                key: 'VideoCompletionRatio',
+                value: newVideoCompletionRatio,
               })
             }
 
@@ -1310,6 +1350,33 @@ export function ModelMutateDrawer({
                             </FormControl>
                             <FormDescription>
                               {t('Multiplier for audio outputs.')}
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name='videoCompletionRatio'
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{t('Video output ratio')}</FormLabel>
+                            <FormControl>
+                              <Input
+                                type='text'
+                                placeholder='1.0'
+                                {...field}
+                                onChange={(e) => {
+                                  const value = e.target.value
+                                  if (validateNumber(value)) {
+                                    field.onChange(value)
+                                  }
+                                }}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              {t('Multiplier for generated video outputs.')}
                             </FormDescription>
                             <FormMessage />
                           </FormItem>

@@ -1055,6 +1055,44 @@ func TestSettle_NonPerCallBilling_AppliesAdaptorAdjustment(t *testing.T) {
 	assert.Equal(t, int64(0), countLogs(t))
 }
 
+func TestApplyVideoTaskPollingResultSettlesRequestTimeTerminalTransitionOnce(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 34, 34, 34
+	const initQuota, preConsumed, finalQuota = 10000, 5000, 3000
+	const tokenRemain = 8000
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "realtime-settle", tokenRemain)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.PrivateData.SubmitLogID = seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+	require.NoError(t, model.DB.Create(task).Error)
+	adaptor := &mockAdaptor{adjustReturn: finalQuota}
+	result := &relaycommon.TaskInfo{
+		Status:           model.TaskStatusSuccess,
+		Progress:         "100%",
+		PromptTokens:     100,
+		CompletionTokens: 200,
+		TotalTokens:      300,
+	}
+
+	require.NoError(t, ApplyVideoTaskPollingResult(ctx, adaptor, task, result, []byte(`{"status":"completed"}`)))
+	assert.Equal(t, initQuota+(preConsumed-finalQuota), getUserQuota(t, userID))
+	assert.Equal(t, tokenRemain+(preConsumed-finalQuota), getTokenRemainQuota(t, tokenID))
+	assert.Equal(t, finalQuota, getTaskQuota(t, task.ID))
+
+	var stored model.Task
+	require.NoError(t, model.DB.First(&stored, task.ID).Error)
+	assert.Equal(t, model.TaskStatus(model.TaskStatusSuccess), stored.Status)
+	assert.Equal(t, "100%", stored.Progress)
+
+	require.NoError(t, ApplyVideoTaskPollingResult(ctx, adaptor, task, result, []byte(`{"status":"completed"}`)))
+	assert.Equal(t, initQuota+(preConsumed-finalQuota), getUserQuota(t, userID))
+	assert.Equal(t, tokenRemain+(preConsumed-finalQuota), getTokenRemainQuota(t, tokenID))
+}
+
 // ===========================================================================
 // 统一退款原则：只看上游 token 消耗（上游是否已计费），不看是否返图
 // ===========================================================================

@@ -33,6 +33,7 @@ export const createModelPricingSchema = (t: (key: string) => string) =>
     imageRatio: z.string().optional(),
     audioRatio: z.string().optional(),
     audioCompletionRatio: z.string().optional(),
+    videoCompletionRatio: z.string().optional(),
   })
 
 export type ModelPricingFormValues = z.infer<
@@ -48,6 +49,7 @@ export type LaneKey =
   | 'image'
   | 'audioInput'
   | 'audioOutput'
+  | 'videoOutput'
 
 export type ModelRatioData = {
   name: string
@@ -59,6 +61,7 @@ export type ModelRatioData = {
   imageRatio?: string
   audioRatio?: string
   audioCompletionRatio?: string
+  videoCompletionRatio?: string
   billingMode?: PricingMode
   billingExpr?: string
   requestRuleExpr?: string
@@ -80,6 +83,7 @@ export const EMPTY_LANE_PRICES: Record<LaneKey, string> = {
   image: '',
   audioInput: '',
   audioOutput: '',
+  videoOutput: '',
 }
 
 export const EMPTY_LANE_ENABLED: Record<LaneKey, boolean> = {
@@ -89,6 +93,7 @@ export const EMPTY_LANE_ENABLED: Record<LaneKey, boolean> = {
   image: false,
   audioInput: false,
   audioOutput: false,
+  videoOutput: false,
 }
 
 export const ratioFieldByLane: Record<LaneKey, keyof ModelPricingFormValues> = {
@@ -98,6 +103,7 @@ export const ratioFieldByLane: Record<LaneKey, keyof ModelPricingFormValues> = {
   image: 'imageRatio',
   audioInput: 'audioRatio',
   audioOutput: 'audioCompletionRatio',
+  videoOutput: 'videoCompletionRatio',
 }
 
 export const laneConfigs: Array<{
@@ -141,6 +147,12 @@ export const laneConfigs: Array<{
     titleKey: 'Audio output price',
     descriptionKey: 'Token price for audio output.',
     placeholder: '15.11',
+  },
+  {
+    key: 'videoOutput',
+    titleKey: 'Video output price',
+    descriptionKey: 'Token price for generated video output.',
+    placeholder: '17.5',
   },
 ]
 
@@ -191,6 +203,7 @@ export function createInitialLaneState(data?: ModelRatioData | null) {
     image: deriveLanePrice(data.imageRatio, promptPrice),
     audioInput: audioInputPrice,
     audioOutput: deriveLanePrice(data.audioCompletionRatio, audioInputPrice),
+    videoOutput: deriveLanePrice(data.videoCompletionRatio, promptPrice),
   }
 
   return {
@@ -203,6 +216,7 @@ export function createInitialLaneState(data?: ModelRatioData | null) {
       image: hasValue(data.imageRatio),
       audioInput: hasValue(data.audioRatio),
       audioOutput: hasValue(data.audioCompletionRatio),
+      videoOutput: hasValue(data.videoCompletionRatio),
     },
   }
 }
@@ -292,6 +306,14 @@ export function buildPreviewRows(
       value:
         laneEnabled.audioOutput && lanePrices.audioOutput
           ? `$${lanePrices.audioOutput}`
+          : t('Empty'),
+    },
+    {
+      key: 'videoOutput',
+      label: t('Video output price'),
+      value:
+        laneEnabled.videoOutput && lanePrices.videoOutput
+          ? `$${lanePrices.videoOutput}`
           : t('Empty'),
     },
   ]

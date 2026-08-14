@@ -69,6 +69,7 @@ var pricingSyncFields = []string{
 	"image_ratio",
 	"audio_ratio",
 	"audio_completion_ratio",
+	"video_completion_ratio",
 	"model_price",
 	billing_setting.BillingModeField,
 	billing_setting.BillingExprField,
@@ -82,6 +83,7 @@ var numericPricingSyncFields = map[string]bool{
 	"image_ratio":            true,
 	"audio_ratio":            true,
 	"audio_completion_ratio": true,
+	"video_completion_ratio": true,
 	"model_price":            true,
 }
 
@@ -136,6 +138,7 @@ func getLocalPricingSyncData() map[string]any {
 	data["image_ratio"] = ratio_setting.GetImageRatioCopy()
 	data["audio_ratio"] = ratio_setting.GetAudioRatioCopy()
 	data["audio_completion_ratio"] = ratio_setting.GetAudioCompletionRatioCopy()
+	data["video_completion_ratio"] = ratio_setting.GetVideoCompletionRatioCopy()
 	return data
 }
 
@@ -389,6 +392,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 				ImageRatio           *float64 `json:"image_ratio"`
 				AudioRatio           *float64 `json:"audio_ratio"`
 				AudioCompletionRatio *float64 `json:"audio_completion_ratio"`
+				VideoCompletionRatio *float64 `json:"video_completion_ratio"`
 				BillingMode          string   `json:"billing_mode"`
 				BillingExpr          string   `json:"billing_expr"`
 			}
@@ -405,6 +409,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 			imageRatioMap := make(map[string]float64)
 			audioRatioMap := make(map[string]float64)
 			audioCompletionRatioMap := make(map[string]float64)
+			videoCompletionRatioMap := make(map[string]float64)
 			modelPriceMap := make(map[string]float64)
 			billingModeMap := make(map[string]string)
 			billingExprMap := make(map[string]string)
@@ -439,6 +444,9 @@ func FetchUpstreamRatios(c *gin.Context) {
 				if item.AudioCompletionRatio != nil {
 					audioCompletionRatioMap[item.ModelName] = *item.AudioCompletionRatio
 				}
+				if item.VideoCompletionRatio != nil {
+					videoCompletionRatioMap[item.ModelName] = *item.VideoCompletionRatio
+				}
 			}
 
 			converted := make(map[string]any)
@@ -472,6 +480,9 @@ func FetchUpstreamRatios(c *gin.Context) {
 			}
 			if len(audioCompletionRatioMap) > 0 {
 				converted["audio_completion_ratio"] = valueMap(audioCompletionRatioMap)
+			}
+			if len(videoCompletionRatioMap) > 0 {
+				converted["video_completion_ratio"] = valueMap(videoCompletionRatioMap)
 			}
 
 			if len(modelPriceMap) > 0 {

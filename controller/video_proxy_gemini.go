@@ -10,7 +10,16 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
+	geminitask "github.com/QuantumNous/new-api/relay/channel/task/gemini"
 )
+
+func isGeminiOmniTask(task *model.Task) bool {
+	if task == nil {
+		return false
+	}
+	return strings.EqualFold(task.Properties.OriginModelName, geminitask.GeminiOmniFlashPreviewModel) ||
+		strings.EqualFold(task.Properties.UpstreamModelName, geminitask.GeminiOmniFlashPreviewModel)
+}
 
 func getGeminiVideoURL(channel *model.Channel, task *model.Task, apiKey string) (string, error) {
 	if channel == nil || task == nil {
@@ -18,6 +27,9 @@ func getGeminiVideoURL(channel *model.Channel, task *model.Task, apiKey string) 
 	}
 
 	if url := extractGeminiVideoURLFromTaskData(task); url != "" {
+		if isGeminiOmniTask(task) {
+			return url, nil
+		}
 		return ensureAPIKey(url, apiKey), nil
 	}
 
@@ -37,8 +49,10 @@ func getGeminiVideoURL(channel *model.Channel, task *model.Task, apiKey string) 
 
 	proxy := channel.GetSetting().Proxy
 	resp, err := adaptor.FetchTask(baseURL, apiKey, map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
+		"task_id":        task.GetUpstreamTaskID(),
+		"action":         task.Action,
+		"model":          task.Properties.OriginModelName,
+		"upstream_model": task.Properties.UpstreamModelName,
 	}, proxy)
 	if err != nil {
 		return "", fmt.Errorf("fetch task failed: %w", err)
@@ -52,10 +66,16 @@ func getGeminiVideoURL(channel *model.Channel, task *model.Task, apiKey string) 
 
 	taskInfo, parseErr := adaptor.ParseTaskResult(body)
 	if parseErr == nil && taskInfo != nil && taskInfo.RemoteUrl != "" {
+		if isGeminiOmniTask(task) {
+			return taskInfo.RemoteUrl, nil
+		}
 		return ensureAPIKey(taskInfo.RemoteUrl, apiKey), nil
 	}
 
 	if url := extractGeminiVideoURLFromPayload(body); url != "" {
+		if isGeminiOmniTask(task) {
+			return url, nil
+		}
 		return ensureAPIKey(url, apiKey), nil
 	}
 
@@ -95,6 +115,24 @@ func extractGeminiVideoURLFromMap(payload map[string]any) string {
 	if resp, ok := payload["response"].(map[string]any); ok {
 		if uri := extractGeminiVideoURLFromResponse(resp); uri != "" {
 			return uri
+		}
+	}
+	if steps, ok := payload["steps"].([]any); ok {
+		for _, step := range steps {
+			stepMap, ok := step.(map[string]any)
+			if !ok {
+				continue
+			}
+			contents, _ := stepMap["content"].([]any)
+			for _, content := range contents {
+				contentMap, ok := content.(map[string]any)
+				if !ok || contentMap["type"] != "video" {
+					continue
+				}
+				if uri, _ := contentMap["uri"].(string); strings.TrimSpace(uri) != "" {
+					return uri
+				}
+			}
 		}
 	}
 	return ""

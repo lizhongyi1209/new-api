@@ -41,12 +41,18 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
+	if isGeminiOmniModel(info.UpstreamModelName) {
+		return validateOmniRequest(c, info)
+	}
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionTextGenerate)
 }
 
 // BuildRequestURL constructs the Gemini API predictLongRunning endpoint for Veo.
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	modelName := info.UpstreamModelName
+	if isGeminiOmniModel(modelName) {
+		return omniEndpoint(a.baseURL, modelName), nil
+	}
 	version := model_setting.GetGeminiVersionSetting(modelName)
 
 	return fmt.Sprintf(
@@ -61,12 +67,27 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	if isGeminiOmniModel(info.UpstreamModelName) {
+		req.Header.Set("Authorization", "Bearer "+a.apiKey)
+		return nil
+	}
 	req.Header.Set("x-goog-api-key", a.apiKey)
 	return nil
 }
 
 // BuildRequestBody converts request into the Veo predictLongRunning format.
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	if isGeminiOmniModel(info.UpstreamModelName) {
+		body, err := buildOmniRequest(c, info)
+		if err != nil {
+			return nil, err
+		}
+		data, err := common.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(data), nil
+	}
 	v, ok := c.Get("task_request")
 	if !ok {
 		return nil, fmt.Errorf("request not found in context")
@@ -126,6 +147,24 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
 	_ = resp.Body.Close()
+	if isGeminiOmniModel(info.UpstreamModelName) {
+		taskInfo, err := parseOmniTaskResult(responseBody)
+		if err != nil {
+			return "", nil, service.TaskErrorWrapper(err, "unmarshal_response_failed", http.StatusInternalServerError)
+		}
+		if strings.TrimSpace(taskInfo.TaskID) == "" {
+			return "", nil, service.TaskErrorWrapper(fmt.Errorf("missing interaction id"), "invalid_response", http.StatusBadGateway)
+		}
+		video := dto.NewOpenAIVideo()
+		video.ID = info.PublicTaskID
+		video.TaskID = info.PublicTaskID
+		video.CreatedAt = time.Now().Unix()
+		video.Model = info.OriginModelName
+		video.Status = model.TaskStatus(taskInfo.Status).ToVideoStatus()
+		video.SetProgressStr(taskInfo.Progress)
+		c.JSON(http.StatusOK, video)
+		return taskInfo.TaskID, responseBody, nil
+	}
 
 	var s submitResponse
 	if err := common.Unmarshal(responseBody, &s); err != nil {
@@ -146,6 +185,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 func (a *TaskAdaptor) GetModelList() []string {
 	return []string{
+		GeminiOmniFlashPreviewModel,
 		"veo-3.0-generate-001",
 		"veo-3.0-fast-generate-001",
 		"veo-3.1-generate-preview",
@@ -159,6 +199,9 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 // EstimateBilling returns OtherRatios based on durationSeconds and resolution.
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
+	if isGeminiOmniModel(info.UpstreamModelName) {
+		return a.estimateOmniBilling(c, info)
+	}
 	v, ok := c.Get("task_request")
 	if !ok {
 		return nil
@@ -183,6 +226,23 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	taskID, ok := body["task_id"].(string)
 	if !ok {
 		return nil, fmt.Errorf("invalid task_id")
+	}
+	modelName, _ := body["upstream_model"].(string)
+	if strings.TrimSpace(modelName) == "" {
+		modelName, _ = body["model"].(string)
+	}
+	if isGeminiOmniModel(modelName) {
+		req, err := http.NewRequest(http.MethodGet, omniQueryEndpoint(baseUrl, modelName, taskID), nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("Authorization", "Bearer "+key)
+		client, err := service.GetHttpClientWithProxy(proxy)
+		if err != nil {
+			return nil, fmt.Errorf("new proxy http client failed: %w", err)
+		}
+		return client.Do(req)
 	}
 
 	upstreamName, err := taskcommon.DecodeLocalTaskID(taskID)
@@ -209,6 +269,13 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	var detector struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := common.Unmarshal(respBody, &detector); err == nil && (detector.ID != "" || detector.Status != "") {
+		return parseOmniTaskResult(respBody)
+	}
 	var op operationResponse
 	if err := common.Unmarshal(respBody, &op); err != nil {
 		return nil, fmt.Errorf("unmarshal operation response failed: %w", err)
@@ -244,6 +311,20 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
+	if isGeminiOmniModel(task.Properties.OriginModelName) || isGeminiOmniModel(task.Properties.UpstreamModelName) {
+		video := dto.NewOpenAIVideo()
+		video.ID = task.TaskID
+		video.Model = task.Properties.OriginModelName
+		video.Status = task.Status.ToVideoStatus()
+		video.SetProgressStr(task.Progress)
+		video.CreatedAt = task.CreatedAt
+		if task.FinishTime > 0 {
+			video.CompletedAt = task.FinishTime
+		} else if task.UpdatedAt > 0 {
+			video.CompletedAt = task.UpdatedAt
+		}
+		return common.Marshal(video)
+	}
 	upstreamTaskID := task.GetUpstreamTaskID()
 	upstreamName, err := taskcommon.DecodeLocalTaskID(upstreamTaskID)
 	if err != nil {

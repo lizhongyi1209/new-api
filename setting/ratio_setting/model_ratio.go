@@ -186,6 +186,7 @@ var defaultModelRatio = map[string]float64{
 	"gemini-2.5-flash-lite-preview-thinking-*":  0.05,
 	"gemini-2.5-flash-lite-preview-06-17":       0.05,
 	"gemini-2.5-flash":                          0.15,
+	"gemini-omni-flash-preview":                 0.75, // $1.50 / 1M input tokens
 	"gemini-robotics-er-1.5-preview":            0.15,
 	"gemini-embedding-001":                      0.075,
 	"text-embedding-004":                        0.001,
@@ -351,15 +352,21 @@ var defaultAudioCompletionRatio = map[string]float64{
 	"tts-1-hd-1106":        0,
 }
 
+var defaultVideoCompletionRatio = map[string]float64{
+	"gemini-omni-flash-preview": 35.0 / 3.0, // $17.50 video output / $1.50 input
+}
+
 var modelPriceMap = types.NewRWMap[string, float64]()
 var modelRatioMap = types.NewRWMap[string, float64]()
 var completionRatioMap = types.NewRWMap[string, float64]()
+var videoCompletionRatioMap = types.NewRWMap[string, float64]()
 
 var defaultCompletionRatio = map[string]float64{
-	"gpt-4-gizmo-*":  2,
-	"gpt-4o-gizmo-*": 3,
-	"gpt-4-all":      2,
-	"gpt-image-1":    8,
+	"gpt-4-gizmo-*":             2,
+	"gpt-4o-gizmo-*":            3,
+	"gpt-4-all":                 2,
+	"gpt-image-1":               8,
+	"gemini-omni-flash-preview": 6, // $9 text/thought output / $1.50 input
 }
 
 // InitRatioSettings initializes all model related settings maps
@@ -372,6 +379,7 @@ func InitRatioSettings() {
 	imageRatioMap.AddAll(defaultImageRatio)
 	audioRatioMap.AddAll(defaultAudioRatio)
 	audioCompletionRatioMap.AddAll(defaultAudioCompletionRatio)
+	videoCompletionRatioMap.AddAll(defaultVideoCompletionRatio)
 }
 
 func GetModelPriceMap() map[string]float64 {
@@ -665,6 +673,14 @@ func GetAudioCompletionRatio(name string) float64 {
 	return 1
 }
 
+func GetVideoCompletionRatio(name string) float64 {
+	name = FormatMatchingModelName(name)
+	if ratio, ok := videoCompletionRatioMap.Get(name); ok {
+		return ratio
+	}
+	return 1
+}
+
 func ContainsAudioRatio(name string) bool {
 	name = FormatMatchingModelName(name)
 	_, ok := audioRatioMap.Get(name)
@@ -674,6 +690,12 @@ func ContainsAudioRatio(name string) bool {
 func ContainsAudioCompletionRatio(name string) bool {
 	name = FormatMatchingModelName(name)
 	_, ok := audioCompletionRatioMap.Get(name)
+	return ok
+}
+
+func ContainsVideoCompletionRatio(name string) bool {
+	name = FormatMatchingModelName(name)
+	_, ok := videoCompletionRatioMap.Get(name)
 	return ok
 }
 
@@ -720,6 +742,14 @@ func UpdateAudioCompletionRatioByJSONString(jsonStr string) error {
 	return types.LoadFromJsonStringWithCallback(audioCompletionRatioMap, jsonStr, InvalidateExposedDataCache)
 }
 
+func VideoCompletionRatio2JSONString() string {
+	return videoCompletionRatioMap.MarshalJSONString()
+}
+
+func UpdateVideoCompletionRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonStringWithCallback(videoCompletionRatioMap, jsonStr, InvalidateExposedDataCache)
+}
+
 func GetModelRatioCopy() map[string]float64 {
 	return modelRatioMap.ReadAll()
 }
@@ -742,6 +772,10 @@ func GetAudioRatioCopy() map[string]float64 {
 
 func GetAudioCompletionRatioCopy() map[string]float64 {
 	return audioCompletionRatioMap.ReadAll()
+}
+
+func GetVideoCompletionRatioCopy() map[string]float64 {
+	return videoCompletionRatioMap.ReadAll()
 }
 
 // 转换模型名，减少渠道必须配置各种带参数模型

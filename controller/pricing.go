@@ -72,7 +72,7 @@ func GetPricing(c *gin.Context) {
 		"usable_group":       usableGroup,
 		"supported_endpoint": model.GetSupportedEndpointMap(),
 		"auto_groups":        service.GetUserAutoGroup(group),
-		"pricing_version":    "a42d372ccf0b5dd13ecf71203521f9d2",
+		"pricing_version":    "bf1f884a94bd714ac0c8671721a2e35a51f3ad8ae4dd62c30768f53991269f62",
 	})
 }
 

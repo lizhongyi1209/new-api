@@ -622,6 +622,11 @@ function PriceSection(props: {
         props.model.audio_ratio != null &&
         props.model.audio_completion_ratio != null,
     },
+    {
+      label: t('Video output'),
+      type: 'video_output',
+      available: props.model.video_completion_ratio != null,
+    },
   ]
 
   if (dynamicSummary) {
@@ -889,6 +894,9 @@ function GroupPricingSection(props: {
       props.model.audio_completion_ratio != null
     ) {
       types.push({ label: t('Audio Out'), type: 'audio_output' })
+    }
+    if (props.model.video_completion_ratio != null) {
+      types.push({ label: t('Video Out'), type: 'video_output' })
     }
     return types
   }, [props.model, t])

@@ -27,6 +27,7 @@ var completionRatioMetaOptionKeys = []string{
 	"ImageRatio",
 	"AudioRatio",
 	"AudioCompletionRatio",
+	"VideoCompletionRatio",
 }
 
 func isPaymentComplianceOptionKey(key string) bool {
@@ -259,6 +260,15 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "音频补全倍率设置失败: " + err.Error(),
+			})
+			return
+		}
+	case "VideoCompletionRatio":
+		err = ratio_setting.UpdateVideoCompletionRatioByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "视频输出倍率设置失败: " + err.Error(),
 			})
 			return
 		}

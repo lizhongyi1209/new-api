@@ -45,6 +45,7 @@ export type PricingModel = {
   image_ratio?: number | null
   audio_ratio?: number | null
   audio_completion_ratio?: number | null
+  video_completion_ratio?: number | null
   enable_groups: string[]
   tags?: string
   supported_endpoint_types?: string[]
@@ -108,4 +109,5 @@ export type PriceType =
   | 'image'
   | 'audio_input'
   | 'audio_output'
+  | 'video_output'
 export type QuotaType = 0 | 1 // 0: token-based, 1: per-request

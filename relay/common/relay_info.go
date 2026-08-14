@@ -818,20 +818,23 @@ func (t *TaskSubmitReq) UnmarshalMetadata(v any) error {
 }
 
 type TaskInfo struct {
-	Code             int                    `json:"code"`
-	TaskID           string                 `json:"task_id"`
-	Status           string                 `json:"status"`
-	Reason           string                 `json:"reason,omitempty"`
-	Url              string                 `json:"url,omitempty"`
-	RemoteUrl        string                 `json:"remote_url,omitempty"`
-	Progress         string                 `json:"progress,omitempty"`
-	PromptTokens     int                    `json:"prompt_tokens,omitempty"`     // 用于异步任务日志和按倍率计费
-	CompletionTokens int                    `json:"completion_tokens,omitempty"` // 用于按倍率计费
-	TotalTokens      int                    `json:"total_tokens,omitempty"`      // 用于按倍率计费
-	ActualCost       float64                `json:"actual_cost,omitempty"`       // 上游返回的实际成本（RMB），用于精确计费
-	Metadata         map[string]interface{} `json:"metadata,omitempty"`          // 额外的元数据（如视频时长、分辨率等）
-	QuotaClamp       *common.QuotaClamp     `json:"-"`                           // 完成结算时的额度饱和审计标记
-	VideoBilling     *VideoBillingDetails   `json:"-"`                           // 视频任务完成后的结构化计费明细
+	Code                   int                    `json:"code"`
+	TaskID                 string                 `json:"task_id"`
+	Status                 string                 `json:"status"`
+	Reason                 string                 `json:"reason,omitempty"`
+	Url                    string                 `json:"url,omitempty"`
+	RemoteUrl              string                 `json:"remote_url,omitempty"`
+	Progress               string                 `json:"progress,omitempty"`
+	PromptTokens           int                    `json:"prompt_tokens,omitempty"`     // 用于异步任务日志和按倍率计费
+	CompletionTokens       int                    `json:"completion_tokens,omitempty"` // 用于按倍率计费
+	TotalTokens            int                    `json:"total_tokens,omitempty"`      // 用于按倍率计费
+	ThoughtTokens          int                    `json:"thought_tokens,omitempty"`
+	InputTokensByModality  map[string]int         `json:"input_tokens_by_modality,omitempty"`
+	OutputTokensByModality map[string]int         `json:"output_tokens_by_modality,omitempty"`
+	ActualCost             float64                `json:"actual_cost,omitempty"` // 上游返回的实际成本（RMB），用于精确计费
+	Metadata               map[string]interface{} `json:"metadata,omitempty"`    // 额外的元数据（如视频时长、分辨率等）
+	QuotaClamp             *common.QuotaClamp     `json:"-"`                     // 完成结算时的额度饱和审计标记
+	VideoBilling           *VideoBillingDetails   `json:"-"`                     // 视频任务完成后的结构化计费明细
 }
 
 // VideoBillingDetails records provider-native video pricing and the gateway
@@ -859,6 +862,13 @@ type VideoBillingDetails struct {
 	SettlementDeltaQuota       int     `json:"settlement_delta_quota"`
 	FinalQuota                 int     `json:"final_quota"`
 	Estimated                  bool    `json:"estimated"`
+	InputTokens                int     `json:"input_tokens,omitempty"`
+	TextOutputTokens           int     `json:"text_output_tokens,omitempty"`
+	VideoOutputTokens          int     `json:"video_output_tokens,omitempty"`
+	ThoughtTokens              int     `json:"thought_tokens,omitempty"`
+	InputUnitRate              float64 `json:"input_unit_rate,omitempty"`
+	TextOutputUnitRate         float64 `json:"text_output_unit_rate,omitempty"`
+	VideoOutputUnitRate        float64 `json:"video_output_unit_rate,omitempty"`
 }
 
 func FailTaskInfo(reason string) *TaskInfo {

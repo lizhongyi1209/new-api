@@ -673,13 +673,15 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.NodeName = common.NodeName
 		task.PrivateData.SubmitLogID = submitLogID
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
-			ModelPrice:      relayInfo.PriceData.ModelPrice,
-			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-			ModelRatio:      relayInfo.PriceData.ModelRatio,
-			OtherRatios:     relayInfo.PriceData.OtherRatios,
-			OriginModelName: relayInfo.OriginModelName,
-			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
-			VideoBilling:    relayInfo.VideoBilling,
+			ModelPrice:           relayInfo.PriceData.ModelPrice,
+			GroupRatio:           relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+			ModelRatio:           relayInfo.PriceData.ModelRatio,
+			CompletionRatio:      relayInfo.PriceData.CompletionRatio,
+			VideoCompletionRatio: relayInfo.PriceData.VideoCompletionRatio,
+			OtherRatios:          relayInfo.PriceData.OtherRatios,
+			OriginModelName:      relayInfo.OriginModelName,
+			PerCallBilling:       common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+			VideoBilling:         relayInfo.VideoBilling,
 		}
 		if relayInfo.TieredBillingSnapshot != nil {
 			if snapshot, err := common.Marshal(relayInfo.TieredBillingSnapshot); err == nil {

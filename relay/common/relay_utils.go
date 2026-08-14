@@ -286,7 +286,7 @@ func validateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string, re
 			isMultiShot = metaMultiShot
 		}
 	}
-	if !isMultiShot {
+	if requirePrompt && !isMultiShot {
 		if taskErr := validatePrompt(req.Prompt); taskErr != nil {
 			return taskErr
 		}
