@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
@@ -419,4 +420,49 @@ func TestOmniBillingEstimateReservesTenSecondMaximum(t *testing.T) {
 	assert.True(t, info.VideoBilling.Estimated)
 	assert.Equal(t, 10, info.VideoBilling.OutputSeconds)
 	assert.Equal(t, 57920, info.VideoBilling.VideoOutputTokens)
+}
+
+func TestOmniConvertToOpenAIVideoSurfacesFailReason(t *testing.T) {
+	task := &model.Task{
+		TaskID:     "task_omni_fail",
+		Status:     model.TaskStatusFailure,
+		Progress:   "100%",
+		FailReason: "safety filter triggered",
+	}
+	task.Properties.OriginModelName = "gemini-omni-flash-preview"
+
+	body, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(body, &video))
+	assert.Equal(t, dto.VideoStatusFailed, video.Status)
+	require.NotNil(t, video.Error)
+	assert.Equal(t, "safety filter triggered", video.Error.Message)
+}
+
+func TestOmniConvertToOpenAIVideoFallsBackWhenReasonMissing(t *testing.T) {
+	task := &model.Task{TaskID: "task_omni_fail2", Status: model.TaskStatusFailure}
+	task.Properties.OriginModelName = "gemini-omni-flash-preview"
+
+	body, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(body, &video))
+	require.NotNil(t, video.Error)
+	assert.Equal(t, "task failed", video.Error.Message)
+}
+
+func TestOmniConvertToOpenAIVideoLeavesErrorNilOnSuccess(t *testing.T) {
+	task := &model.Task{TaskID: "task_omni_ok", Status: model.TaskStatusSuccess, Progress: "100%"}
+	task.Properties.OriginModelName = "gemini-omni-flash-preview"
+
+	body, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(body, &video))
+	assert.Equal(t, dto.VideoStatusCompleted, video.Status)
+	assert.Nil(t, video.Error)
 }

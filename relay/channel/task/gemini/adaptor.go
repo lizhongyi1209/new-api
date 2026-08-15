@@ -323,6 +323,16 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 		} else if task.UpdatedAt > 0 {
 			video.CompletedAt = task.UpdatedAt
 		}
+		// 失败原因必须回传：轮询响应是客户端唯一能看到的地方。
+		// FailReason 由 ApplyVideoTaskPollingResult 从 omniErrorMessage 写入，
+		// 不回填的话客户端只能显示一个没有原因的“失败”。
+		if task.Status == model.TaskStatusFailure {
+			message := strings.TrimSpace(task.FailReason)
+			if message == "" {
+				message = "task failed"
+			}
+			video.Error = &dto.OpenAIVideoError{Message: message}
+		}
 		return common.Marshal(video)
 	}
 	upstreamTaskID := task.GetUpstreamTaskID()
