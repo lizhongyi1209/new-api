@@ -98,39 +98,43 @@ func TestOmniFetchTaskUsesQueryEndpointAndBearerAuth(t *testing.T) {
 
 func TestOmniRequestConversion(t *testing.T) {
 	tests := []struct {
-		name       string
-		body       string
-		wantTask   string
-		wantAction string
-		wantType   string
-		wantPrompt bool
-		wantAspect string
+		name         string
+		body         string
+		wantTask     string
+		wantAction   string
+		wantType     string
+		wantPrompt   bool
+		wantAspect   string
+		wantDuration string
 	}{
 		{
-			name:       "text to video",
-			body:       `{"model":"gemini-omni-flash-preview","prompt":"ocean at sunrise","aspect_ratio":"9:16"}`,
-			wantTask:   omniTaskTextToVideo,
-			wantAction: constant.TaskActionTextGenerate,
-			wantType:   "text",
-			wantPrompt: true,
-			wantAspect: "9:16",
+			name:         "text to video",
+			body:         `{"model":"gemini-omni-flash-preview","prompt":"ocean at sunrise","aspect_ratio":"9:16","duration":3}`,
+			wantTask:     omniTaskTextToVideo,
+			wantAction:   constant.TaskActionTextGenerate,
+			wantType:     "text",
+			wantPrompt:   true,
+			wantAspect:   "9:16",
+			wantDuration: "3s",
 		},
 		{
-			name:       "image to video",
-			body:       `{"model":"gemini-omni-flash-preview","mode":"image_to_video","image":"data:image/png;base64,iVBORw0KGgo=","prompt":"move gently"}`,
-			wantTask:   omniTaskImageToVideo,
-			wantAction: constant.TaskActionGenerate,
-			wantType:   "image",
-			wantPrompt: true,
-			wantAspect: "16:9",
+			name:         "image to video",
+			body:         `{"model":"gemini-omni-flash-preview","mode":"image_to_video","image":"data:image/png;base64,iVBORw0KGgo=","prompt":"move gently","duration":"5"}`,
+			wantTask:     omniTaskImageToVideo,
+			wantAction:   constant.TaskActionGenerate,
+			wantType:     "image",
+			wantPrompt:   true,
+			wantAspect:   "16:9",
+			wantDuration: "5s",
 		},
 		{
-			name:       "reference without prompt",
-			body:       `{"model":"gemini-omni-flash-preview","mode":"reference_to_video","images":["data:image/png;base64,iVBORw0KGgo="]}`,
-			wantTask:   omniTaskReferenceToVideo,
-			wantAction: constant.TaskActionReferenceGenerate,
-			wantType:   "image",
-			wantAspect: "16:9",
+			name:         "reference without prompt",
+			body:         `{"model":"gemini-omni-flash-preview","mode":"reference_to_video","images":["data:image/png;base64,iVBORw0KGgo="],"seconds":"8"}`,
+			wantTask:     omniTaskReferenceToVideo,
+			wantAction:   constant.TaskActionReferenceGenerate,
+			wantType:     "image",
+			wantAspect:   "16:9",
+			wantDuration: "8s",
 		},
 		{
 			name:       "video edit",
@@ -163,6 +167,12 @@ func TestOmniRequestConversion(t *testing.T) {
 			assert.True(t, request.Background)
 			assert.Equal(t, test.wantTask, request.GenerationConfig.VideoConfig.Task)
 			assert.Equal(t, test.wantAspect, request.ResponseFormat.AspectRatio)
+			if test.wantDuration == "" {
+				assert.Nil(t, request.ResponseFormat.Duration)
+			} else {
+				require.NotNil(t, request.ResponseFormat.Duration)
+				assert.Equal(t, test.wantDuration, *request.ResponseFormat.Duration)
+			}
 			assert.NotEmpty(t, request.Input)
 			assert.Equal(t, test.wantType, request.Input[0].Content[0].Type)
 			if test.wantPrompt {
@@ -239,6 +249,8 @@ func TestOmniMultipartValidationAndConversion(t *testing.T) {
 	require.NotEmpty(t, request.Input[0].Content)
 	assert.Equal(t, "image", request.Input[0].Content[0].Type)
 	assert.Equal(t, "image/png", request.Input[0].Content[0].MIMEType)
+	require.NotNil(t, request.ResponseFormat.Duration)
+	assert.Equal(t, "3s", *request.ResponseFormat.Duration)
 }
 
 func TestOmniMultipartRejectsMalformedDuration(t *testing.T) {
@@ -258,15 +270,33 @@ func TestOmniMultipartRejectsMalformedDuration(t *testing.T) {
 }
 
 func TestOmniValidationRejectsUnsupportedEditFormatFields(t *testing.T) {
-	context := omniTestContext(t, `{"model":"gemini-omni-flash-preview","mode":"edit","video_url":"data:video/mp4;base64,AAAAIGZ0eXBpc29t","aspect_ratio":"16:9"}`)
-	info := &relaycommon.RelayInfo{
-		ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: GeminiOmniFlashPreviewModel},
-		TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "aspect ratio",
+			body: `{"model":"gemini-omni-flash-preview","mode":"edit","video_url":"data:video/mp4;base64,AAAAIGZ0eXBpc29t","aspect_ratio":"16:9"}`,
+		},
+		{
+			name: "seconds alias",
+			body: `{"model":"gemini-omni-flash-preview","mode":"edit","video_url":"data:video/mp4;base64,AAAAIGZ0eXBpc29t","seconds":"3"}`,
+		},
 	}
-	taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(context, info)
-	require.NotNil(t, taskErr)
-	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
-	assert.Equal(t, "unsupported_parameter", taskErr.Code)
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			context := omniTestContext(t, test.body)
+			info := &relaycommon.RelayInfo{
+				ChannelMeta:   &relaycommon.ChannelMeta{UpstreamModelName: GeminiOmniFlashPreviewModel},
+				TaskRelayInfo: &relaycommon.TaskRelayInfo{},
+			}
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(context, info)
+			require.NotNil(t, taskErr)
+			assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+			assert.Equal(t, "unsupported_parameter", taskErr.Code)
+		})
+	}
 }
 
 func TestOmniValidationRejectsInvalidMediaBeforeRelay(t *testing.T) {

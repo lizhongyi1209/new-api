@@ -163,6 +163,13 @@ export interface VideoBillingAudit {
   settlement_delta_quota: number
   final_quota: number
   estimated: boolean
+  input_tokens?: number
+  text_output_tokens?: number
+  video_output_tokens?: number
+  thought_tokens?: number
+  input_unit_rate?: number
+  text_output_unit_rate?: number
+  video_output_unit_rate?: number
 }
 
 export interface TaskLifecycleAudit {

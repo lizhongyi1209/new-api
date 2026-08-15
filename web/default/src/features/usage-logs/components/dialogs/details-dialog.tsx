@@ -49,7 +49,6 @@ import {
   UserCog,
   Info,
   LogIn,
-  ExternalLink,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -167,22 +166,28 @@ function DetailSection(props: {
 
 function formatRatio(ratio: number | undefined): string {
   if (ratio == null) return '-'
-  return ratio.toFixed(4)
+  return new Intl.NumberFormat(undefined, {
+    maximumFractionDigits: 4,
+  }).format(ratio)
 }
 
 const BILLING_FORMULA_TERM_PATTERN = /([a-zA-Z_][a-zA-Z0-9_]*)\(([^)]*)\)/g
-
-function formatBillingNumber(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    maximumFractionDigits: 6,
-  }).format(value)
-}
 
 function getBillingRatioLabel(name: string, t: TFunction): string {
   if (name === 'video_input') return t('Video Input')
   if (name === 'resolution') return t('Resolution')
   if (name === 'seconds') return t('Duration')
   return name
+}
+
+function formatTokenBillingLine(
+  tokens: number,
+  unitRate: number,
+  t: TFunction,
+  formatPrice: (value: number) => string
+): string {
+  const cost = (tokens * unitRate) / 1_000_000
+  return `${tokens.toLocaleString()} ${t('Tokens')} × ${formatPrice(unitRate)}/M = ${formatPrice(cost)}`
 }
 
 function formatStoredBillingFormula(
@@ -194,9 +199,6 @@ function formatStoredBillingFormula(
     BILLING_FORMULA_TERM_PATTERN,
     (_term, name: string, rawValue: string) => {
       const value = Number(rawValue)
-      const displayValue = Number.isFinite(value)
-        ? formatBillingNumber(value)
-        : rawValue
       if (name === 'model_price') {
         return `${t('Model Price')} ${Number.isFinite(value) ? formatPrice(value) : rawValue}`
       }
@@ -204,9 +206,9 @@ function formatStoredBillingFormula(
         return `${t('Price')} ${Number.isFinite(value) ? `${formatPrice(value * 2)}/M` : rawValue}`
       }
       if (name === 'group_ratio') {
-        return `${t('Group Ratio')} ${displayValue}`
+        return `${t('Group Ratio')} ${Number.isFinite(value) ? formatRatio(value) : rawValue}`
       }
-      return `${getBillingRatioLabel(name, t)} ${t('Multiplier')} ${displayValue}`
+      return `${getBillingRatioLabel(name, t)} ${t('Multiplier')} ${Number.isFinite(value) ? formatRatio(value) : rawValue}`
     }
   )
 }
@@ -246,15 +248,13 @@ function buildReadableTaskBillingFormula(
     tokenTerms.length > 1 ? `(${tokenTerms.join(' + ')})` : tokenTerms[0]
   const formulaParts = [`${tokenExpression} ÷ 1,000,000`]
   if (effectiveGroupRatio != null && Number.isFinite(effectiveGroupRatio)) {
-    formulaParts.push(
-      `${groupRatioLabel} ${formatBillingNumber(effectiveGroupRatio)}`
-    )
+    formulaParts.push(`${groupRatioLabel} ${formatRatio(effectiveGroupRatio)}`)
   }
   for (const [name, ratio] of Object.entries(
     other.billing?.other_ratios ?? {}
   ).sort(([left], [right]) => left.localeCompare(right))) {
     formulaParts.push(
-      `${getBillingRatioLabel(name, t)} ${t('Multiplier')} ${formatBillingNumber(ratio)}`
+      `${getBillingRatioLabel(name, t)} ${t('Multiplier')} ${formatRatio(ratio)}`
     )
   }
 
@@ -317,6 +317,10 @@ function BillingBreakdown(props: {
   const isPerCall = isPerCallBilling(other.model_price)
   const isClaude = other.claude === true
   const isTieredExpr = other.billing_mode === 'tiered_expr'
+  const videoTokenBilling =
+    other.video_billing?.billing_mode === 'video_modality_tokens'
+      ? other.video_billing
+      : undefined
   const isVideoPerSecond =
     other.billing_mode === 'video_per_second' ||
     other.video_billing?.billing_mode === 'video_per_second' ||
@@ -329,7 +333,71 @@ function BillingBreakdown(props: {
   const fmtPrice = (usd: number) => formatBillingCurrencyFromUSD(usd, priceOpts)
   const baseInputUSD = other.model_ratio != null ? other.model_ratio * 2.0 : 0
 
-  if (isVideoPerSecond) {
+  if (videoTokenBilling) {
+    rows.push({ label: t('Billing Mode'), value: t('Per-token') })
+    if (videoTokenBilling.output_seconds > 0) {
+      rows.push({
+        label: t('Duration'),
+        value: `${videoTokenBilling.output_seconds.toLocaleString()} ${t('seconds')}`,
+      })
+    }
+    if (
+      (videoTokenBilling.input_tokens ?? 0) > 0 &&
+      (videoTokenBilling.input_unit_rate ?? 0) > 0
+    ) {
+      rows.push({
+        label: t('Input'),
+        value: formatTokenBillingLine(
+          videoTokenBilling.input_tokens ?? 0,
+          videoTokenBilling.input_unit_rate ?? 0,
+          t,
+          fmtPrice
+        ),
+      })
+    }
+    if (
+      (videoTokenBilling.video_output_tokens ?? 0) > 0 &&
+      (videoTokenBilling.video_output_unit_rate ?? 0) > 0
+    ) {
+      rows.push({
+        label: t('Video output'),
+        value: formatTokenBillingLine(
+          videoTokenBilling.video_output_tokens ?? 0,
+          videoTokenBilling.video_output_unit_rate ?? 0,
+          t,
+          fmtPrice
+        ),
+      })
+    }
+    if (
+      (videoTokenBilling.text_output_tokens ?? 0) > 0 &&
+      (videoTokenBilling.text_output_unit_rate ?? 0) > 0
+    ) {
+      rows.push({
+        label: t('Text Output'),
+        value: formatTokenBillingLine(
+          videoTokenBilling.text_output_tokens ?? 0,
+          videoTokenBilling.text_output_unit_rate ?? 0,
+          t,
+          fmtPrice
+        ),
+      })
+    }
+    if (
+      (videoTokenBilling.thought_tokens ?? 0) > 0 &&
+      (videoTokenBilling.text_output_unit_rate ?? 0) > 0
+    ) {
+      rows.push({
+        label: t('Reasoning'),
+        value: formatTokenBillingLine(
+          videoTokenBilling.thought_tokens ?? 0,
+          videoTokenBilling.text_output_unit_rate ?? 0,
+          t,
+          fmtPrice
+        ),
+      })
+    }
+  } else if (isVideoPerSecond) {
     rows.push({
       label: t('Billing Mode'),
       value: t('Video per second'),
@@ -395,7 +463,7 @@ function BillingBreakdown(props: {
     })
   }
 
-  if (!isVideoPerSecond && other.billing?.formula) {
+  if (!videoTokenBilling && !isVideoPerSecond && other.billing?.formula) {
     const readableFormula =
       buildReadableTaskBillingFormula(
         log,
@@ -410,13 +478,13 @@ function BillingBreakdown(props: {
       value: readableFormula,
     })
   }
-  if (!isVideoPerSecond) {
+  if (!videoTokenBilling && !isVideoPerSecond) {
     for (const [name, ratio] of Object.entries(
       other.billing?.other_ratios ?? {}
     ).sort(([left], [right]) => left.localeCompare(right))) {
       rows.push({
         label: `${t('Multiplier')} · ${getBillingRatioLabel(name, t)}`,
-        value: `${String(ratio)}x`,
+        value: `${formatRatio(ratio)}x`,
       })
     }
   }
@@ -611,7 +679,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const other = parseLogOther(props.log.other)
-  const details = other?.billing_explanation ?? props.log.content ?? ''
   const typeConfig = getLogTypeConfig(props.log.type)
 
   const isViolation = isViolationFeeLog(other)
@@ -620,8 +687,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const isTopup = props.log.type === 1
   const isManage = props.log.type === 3
   const isSubscription = other?.billing_source === 'subscription'
+  const details =
+    isConsume && other?.video_billing?.billing_mode === 'video_modality_tokens'
+      ? ''
+      : (other?.billing_explanation ?? props.log.content ?? '')
   const taskRequest = other?.request_params
-  const taskLifecycle = other?.task_lifecycle
   const isTieredBilling =
     isConsume &&
     !isViolation &&
@@ -1193,9 +1263,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Token breakdown (for consume/error types with token data) */}
-        {isDisplayableType(props.log.type) && other && (
-          <TokenBreakdown log={props.log} other={other} />
-        )}
+        {isDisplayableType(props.log.type) &&
+          other &&
+          other.video_billing?.billing_mode !== 'video_modality_tokens' && (
+            <TokenBreakdown log={props.log} other={other} />
+          )}
 
         {/* Billing breakdown (consume type) */}
         {isConsume && other && !isViolation && (
@@ -1328,80 +1400,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
             )}
           </DetailSection>
         )}
-
-        {props.isAdmin &&
-        isConsume &&
-        other?.is_task === true &&
-        other.task_id ? (
-          <DetailSection label={t('Task Lifecycle')}>
-            <DetailRow label={t('Task ID')} value={other.task_id} mono />
-            {taskLifecycle?.status || other.task_status ? (
-              <DetailRow
-                label={t('Status')}
-                value={taskLifecycle?.status || other.task_status}
-                mono
-              />
-            ) : null}
-            {taskLifecycle?.use_time_seconds != null ? (
-              <DetailRow
-                label={t('Duration')}
-                value={formatUseTime(taskLifecycle.use_time_seconds)}
-                mono
-              />
-            ) : null}
-            {taskLifecycle?.charged_quota != null ? (
-              <DetailRow
-                label={t('Charged Cost')}
-                value={formatLogQuota(taskLifecycle.charged_quota)}
-                mono
-              />
-            ) : null}
-            {taskLifecycle?.refunded_quota != null ? (
-              <DetailRow
-                label={t('Refunded Cost')}
-                value={formatLogQuota(taskLifecycle.refunded_quota)}
-                mono
-              />
-            ) : null}
-            {taskLifecycle?.net_quota != null ? (
-              <DetailRow
-                label={t('Net Cost')}
-                value={formatLogQuota(taskLifecycle.net_quota)}
-                mono
-              />
-            ) : null}
-            {taskLifecycle?.refund_status ? (
-              <DetailRow
-                label={t('Refund Status')}
-                value={taskLifecycle.refund_status}
-                mono
-              />
-            ) : null}
-            {taskLifecycle?.response_body_available != null ? (
-              <DetailRow
-                label={t('Response Retained')}
-                value={
-                  taskLifecycle.response_body_available ? t('Yes') : t('No')
-                }
-              />
-            ) : null}
-            <Button
-              variant='outline'
-              size='sm'
-              className='mt-1 w-fit'
-              render={
-                <a
-                  href={`/api/task/${encodeURIComponent(other.task_id)}/audit`}
-                  target='_blank'
-                  rel='noreferrer'
-                />
-              }
-            >
-              <ExternalLink className='size-3.5' aria-hidden='true' />
-              {t('Open Audit Data')}
-            </Button>
-          </DetailSection>
-        ) : null}
 
         {/* Custom extension: provider-specific video request fields. */}
         {other &&

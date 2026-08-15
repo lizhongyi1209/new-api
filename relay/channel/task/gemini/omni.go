@@ -59,9 +59,10 @@ type omniGenerationConfig struct {
 }
 
 type omniResponseFormat struct {
-	Type        string `json:"type"`
-	Delivery    string `json:"delivery"`
-	AspectRatio string `json:"aspect_ratio,omitempty"`
+	Type        string  `json:"type"`
+	Delivery    string  `json:"delivery"`
+	AspectRatio string  `json:"aspect_ratio,omitempty"`
+	Duration    *string `json:"duration,omitempty"`
 }
 
 type omniRequest struct {
@@ -221,6 +222,9 @@ func validateOmniRequest(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskE
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 	}
 	req.Mode = task
+	if req.Duration == 0 && req.Seconds != "" {
+		req.Duration, _ = strconv.Atoi(req.Seconds)
+	}
 
 	if req.Duration != 0 && (req.Duration < omniMinDurationSeconds || req.Duration > omniMaxDurationSeconds) {
 		return omniTaskError("duration must be between 3 and 10 seconds", "invalid_duration")
@@ -406,6 +410,9 @@ func buildOmniRequest(c *gin.Context, info *relaycommon.RelayInfo) (omniRequest,
 	if err != nil {
 		return omniRequest{}, err
 	}
+	if req.Duration == 0 && req.Seconds != "" {
+		req.Duration, _ = strconv.Atoi(req.Seconds)
+	}
 	task := resolveOmniTask(req)
 	contents := make([]omniContent, 0, len(req.Images)+1)
 
@@ -459,6 +466,10 @@ func buildOmniRequest(c *gin.Context, info *relaycommon.RelayInfo) (omniRequest,
 	}
 	if task != omniTaskEdit {
 		responseFormat.AspectRatio = aspectRatio
+		if req.Duration > 0 {
+			duration := strconv.Itoa(req.Duration) + "s"
+			responseFormat.Duration = &duration
+		}
 	}
 
 	return omniRequest{
