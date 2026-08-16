@@ -3301,6 +3301,7 @@
     "请输入认证器验证码或备用码": "Please enter authenticator verification code or backup code",
     "请输入说明": "Please enter the description",
     "请输入运行时长": "Please enter runtime duration",
+    "请输入邀请码": "Please enter invitation code",
     "请输入邮箱！": "Please enter your email!",
     "请输入邮箱地址": "Please enter the email address",
     "请输入邮箱验证码！": "Please enter the email verification code!",
@@ -3978,5 +3979,16 @@
     "，": ", ",
     "、": ", "
   },
-  "上传管理": "Upload Management"
+  "上传管理": "Upload Management",
+  "推荐计划": "Referral Program",
+  "推荐用户数量与充值总额": "Referral counts and total top-ups",
+  "推荐用户总数": "Total referrals",
+  "总充值": "Total top-up",
+  "第 {{level}} 层推荐用户": "Level {{level}} referrals",
+  "{{count}} 位推荐用户": "{{count}} referrals",
+  "注册时间": "Registered at",
+  "加载推荐计划失败": "Unable to load referral program",
+  "加载推荐用户失败": "Unable to load referrals",
+  "暂无推荐用户": "No referrals",
+  "邀请用户注册后，详情会显示在这里": "Referral details will appear here after users register"
 }

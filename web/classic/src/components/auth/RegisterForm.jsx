@@ -73,14 +73,18 @@ const RegisterForm = () => {
     redirecting: '正在跳转 GitHub...',
     timeout: '请求超时，请刷新页面后重新发起 GitHub 登录',
   };
-  const [inputs, setInputs] = useState({
+  const [invitationCodeFromLink] = useState(
+    () => new URLSearchParams(window.location.search).get('aff')?.trim() || '',
+  );
+  const [inputs, setInputs] = useState(() => ({
     username: '',
     password: '',
     password2: '',
     email: '',
     verification_code: '',
     wechat_verification_code: '',
-  });
+    aff_code: invitationCodeFromLink || localStorage.getItem('aff') || '',
+  }));
   const { username, password, password2 } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
   const [statusState] = useContext(StatusContext);
@@ -114,11 +118,6 @@ const RegisterForm = () => {
   const logo = getLogo();
   const systemName = getSystemName();
 
-  let affCode = new URLSearchParams(window.location.search).get('aff');
-  if (affCode) {
-    localStorage.setItem('aff', affCode);
-  }
-
   const status = useMemo(() => {
     if (statusState?.status) return statusState.status;
     const savedStatus = localStorage.getItem('status');
@@ -133,15 +132,21 @@ const RegisterForm = () => {
     (status.custom_oauth_providers || []).length > 0;
   const hasOAuthRegisterOptions = Boolean(
     status.github_oauth ||
-      status.discord_oauth ||
-      status.oidc_enabled ||
-      status.wechat_login ||
-      status.linuxdo_oauth ||
-      status.telegram_oauth ||
-      hasCustomOAuthProviders,
+    status.discord_oauth ||
+    status.oidc_enabled ||
+    status.wechat_login ||
+    status.linuxdo_oauth ||
+    status.telegram_oauth ||
+    hasCustomOAuthProviders,
   );
 
   const [showEmailVerification, setShowEmailVerification] = useState(false);
+
+  useEffect(() => {
+    if (invitationCodeFromLink) {
+      localStorage.setItem('aff', invitationCodeFromLink);
+    }
+  }, [invitationCodeFromLink]);
 
   useEffect(() => {
     setShowEmailVerification(!!status?.email_verification);
@@ -216,6 +221,11 @@ const RegisterForm = () => {
   }
 
   async function handleSubmit(e) {
+    const invitationCode = inputs.aff_code.trim();
+    if (!invitationCode) {
+      showInfo(t('请输入邀请码'));
+      return;
+    }
     if (password.length < 8) {
       showInfo('密码长度不得小于 8 位！');
       return;
@@ -231,13 +241,9 @@ const RegisterForm = () => {
       }
       setRegisterLoading(true);
       try {
-        if (!affCode) {
-          affCode = localStorage.getItem('aff');
-        }
-        inputs.aff_code = affCode;
         const res = await API.post(
           `/api/user/register?turnstile=${turnstileToken}`,
-          inputs,
+          { ...inputs, aff_code: invitationCode },
         );
         const { success, message } = res.data;
         if (success) {
@@ -583,6 +589,18 @@ const RegisterForm = () => {
                 />
 
                 <Form.Input
+                  field='aff_code'
+                  label={t('邀请码')}
+                  placeholder={t('请输入邀请码')}
+                  name='aff_code'
+                  initValue={inputs.aff_code}
+                  onChange={(value) => handleChange('aff_code', value)}
+                  prefix={<IconKey />}
+                  readonly={Boolean(invitationCodeFromLink)}
+                  rules={[{ required: true, message: t('请输入邀请码') }]}
+                />
+
+                <Form.Input
                   field='password'
                   label={t('密码')}
                   placeholder={t('输入密码，最短 8 位，最长 20 位')}
@@ -781,8 +799,7 @@ const RegisterForm = () => {
         style={{ top: '50%', left: '-120px' }}
       />
       <div className='w-full max-w-sm mt-[60px]'>
-        {showEmailRegister ||
-        !hasOAuthRegisterOptions
+        {showEmailRegister || !hasOAuthRegisterOptions
           ? renderEmailRegisterForm()
           : renderOAuthOptions()}
         {renderWeChatLoginModal()}

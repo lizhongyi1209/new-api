@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -63,6 +63,9 @@ export function SignUpForm({
   const [wechatCode, setWeChatCode] = useState('')
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
+  const [invitationCodeFromLink] = useState(
+    () => new URLSearchParams(window.location.search).get('aff')?.trim() ?? ''
+  )
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
 
   const { status } = useStatus()
@@ -88,6 +91,7 @@ export function SignUpForm({
     resolver: zodResolver(registerFormSchema),
     defaultValues: {
       username: '',
+      affCode: invitationCodeFromLink || getAffiliateCode().trim(),
       email: '',
       password: '',
       confirmPassword: '',
@@ -129,11 +133,10 @@ export function SignUpForm({
   }, [requiresLegalConsent])
 
   useEffect(() => {
-    const aff = new URLSearchParams(window.location.search).get('aff')?.trim()
-    if (aff) {
-      saveAffiliateCode(aff)
+    if (invitationCodeFromLink) {
+      saveAffiliateCode(invitationCodeFromLink)
     }
-  }, [])
+  }, [invitationCodeFromLink])
 
   async function onSubmit(data: z.infer<typeof registerFormSchema>) {
     if (requiresLegalConsent && !agreedToLegal) {
@@ -162,7 +165,7 @@ export function SignUpForm({
         password: data.password,
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
-        aff_code: getAffiliateCode(),
+        aff_code: data.affCode,
         turnstile: turnstileToken,
       })
 
@@ -172,7 +175,7 @@ export function SignUpForm({
       } else {
         toast.error(res?.message || t('Failed to create account'))
       }
-    } catch (_error) {
+    } catch {
       // Errors are handled by global interceptor
     } finally {
       setIsLoading(false)
@@ -216,11 +219,20 @@ export function SignUpForm({
       } else {
         toast.error(res?.message || t('Login failed'))
       }
-    } catch (_error) {
+    } catch {
       toast.error(t('Login failed'))
     } finally {
       setIsWeChatSubmitting(false)
     }
+  }
+
+  let sendCodeButtonContent: ReactNode = t('Send code')
+  if (isActive) {
+    sendCodeButtonContent = t('Resend ({{seconds}}s)', {
+      seconds: secondsLeft,
+    })
+  } else if (isSendingCode) {
+    sendCodeButtonContent = <Loader2 className='h-4 w-4 animate-spin' />
   }
 
   return (
@@ -239,6 +251,26 @@ export function SignUpForm({
               <FormLabel>{t('Username')}</FormLabel>
               <FormControl>
                 <Input placeholder={t('Enter your username')} {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        {/* Invitation Code Field */}
+        <FormField
+          control={form.control}
+          name='affCode'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Invitation Code')}</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder={t('Enter your invitation code')}
+                  readOnly={Boolean(invitationCodeFromLink)}
+                  required
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -323,13 +355,7 @@ export function SignUpForm({
                 }
                 onClick={handleSendVerificationCode}
               >
-                {isActive ? (
-                  t('Resend ({{seconds}}s)', { seconds: secondsLeft })
-                ) : isSendingCode ? (
-                  <Loader2 className='h-4 w-4 animate-spin' />
-                ) : (
-                  t('Send code')
-                )}
+                {sendCodeButtonContent}
               </Button>
             </div>
           </>

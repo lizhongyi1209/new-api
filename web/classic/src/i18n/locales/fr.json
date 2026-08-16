@@ -3204,6 +3204,7 @@
     "请输入认证器验证码或备用码": "Veuillez saisir le code de vérification de l'authentificateur ou le code de sauvegarde",
     "请输入说明": "Veuillez saisir la description",
     "请输入运行时长": "Please enter runtime duration",
+    "请输入邀请码": "Veuillez saisir un code d’invitation",
     "请输入邮箱！": "Veuillez saisir votre e-mail !",
     "请输入邮箱地址": "Veuillez saisir l'adresse e-mail",
     "请输入邮箱验证码！": "Veuillez saisir le code de vérification de l'e-mail !",
@@ -3685,5 +3686,16 @@
     "默认测试模型": "Modèle de test par défaut",
     "默认用户消息": "Bonjour",
     "默认补全倍率": "Taux de complétion par défaut"
-  }
+  },
+  "推荐计划": "Programme de parrainage",
+  "推荐用户数量与充值总额": "Nombre de filleuls et total des recharges",
+  "推荐用户总数": "Nombre total de filleuls",
+  "总充值": "Recharges totales",
+  "第 {{level}} 层推荐用户": "Filleuls de niveau {{level}}",
+  "{{count}} 位推荐用户": "{{count}} filleuls",
+  "注册时间": "Date d’inscription",
+  "加载推荐计划失败": "Impossible de charger le programme de parrainage",
+  "加载推荐用户失败": "Impossible de charger les filleuls",
+  "暂无推荐用户": "Aucun filleul",
+  "邀请用户注册后，详情会显示在这里": "Les détails apparaîtront ici après leur inscription"
 }

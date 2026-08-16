@@ -211,6 +211,20 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
+	affCode := strings.TrimSpace(user.AffCode)
+	if affCode == "" {
+		common.ApiErrorI18n(c, i18n.MsgUserAffCodeRequired)
+		return
+	}
+	inviterId, err := model.GetUserIdByAffCode(affCode)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			common.ApiErrorI18n(c, i18n.MsgUserAffCodeInvalid)
+			return
+		}
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+		return
+	}
 	if common.EmailVerificationEnabled {
 		if user.Email == "" || user.VerificationCode == "" {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
@@ -243,8 +257,6 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
 		return
 	}
-	affCode := user.AffCode // this code is the inviter's code, not the user's own code
-	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
 		Username:    user.Username,
 		Password:    user.Password,
@@ -576,6 +588,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 	defaultConfig["personal"] = map[string]interface{}{
 		"enabled":  true,
 		"topup":    true,
+		"referral": true,
 		"personal": true,
 	}
 

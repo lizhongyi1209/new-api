@@ -3604,6 +3604,7 @@
     "请输入账号": "Vui lòng nhập tài khoản",
     "请输入转账金额": "Vui lòng nhập số tiền chuyển",
     "请输入运行时长": "Please enter runtime duration",
+    "请输入邀请码": "Vui lòng nhập mã mời",
     "请输入邮箱": "Vui lòng nhập email",
     "请输入邮箱！": "Vui lòng nhập email của bạn!",
     "请输入邮箱地址": "Vui lòng nhập địa chỉ email",
@@ -4219,5 +4220,15 @@
     "默认测试模型": "Mô hình kiểm tra mặc định",
     "默认用户消息": "Xin chào",
     "默认补全倍率": "Tỷ lệ hoàn thành mặc định"
-  }
+  },
+  "推荐计划": "Chương trình giới thiệu",
+  "推荐用户数量与充值总额": "Số người được giới thiệu và tổng tiền nạp",
+  "推荐用户总数": "Tổng số người được giới thiệu",
+  "总充值": "Tổng nạp tiền",
+  "第 {{level}} 层推荐用户": "Người được giới thiệu cấp {{level}}",
+  "{{count}} 位推荐用户": "{{count}} người được giới thiệu",
+  "加载推荐计划失败": "Không thể tải chương trình giới thiệu",
+  "加载推荐用户失败": "Không thể tải người được giới thiệu",
+  "暂无推荐用户": "Chưa có người được giới thiệu",
+  "邀请用户注册后，详情会显示在这里": "Chi tiết sẽ xuất hiện tại đây sau khi người dùng đăng ký"
 }
