@@ -22,6 +22,7 @@ import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import {
   Collapsible,
@@ -103,6 +104,9 @@ export function ReferralLevelCard(props: ReferralLevelCardProps) {
             <TableHead className='pr-4 text-right sm:pr-5'>
               {t('Total Top-up')}
             </TableHead>
+            <TableHead className='pr-4 text-right sm:pr-5'>
+              {t('Income Contribution')}
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -114,6 +118,9 @@ export function ReferralLevelCard(props: ReferralLevelCardProps) {
               <TableCell>{formatTimestamp(user.created_at)}</TableCell>
               <TableCell className='pr-4 text-right font-medium tabular-nums sm:pr-5'>
                 {formatCurrencyFromUSD(user.total_top_up, currencyOptions)}
+              </TableCell>
+              <TableCell className='pr-4 text-right font-medium tabular-nums sm:pr-5'>
+                {formatCurrencyFromUSD(user.revenue, currencyOptions)}
               </TableCell>
             </TableRow>
           ))}
@@ -138,29 +145,53 @@ export function ReferralLevelCard(props: ReferralLevelCardProps) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <Card className='gap-0 overflow-hidden py-0'>
-        <CollapsibleTrigger className='hover:bg-muted/40 focus-visible:ring-ring flex w-full cursor-pointer items-center gap-3 px-4 py-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none sm:px-5'>
+      <Card data-card-hover='false' className='gap-0 overflow-hidden py-0'>
+        <CollapsibleTrigger
+          data-disable-active-scale='true'
+          className='hover:bg-muted/40 focus-visible:ring-ring flex w-full cursor-pointer items-center gap-3 px-4 py-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none sm:px-5'
+        >
           <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg'>
             <Users className='size-4' aria-hidden='true' />
           </div>
           <div className='min-w-0 flex-1'>
-            <p className='font-medium'>
-              {t('Level {{level}} Referrals', {
-                level: props.summary.level,
-              })}
-            </p>
+            <div className='flex flex-wrap items-center gap-2'>
+              <p className='font-medium'>
+                {t('Level {{level}} Referrals', {
+                  level: props.summary.level,
+                })}
+              </p>
+              <Badge variant='secondary'>
+                {t('{{rate}}% Reward', {
+                  rate: props.summary.reward_rate,
+                })}
+              </Badge>
+            </div>
             <p className='text-muted-foreground mt-0.5 text-xs'>
               {t('{{count}} referrals', { count: props.summary.count })}
             </p>
-          </div>
-          <div className='shrink-0 text-right'>
-            <p className='text-muted-foreground text-xs'>{t('Total Top-up')}</p>
-            <p className='text-sm font-semibold tabular-nums'>
-              {formatCurrencyFromUSD(
-                props.summary.total_top_up,
-                currencyOptions
-              )}
+            <p className='mt-1 text-xs font-medium tabular-nums sm:hidden'>
+              {t('Income')}:{' '}
+              {formatCurrencyFromUSD(props.summary.revenue, currencyOptions)}
             </p>
+          </div>
+          <div className='hidden shrink-0 grid-cols-2 gap-5 text-right sm:grid'>
+            <div>
+              <p className='text-muted-foreground text-xs'>
+                {t('Total Top-up')}
+              </p>
+              <p className='text-sm font-semibold tabular-nums'>
+                {formatCurrencyFromUSD(
+                  props.summary.total_top_up,
+                  currencyOptions
+                )}
+              </p>
+            </div>
+            <div>
+              <p className='text-muted-foreground text-xs'>{t('Income')}</p>
+              <p className='text-sm font-semibold tabular-nums'>
+                {formatCurrencyFromUSD(props.summary.revenue, currencyOptions)}
+              </p>
+            </div>
           </div>
           <ChevronDown
             className={`text-muted-foreground size-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}

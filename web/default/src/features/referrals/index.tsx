@@ -17,13 +17,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
-import { CircleDollarSign, UsersRound } from 'lucide-react'
+import { CircleDollarSign, HandCoins, Link2, UsersRound } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { CopyButton } from '@/components/copy-button'
 import { SectionPageLayout } from '@/components/layout'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 
@@ -51,7 +59,9 @@ export function ReferralProgram() {
   if (summaryQuery.isLoading) {
     content = (
       <>
-        <div className='grid gap-3 sm:grid-cols-2'>
+        <Skeleton className='h-32 w-full' />
+        <div className='grid gap-3 sm:grid-cols-3'>
+          <Skeleton className='h-28 w-full' />
           <Skeleton className='h-28 w-full' />
           <Skeleton className='h-28 w-full' />
         </div>
@@ -72,9 +82,48 @@ export function ReferralProgram() {
       </Alert>
     )
   } else {
+    const referralLink = `${window.location.origin}/sign-up?aff=${encodeURIComponent(summaryQuery.data.referral_code)}`
+
     content = (
       <>
-        <div className='grid gap-3 sm:grid-cols-2'>
+        <Card data-card-hover='false'>
+          <CardHeader>
+            <div className='flex items-center gap-2'>
+              <Link2
+                className='text-muted-foreground size-4'
+                aria-hidden='true'
+              />
+              <CardTitle className='text-sm'>
+                {t('Your Referral Link')}
+              </CardTitle>
+            </div>
+            <CardDescription>
+              {t(
+                'Share this link to invite new users to your referral network.'
+              )}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className='flex items-center gap-2'>
+              <Input
+                value={referralLink}
+                readOnly
+                aria-label={t('Your Referral Link')}
+                className='min-w-0 flex-1 font-mono text-xs'
+              />
+              <CopyButton
+                value={referralLink}
+                variant='outline'
+                className='size-9'
+                iconClassName='size-4'
+                tooltip={t('Copy referral link')}
+                aria-label={t('Copy referral link')}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className='grid gap-3 sm:grid-cols-3'>
           <Card>
             <CardHeader className='flex-row items-center justify-between'>
               <CardTitle className='text-sm font-medium'>
@@ -105,6 +154,25 @@ export function ReferralProgram() {
               <p className='text-2xl font-semibold tabular-nums'>
                 {formatCurrencyFromUSD(
                   summaryQuery.data.total_top_up,
+                  currencyOptions
+                )}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className='flex-row items-center justify-between'>
+              <CardTitle className='text-sm font-medium'>
+                {t('Total Income')}
+              </CardTitle>
+              <HandCoins
+                className='text-muted-foreground size-4'
+                aria-hidden='true'
+              />
+            </CardHeader>
+            <CardContent>
+              <p className='text-2xl font-semibold tabular-nums'>
+                {formatCurrencyFromUSD(
+                  summaryQuery.data.total_revenue,
                   currencyOptions
                 )}
               </p>

@@ -20,11 +20,15 @@ export type ReferralLevelSummary = {
   level: number
   count: number
   total_top_up: number
+  reward_rate: number
+  revenue: number
 }
 
 export type ReferralProgramSummary = {
+  referral_code: string
   total_count: number
   total_top_up: number
+  total_revenue: number
   levels: ReferralLevelSummary[]
 }
 
@@ -32,6 +36,7 @@ export type ReferralUser = {
   username: string
   created_at: number
   total_top_up: number
+  revenue: number
 }
 
 export type ReferralApiResponse<T> = {
