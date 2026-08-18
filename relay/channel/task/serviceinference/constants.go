@@ -12,6 +12,7 @@ const seedance25VideoInputPriceRatio = 42.0 / 70.0
 
 var ModelList = []string{
 	"dreamina-seedance-2-0-260128",
+	"grok-imagine-video-1.5",
 }
 
 const (

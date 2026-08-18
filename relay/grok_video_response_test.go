@@ -35,6 +35,44 @@ func TestBuildGrokVideoTaskResponse(t *testing.T) {
 	assert.NotContains(t, response, "request_id")
 }
 
+func TestBuildGrokVideoTaskResponseFromServiceInferenceWrapper(t *testing.T) {
+	task := &model.Task{
+		Status:   model.TaskStatusSuccess,
+		Progress: "100%",
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "https://cache.example/video.mp4",
+		},
+		Properties: model.Properties{
+			OriginModelName: "grok-imagine-video-1.5",
+		},
+		Data: []byte(`{
+			"task": {
+				"id":"mvt-upstream",
+				"status":"completed",
+				"duration_seconds":5,
+				"outputs":["https://upstream.example/video.mp4"],
+				"metadata": {
+					"progress":100,
+					"video":{"url":"https://upstream.example/video.mp4","duration":5.04,"respect_moderation":true},
+					"usage":{"cost_in_usd_ticks":7100000000}
+				}
+			}
+		}`),
+	}
+
+	response := BuildGrokVideoTaskResponse(task)
+	assert.Equal(t, "done", response["status"])
+	assert.Equal(t, "grok-imagine-video-1.5", response["model"])
+	assert.Equal(t, float64(100), response["progress"])
+	video, ok := response["video"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "https://cache.example/video.mp4", video["url"])
+	assert.Equal(t, float64(5.04), video["duration"])
+	assert.NotContains(t, video, "respect_moderation")
+	assert.NotContains(t, response, "task")
+	assert.NotContains(t, response, "usage")
+}
+
 func TestBuildGrokVideoTaskResponsePreservesExpired(t *testing.T) {
 	task := &model.Task{
 		Status:     model.TaskStatusFailure,

@@ -36,9 +36,13 @@ func newTestRelayInfo(serverURL string, other dto.ChannelOtherSettings) *relayco
 }
 
 func newTaskContext(body string) *gin.Context {
+	return newTaskContextForPath("/v1/videos", body)
+}
+
+func newTaskContextForPath(path string, body string) *gin.Context {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(body))
+	c.Request = httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 	return c
 }
@@ -56,6 +60,163 @@ func writeJSON(t *testing.T, w http.ResponseWriter, status int, v any) {
 func requireBearer(t *testing.T, r *http.Request) {
 	t.Helper()
 	assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
+}
+
+func TestGrokOfficialRequestConvertsToServiceInferencePayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+	info.OriginModelName = "grok-imagine-video-1.5"
+	context := newTaskContextForPath("/grok/v1/videos/generations", `{
+		"model":"grok-imagine-video-1.5",
+		"prompt":"make the light move",
+		"image":{"image_url":"https://cdn.example.com/reference.png"},
+		"duration":15,
+		"resolution":"720p",
+		"aspect_ratio":"9:16"
+	}`)
+
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+	assert.Equal(t, constant.TaskActionGenerate, info.Action)
+	assert.Equal(t, map[string]float64{
+		"seconds":     15,
+		"resolution":  1.75,
+		"image_input": 2.11 / 2.1,
+	}, adaptor.EstimateBilling(context, info))
+
+	reader, err := adaptor.BuildRequestBody(context, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var payload grokVideoRequestPayload
+	require.NoError(t, common.Unmarshal(data, &payload))
+	assert.Equal(t, "grok-imagine-video-1.5", payload.Model)
+	assert.Equal(t, "make the light move", payload.Prompt)
+	require.NotNil(t, payload.Duration)
+	assert.Equal(t, 15, *payload.Duration)
+	assert.Equal(t, "720p", payload.Resolution)
+	assert.Equal(t, "9:16", payload.AspectRatio)
+	assert.Equal(t, []grokReferenceImage{{URL: "https://cdn.example.com/reference.png"}}, payload.ReferenceImages)
+
+	taskRequest, err := relaycommon.GetTaskRequest(context)
+	require.NoError(t, err)
+	assert.Equal(t, 1, taskRequest.ImageCount)
+	assert.Equal(t, "720p", taskRequest.EffectiveResolution)
+}
+
+func TestGrokServiceInferencePayloadUsesGatewayDefaults(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+	info.OriginModelName = "grok-imagine-video-1.5"
+	context := newTaskContextForPath("/grok/v1/videos/generations", `{
+		"model":"grok-imagine-video-1.5",
+		"prompt":"move",
+		"image":{"url":"https://cdn.example.com/reference.png"}
+	}`)
+
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+	reader, err := adaptor.BuildRequestBody(context, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var payload grokVideoRequestPayload
+	require.NoError(t, common.Unmarshal(data, &payload))
+	require.NotNil(t, payload.Duration)
+	assert.Equal(t, 8, *payload.Duration)
+	assert.Equal(t, "480p", payload.Resolution)
+	assert.Equal(t, "16:9", payload.AspectRatio)
+	assert.Equal(t, map[string]float64{
+		"seconds":     8,
+		"resolution":  1,
+		"image_input": 0.65 / 0.64,
+	}, adaptor.EstimateBilling(context, info))
+}
+
+func TestGrokServiceInferenceAcceptsOfficialDurationAliases(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name     string
+		field    string
+		expected int
+	}{
+		{name: "duration string", field: `"duration":"5"`, expected: 5},
+		{name: "seconds alias", field: `"seconds":"6"`, expected: 6},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+			context := newTaskContextForPath("/grok/v1/videos/generations", `{
+				"model":"grok-imagine-video-1.5",
+				"prompt":"move",
+				"image":{"url":"https://cdn.example.com/reference.png"},
+				`+test.field+`
+			}`)
+			adaptor := &TaskAdaptor{}
+			adaptor.Init(info)
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+			reader, err := adaptor.BuildRequestBody(context, info)
+			require.NoError(t, err)
+			data, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			var payload grokVideoRequestPayload
+			require.NoError(t, common.Unmarshal(data, &payload))
+			require.NotNil(t, payload.Duration)
+			assert.Equal(t, test.expected, *payload.Duration)
+		})
+	}
+}
+
+func TestGrokServiceInferenceRejectsUnsupportedOfficialInputs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name string
+		body string
+		code string
+	}{
+		{
+			name: "file id cannot be sent to wrapper",
+			body: `{"model":"grok-imagine-video-1.5","prompt":"move","image":{"file_id":"file-image"}}`,
+			code: "invalid_image",
+		},
+		{
+			name: "wrapper requires prompt",
+			body: `{"model":"grok-imagine-video-1.5","image":{"url":"https://cdn.example.com/reference.png"}}`,
+			code: "invalid_request",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+			context := newTaskContextForPath("/grok/v1/videos/generations", test.body)
+			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(context, info)
+			require.NotNil(t, taskErr)
+			assert.Equal(t, test.code, taskErr.Code)
+			assert.True(t, taskErr.LocalError)
+		})
+	}
+}
+
+func TestGrokDoResponseKeepsPublicContract(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/grok/v1/videos/generations", nil)
+	response := &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"task":{"id":"mvt-upstream","status":"pending"}}`)),
+	}
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"},
+		OriginModelName: "grok-imagine-video-1.5",
+	}
+
+	upstreamID, data, taskErr := (&TaskAdaptor{}).DoResponse(context, response, info)
+	require.Nil(t, taskErr)
+	assert.Equal(t, "mvt-upstream", upstreamID)
+	assert.JSONEq(t, `{"task":{"id":"mvt-upstream","status":"pending"}}`, string(data))
+	assert.JSONEq(t, `{"request_id":"task_public"}`, recorder.Body.String())
 }
 
 func TestBuildRequestBodyNativeContentUploadsImageAsset(t *testing.T) {
@@ -219,6 +380,32 @@ func TestParseTaskResultCompletedUsage(t *testing.T) {
 	assert.Equal(t, "https://cdn.example.com/video.mp4", taskInfo.Url)
 	assert.Equal(t, 40594, taskInfo.CompletionTokens)
 	assert.Equal(t, 40594, taskInfo.TotalTokens)
+}
+
+func TestParseGrokTaskResultReadsMetadataUsage(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	taskInfo, err := adaptor.ParseTaskResult([]byte(`{
+		"task": {
+			"id": "mvt-1",
+			"status": "completed",
+			"model": "grok-imagine-video-1.5",
+			"duration_seconds": 5,
+			"outputs": ["https://cdn.example.com/video.mp4"],
+			"metadata": {
+				"progress": 100,
+				"video": {"url":"https://cdn.example.com/video.mp4","duration":5.04,"respect_moderation":true},
+				"usage": {"cost_in_usd_ticks":7100000000}
+			}
+		}
+	}`))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusSuccess, taskInfo.Status)
+	assert.Equal(t, "https://cdn.example.com/video.mp4", taskInfo.Url)
+	require.NotNil(t, taskInfo.Metadata)
+	assert.Equal(t, float64(5.04), taskInfo.Metadata["duration"])
+	assert.Equal(t, 100, taskInfo.Metadata["progress"])
+	assert.Equal(t, int64(7100000000), taskInfo.Metadata["cost_in_usd_ticks"])
 }
 
 func TestFetchTaskUsesTaskEndpointAndBearer(t *testing.T) {

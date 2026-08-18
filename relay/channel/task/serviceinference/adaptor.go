@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/relay/channel/task/grokvideo"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
@@ -38,26 +39,55 @@ type requestPayload struct {
 	ReturnLastFrame *bool         `json:"return_last_frame,omitempty"`
 }
 
+type grokVideoRequestPayload struct {
+	Model           string               `json:"model"`
+	Prompt          string               `json:"prompt"`
+	Duration        *int                 `json:"duration,omitempty"`
+	Resolution      string               `json:"resolution"`
+	AspectRatio     string               `json:"aspect_ratio,omitempty"`
+	ReferenceImages []grokReferenceImage `json:"reference_images,omitempty"`
+}
+
+type grokReferenceImage struct {
+	URL string `json:"url"`
+}
+
 type taskResponse struct {
 	Task videoTask `json:"task"`
 }
 
 type videoTask struct {
-	ID              string     `json:"id"`
-	Status          string     `json:"status"`
-	Model           string     `json:"model"`
-	DurationSeconds int        `json:"duration_seconds"`
-	Outputs         []string   `json:"outputs"`
-	Error           any        `json:"error"`
-	CreatedAt       string     `json:"created_at"`
-	CompletedAt     string     `json:"completed_at"`
-	Usage           *taskUsage `json:"usage,omitempty"`
-	LastFrameURL    string     `json:"last_frame_url,omitempty"`
+	ID              string        `json:"id"`
+	Status          string        `json:"status"`
+	Model           string        `json:"model"`
+	DurationSeconds int           `json:"duration_seconds"`
+	Outputs         []string      `json:"outputs"`
+	Error           any           `json:"error"`
+	CreatedAt       string        `json:"created_at"`
+	CompletedAt     string        `json:"completed_at"`
+	Usage           *taskUsage    `json:"usage,omitempty"`
+	Metadata        *taskMetadata `json:"metadata,omitempty"`
+	LastFrameURL    string        `json:"last_frame_url,omitempty"`
 }
 
 type taskUsage struct {
-	CompletionTokens int `json:"completion_tokens,omitempty"`
-	TotalTokens      int `json:"total_tokens,omitempty"`
+	CompletionTokens int   `json:"completion_tokens,omitempty"`
+	TotalTokens      int   `json:"total_tokens,omitempty"`
+	CostInUSDTicks   int64 `json:"cost_in_usd_ticks,omitempty"`
+}
+
+type taskMetadata struct {
+	Status   string         `json:"status,omitempty"`
+	Model    string         `json:"model,omitempty"`
+	Progress int            `json:"progress,omitempty"`
+	Video    *metadataVideo `json:"video,omitempty"`
+	Usage    *taskUsage     `json:"usage,omitempty"`
+}
+
+type metadataVideo struct {
+	URL               string  `json:"url,omitempty"`
+	Duration          float64 `json:"duration,omitempty"`
+	RespectModeration bool    `json:"respect_moderation,omitempty"`
 }
 
 type assetGroupResponse struct {
@@ -134,6 +164,29 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	var modelRequest struct {
+		Model string `json:"model"`
+	}
+	if err := common.UnmarshalBodyReusable(c, &modelRequest); err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	if strings.HasPrefix(modelRequest.Model, "grok-imagine-video") {
+		if modelRequest.Model != "grok-imagine-video-1.5" {
+			return service.TaskErrorWrapperLocal(fmt.Errorf("ServiceInference only supports grok-imagine-video-1.5"), "invalid_model", http.StatusBadRequest)
+		}
+		request, taskErr := grokvideo.ParseAndValidate(c, info)
+		if taskErr != nil {
+			return taskErr
+		}
+		if strings.TrimSpace(request.Prompt) == "" {
+			return service.TaskErrorWrapperLocal(fmt.Errorf("prompt is required for ServiceInference grok video"), "invalid_request", http.StatusBadRequest)
+		}
+		imageURL := request.Image.ResolvedURL()
+		if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
+			return service.TaskErrorWrapperLocal(fmt.Errorf("ServiceInference grok video image requires a public http(s) URL"), "invalid_image", http.StatusBadRequest)
+		}
+		return nil
+	}
 	var nativeReq requestPayload
 	if err := common.UnmarshalBodyReusable(c, &nativeReq); err != nil {
 		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
@@ -186,6 +239,41 @@ func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *r
 }
 
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	if request, ok := grokvideo.GetRequest(c); ok {
+		duration := grokvideo.DefaultDuration
+		if request.Duration != nil {
+			duration = *request.Duration
+		}
+		resolution := request.Resolution
+		if resolution == "" {
+			resolution = grokvideo.DefaultResolution
+		}
+		aspectRatio := request.AspectRatio
+		if aspectRatio == "" {
+			aspectRatio = grokvideo.DefaultAspectRatio
+		}
+		modelName := request.Model
+		if info.IsModelMapped {
+			modelName = info.UpstreamModelName
+		} else {
+			info.UpstreamModelName = modelName
+		}
+		body := grokVideoRequestPayload{
+			Model:       modelName,
+			Prompt:      request.Prompt,
+			Duration:    &duration,
+			Resolution:  resolution,
+			AspectRatio: aspectRatio,
+			ReferenceImages: []grokReferenceImage{{
+				URL: request.Image.ResolvedURL(),
+			}},
+		}
+		data, err := common.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(data), nil
+	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil, err
@@ -251,13 +339,16 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
-	ov := dto.NewOpenAIVideo()
-	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
-	ov.Model = info.OriginModelName
-
-	c.JSON(http.StatusOK, ov)
+	if strings.HasPrefix(c.Request.URL.Path, "/grok/v1/") {
+		c.JSON(http.StatusOK, map[string]string{"request_id": info.PublicTaskID})
+	} else {
+		ov := dto.NewOpenAIVideo()
+		ov.ID = info.PublicTaskID
+		ov.TaskID = info.PublicTaskID
+		ov.CreatedAt = time.Now().Unix()
+		ov.Model = info.OriginModelName
+		c.JSON(http.StatusOK, ov)
+	}
 	return submitResp.Task.ID, responseBody, nil
 }
 
@@ -327,6 +418,21 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		if resTask.Usage != nil {
 			taskResult.CompletionTokens = resTask.Usage.CompletionTokens
 			taskResult.TotalTokens = resTask.Usage.TotalTokens
+		}
+		if resTask.Metadata != nil {
+			if taskResult.Url == "" && resTask.Metadata.Video != nil {
+				taskResult.Url = resTask.Metadata.Video.URL
+			}
+			taskResult.Metadata = map[string]interface{}{
+				"duration": resTask.DurationSeconds,
+				"progress": resTask.Metadata.Progress,
+			}
+			if resTask.Metadata.Video != nil && resTask.Metadata.Video.Duration > 0 {
+				taskResult.Metadata["duration"] = resTask.Metadata.Video.Duration
+			}
+			if resTask.Metadata.Usage != nil && resTask.Metadata.Usage.CostInUSDTicks > 0 {
+				taskResult.Metadata["cost_in_usd_ticks"] = resTask.Metadata.Usage.CostInUSDTicks
+			}
 		}
 	case "failed", "failure", "error", "cancelled", "canceled":
 		taskResult.Status = model.TaskStatusFailure
@@ -691,6 +797,9 @@ func formatUpstreamError(value any) string {
 // EstimateBilling 根据请求 metadata 中的输出分辨率与是否含视频输入，返回相对基准价的计费 OtherRatio。
 // 具体价格规则由上游模型族决定，倍率为 1.0（基准价）时无需附加 OtherRatio。
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
+	if request, ok := grokvideo.GetRequest(c); ok {
+		return grokvideo.EstimateBilling(request, info.Action)
+	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil

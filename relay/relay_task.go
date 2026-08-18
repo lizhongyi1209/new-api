@@ -591,11 +591,16 @@ func TaskModel2Dto(task *model.Task, includeUpstreamData bool) *dto.TaskDto {
 	}
 }
 
-// BuildGrokVideoTaskResponse exposes the xAI deferred video response contract
-// without leaking the upstream request ID, provider cost, or moderation detail.
+// BuildGrokVideoTaskResponse exposes the stable Grok deferred-video contract
+// across supported upstreams without leaking provider IDs, cost, or moderation detail.
 func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 	var upstream map[string]any
 	_ = common.Unmarshal(task.Data, &upstream)
+	providerTask := upstream
+	if wrappedTask, ok := upstream["task"].(map[string]any); ok {
+		providerTask = wrappedTask
+	}
+	metadata, _ := providerTask["metadata"].(map[string]any)
 
 	status := "pending"
 	switch task.Status {
@@ -603,7 +608,7 @@ func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 		status = "done"
 	case model.TaskStatusFailure:
 		status = "failed"
-		if rawStatus, ok := upstream["status"].(string); ok && rawStatus == "expired" {
+		if rawStatus, ok := providerTask["status"].(string); ok && rawStatus == "expired" {
 			status = "expired"
 		}
 	}
@@ -613,7 +618,11 @@ func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 		response["model"] = modelName
 	}
 	if status == "done" {
-		if video, ok := upstream["video"].(map[string]any); ok {
+		video, _ := providerTask["video"].(map[string]any)
+		if video == nil && metadata != nil {
+			video, _ = metadata["video"].(map[string]any)
+		}
+		if video != nil {
 			publicVideo := make(map[string]any, len(video))
 			for key, value := range video {
 				if key != "respect_moderation" {
@@ -623,17 +632,32 @@ func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 			if resultURL := strings.TrimSpace(task.GetResultURL()); resultURL != "" {
 				publicVideo["url"] = resultURL
 			}
+			if _, ok := publicVideo["duration"]; !ok {
+				if duration, ok := providerTask["duration_seconds"]; ok {
+					publicVideo["duration"] = duration
+				}
+			}
 			response["video"] = publicVideo
 		} else if resultURL := task.GetResultURL(); resultURL != "" {
-			response["video"] = map[string]any{"url": resultURL}
+			publicVideo := map[string]any{"url": resultURL}
+			if duration, ok := providerTask["duration_seconds"]; ok {
+				publicVideo["duration"] = duration
+			}
+			response["video"] = publicVideo
 		}
 	}
-	if progress, ok := upstream["progress"]; ok {
+	if progress, ok := providerTask["progress"]; ok {
+		response["progress"] = progress
+	} else if progress, ok := metadata["progress"]; ok {
+		response["progress"] = progress
+	} else if progress, err := strconv.Atoi(strings.TrimSuffix(strings.TrimSpace(task.Progress), "%")); err == nil {
 		response["progress"] = progress
 	}
 	if status == "failed" || status == "expired" {
-		if upstreamError, ok := upstream["error"].(map[string]any); ok {
+		if upstreamError, ok := providerTask["error"].(map[string]any); ok {
 			response["error"] = upstreamError
+		} else if upstreamError, ok := providerTask["error"].(string); ok && strings.TrimSpace(upstreamError) != "" {
+			response["error"] = map[string]any{"message": upstreamError}
 		} else if task.FailReason != "" {
 			response["error"] = map[string]any{"message": task.FailReason}
 		}
