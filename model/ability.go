@@ -147,9 +147,10 @@ func GetChannel(group string, model string, retry int, requestPath string) (*Cha
 }
 
 // filterAbilitiesByRequestPath restricts candidates by request path for the DB
-// (non-memory-cache) selection path. Only Advanced Custom (type 58) channels are
-// path-checked: kept only when one of their routes matches requestPath; all other
-// channel types always pass. When requestPath is empty, filtering is skipped.
+// (non-memory-cache) selection path. iLiu native routes only accept iLiu channels;
+// iLiu channels only serve those routes plus /v1/chat/completions. Advanced Custom
+// channels must match a configured route. Other channel types pass.
+// When requestPath is empty, filtering is skipped.
 func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Ability {
 	if requestPath == "" || len(abilities) == 0 {
 		return abilities
@@ -172,7 +173,9 @@ func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Abi
 	}
 
 	advancedConfigs := make(map[int]*dto.AdvancedCustomConfig)
+	channelTypes := make(map[int]int, len(channels))
 	for _, channel := range channels {
+		channelTypes[channel.Id] = channel.Type
 		if channel.Type == constant.ChannelTypeAdvancedCustom {
 			advancedConfigs[channel.Id] = channel.GetOtherSettings().AdvancedCustom
 		}
@@ -180,6 +183,19 @@ func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Abi
 
 	filtered := make([]Ability, 0, len(abilities))
 	for _, ability := range abilities {
+		channelType, channelExists := channelTypes[ability.ChannelId]
+		if strings.HasPrefix(requestPath, "/v1/mj/") {
+			if channelExists && channelType == constant.ChannelTypeILiuMidjourney {
+				filtered = append(filtered, ability)
+			}
+			continue
+		}
+		if channelExists && channelType == constant.ChannelTypeILiuMidjourney {
+			if requestPath == "/v1/chat/completions" {
+				filtered = append(filtered, ability)
+			}
+			continue
+		}
 		config, isAdvancedCustom := advancedConfigs[ability.ChannelId]
 		if !isAdvancedCustom {
 			filtered = append(filtered, ability)

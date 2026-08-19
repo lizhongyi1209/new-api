@@ -92,7 +92,7 @@ export class SecureVerificationService {
    * @param {string} code - 验证码
    * @returns {Promise<void>}
    */
-  static async verify2FA(code) {
+  static async verify2FA(code, scope) {
     if (!code?.trim()) {
       throw new Error('请输入验证码或备用码');
     }
@@ -101,23 +101,26 @@ export class SecureVerificationService {
     const verifyResponse = await API.post('/api/verify', {
       method: '2fa',
       code: code.trim(),
+      scope,
     });
 
     if (!verifyResponse.data?.success) {
       throw new Error(verifyResponse.data?.message || '验证失败');
     }
 
-    // 验证成功，session 已在后端设置
+    return verifyResponse.data.data;
   }
 
   /**
    * 执行Passkey验证
    * @returns {Promise<void>}
    */
-  static async verifyPasskey() {
+  static async verifyPasskey(scope) {
     try {
       // 开始Passkey验证
-      const beginResponse = await API.post('/api/user/passkey/verify/begin');
+      const beginResponse = await API.post('/api/user/passkey/verify/begin', {
+        scope,
+      });
       if (!beginResponse.data?.success) {
         throw new Error(beginResponse.data?.message || '开始验证失败');
       }
@@ -126,6 +129,10 @@ export class SecureVerificationService {
       const publicKey = prepareCredentialRequestOptions(
         beginResponse.data.data.options,
       );
+      const flowToken = beginResponse.data.data.flow_token;
+      if (!flowToken) {
+        throw new Error('验证流程已过期');
+      }
 
       // 执行WebAuthn验证
       const credential = await navigator.credentials.get({ publicKey });
@@ -137,24 +144,15 @@ export class SecureVerificationService {
       const assertionResult = buildAssertionResult(credential);
 
       // 完成验证
-      const finishResponse = await API.post(
-        '/api/user/passkey/verify/finish',
-        assertionResult,
-      );
+      const finishResponse = await API.post('/api/user/passkey/verify/finish', {
+        flow_token: flowToken,
+        credential: assertionResult,
+      });
       if (!finishResponse.data?.success) {
         throw new Error(finishResponse.data?.message || '验证失败');
       }
 
-      // 调用通用验证 API 设置 session（Passkey 验证已完成）
-      const verifyResponse = await API.post('/api/verify', {
-        method: 'passkey',
-      });
-
-      if (!verifyResponse.data?.success) {
-        throw new Error(verifyResponse.data?.message || '验证失败');
-      }
-
-      // 验证成功，session 已在后端设置
+      return finishResponse.data.data;
     } catch (error) {
       if (error.name === 'NotAllowedError') {
         throw new Error('Passkey 验证被取消或超时');
@@ -172,12 +170,12 @@ export class SecureVerificationService {
    * @param {string} code - 2FA验证码（当method为'2fa'时必需）
    * @returns {Promise<void>}
    */
-  static async verify(method, code = '') {
+  static async verify(method, code = '', scope) {
     switch (method) {
       case '2fa':
-        return await this.verify2FA(code);
+        return await this.verify2FA(code, scope);
       case 'passkey':
-        return await this.verifyPasskey();
+        return await this.verifyPasskey(scope);
       default:
         throw new Error(`不支持的验证方式: ${method}`);
     }
@@ -192,9 +190,14 @@ export const createApiCalls = {
    * 创建查看渠道密钥的API调用
    * @param {number} channelId - 渠道ID
    */
-  viewChannelKey: (channelId) => async () => {
-    // 新系统中，验证已通过中间件处理，直接调用 API 即可
-    const response = await API.post(`/api/channel/${channelId}/key`, {});
+  viewChannelKey: (channelId) => async (proofToken) => {
+    const response = await API.post(
+      `/api/channel/${channelId}/key`,
+      {},
+      {
+        headers: proofToken ? { 'X-Security-Proof': proofToken } : undefined,
+      },
+    );
     return response.data;
   },
 
@@ -206,23 +209,25 @@ export const createApiCalls = {
    */
   custom:
     (url, method = 'POST', extraData = {}) =>
-    async () => {
-      // 新系统中，验证已通过中间件处理
+    async (proofToken) => {
       const data = extraData;
+      const config = {
+        headers: proofToken ? { 'X-Security-Proof': proofToken } : undefined,
+      };
 
       let response;
       switch (method.toUpperCase()) {
         case 'GET':
-          response = await API.get(url, { params: data });
+          response = await API.get(url, { ...config, params: data });
           break;
         case 'POST':
-          response = await API.post(url, data);
+          response = await API.post(url, data, config);
           break;
         case 'PUT':
-          response = await API.put(url, data);
+          response = await API.put(url, data, config);
           break;
         case 'DELETE':
-          response = await API.delete(url, { data });
+          response = await API.delete(url, { ...config, data });
           break;
         default:
           throw new Error(`不支持的HTTP方法: ${method}`);

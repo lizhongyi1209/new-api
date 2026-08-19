@@ -306,8 +306,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
   // Search tokens function
   const searchTokens = async (page = 1, size = pageSize) => {
     const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
-    const normalizedSize =
-      Number.isInteger(size) && size > 0 ? size : pageSize;
+    const normalizedSize = Number.isInteger(size) && size > 0 ? size : pageSize;
 
     const { searchKeyword, searchToken } = getFormValues();
     if (searchKeyword === '' && searchToken === '') {
@@ -425,7 +424,7 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
       const res = await API.post('/api/token/batch/group', {
         ids,
         group: payload.group,
-        auto_group_priority: payload.auto_group_priority,
+        auto_groups: payload.auto_groups,
         cross_group_retry: payload.cross_group_retry,
       });
       if (res?.data?.success) {

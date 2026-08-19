@@ -59,6 +59,7 @@ const (
 	ChannelTypeAdvancedCustom        = 59
 	ChannelTypeServiceInferenceVideo = 60
 	ChannelTypeXinhankr              = 61
+	ChannelTypeILiuMidjourney        = 62
 	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
 
 )
@@ -99,7 +100,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //32
 	"",                                          //33
 	"https://api.cohere.ai",                     //34
-	"https://api.minimaxi.com",                 //35
+	"https://api.minimaxi.com",                  //35
 	"",                                          //36
 	"https://api.dify.ai",                       //37
 	"https://api.jina.ai",                       //38
@@ -126,6 +127,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //59
 	"https://model.service-inference.ai",        //60
 	"https://token.xinhankr.com",                //61
+	"https://iliu.ai/v1",                        //62
 }
 
 var ChannelTypeNames = map[int]string{
@@ -187,6 +189,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeAdvancedCustom:        "Advanced Custom",
 	ChannelTypeServiceInferenceVideo: "TokenMartSeedance",
 	ChannelTypeXinhankr:              "xinhankr",
+	ChannelTypeILiuMidjourney:        "iLiu Midjourney",
 }
 
 func GetChannelTypeName(channelType int) string {

@@ -21,7 +21,6 @@ test_size() {
             \"prompt\": \"一只可爱的猫\",
             \"aspect_ratio\": \"1:1\",
             \"size\": \"$size\",
-            \"image_compression\": \"webp\",
             \"n\": 1
         }")
 
@@ -62,7 +61,6 @@ response=$(curl -s -X POST "$API_BASE/async/v1/images/generations" \
         "prompt": "一只可爱的猫",
         "aspect_ratio": "1:1",
         "size": "HD",
-        "image_compression": "webp",
         "n": 1
     }')
 

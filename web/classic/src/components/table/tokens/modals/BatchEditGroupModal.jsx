@@ -18,11 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  API,
-  showError,
-  renderGroupOption,
-} from '../../../../helpers';
+import { API, showError, renderGroupOption } from '../../../../helpers';
 import {
   Button,
   Modal,
@@ -48,7 +44,9 @@ const BatchEditGroupModal = (props) => {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState([]);
   const [selectedGroups, setSelectedGroups] = useState([]);
+  const [customAutoMode, setCustomAutoMode] = useState(false);
   const [crossGroupRetry, setCrossGroupRetry] = useState(false);
+  const [maxAutoGroups, setMaxAutoGroups] = useState(5);
   const [dragIndex, setDragIndex] = useState(null);
   const groupsLoadedRef = useRef(false);
 
@@ -62,6 +60,7 @@ const BatchEditGroupModal = (props) => {
   useEffect(() => {
     if (props.visible) {
       setSelectedGroups([]);
+      setCustomAutoMode(false);
       setCrossGroupRetry(false);
     }
   }, [props.visible]);
@@ -84,6 +83,15 @@ const BatchEditGroupModal = (props) => {
       }
       setGroups(localGroupOptions);
       groupsLoadedRef.current = true;
+      try {
+        const autoGroupsRes = await API.get(`/api/token/auto-groups`);
+        const configuredMax = Number(autoGroupsRes.data?.data?.max_count);
+        if (Number.isInteger(configuredMax) && configuredMax > 0) {
+          setMaxAutoGroups(configuredMax);
+        }
+      } catch (_error) {
+        // Keep the selector usable with the backend default limit.
+      }
     } else {
       showError(t(message));
     }
@@ -93,6 +101,7 @@ const BatchEditGroupModal = (props) => {
   const handleGroupSelectChange = (newValues) => {
     if (!newValues || newValues.length === 0) {
       setSelectedGroups([]);
+      setCustomAutoMode(false);
       return;
     }
     const prevHadAuto = selectedGroups.includes('auto');
@@ -100,10 +109,13 @@ const BatchEditGroupModal = (props) => {
 
     if (nowHasAuto && !prevHadAuto) {
       setSelectedGroups(['auto']);
+      setCustomAutoMode(false);
       return;
     }
     if (nowHasAuto && prevHadAuto && newValues.length > 1) {
-      setSelectedGroups(newValues.filter((g) => g !== 'auto'));
+      const concreteGroups = newValues.filter((g) => g !== 'auto');
+      setSelectedGroups(concreteGroups);
+      setCustomAutoMode(concreteGroups.length > 1);
       return;
     }
     const newSet = new Set(newValues);
@@ -113,7 +125,20 @@ const BatchEditGroupModal = (props) => {
         ordered.push(g);
       }
     });
+    if (ordered.length > maxAutoGroups) {
+      showError(
+        t('每个令牌最多可选择 {{max}} 个自动分组', {
+          max: maxAutoGroups,
+        }),
+      );
+      setSelectedGroups(ordered.slice(0, maxAutoGroups));
+      setCustomAutoMode(true);
+      return;
+    }
     setSelectedGroups(ordered);
+    if (ordered.length > 1) {
+      setCustomAutoMode(true);
+    }
   };
 
   const moveGroupUp = (index) => {
@@ -136,6 +161,7 @@ const BatchEditGroupModal = (props) => {
 
   const resetSelectedGroups = () => {
     setSelectedGroups(['auto']);
+    setCustomAutoMode(false);
   };
 
   const handleDragStart = (e, index) => {
@@ -175,37 +201,51 @@ const BatchEditGroupModal = (props) => {
 
   const deriveGroupFields = () => {
     if (selectedGroups.length === 0) {
-      return { group: '', auto_group_priority: '' };
+      return { group: '', auto_groups: [] };
     }
-    if (selectedGroups.length === 1) {
-      return { group: selectedGroups[0], auto_group_priority: '' };
+    if (selectedGroups[0] === 'auto') {
+      return { group: 'auto', auto_groups: [] };
+    }
+    if (!customAutoMode) {
+      return { group: selectedGroups[0], auto_groups: [] };
     }
     return {
       group: 'auto',
-      auto_group_priority: JSON.stringify(selectedGroups),
+      auto_groups: selectedGroups,
     };
   };
 
   const handleSubmit = () => {
     const derived = deriveGroupFields();
     setLoading(true);
-    props.onSubmit({
-      group: derived.group,
-      auto_group_priority: derived.auto_group_priority,
-      cross_group_retry: crossGroupRetry,
-    }).finally(() => {
-      setLoading(false);
-    });
+    props
+      .onSubmit({
+        group: derived.group,
+        auto_groups: derived.auto_groups,
+        cross_group_retry: crossGroupRetry,
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
-  const isAutoMode = selectedGroups.length === 1 && selectedGroups[0] === 'auto';
-  const showPriorityPanel = selectedGroups.length >= 2 && !selectedGroups.includes('auto');
+  const isAutoMode = selectedGroups[0] === 'auto' || customAutoMode;
+  const showPriorityPanel =
+    customAutoMode &&
+    selectedGroups.length > 0 &&
+    !selectedGroups.includes('auto');
 
   const getGroupHint = () => {
     if (selectedGroups.length === 0) return t('不选 = 继承用户默认分组');
-    if (isAutoMode) return t('自动模式，使用系统默认分组排序');
-    if (selectedGroups.length === 1) return t('单选 = 固定使用该分组');
-    return t(`多选 = 自动模式，按优先级尝试 ${selectedGroups.length} 个分组`);
+    if (selectedGroups[0] === 'auto') {
+      return t('自动模式，使用系统默认分组排序');
+    }
+    if (customAutoMode) {
+      return t('自动模式，按优先级尝试 {{count}} 个分组', {
+        count: selectedGroups.length,
+      });
+    }
+    return t('单选 = 固定使用该分组');
   };
 
   return (
@@ -254,7 +294,9 @@ const BatchEditGroupModal = (props) => {
         {groups.length > 0 ? (
           <div className='mb-4'>
             <div className='mb-1'>
-              <Text strong className='text-sm'>{t('令牌分组')}</Text>
+              <Text strong className='text-sm'>
+                {t('令牌分组')}
+              </Text>
             </div>
             <Select
               multiple
@@ -274,9 +316,27 @@ const BatchEditGroupModal = (props) => {
               showClear
               style={{ width: '100%' }}
             />
-            <div className='text-xs mt-1' style={{ color: 'var(--semi-color-text-2)' }}>
+            <div
+              className='text-xs mt-1'
+              style={{ color: 'var(--semi-color-text-2)' }}
+            >
               {getGroupHint()}
             </div>
+            {selectedGroups.length > 0 && !selectedGroups.includes('auto') && (
+              <div className='flex items-center justify-between mt-2'>
+                <Text size='small'>{t('自动分组')}</Text>
+                <Switch
+                  checked={customAutoMode}
+                  onChange={(checked) => {
+                    setCustomAutoMode(checked);
+                    if (!checked && selectedGroups.length > 1) {
+                      setSelectedGroups([selectedGroups[0]]);
+                    }
+                  }}
+                  size='default'
+                />
+              </div>
+            )}
           </div>
         ) : (
           <div className='mb-4'>
@@ -287,17 +347,24 @@ const BatchEditGroupModal = (props) => {
         {/* Cross-group retry */}
         <div
           className='mb-4'
-          style={{ display: (isAutoMode || showPriorityPanel) ? 'block' : 'none' }}
+          style={{
+            display: isAutoMode || showPriorityPanel ? 'block' : 'none',
+          }}
         >
           <div className='flex items-center justify-between'>
-            <Text strong className='text-sm'>{t('跨分组重试')}</Text>
+            <Text strong className='text-sm'>
+              {t('跨分组重试')}
+            </Text>
             <Switch
               checked={crossGroupRetry}
               onChange={setCrossGroupRetry}
               size='default'
             />
           </div>
-          <div className='text-xs mt-1' style={{ color: 'var(--semi-color-text-2)' }}>
+          <div
+            className='text-xs mt-1'
+            style={{ color: 'var(--semi-color-text-2)' }}
+          >
             {t('开启后，当前分组渠道失败时会按顺序尝试下一个分组的渠道')}
           </div>
         </div>

@@ -16,10 +16,12 @@ import (
 )
 
 const (
-	RequestContextKey  = "grok_video_request"
-	DefaultDuration    = 8
-	DefaultResolution  = "480p"
-	DefaultAspectRatio = "16:9"
+	RequestContextKey         = "grok_video_request"
+	DefaultDuration           = 8
+	DefaultResolution         = "480p"
+	DefaultAspectRatio        = "16:9"
+	MaxVideoEditingDuration   = 8.7 // Maximum input video duration for editing (seconds)
+	MaxVideoEditingResolution = 720 // Maximum output resolution for video editing (capped at 720p)
 )
 
 var (
@@ -32,10 +34,10 @@ var (
 
 type Request struct {
 	Model           string          `json:"model"`
-	Prompt          string          `json:"prompt"`
+	Prompt          *string         `json:"prompt,omitempty"`
 	Duration        *int            `json:"duration,omitempty"`
-	AspectRatio     string          `json:"aspect_ratio,omitempty"`
-	Resolution      string          `json:"resolution,omitempty"`
+	AspectRatio     *string         `json:"aspect_ratio,omitempty"`
+	Resolution      *string         `json:"resolution,omitempty"`
 	Image           *MediaInput     `json:"image,omitempty"`
 	ReferenceImages []MediaInput    `json:"reference_images,omitempty"`
 	ReferenceAudios []AudioInput    `json:"reference_audios,omitempty"`
@@ -46,20 +48,68 @@ type Request struct {
 }
 
 type MediaInput struct {
-	URL      string `json:"url,omitempty"`
-	ImageURL string `json:"image_url,omitempty"`
-	FileID   string `json:"file_id,omitempty"`
+	URL      *string `json:"url,omitempty"`
+	ImageURL *string `json:"image_url,omitempty"`
+	FileID   *string `json:"file_id,omitempty"`
 }
 
 func (input MediaInput) ResolvedURL() string {
-	if url := strings.TrimSpace(input.URL); url != "" {
-		return url
+	if input.URL != nil {
+		if url := strings.TrimSpace(*input.URL); url != "" {
+			return url
+		}
 	}
-	return strings.TrimSpace(input.ImageURL)
+	if input.ImageURL != nil {
+		return strings.TrimSpace(*input.ImageURL)
+	}
+	return ""
+}
+
+func (input MediaInput) ResolvedFileID() string {
+	if input.FileID == nil {
+		return ""
+	}
+	return strings.TrimSpace(*input.FileID)
+}
+
+func (request Request) PromptValue() string {
+	if request.Prompt == nil {
+		return ""
+	}
+	return *request.Prompt
+}
+
+func (request Request) AspectRatioValue() string {
+	if request.AspectRatio == nil {
+		return ""
+	}
+	return *request.AspectRatio
+}
+
+func (request Request) ResolutionValue() string {
+	if request.Resolution == nil {
+		return ""
+	}
+	return *request.Resolution
 }
 
 type AudioInput struct {
-	URL string `json:"url"`
+	URL     *string `json:"url,omitempty"`
+	VoiceID *string `json:"voice_id,omitempty"`
+}
+
+func (input AudioInput) ResolvedURL() string {
+	if input.URL == nil {
+		return ""
+	}
+	return strings.TrimSpace(*input.URL)
+}
+
+func (input AudioInput) ResolvedVoiceID() string {
+	if input.VoiceID == nil {
+		return ""
+	}
+	return strings.TrimSpace(*input.VoiceID)
 }
 
 type OutputOptions struct {
@@ -128,12 +178,13 @@ func ParseAndValidate(c *gin.Context, info *relaycommon.RelayInfo) (Request, *dt
 	}
 	info.Action = action
 	c.Set(RequestContextKey, request)
+	resolution := request.ResolutionValue()
 	taskRequest := relaycommon.TaskSubmitReq{
 		Model:               request.Model,
-		Prompt:              request.Prompt,
-		AspectRatio:         request.AspectRatio,
-		Resolution:          request.Resolution,
-		EffectiveResolution: request.Resolution,
+		Prompt:              request.PromptValue(),
+		AspectRatio:         request.AspectRatioValue(),
+		Resolution:          resolution,
+		EffectiveResolution: resolution,
 		ImageCount:          len(request.ReferenceImages),
 		ReferenceImageCount: len(request.ReferenceImages),
 		ReferenceAudioCount: len(request.ReferenceAudios),
@@ -142,7 +193,7 @@ func ParseAndValidate(c *gin.Context, info *relaycommon.RelayInfo) (Request, *dt
 	if request.Image != nil {
 		taskRequest.ImageCount++
 	}
-	if taskRequest.EffectiveResolution == "" && action != constant.TaskActionVideoEdit && action != constant.TaskActionVideoExtend {
+	if resolution == "" && action != constant.TaskActionVideoEdit && action != constant.TaskActionVideoExtend {
 		taskRequest.EffectiveResolution = DefaultResolution
 		taskRequest.ResolutionDefaulted = true
 	}
@@ -198,13 +249,18 @@ func validateRequest(path string, request Request) (string, *dto.TaskError) {
 	}
 
 	if strings.HasSuffix(path, "/edits") {
-		if strings.TrimSpace(request.Prompt) == "" {
+		if strings.TrimSpace(request.PromptValue()) == "" {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("prompt is required"), "invalid_request", http.StatusBadRequest)
 		}
 		if taskErr := validateMediaInput("video", request.Video); taskErr != nil {
 			return "", taskErr
 		}
-		if request.Duration != nil || request.AspectRatio != "" || request.Resolution != "" {
+		// Video editing does not support custom duration, aspect_ratio, or resolution parameters.
+		// The output preserves the input's duration and aspect ratio, and matches its resolution
+		// capped at 720p (e.g., a 1080p input will be downscaled to 720p output).
+		// The upstream enforces a maximum input video duration of 8.7 seconds; videos longer
+		// than that will be rejected by the provider.
+		if request.Duration != nil || request.AspectRatio != nil || request.Resolution != nil {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("duration, aspect_ratio, and resolution are not supported for video editing"), "invalid_request", http.StatusBadRequest)
 		}
 		if request.Image != nil || len(request.ReferenceImages) > 0 || len(request.ReferenceAudios) > 0 {
@@ -214,16 +270,21 @@ func validateRequest(path string, request Request) (string, *dto.TaskError) {
 	}
 
 	if strings.HasSuffix(path, "/extensions") {
-		if strings.TrimSpace(request.Prompt) == "" {
+		if strings.TrimSpace(request.PromptValue()) == "" {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("prompt is required"), "invalid_request", http.StatusBadRequest)
 		}
 		if taskErr := validateMediaInput("video", request.Video); taskErr != nil {
 			return "", taskErr
 		}
+		// The duration parameter controls the length of the extended portion only, not the total output.
+		// For example, if the input video is 10 seconds and duration is set to 5, the returned video
+		// will be 15 seconds long (10s original + 5s extension).
 		if request.Duration != nil && (*request.Duration < 2 || *request.Duration > 10) {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("extension duration must be between 2 and 10"), "invalid_duration", http.StatusBadRequest)
 		}
-		if request.AspectRatio != "" || request.Resolution != "" {
+		// Video extension does not support custom aspect_ratio or resolution parameters.
+		// The output preserves the input video's aspect ratio and resolution.
+		if request.AspectRatio != nil || request.Resolution != nil {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("aspect_ratio and resolution are not supported for video extension"), "invalid_request", http.StatusBadRequest)
 		}
 		if request.Image != nil || len(request.ReferenceImages) > 0 || len(request.ReferenceAudios) > 0 {
@@ -238,14 +299,13 @@ func validateRequest(path string, request Request) (string, *dto.TaskError) {
 	if request.Duration != nil && (*request.Duration < 1 || *request.Duration > 15) {
 		return "", service.TaskErrorWrapperLocal(fmt.Errorf("duration must be between 1 and 15"), "invalid_duration", http.StatusBadRequest)
 	}
-	if request.AspectRatio != "" && !validAspectRatios[request.AspectRatio] {
+	aspectRatio := request.AspectRatioValue()
+	if request.AspectRatio != nil && !validAspectRatios[aspectRatio] {
 		return "", service.TaskErrorWrapperLocal(fmt.Errorf("invalid aspect_ratio"), "invalid_aspect_ratio", http.StatusBadRequest)
 	}
-	if request.Resolution != "" && !validResolutions[request.Resolution] {
+	resolution := request.ResolutionValue()
+	if request.Resolution != nil && !validResolutions[resolution] {
 		return "", service.TaskErrorWrapperLocal(fmt.Errorf("invalid resolution"), "invalid_resolution", http.StatusBadRequest)
-	}
-	if request.Resolution == "1080p" && (!IsVideo15Model(request.Model) || request.Image == nil) {
-		return "", service.TaskErrorWrapperLocal(fmt.Errorf("1080p is only supported by grok-imagine-video-1.5 for image-to-video generation"), "invalid_resolution", http.StatusBadRequest)
 	}
 	if request.Image != nil && (len(request.ReferenceImages) > 0 || len(request.ReferenceAudios) > 0) {
 		return "", service.TaskErrorWrapperLocal(fmt.Errorf("image and reference inputs are mutually exclusive"), "invalid_request", http.StatusBadRequest)
@@ -254,20 +314,27 @@ func validateRequest(path string, request Request) (string, *dto.TaskError) {
 		if taskErr := validateMediaInput("image", request.Image); taskErr != nil {
 			return "", taskErr
 		}
+		if resolution == "1080p" && !IsVideo15Model(request.Model) {
+			return "", service.TaskErrorWrapperLocal(fmt.Errorf("1080p image-to-video requires grok-imagine-video-1.5"), "invalid_resolution", http.StatusBadRequest)
+		}
 		return constant.TaskActionGenerate, nil
 	}
 	if len(request.ReferenceImages) > 0 || len(request.ReferenceAudios) > 0 {
-		if strings.TrimSpace(request.Prompt) == "" {
+		if strings.TrimSpace(request.PromptValue()) == "" {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("prompt is required for reference-to-video"), "invalid_request", http.StatusBadRequest)
 		}
 		if len(request.ReferenceImages) > 7 {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("a maximum of 7 reference images is supported"), "invalid_reference_images", http.StatusBadRequest)
 		}
-		if request.Duration != nil && *request.Duration > 10 {
-			return "", service.TaskErrorWrapperLocal(fmt.Errorf("reference-to-video duration must not exceed 10"), "invalid_duration", http.StatusBadRequest)
-		}
+		maxDuration := 10
 		if IsVideo15Model(request.Model) {
-			return "", service.TaskErrorWrapperLocal(fmt.Errorf("grok-imagine-video-1.5 does not support reference-to-video"), "invalid_model", http.StatusBadRequest)
+			maxDuration = 15
+		}
+		if request.Duration != nil && *request.Duration > maxDuration {
+			return "", service.TaskErrorWrapperLocal(fmt.Errorf("reference-to-video duration must not exceed %d", maxDuration), "invalid_duration", http.StatusBadRequest)
+		}
+		if resolution == "1080p" {
+			return "", service.TaskErrorWrapperLocal(fmt.Errorf("reference-to-video supports at most 720p"), "invalid_resolution", http.StatusBadRequest)
 		}
 		for i := range request.ReferenceImages {
 			if taskErr := validateMediaInput("reference_images", &request.ReferenceImages[i]); taskErr != nil {
@@ -277,18 +344,18 @@ func validateRequest(path string, request Request) (string, *dto.TaskError) {
 		if len(request.ReferenceAudios) > 3 {
 			return "", service.TaskErrorWrapperLocal(fmt.Errorf("a maximum of 3 reference audios is supported"), "invalid_reference_audios", http.StatusBadRequest)
 		}
-		for _, audio := range request.ReferenceAudios {
-			if strings.TrimSpace(audio.URL) == "" {
-				return "", service.TaskErrorWrapperLocal(fmt.Errorf("each reference audio requires url"), "invalid_reference_audio", http.StatusBadRequest)
+		for i := range request.ReferenceAudios {
+			if taskErr := validateAudioInput(&request.ReferenceAudios[i]); taskErr != nil {
+				return "", taskErr
 			}
 		}
 		return constant.TaskActionReferenceGenerate, nil
 	}
-	if IsVideo15Model(request.Model) {
-		return "", service.TaskErrorWrapperLocal(fmt.Errorf("grok-imagine-video-1.5 only supports image-to-video generation"), "invalid_model", http.StatusBadRequest)
-	}
-	if strings.TrimSpace(request.Prompt) == "" {
+	if strings.TrimSpace(request.PromptValue()) == "" {
 		return "", service.TaskErrorWrapperLocal(fmt.Errorf("prompt is required for text-to-video"), "invalid_request", http.StatusBadRequest)
+	}
+	if resolution == "1080p" && !IsVideo15Model(request.Model) {
+		return "", service.TaskErrorWrapperLocal(fmt.Errorf("1080p text-to-video requires grok-imagine-video-1.5"), "invalid_resolution", http.StatusBadRequest)
 	}
 	return constant.TaskActionTextGenerate, nil
 }
@@ -303,12 +370,29 @@ func validateMediaInput(field string, input *MediaInput) *dto.TaskError {
 	if input == nil {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("%s is required", field), "invalid_"+field, http.StatusBadRequest)
 	}
+	if input.URL != nil && input.ImageURL != nil {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("%s cannot contain both url and image_url", field), "invalid_"+field, http.StatusBadRequest)
+	}
 	url := input.ResolvedURL()
-	if url == "" && strings.TrimSpace(input.FileID) == "" {
+	fileID := input.ResolvedFileID()
+	if url == "" && fileID == "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("%s requires url or file_id", field), "invalid_"+field, http.StatusBadRequest)
 	}
-	if url != "" && input.FileID != "" {
+	if url != "" && fileID != "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("%s cannot contain both url and file_id", field), "invalid_"+field, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validateAudioInput(input *AudioInput) *dto.TaskError {
+	if input == nil {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("reference audio is required"), "invalid_reference_audio", http.StatusBadRequest)
+	}
+	if input.URL != nil && input.VoiceID != nil {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("reference audio cannot contain both url and voice_id"), "invalid_reference_audio", http.StatusBadRequest)
+	}
+	if input.ResolvedURL() == "" && input.ResolvedVoiceID() == "" {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("reference audio requires url or voice_id"), "invalid_reference_audio", http.StatusBadRequest)
 	}
 	return nil
 }
@@ -325,14 +409,15 @@ func EstimateBilling(request Request, action string) map[string]float64 {
 		seconds = *request.Duration
 	}
 	ratio := 1.0
+	resolution := request.ResolutionValue()
 	if IsVideo15Model(request.Model) {
-		switch request.Resolution {
+		switch resolution {
 		case "720p":
 			ratio = 1.75
 		case "1080p":
 			ratio = 3.125
 		}
-	} else if request.Resolution == "720p" {
+	} else if resolution == "720p" {
 		ratio = 1.4
 	}
 	ratios := map[string]float64{"seconds": float64(seconds), "resolution": ratio}

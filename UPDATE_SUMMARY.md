@@ -68,7 +68,6 @@ curl -X POST https://cf-api.o1key.com/async/v1/images/generations \
     "prompt": "一只可爱的猫",
     "aspect_ratio": "1:1",
     "size": "1K",
-    "image_compression": "webp",
     "n": 1
   }'
 ```
@@ -89,7 +88,6 @@ response = requests.post(
         "prompt": "一只可爱的猫",
         "aspect_ratio": "1:1",
         "size": "2K",  # 使用 2K
-        "image_compression": "webp",
         "n": 1
     }
 )
@@ -185,7 +183,6 @@ docker compose restart new-api
 1. **兼容性**: 旧客户端使用 `HD`, `FHD` 会被忽略，不会报错
 2. **默认值**: 如果不传 `size`，系统使用默认值（通常是 2K）
 3. **性能**: 1K 最快，4K 最慢，建议日常使用 2K
-4. **文件大小**: 建议使用 `image_compression: "webp"` 减小文件大小
 
 ---
 

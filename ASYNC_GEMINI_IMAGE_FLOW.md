@@ -31,8 +31,7 @@
   "model": "gemini-3-pro-image",
   "prompt": "a blue cat",
   "image": "https://example.com/ref.png",
-  "size": "1024x1024",
-  "image_compression": "webp"
+  "size": "1024x1024"
 }
 
 // 转换为 Gemini 原生格式
@@ -55,8 +54,7 @@
     "imageConfig": {
       "imageSize": "1024x1024"
     }
-  },
-  "image_compression": "webp"  // 客户端参数，不发给上游
+  }
 }
 ```
 
@@ -68,10 +66,6 @@
 后台 goroutine 启动
   ↓
 从 task.Data 读取 Gemini 原生请求
-  ↓
-提取客户端参数 (第 753 行)
-  └─ image_compression: "webp" / "jpg" / "origin"
-  └─ 从请求体中删除，不发给上游
   ↓
 调用上游 Gemini API (第 850 行)
   └─ adaptor.DoRequest(c, relayInfo, jsonData)
@@ -97,10 +91,10 @@
      }
   ↓
 上传到 R2 存储 (第 945 行)
-  └─ UploadBase64ImageToR2Compressed(mimeType, base64Data, geminiCompression)
+  └─ UploadBase64ImageToR2(mimeType, base64Data)
   ↓
 返回公网 URL
-  └─ https://r2.example.com/images/uuid.webp
+  └─ https://r2.example.com/images/uuid.png
   ↓
 修改响应结构 (第 957-958 行)
   ├─ 删除 inlineData 字段
@@ -110,26 +104,15 @@
 **上传函数详解**（`service/storage.go:172-242`）：
 
 ```go
-func UploadBase64ImageToR2Compressed(mimeType, base64Data, compression string) (string, error)
+func UploadBase64ImageToR2(mimeType, base64Data string) (string, error)
 ```
 
-| compression 参数 | 处理方式 | 输出格式 | 质量 |
-|-----------------|---------|---------|------|
-| `"webp"` | 转换为 WebP | `.webp` | 85 |
-| `"jpg"` | 转换为 JPEG | `.jpg` | 85 |
-| `"origin"` | 保持原格式 | 自动检测 | 原始 |
-| 默认/空 | 不转换 | `.png` | 原始 |
+图片字节不会重新编码，文件扩展名根据原始图片格式检测。
 
-**转换流程**：
+**上传流程**：
 
 ```
-base64 解码
-  ↓
-根据 compression 参数处理
-  ├─ webp: convertToWebP(imgBytes, 85)
-  ├─ jpg:  convertToJPEG(imgBytes, 85)
-  ├─ origin: 检测原格式 (png/jpg/webp/heif)
-  └─ 默认: 保持原样
+base64 解码并检测原始格式
   ↓
 生成 UUID 文件名
   └─ images/{uuid}.{ext}
@@ -149,8 +132,8 @@ base64 解码
 存储到 task.Data (第 983 行)
   └─ {
        "urls": [
-         "https://r2.example.com/images/uuid1.webp",
-         "https://r2.example.com/images/uuid2.webp"
+         "https://r2.example.com/images/uuid1.png",
+         "https://r2.example.com/images/uuid2.png"
        ]
      }
   ↓
@@ -184,8 +167,8 @@ GET /async/v1/task/{task_id}
   "data": {
     "created": 1234567890,
     "data": [
-      {"url": "https://r2.example.com/images/uuid1.webp"},
-      {"url": "https://r2.example.com/images/uuid2.webp"}
+      {"url": "https://r2.example.com/images/uuid1.png"},
+      {"url": "https://r2.example.com/images/uuid2.png"}
     ]
   }
 }
@@ -199,39 +182,15 @@ GET /async/v1/task/{task_id}
 | 转换为 Gemini 格式 | `service/async_image.go` | 1023-1150 | ConvertAsyncImageToGeminiNative |
 | 异步处理入口 | `service/async_image.go` | 705-1019 | ProcessUnifiedImageTask |
 | 提取图片 | `service/async_image.go` | 920-968 | 遍历 candidates.content.parts |
-| 上传 R2 | `service/storage.go` | 172-242 | UploadBase64ImageToR2Compressed |
-| 图片压缩 | `service/storage.go` | 192-227 | webp/jpg/origin 转换 |
+| 上传 R2 | `service/storage.go` | 172-242 | UploadBase64ImageToR2 |
+| 原图保存 | `service/storage.go` | 172-242 | 保持原始字节并检测扩展名 |
 | 返回结果 | `controller/async_image.go` | 369-397 | AsyncTaskFetch |
 
-## 图片压缩详解
+## 图片保存规则
 
-### WebP 压缩（推荐）
-
-```bash
-# 使用 cwebp 命令行工具
-cwebp -q 85 input.png -o output.webp
-```
-
-- **优点**：体积小（比 PNG 小 30-80%），质量高
-- **缺点**：需要系统安装 `webp` 工具
-- **适用场景**：Web 展示、移动端
-
-### JPEG 压缩
-
-```go
-// 使用 Go 标准库
-jpeg.Encode(output, img, &jpeg.Options{Quality: 85})
-```
-
-- **优点**：兼容性好，体积适中
-- **缺点**：有损压缩，不支持透明
-- **适用场景**：照片、无透明需求
-
-### Origin 模式
-
-- 保持原格式（PNG/JPEG/WebP/HEIF）
-- 不做任何转换
-- 适用于需要保留原始质量的场景
+- 保持上游返回的原始图片字节，不做重新编码或压缩。
+- 根据图片内容检测 PNG、JPEG、WebP 或 GIF 扩展名。
+- 无法识别内容时使用 MIME 类型推断扩展名。
 
 ## 环境变量配置
 
@@ -261,7 +220,6 @@ curl -X POST https://api.example.com/async/v1/images/generations \
     "prompt": "a blue cat sitting on a red chair",
     "image": "https://example.com/reference.png",
     "size": "1024x1024",
-    "image_compression": "webp",
     "n": 2
   }'
 ```
@@ -302,8 +260,8 @@ curl https://api.example.com/async/v1/task/task_abc123 \
   "data": {
     "created": 1234567890,
     "data": [
-      {"url": "https://r2.example.com/images/uuid1.webp"},
-      {"url": "https://r2.example.com/images/uuid2.webp"}
+      {"url": "https://r2.example.com/images/uuid1.png"},
+      {"url": "https://r2.example.com/images/uuid2.png"}
     ]
   }
 }
@@ -317,7 +275,6 @@ curl https://api.example.com/async/v1/task/task_abc123 \
 | 上游调用 | ImageAdaptor | GeminiAdaptor |
 | 响应解析 | OpenAI ImageResponse | Gemini candidates.content.parts |
 | 图片位置 | `data[].url` 或 `data[].b64_json` | `inlineData.data` |
-| 压缩参数 | `image_compression` | `image_compression` (相同) |
 | 结果存储 | `{urls: [...]}` | `{urls: [...]}` (相同) |
 
 ## 故障排查
@@ -335,23 +292,14 @@ curl https://api.example.com/async/v1/task/task_abc123 \
 - R2 bucket 权限是否正确
 - 日志：`unified_image: R2 upload failed: xxx`
 
-### 3. 压缩失败
-
-**检查**：
-- WebP 模式需要系统安装 `webp` 工具：`apt-get install webp`
-- JPEG 模式需要图片可解码（不支持某些特殊格式）
-- 日志：`webp conversion failed` / `jpeg conversion failed`
-
-### 4. 图片过大
+### 3. 图片过大
 
 **检查**：
 - 输入图片是否超过 50 MB（URL）或 20 MB（base64）
 - 上游返回的图片是否超过默认限制（64 MB）
-- 考虑使用压缩模式减小体积
 
 ## 性能优化建议
 
-1. **使用 WebP 压缩**：减少存储和传输成本
-2. **合理设置 `n` 参数**：避免一次生成过多图片
-3. **使用 CDN**：在 R2 前加 Cloudflare CDN 加速访问
-4. **定期清理**：删除过期的 R2 图片文件
+1. **合理设置 `n` 参数**：避免一次生成过多图片
+2. **使用 CDN**：在 R2 前加 Cloudflare CDN 加速访问
+3. **定期清理**：删除过期的 R2 图片文件

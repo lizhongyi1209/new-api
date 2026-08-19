@@ -105,6 +105,7 @@ export function getChannelTypeIcon(type: number): string {
     58: 'Hunyuan', // TencentVideo
     60: 'OpenAI', // TokenMartSeedance
     61: 'Doubao', // xinhankr (Seedance via xinhankr gateway)
+    62: 'Midjourney', // iLiu Midjourney
 
     // Tools & Platforms
     37: 'Dify', // Dify

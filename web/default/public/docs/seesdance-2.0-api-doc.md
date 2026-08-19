@@ -1,14 +1,14 @@
-# Seesdance 2.0 真人视频生成 API 文档
+# Seedance 2.0 视频生成 API 文档
 
 ## 概述
 
-Seesdance 2.0 是一个支持真人图片驱动的视频生成服务，可以基于参考图片、音频或文本提示生成高质量的视频内容。
+Seedance 2.0 支持多模态参考、首帧、首尾帧和文生视频四种生成方式，可以基于文本、图片、视频和音频生成高质量视频内容。
 
 **基础信息：**
 
-- 基础 URL: `https://api.o1key.cn`
+- 基础 URL: `https://cf-api.o1key.com`
 - 认证方式: Bearer Token
-- 模型名称: `dreamina-seedance-2-0-260128`
+- 模型名称: `seedance-2-0-260128-d-ep`
 
 ---
 
@@ -18,7 +18,7 @@ Seesdance 2.0 是一个支持真人图片驱动的视频生成服务，可以基
 
 #### 请求
 
-**端点:** `POST /v1/video/generate`
+**端点:** `POST /v1/video/generations`
 
 **Headers:**
 
@@ -29,29 +29,29 @@ Authorization: Bearer YOUR_API_KEY
 
 **请求体参数:**
 
-| 参数名            | 类型    | 必填 | 说明                                          |
-| ----------------- | ------- | ---- | --------------------------------------------- |
-| model             | string  | 是   | 模型名称，使用 `dreamina-seedance-2-0-260128` |
-| content           | array   | 是   | 内容数组，包含文本提示、图片、音频等元素      |
-| duration          | integer | 否   | 视频时长（秒），例如：4                       |
-| resolution        | string  | 否   | 分辨率，例如：`480p`、`720p`、`1080p`         |
-| ratio             | string  | 否   | 视频宽高比，例如：`16:9`、`9:16`、`1:1`       |
-| generate_audio    | boolean | 否   | 是否生成音频，默认 false                      |
-| watermark         | boolean | 否   | 是否添加水印，默认 false                      |
-| return_last_frame | boolean | 否   | 是否返回最后一帧图片，默认 false              |
+| 参数名            | 类型    | 必填 | 说明                                      |
+| ----------------- | ------- | ---- | ----------------------------------------- |
+| model             | string  | 是   | 模型名称，使用 `seedance-2-0-260128-d-ep` |
+| content           | array   | 是   | 内容数组，包含文本提示、图片、音频等元素  |
+| duration          | integer | 否   | 视频时长（秒），支持 4-15                 |
+| resolution        | string  | 否   | 分辨率，例如：`480p`、`720p`、`1080p`     |
+| ratio             | string  | 否   | 视频宽高比，例如：`16:9`、`9:16`、`1:1`   |
+| generate_audio    | boolean | 否   | 是否生成同步音频                          |
+| watermark         | boolean | 否   | 是否添加水印，默认 false                  |
+| return_last_frame | boolean | 否   | 是否返回最后一帧图片，默认 false          |
 
 **content 数组元素结构:**
 
 每个 content 元素包含以下字段：
 
-| 字段名    | 类型   | 说明                                                        |
-| --------- | ------ | ----------------------------------------------------------- |
-| type      | string | 内容类型：`text`、`image_url`、`video_url`、`audio_url`     |
-| text      | string | 当 type 为 `text` 时，文本提示内容                          |
-| image_url | object | 当 type 为 `image_url` 时，包含图片 URL                     |
-| video_url | object | 当 type 为 `video_url` 时，包含视频 URL                     |
-| audio_url | object | 当 type 为 `audio_url` 时，包含音频 URL                     |
-| role      | string | 可选，资源角色标识，如 `reference_image`、`reference_audio` |
+| 字段名    | 类型   | 说明                                                                                           |
+| --------- | ------ | ---------------------------------------------------------------------------------------------- |
+| type      | string | 内容类型：`text`、`image_url`、`video_url`、`audio_url`                                        |
+| text      | string | 当 type 为 `text` 时，文本提示内容                                                             |
+| image_url | object | 当 type 为 `image_url` 时，包含图片 URL                                                        |
+| video_url | object | 当 type 为 `video_url` 时，包含视频 URL                                                        |
+| audio_url | object | 当 type 为 `audio_url` 时，包含音频 URL                                                        |
+| role      | string | 媒体用途：`reference_image`、`reference_video`、`reference_audio`、`first_frame`、`last_frame` |
 
 **媒体 URL 对象结构:**
 
@@ -61,37 +61,55 @@ Authorization: Bearer YOUR_API_KEY
 }
 ```
 
+**四种生成方式：**
+
+| 生成方式   | `content` 组成                 | `role` 要求                                                                                                                        |
+| ---------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 多模态参考 | 文本（可选）+ 图片、视频或音频 | 图片、视频、音频分别使用 `reference_image`、`reference_video`、`reference_audio`；音频不能单独作为参考，至少还需一张图片或一个视频 |
+| 首帧       | 文本（可选）+ 一张图片         | 图片使用 `first_frame`；只有一张图片时也可以省略 `role`                                                                            |
+| 首尾帧     | 文本（可选）+ 两张图片         | 第一张使用 `first_frame`，第二张使用 `last_frame`，两个 `role` 均不可省略                                                          |
+| 文生视频   | 一条文本                       | 不传媒体项和 `role`                                                                                                                |
+
+首帧、首尾帧和多模态参考是互斥的生成方式，不要在同一个请求中混用 `first_frame`、`last_frame` 和 `reference_image`。
+
 #### 请求示例
 
-**示例 1: 真人图片 + 音频驱动视频生成**
+**示例 1：多模态参考生视频**
 
 ```bash
-curl -X POST https://api.o1key.cn/v1/video/generate \
+curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
-    "model": "dreamina-seedance-2-0-260128",
+    "model": "seedance-2-0-260128-d-ep",
     "content": [
       {
         "type": "text",
-        "text": "一个人在唱歌，表情生动，动作自然"
+        "text": "以图片1中的人物为主体，参考视频1的运镜和动作节奏，并使用音频1作为背景音乐，生成电影感街头短片"
       },
       {
         "type": "image_url",
         "image_url": {
-          "url": "https://example.com/reference-person.jpg"
+          "url": "https://example.com/character.jpg"
         },
         "role": "reference_image"
       },
       {
+        "type": "video_url",
+        "video_url": {
+          "url": "https://example.com/camera-motion.mp4"
+        },
+        "role": "reference_video"
+      },
+      {
         "type": "audio_url",
         "audio_url": {
-          "url": "https://example.com/singing-audio.mp3"
+          "url": "https://example.com/background-music.mp3"
         },
         "role": "reference_audio"
       }
     ],
-    "duration": 4,
+    "duration": 8,
     "resolution": "720p",
     "ratio": "16:9",
     "generate_audio": true,
@@ -100,80 +118,94 @@ curl -X POST https://api.o1key.cn/v1/video/generate \
   }'
 ```
 
-**示例 2: 仅使用文本和参考图片**
+**示例 2：首帧生视频**
 
 ```bash
-curl -X POST https://api.o1key.cn/v1/video/generate \
+curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
-    "model": "dreamina-seedance-2-0-260128",
+    "model": "seedance-2-0-260128-d-ep",
     "content": [
       {
         "type": "text",
-        "text": "一个微笑的女孩在挥手打招呼"
+        "text": "人物缓慢转身看向镜头，微风吹动头发，镜头平滑向前推进"
       },
       {
         "type": "image_url",
         "image_url": {
-          "url": "https://example.com/girl-portrait.jpg"
+          "url": "https://example.com/first-frame.jpg"
         },
-        "role": "reference_image"
+        "role": "first_frame"
       }
     ],
-    "duration": 3,
-    "resolution": "1080p",
-    "ratio": "9:16",
-    "generate_audio": false,
-    "watermark": false
+    "duration": 5,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "generate_audio": true,
+    "watermark": false,
+    "return_last_frame": true
   }'
 ```
 
-**示例 3: Python 代码**
+**示例 3：首尾帧生视频**
 
-```python
-import requests
-import json
-
-url = "https://api.o1key.cn/v1/video/generate"
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer YOUR_API_KEY"
-}
-
-payload = {
-    "model": "dreamina-seedance-2-0-260128",
+```bash
+curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "seedance-2-0-260128-d-ep",
     "content": [
-        {
-            "type": "text",
-            "text": "一个人在跳舞，动作流畅优美"
+      {
+        "type": "text",
+        "text": "从雨夜街头平滑过渡到清晨海边，人物动作和镜头运动保持自然连续"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "https://example.com/first-frame.jpg"
         },
-        {
-            "type": "image_url",
-            "image_url": {
-                "url": "https://example.com/dancer.jpg"
-            },
-            "role": "reference_image"
+        "role": "first_frame"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "https://example.com/last-frame.jpg"
         },
-        {
-            "type": "audio_url",
-            "audio_url": {
-                "url": "https://example.com/dance-music.mp3"
-            },
-            "role": "reference_audio"
-        }
+        "role": "last_frame"
+      }
     ],
-    "duration": 5,
-    "resolution": "1080p",
+    "duration": 8,
+    "resolution": "720p",
     "ratio": "16:9",
-    "generate_audio": True,
-    "watermark": False,
-    "return_last_frame": True
-}
+    "generate_audio": true,
+    "watermark": false,
+    "return_last_frame": true
+  }'
+```
 
-response = requests.post(url, headers=headers, json=payload)
-result = response.json()
-print(json.dumps(result, indent=2, ensure_ascii=False))
+**示例 4：文生视频**
+
+```bash
+curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "seedance-2-0-260128-d-ep",
+    "content": [
+      {
+        "type": "text",
+        "text": "电影感航拍镜头掠过日出时的未来海滨城市，云层流动，暖色阳光映照玻璃建筑"
+      }
+    ],
+    "duration": 8,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "generate_audio": true,
+    "watermark": false,
+    "return_last_frame": false
+  }'
 ```
 
 #### 响应
@@ -182,12 +214,12 @@ print(json.dumps(result, indent=2, ensure_ascii=False))
 
 ```json
 {
-  "id": "mvt_abc123def456",
-  "task_id": "mvt_abc123def456",
+  "id": "task_abc123def456",
+  "task_id": "task_abc123def456",
   "status": "queued",
   "progress": 0,
   "created_at": 1735862400,
-  "model": "dreamina-seedance-2-0-260128"
+  "model": "seedance-2-0-260128-d-ep"
 }
 ```
 
@@ -220,7 +252,7 @@ print(json.dumps(result, indent=2, ensure_ascii=False))
 
 #### 请求
 
-**端点:** `GET /v1/video/tasks/{task_id}`
+**端点:** `GET /v1/video/generations/{task_id}`
 
 **Headers:**
 
@@ -238,7 +270,7 @@ Accept: application/json
 #### 请求示例
 
 ```bash
-curl -X GET https://api.o1key.cn/v1/video/tasks/mvt_abc123def456 \
+curl -X GET https://cf-api.o1key.com/v1/video/generations/task_abc123def456 \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -H "Accept: application/json"
 ```
@@ -249,8 +281,8 @@ curl -X GET https://api.o1key.cn/v1/video/tasks/mvt_abc123def456 \
 import requests
 import time
 
-task_id = "mvt_abc123def456"
-url = f"https://api.o1key.cn/v1/video/tasks/{task_id}"
+task_id = "task_abc123def456"
+url = f"https://cf-api.o1key.com/v1/video/generations/{task_id}"
 headers = {
     "Authorization": "Bearer YOUR_API_KEY",
     "Accept": "application/json"
@@ -282,12 +314,12 @@ while True:
 
 ```json
 {
-  "id": "mvt_abc123def456",
-  "task_id": "mvt_abc123def456",
+  "id": "task_abc123def456",
+  "task_id": "task_abc123def456",
   "status": "queued",
   "progress": 0,
   "created_at": 1735862400,
-  "model": "dreamina-seedance-2-0-260128"
+  "model": "seedance-2-0-260128-d-ep"
 }
 ```
 
@@ -295,12 +327,12 @@ while True:
 
 ```json
 {
-  "id": "mvt_abc123def456",
-  "task_id": "mvt_abc123def456",
+  "id": "task_abc123def456",
+  "task_id": "task_abc123def456",
   "status": "in_progress",
   "progress": 50,
   "created_at": 1735862400,
-  "model": "dreamina-seedance-2-0-260128"
+  "model": "seedance-2-0-260128-d-ep"
 }
 ```
 
@@ -308,13 +340,13 @@ while True:
 
 ```json
 {
-  "id": "mvt_abc123def456",
-  "task_id": "mvt_abc123def456",
+  "id": "task_abc123def456",
+  "task_id": "task_abc123def456",
   "status": "completed",
   "progress": 100,
   "created_at": 1735862400,
   "completed_at": 1735862480,
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-260128-d-ep",
   "metadata": {
     "url": "https://cdn.example.com/output-video.mp4",
     "outputs": ["https://cdn.example.com/output-video.mp4"],
@@ -331,13 +363,13 @@ while True:
 
 ```json
 {
-  "id": "mvt_abc123def456",
-  "task_id": "mvt_abc123def456",
+  "id": "task_abc123def456",
+  "task_id": "task_abc123def456",
   "status": "failed",
   "progress": 100,
   "created_at": 1735862400,
   "completed_at": 1735862450,
-  "model": "dreamina-seedance-2-0-260128",
+  "model": "seedance-2-0-260128-d-ep",
   "error": {
     "message": "生成失败：图片格式不支持",
     "code": "upstream_error"
@@ -384,7 +416,7 @@ while True:
 
 ### 3. 参数建议
 
-- **duration**: 建议 3-5 秒，过长可能导致生成时间较长
+- **duration**: 支持 4-15 秒；时长越长，生成耗时和费用通常越高
 - **resolution**:
   - `480p`: 快速生成，适合预览
   - `720p`: 平衡质量与速度
@@ -422,15 +454,15 @@ while True:
 import axios from 'axios'
 
 const API_KEY = 'YOUR_API_KEY'
-const BASE_URL = 'https://api.o1key.cn'
+const BASE_URL = 'https://cf-api.o1key.com'
 
 async function generateVideo() {
   try {
     // 1. 创建任务
     const createResponse = await axios.post(
-      `${BASE_URL}/v1/video/generate`,
+      `${BASE_URL}/v1/video/generations`,
       {
-        model: 'dreamina-seedance-2-0-260128',
+        model: 'seedance-2-0-260128-d-ep',
         content: [
           {
             type: 'text',
@@ -465,7 +497,7 @@ async function generateVideo() {
     // 2. 轮询任务状态
     while (true) {
       const statusResponse = await axios.get(
-        `${BASE_URL}/v1/video/tasks/${taskId}`,
+        `${BASE_URL}/v1/video/generations/${taskId}`,
         {
           headers: {
             Authorization: `Bearer ${API_KEY}`,
@@ -509,8 +541,8 @@ import time
 import json
 from typing import Dict, Optional
 
-class SeesdanceClient:
-    def __init__(self, api_key: str, base_url: str = "https://api.o1key.cn"):
+class SeedanceClient:
+    def __init__(self, api_key: str, base_url: str = "https://cf-api.o1key.com"):
         self.api_key = api_key
         self.base_url = base_url
         self.headers = {
@@ -548,7 +580,7 @@ class SeesdanceClient:
             })
 
         payload = {
-            "model": "dreamina-seedance-2-0-260128",
+            "model": "seedance-2-0-260128-d-ep",
             "content": content,
             "duration": duration,
             "resolution": resolution,
@@ -559,7 +591,7 @@ class SeesdanceClient:
         }
 
         response = requests.post(
-            f"{self.base_url}/v1/video/generate",
+            f"{self.base_url}/v1/video/generations",
             headers=self.headers,
             json=payload
         )
@@ -569,7 +601,7 @@ class SeesdanceClient:
     def get_task_status(self, task_id: str) -> Dict:
         """查询任务状态"""
         response = requests.get(
-            f"{self.base_url}/v1/video/tasks/{task_id}",
+            f"{self.base_url}/v1/video/generations/{task_id}",
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Accept": "application/json"
@@ -609,7 +641,7 @@ class SeesdanceClient:
 
 # 使用示例
 if __name__ == "__main__":
-    client = SeesdanceClient(api_key="YOUR_API_KEY")
+    client = SeedanceClient(api_key="YOUR_API_KEY")
 
     # 创建任务
     print("正在创建视频生成任务...")
@@ -664,6 +696,7 @@ if __name__ == "__main__":
 
 如有问题，请联系技术支持或查看完整 API 文档。
 
-**文档版本**: v1.0  
-**更新日期**: 2026-07-03  
+**文档版本**: v1.1
+
+**更新日期**: 2026-08-12
 **生成工具**: Claude Code

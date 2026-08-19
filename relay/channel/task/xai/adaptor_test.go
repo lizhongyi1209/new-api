@@ -38,19 +38,24 @@ func TestValidateVideoGenerationRequest(t *testing.T) {
 		action string
 	}{
 		{name: "text to video", body: `{"model":"grok-imagine-video","prompt":"orbit","duration":15,"aspect_ratio":"16:9","resolution":"720p"}`, action: constant.TaskActionTextGenerate},
+		{name: "1.5 text to video at 1080p", body: `{"model":"grok-imagine-video-1.5","prompt":"orbit","resolution":"1080p"}`, action: constant.TaskActionTextGenerate},
 		{name: "image to video", body: `{"model":"grok-imagine-video","prompt":"move","image":{"url":"https://example.com/a.png"}}`, action: constant.TaskActionGenerate},
 		{name: "image to video optional prompt", body: `{"model":"grok-imagine-video","image":{"image_url":"https://example.com/a.png"},"seconds":"8"}`, action: constant.TaskActionGenerate},
 		{name: "reference to video", body: `{"model":"grok-imagine-video","prompt":"scene","reference_images":[{"file_id":"file-1"}]}`, action: constant.TaskActionReferenceGenerate},
+		{name: "1.5 reference image and preset voice", body: `{"model":"grok-imagine-video-1.5","prompt":"scene","reference_images":[{"file_id":"file-1"}],"reference_audios":[{"voice_id":"eve"}],"duration":15,"resolution":"720p"}`, action: constant.TaskActionReferenceGenerate},
+		{name: "1.5 audio only reference", body: `{"model":"grok-imagine-video-1.5","prompt":"speak","reference_audios":[{"voice_id":"ara"}]}`, action: constant.TaskActionReferenceGenerate},
 		{name: "duration overflow", body: `{"model":"grok-imagine-video","prompt":"orbit","duration":16}`, code: "invalid_duration"},
 		{name: "mutually exclusive inputs", body: `{"model":"grok-imagine-video","prompt":"orbit","image":{"url":"https://example.com/a.png"},"reference_images":[{"url":"https://example.com/b.png"}]}`, code: "invalid_request"},
-		{name: "1080p wrong mode", body: `{"model":"grok-imagine-video-1.5","prompt":"orbit","resolution":"1080p"}`, code: "invalid_resolution"},
+		{name: "legacy model cannot use 1080p", body: `{"model":"grok-imagine-video","prompt":"orbit","resolution":"1080p"}`, code: "invalid_resolution"},
 		{name: "1080p image to video", body: `{"model":"grok-imagine-video-1.5","prompt":"orbit","image":{"url":"https://example.com/a.png"},"resolution":"1080p"}`, action: constant.TaskActionGenerate},
+		{name: "reference mode cannot use 1080p", body: `{"model":"grok-imagine-video-1.5","prompt":"orbit","reference_images":[{"url":"https://example.com/a.png"}],"resolution":"1080p"}`, code: "invalid_resolution"},
 		{name: "reference image limit", body: `{"model":"grok-imagine-video","prompt":"orbit","reference_images":[{"file_id":"1"},{"file_id":"2"},{"file_id":"3"},{"file_id":"4"},{"file_id":"5"},{"file_id":"6"},{"file_id":"7"},{"file_id":"8"}]}`, code: "invalid_reference_images"},
 		{name: "reference duration limit", body: `{"model":"grok-imagine-video","prompt":"orbit","reference_images":[{"file_id":"1"}],"duration":11}`, code: "invalid_duration"},
-		{name: "reference unsupported model", body: `{"model":"grok-imagine-video-1.5","prompt":"orbit","reference_images":[{"file_id":"1"}]}`, code: "invalid_model"},
 		{name: "audio reference", body: `{"model":"grok-imagine-video","prompt":"speak","reference_audios":[{"url":"data:audio/wav;base64,AAAA"}]}`, action: constant.TaskActionReferenceGenerate},
 		{name: "audio reference requires prompt", body: `{"model":"grok-imagine-video","reference_audios":[{"url":"data:audio/wav;base64,AAAA"}]}`, code: "invalid_request"},
-		{name: "1.5 text to video unsupported", body: `{"model":"grok-imagine-video-1.5","prompt":"orbit"}`, code: "invalid_model"},
+		{name: "audio reference requires one source", body: `{"model":"grok-imagine-video-1.5","prompt":"speak","reference_audios":[{}]}`, code: "invalid_reference_audio"},
+		{name: "audio URL and voice are exclusive", body: `{"model":"grok-imagine-video-1.5","prompt":"speak","reference_audios":[{"url":"data:audio/wav;base64,AAAA","voice_id":"eve"}]}`, code: "invalid_reference_audio"},
+		{name: "image URL aliases are exclusive", body: `{"model":"grok-imagine-video-1.5","image":{"url":"https://example.com/a.png","image_url":"https://example.com/b.png"}}`, code: "invalid_image"},
 		{name: "output requires upload URL", body: `{"model":"grok-imagine-video","prompt":"orbit","output":{}}`, code: "invalid_output"},
 	}
 
@@ -162,7 +167,7 @@ func TestRequestAuditCapturesRequestedAndEffectiveResolution(t *testing.T) {
 		},
 		{
 			name:            "reference counts",
-			body:            `{"model":"grok-imagine-video","prompt":"orbit","reference_images":[{"file_id":"1"},{"file_id":"2"}],"reference_audios":[{"url":"data:audio/wav;base64,AAAA"}]}`,
+			body:            `{"model":"grok-imagine-video-1.5","prompt":"orbit","reference_images":[{"file_id":"1"},{"file_id":"2"}],"reference_audios":[{"voice_id":"eve"}]}`,
 			effective:       "480p",
 			defaulted:       true,
 			imageCount:      2,
@@ -193,7 +198,9 @@ func TestVideoBillingMatchesOfficialPerSecondPrices(t *testing.T) {
 	}{
 		{model: "grok-imagine-video", body: `{"model":"grok-imagine-video","prompt":"orbit","duration":5,"resolution":"480p"}`, price: 0.25},
 		{model: "grok-imagine-video", body: `{"model":"grok-imagine-video","prompt":"orbit","duration":5,"resolution":"720p"}`, price: 0.35},
+		{model: "grok-imagine-video-1.5", body: `{"model":"grok-imagine-video-1.5","prompt":"orbit","duration":5,"resolution":"1080p"}`, price: 1.25},
 		{model: "grok-imagine-video-1.5", body: `{"model":"grok-imagine-video-1.5","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"480p"}`, price: 0.41},
+		{model: "grok-imagine-video-1.5", body: `{"model":"grok-imagine-video-1.5","prompt":"scene","reference_images":[{"url":"https://example.com/a.png"},{"file_id":"file-2"}],"duration":15,"resolution":"720p"}`, price: 2.12},
 		{model: "grok-imagine-video-1.5-preview", body: `{"model":"grok-imagine-video-1.5-preview","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"720p"}`, price: 0.71},
 		{model: "grok-imagine-video-1.5-2026-05-30", body: `{"model":"grok-imagine-video-1.5-2026-05-30","image":{"url":"https://example.com/a.png"},"duration":5,"resolution":"1080p"}`, price: 1.26},
 	}
@@ -233,6 +240,57 @@ func TestBuildRequestBodyPreservesOfficialExtensionFields(t *testing.T) {
 	assert.Equal(t, map[string]any{"filename": "result.mp4", "public_url": true}, request["storage_options"])
 }
 
+func TestBuildRequestBodyPreservesCompleteOfficialReferenceRequest(t *testing.T) {
+	context, info := newVideoContext(`{
+		"model":"grok-imagine-video-1.5",
+		"prompt":"the subject speaks to camera",
+		"reference_images":[
+			{"url":"https://example.com/subject.png"},
+			{"file_id":"file-outfit"}
+		],
+		"reference_audios":[
+			{"voice_id":"eve"},
+			{"url":"data:audio/wav;base64,AAAA"}
+		],
+		"duration":"15",
+		"aspect_ratio":"9:16",
+		"resolution":"720p",
+		"output":{"upload_url":"https://uploads.example.com/video"},
+		"storage_options":{"filename":"result.mp4","expires_after":7200,"public_url":{"expires_after":3600}},
+		"user":""
+	}`)
+	adaptor := &TaskAdaptor{}
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+	assert.Equal(t, constant.TaskActionReferenceGenerate, info.Action)
+	info.ChannelMeta = &relaycommon.ChannelMeta{UpstreamModelName: "grok-imagine-video-1.5"}
+
+	body, err := adaptor.BuildRequestBody(context, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(body)
+	require.NoError(t, err)
+	var request map[string]any
+	require.NoError(t, common.Unmarshal(data, &request))
+	assert.Equal(t, "grok-imagine-video-1.5", request["model"])
+	assert.Equal(t, float64(15), request["duration"])
+	assert.Equal(t, "9:16", request["aspect_ratio"])
+	assert.Equal(t, "720p", request["resolution"])
+	assert.Equal(t, "", request["user"])
+	assert.Equal(t, []any{
+		map[string]any{"url": "https://example.com/subject.png"},
+		map[string]any{"file_id": "file-outfit"},
+	}, request["reference_images"])
+	assert.Equal(t, []any{
+		map[string]any{"voice_id": "eve"},
+		map[string]any{"url": "data:audio/wav;base64,AAAA"},
+	}, request["reference_audios"])
+	assert.Equal(t, map[string]any{"upload_url": "https://uploads.example.com/video"}, request["output"])
+	assert.Equal(t, map[string]any{
+		"filename":      "result.mp4",
+		"expires_after": float64(7200),
+		"public_url":    map[string]any{"expires_after": float64(3600)},
+	}, request["storage_options"])
+}
+
 func TestParseTaskResult(t *testing.T) {
 	adaptor := &TaskAdaptor{}
 	tests := []struct {
@@ -242,7 +300,7 @@ func TestParseTaskResult(t *testing.T) {
 		reason string
 	}{
 		{body: `{"status":"pending"}`, status: model.TaskStatusInProgress},
-		{body: `{"status":"done","video":{"url":"https://vidgen.x.ai/video.mp4","duration":8,"respect_moderation":true}}`, status: model.TaskStatusSuccess, url: "https://vidgen.x.ai/video.mp4"},
+		{body: `{"status":"done","progress":100,"video":{"url":"https://vidgen.x.ai/video.mp4","duration":8,"respect_moderation":true,"file_output":{"file_id":"file-video","filename":"video.mp4"}},"usage":{"cost_in_usd_ticks":8100000000,"input_tokens":11,"input_tokens_details":{"cached_tokens":2,"image_tokens":4,"text_tokens":7},"output_tokens":22,"output_tokens_details":{"image_tokens":10,"reasoning_tokens":5,"text_tokens":7},"total_tokens":33}}`, status: model.TaskStatusSuccess, url: "https://vidgen.x.ai/video.mp4"},
 		{body: `{"status":"expired"}`, status: model.TaskStatusFailure, reason: "expired"},
 		{body: `{"status":"failed","error":{"code":"generation_failed","message":"blocked"}}`, status: model.TaskStatusFailure, reason: "blocked"},
 	}
@@ -253,6 +311,19 @@ func TestParseTaskResult(t *testing.T) {
 		assert.Equal(t, string(test.status), result.Status)
 		assert.Equal(t, test.url, result.Url)
 		assert.Equal(t, test.reason, result.Reason)
+		if test.status == model.TaskStatusSuccess {
+			assert.Equal(t, "100%", result.Progress)
+			assert.Equal(t, 11, result.PromptTokens)
+			assert.Equal(t, 22, result.CompletionTokens)
+			assert.Equal(t, 33, result.TotalTokens)
+			assert.Equal(t, int64(8100000000), result.Metadata["cost_in_usd_ticks"])
+			assert.Equal(t, 2, result.Metadata["cached_tokens"])
+			assert.Equal(t, map[string]int{"text": 7, "image": 4}, result.InputTokensByModality)
+			assert.Equal(t, map[string]int{"text": 7, "image": 10}, result.OutputTokensByModality)
+			assert.Equal(t, 5, result.ThoughtTokens)
+			assert.Equal(t, true, result.Metadata["respect_moderation"])
+			require.NotNil(t, result.Metadata["file_output"])
+		}
 	}
 }
 

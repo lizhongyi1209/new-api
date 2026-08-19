@@ -139,8 +139,7 @@ Content-Type: application/json
   "model": "gemini-3-pro-image",
   "prompt": "make it blue",
   "image": "https://r2.example.com/uploads/abc123_reference.png",
-  "size": "1024x1024",
-  "image_compression": "webp"
+  "size": "1024x1024"
 }
 ```
 
@@ -197,8 +196,7 @@ TASK_RESPONSE=$(curl -s -X POST "$API_BASE/async/v1/images/generations" \
     \"model\": \"gemini-3-pro-image\",
     \"prompt\": \"make it blue\",
     \"image\": \"$PUBLIC_URL\",
-    \"size\": \"1024x1024\",
-    \"image_compression\": \"webp\"
+    \"size\": \"1024x1024\"
   }")
 
 TASK_ID=$(echo "$TASK_RESPONSE" | jq -r '.task_id')
@@ -266,8 +264,7 @@ task_resp = requests.post(
         "model": "gemini-3-pro-image",
         "prompt": "make it blue",
         "image": public_url,
-        "size": "1024x1024",
-        "image_compression": "webp"
+        "size": "1024x1024"
     }
 )
 task_data = task_resp.json()
@@ -335,8 +332,7 @@ const headers = {
       model: 'gemini-3-pro-image',
       prompt: 'make it blue',
       image: public_url,
-      size: '1024x1024',
-      image_compression: 'webp'
+      size: '1024x1024'
     },
     { headers }
   );

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -23,156 +22,62 @@ import (
 	"gorm.io/gorm"
 )
 
+const authIdentityContextKey = "auth_identity"
+
+type dashboardCredentialKind int
+
+const (
+	dashboardCredentialUnmatched dashboardCredentialKind = iota
+	dashboardCredentialInternal
+	dashboardCredentialPAT
+	dashboardCredentialLegacy
+)
+
 func validUserInfo(username string, role int) bool {
-	// check username is empty
-	if strings.TrimSpace(username) == "" {
-		return false
-	}
-	if !common.IsValidateRole(role) {
-		return false
-	}
-	return true
+	return strings.TrimSpace(username) != "" && common.IsValidateRole(role)
 }
 
 func authHelper(c *gin.Context, minRole int) {
-	session := sessions.Default(c)
-	username := session.Get("username")
-	role := session.Get("role")
-	id := session.Get("id")
-	status := session.Get("status")
-	useAccessToken := false
-	if username == nil {
-		// Check access token
-		accessToken := c.Request.Header.Get("Authorization")
-		if accessToken == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"success": false,
-				"message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn),
-			})
-			c.Abort()
-			return
-		}
-		user, authErr := model.ValidateAccessToken(accessToken)
-		if authErr != nil {
-			if errors.Is(authErr, model.ErrDatabase) {
-				common.SysLog("ValidateAccessToken database error: " + authErr.Error())
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"success": false,
-					"message": common.TranslateMessage(c, i18n.MsgDatabaseError),
-				})
-			} else {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": common.TranslateMessage(c, i18n.MsgAuthAccessTokenInvalid),
-				})
-			}
-			c.Abort()
-			return
-		}
-		if user != nil && user.Username != "" {
-			if !validUserInfo(user.Username, user.Role) {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
-				})
-				c.Abort()
-				return
-			}
-			// Token is valid
-			username = user.Username
-			role = user.Role
-			id = user.Id
-			status = user.Status
-			useAccessToken = true
-		} else {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": common.TranslateMessage(c, i18n.MsgAuthAccessTokenInvalid),
-			})
-			c.Abort()
-			return
-		}
-	}
-	// get header New-Api-User
-	apiUserIdStr := c.Request.Header.Get("New-Api-User")
-	if apiUserIdStr == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdNotProvided),
-		})
-		c.Abort()
-		return
-	}
-	apiUserId, err := strconv.Atoi(apiUserIdStr)
+	user, identity, credentialKind, err := classifyDashboardCredential(c)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdFormatError),
-		})
-		c.Abort()
+		writeDashboardAuthError(c, err)
 		return
+	}
+	if credentialKind == dashboardCredentialUnmatched {
+		writeDashboardAuthError(c, service.ErrAuthTokenInvalid)
+		return
+	}
+	if user.Status != common.UserStatusEnabled {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_USER_DISABLED", "message": common.TranslateMessage(c, i18n.MsgAuthUserBanned)})
+		return
+	}
+	if user.Role < minRole {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"success": false, "code": "AUTH_INSUFFICIENT_PRIVILEGE", "message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege)})
+		return
+	}
+	if !validUserInfo(user.Username, user.Role) {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_USER_INVALID", "message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid)})
+		return
+	}
+	setDashboardAuthContext(c, user, identity, credentialKind == dashboardCredentialPAT)
 
-	}
-	if id != apiUserId {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserIdMismatch),
-		})
-		c.Abort()
-		return
-	}
-	if status.(int) == common.UserStatusDisabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserBanned),
-		})
-		c.Abort()
-		return
-	}
-	if role.(int) < minRole {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthInsufficientPrivilege),
-		})
-		c.Abort()
-		return
-	}
-	if !validUserInfo(username.(string), role.(int)) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": common.TranslateMessage(c, i18n.MsgAuthUserInfoInvalid),
-		})
-		c.Abort()
-		return
-	}
-	// 防止不同newapi版本冲突，导致数据不通用
-	c.Header("Auth-Version", "864b7076dbcd0a3c01b5520316720ebf")
-	c.Set("username", username)
-	c.Set("role", role)
-	c.Set("id", id)
-	c.Set("group", session.Get("group"))
-	c.Set("user_group", session.Get("group"))
-	c.Set("use_access_token", useAccessToken)
-
-	// 管理/root 写操作审计兜底：内聚在鉴权链路里，保证任何经过 AdminAuth/RootAuth
-	// 的写接口都会自动留痕（无需在路由上单独挂审计中间件，避免漏挂）。
-	// handler 内手动埋点者会设置 ContextKeyAuditLogged，finishAdminAudit 据此跳过。
 	var auditWriter *auditResponseWriter
 	if minRole >= common.RoleAdminUser {
 		auditWriter = beginAdminAudit(c)
 	}
-
 	c.Next()
-
 	finishAdminAudit(c, auditWriter)
 }
 
 func TryUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		session := sessions.Default(c)
-		id := session.Get("id")
-		if id != nil {
-			c.Set("id", id)
+		user, identity, credentialKind, err := classifyDashboardCredential(c)
+		if err != nil {
+			writeDashboardAuthError(c, err)
+			return
+		}
+		if credentialKind != dashboardCredentialUnmatched {
+			setDashboardAuthContext(c, user, identity, credentialKind == dashboardCredentialPAT)
 		}
 		c.Next()
 	}
@@ -193,6 +98,146 @@ func AdminAuth() func(c *gin.Context) {
 func RootAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleRootUser)
+	}
+}
+
+func GetAuthIdentity(c *gin.Context) (service.AuthIdentity, bool) {
+	value, ok := c.Get(authIdentityContextKey)
+	if !ok {
+		return service.AuthIdentity{}, false
+	}
+	identity, ok := value.(service.AuthIdentity)
+	return identity, ok
+}
+
+func GetSessionAuthIdentity(c *gin.Context) (service.AuthIdentity, bool) {
+	identity, ok := GetAuthIdentity(c)
+	if !ok {
+		identity = service.AuthIdentity{
+			UserID:          c.GetInt("id"),
+			SessionID:       c.GetString("session_id"),
+			UserAuthVersion: c.GetInt64("auth_version"),
+			SessionVersion:  c.GetInt64("session_version"),
+		}
+	}
+	if identity.UserID <= 0 || identity.SessionID == "" || identity.UserAuthVersion <= 0 || identity.SessionVersion <= 0 {
+		return service.AuthIdentity{}, false
+	}
+	return identity, true
+}
+
+func classifyDashboardCredential(c *gin.Context) (*model.UserBase, service.AuthIdentity, dashboardCredentialKind, error) {
+	raw, hasAuthorization := authorizationToken(c.GetHeader("Authorization"))
+	if hasAuthorization {
+		identity, internal, err := service.ParseDashboardAccessToken(raw)
+		if internal {
+			if err != nil {
+				return nil, service.AuthIdentity{}, dashboardCredentialInternal, err
+			}
+			_, user, err := service.ValidateLoginSession(identity)
+			if err != nil {
+				return nil, service.AuthIdentity{}, dashboardCredentialInternal, err
+			}
+			return user, identity, dashboardCredentialInternal, nil
+		}
+		patUser, err := model.ValidateAccessToken(raw)
+		if err != nil {
+			return nil, service.AuthIdentity{}, dashboardCredentialPAT, err
+		}
+		if patUser == nil || patUser.Id <= 0 {
+			return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
+		}
+		user, err := model.GetUserCache(patUser.Id)
+		if err != nil {
+			return nil, service.AuthIdentity{}, dashboardCredentialPAT, err
+		}
+		return user, service.AuthIdentity{UserID: user.Id, UserAuthVersion: user.AuthVersion}, dashboardCredentialPAT, nil
+	}
+
+	// Compatibility path for web/classic. Existing pre-migration cookies do not
+	// carry auth_version and are intentionally rejected; a fresh login writes it.
+	sessionValue, exists := c.Get(sessions.DefaultKey)
+	if !exists {
+		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
+	}
+	session, ok := sessionValue.(sessions.Session)
+	if !ok || session == nil {
+		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
+	}
+	id, ok := session.Get("id").(int)
+	if !ok || id <= 0 {
+		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
+	}
+	authVersion, ok := sessionInt64(session.Get("auth_version"))
+	if !ok || authVersion <= 0 {
+		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
+	}
+	user, err := model.GetUserCache(id)
+	if err != nil {
+		return nil, service.AuthIdentity{}, dashboardCredentialLegacy, err
+	}
+	if user.AuthVersion != authVersion {
+		return nil, service.AuthIdentity{}, dashboardCredentialLegacy, service.ErrLoginSessionRevoked
+	}
+	return user, service.AuthIdentity{UserID: id, UserAuthVersion: authVersion}, dashboardCredentialLegacy, nil
+}
+
+func sessionInt64(value interface{}) (int64, bool) {
+	switch typed := value.(type) {
+	case int64:
+		return typed, true
+	case int:
+		return int64(typed), true
+	case int32:
+		return int64(typed), true
+	case uint64:
+		if typed <= uint64(^uint64(0)>>1) {
+			return int64(typed), true
+		}
+	}
+	return 0, false
+}
+
+func authorizationToken(header string) (string, bool) {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return "", false
+	}
+	parts := strings.Fields(header)
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		header = parts[1]
+	} else if len(parts) != 1 {
+		return "", false
+	}
+	return header, header != ""
+}
+
+func setDashboardAuthContext(c *gin.Context, user *model.UserBase, identity service.AuthIdentity, useAccessToken bool) {
+	c.Header("Auth-Version", "864b7076dbcd0a3c01b5520316720ebf")
+	c.Set("username", user.Username)
+	c.Set("role", user.Role)
+	c.Set("id", user.Id)
+	c.Set("group", user.Group)
+	c.Set("user_group", user.Group)
+	c.Set("use_access_token", useAccessToken)
+	c.Set("session_id", identity.SessionID)
+	c.Set("auth_version", identity.UserAuthVersion)
+	c.Set("session_version", identity.SessionVersion)
+	c.Set(authIdentityContextKey, identity)
+	user.WriteContext(c)
+}
+
+func writeDashboardAuthError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrAuthTokenExpired):
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_TOKEN_EXPIRED", "message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn)})
+	case errors.Is(err, service.ErrLoginSessionRevoked), errors.Is(err, gorm.ErrRecordNotFound):
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_SESSION_REVOKED", "message": common.TranslateMessage(c, i18n.MsgAuthNotLoggedIn)})
+	case errors.Is(err, service.ErrAuthTokenInvalid):
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"success": false, "code": "AUTH_UNAUTHORIZED", "message": common.TranslateMessage(c, i18n.MsgAuthAccessTokenInvalid)})
+	default:
+		common.SysLog("dashboard authentication error: " + err.Error())
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUTH_INTERNAL_ERROR", "message": common.TranslateMessage(c, i18n.MsgDatabaseError)})
 	}
 }
 
@@ -233,23 +278,36 @@ func WssAuth(c *gin.Context) {
 // Used for endpoints that need to be accessible from both the dashboard and API clients.
 func TokenOrUserAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
-		// Try session auth first (dashboard users)
-		session := sessions.Default(c)
-		if id := session.Get("id"); id != nil {
-			if status, ok := session.Get("status").(int); ok && status == common.UserStatusEnabled {
-				c.Set("id", id)
-				c.Set("username", session.Get("username"))
-				c.Set("role", session.Get("role"))
-				c.Set("status", status)
-				c.Set("group", session.Get("group"))
-				c.Set("user_group", session.Get("group"))
-				c.Set("use_access_token", false)
-				c.Next()
+		raw, hasAuthorization := authorizationToken(c.GetHeader("Authorization"))
+		if hasAuthorization {
+			identity, internal, err := service.ParseDashboardAccessToken(raw)
+			if !internal {
+				TokenAuth()(c)
 				return
 			}
+			if err != nil {
+				writeDashboardAuthError(c, err)
+				return
+			}
+			_, user, err := service.ValidateLoginSession(identity)
+			if err != nil {
+				writeDashboardAuthError(c, err)
+				return
+			}
+			setDashboardAuthContext(c, user, identity, false)
+			c.Next()
+			return
 		}
-		// Fall back to token auth (API clients)
-		c.Set("use_access_token", true)
+		user, identity, kind, err := classifyDashboardCredential(c)
+		if err != nil {
+			writeDashboardAuthError(c, err)
+			return
+		}
+		if kind == dashboardCredentialLegacy {
+			setDashboardAuthContext(c, user, identity, false)
+			c.Next()
+			return
+		}
 		TokenAuth()(c)
 	}
 }
@@ -356,7 +414,8 @@ func TokenAuth() func(c *gin.Context) {
 			}
 		}
 		// gemini api 从query中获取key
-		if strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
+		if c.Request.URL.Path == "/v1/models" ||
+			strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1beta/openai/models") ||
 			strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
 			skKey := c.Query("key")
@@ -484,6 +543,15 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	}
 	common.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)
 	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
+	if token.AutoGroups != "" {
+		autoGroups, err := token.GetAutoGroups()
+		if err != nil {
+			common.SysError(fmt.Sprintf("failed to parse auto groups for token %d: %v", token.Id, err))
+			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, []string{})
+		} else if len(autoGroups) > 0 {
+			common.SetContextKey(c, constant.ContextKeyTokenAutoGroups, autoGroups)
+		}
+	}
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {
 			c.Set("specific_channel_id", parts[1])

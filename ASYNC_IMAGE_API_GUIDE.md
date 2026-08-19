@@ -56,8 +56,7 @@ curl -X POST "https://cf-api.o1key.com/async/v1/images/generations" \
     "model": "nano-banana-pro",
     "prompt": "A cute cat sitting on a cloud in a magical sky, Studio Ghibli style",
     "n": 1,
-    "aspect_ratio": "16:9",
-    "image_compression": "webp"
+    "aspect_ratio": "16:9"
   }'
 ```
 
@@ -72,7 +71,6 @@ curl -X POST "https://cf-api.o1key.com/async/v1/images/generations" \
 | aspect_ratio | string | 否 | `"1:1"`、`"16:9"`、`"9:16"`、`"4:3"` 等 |
 | quality | string | 否 | `"standard"` / `"hd"` |
 | response_format | string | 否 | `"url"` 返回 R2 链接（默认），`"b64_json"` 返回 base64 |
-| image_compression | string | 否 | `"webp"` R2 存储时转 WebP 压缩 |
 | image | mixed | 否 | 参考图 URL 或 base64（图生图用） |
 | images | string[] | 否 | 多张参考图 URL 数组 |
 
@@ -174,7 +172,7 @@ curl -X POST "https://cf-api.o1key.com/async/v1/tasks/fetch" \
   "data": {
     "data": [
       {
-        "url": "https://<r2-public>/images/<uuid>.webp"
+        "url": "https://<r2-public>/images/<uuid>.png"
       }
     ],
     "created": 1778172246
@@ -242,8 +240,7 @@ r = requests.post(
     json={
         "model": "nano-banana-pro",
         "prompt": "A cute cat",
-        "aspect_ratio": "1:1",
-        "image_compression": "webp"
+        "aspect_ratio": "1:1"
     }
 )
 task_id = r.json()["task_id"]

@@ -262,6 +262,9 @@ func migrateDB() error {
 		&Channel{},
 		&Token{},
 		&User{},
+		&UserSession{},
+		&AuthFlow{},
+		&ExternalIdentityClaim{},
 		&PasskeyCredential{},
 		&Option{},
 		&Redemption{},
@@ -295,6 +298,15 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := migrateTokenAutoGroupsFromLegacyPriority(); err != nil {
+		return err
+	}
+	if err := InitializeUserAuthVersions(); err != nil {
+		return err
+	}
+	if err := InitializeExternalIdentityClaims(); err != nil {
+		return err
+	}
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -318,6 +330,9 @@ func migrateDBFast() error {
 		{&Channel{}, "Channel"},
 		{&Token{}, "Token"},
 		{&User{}, "User"},
+		{&UserSession{}, "UserSession"},
+		{&AuthFlow{}, "AuthFlow"},
+		{&ExternalIdentityClaim{}, "ExternalIdentityClaim"},
 		{&PasskeyCredential{}, "PasskeyCredential"},
 		{&Option{}, "Option"},
 		{&Redemption{}, "Redemption"},
@@ -369,6 +384,15 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	if err := migrateTokenAutoGroupsFromLegacyPriority(); err != nil {
+		return err
+	}
+	if err := InitializeUserAuthVersions(); err != nil {
+		return err
+	}
+	if err := InitializeExternalIdentityClaims(); err != nil {
+		return err
+	}
 	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -380,6 +404,27 @@ func migrateDBFast() error {
 	}
 	common.SysLog("database migrated")
 	return nil
+}
+
+// migrateTokenAutoGroupsFromLegacyPriority preserves ordered per-token groups
+// written by the earlier custom auto_group_priority implementation. Keep the
+// old column in place so this migration remains non-destructive and idempotent.
+//
+// The legacy column has no Go field any more, but the probe must still pass a
+// model value: the MySQL driver inherits GORM's base HasColumn, which
+// dereferences stmt.Schema unguarded, so a bare table name panics there while
+// PostgreSQL and SQLite tolerate it.
+func migrateTokenAutoGroupsFromLegacyPriority() error {
+	if !DB.Migrator().HasTable(&Token{}) ||
+		!DB.Migrator().HasColumn(&Token{}, "auto_groups") ||
+		!DB.Migrator().HasColumn(&Token{}, "auto_group_priority") {
+		return nil
+	}
+
+	return DB.Model(&Token{}).
+		Where("(auto_groups IS NULL OR auto_groups = ?)", "").
+		Where("auto_group_priority IS NOT NULL AND auto_group_priority <> ?", "").
+		UpdateColumn("auto_groups", gorm.Expr("auto_group_priority")).Error
 }
 
 func migrateLOGDB() error {

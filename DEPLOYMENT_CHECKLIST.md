@@ -6,7 +6,7 @@
 - [x] 添加 `ImageStorageProviderLocal` 常量
 - [x] 修改 `SelectImageStorageProvider` 逻辑，api.o1key.cn 默认走本地存储
 - [x] 实现 `GenerateLocalPresignedUploadURL` - 生成本地上传 URL
-- [x] 实现 `UploadBase64ImageToLocalCompressed` - base64 图片上传
+- [x] 实现 `UploadBase64ImageToLocal` - base64 原图上传
 - [x] 添加 `UploadLocalFile` 控制器 - 处理文件上传
 - [x] 注册路由 `/v1/storage/local/upload`
 - [x] 添加静态文件路由 `router.Static("/upload", uploadDir)`

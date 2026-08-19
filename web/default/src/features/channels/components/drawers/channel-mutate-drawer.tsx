@@ -1376,6 +1376,7 @@ export function ChannelMutateDrawer({
 
     try {
       await withVerification(fetchChannelKey, {
+        scope: 'channel.key.read',
         preferredMethod: 'passkey',
         title: 'Verify to view channel key',
         description:

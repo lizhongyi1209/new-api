@@ -885,6 +885,8 @@ type OpenAIResponsesRequest struct {
 	Stream           *bool           `json:"stream,omitempty"`
 	StreamOptions    *StreamOptions  `json:"stream_options,omitempty"`
 	Temperature      *float64        `json:"temperature,omitempty"`
+	FrequencyPenalty json.RawMessage `json:"frequency_penalty,omitempty"`
+	PresencePenalty  json.RawMessage `json:"presence_penalty,omitempty"`
 	Text             json.RawMessage `json:"text,omitempty"`
 	ToolChoice       json.RawMessage `json:"tool_choice,omitempty"`
 	Tools            json.RawMessage `json:"tools,omitempty"` // 需要处理的参数很少，MCP 参数太多不确定，所以用 map

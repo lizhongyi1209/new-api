@@ -109,7 +109,7 @@ func Distribute() func(c *gin.Context) {
 						channelSupportsRequestPath(preferred, c.Request.URL.Path) {
 						if usingGroup == "auto" {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
-							autoGroups := service.GetUserAutoGroup(userGroup)
+							autoGroups := service.GetRequestAutoGroups(c, userGroup)
 							for _, g := range autoGroups {
 								if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) {
 									selectGroup = g
@@ -172,11 +172,18 @@ func Distribute() func(c *gin.Context) {
 }
 
 // channelSupportsRequestPath reports whether a channel can serve the request path.
-// Only Advanced Custom (type 58) channels are path-checked; all other channel types
-// always pass. A type-58 channel is usable only when one of its routes matches.
+// iLiu native routes are exclusive to iLiu channels, and iLiu channels only serve
+// those routes plus their documented OpenAI-compatible chat endpoint. Advanced
+// Custom channels are usable only when one of their configured routes matches.
 func channelSupportsRequestPath(channel *model.Channel, requestPath string) bool {
 	if channel == nil {
 		return false
+	}
+	if strings.HasPrefix(requestPath, "/v1/mj/") {
+		return channel.Type == constant.ChannelTypeILiuMidjourney
+	}
+	if channel.Type == constant.ChannelTypeILiuMidjourney {
+		return requestPath == "/v1/chat/completions"
 	}
 	if channel.Type != constant.ChannelTypeAdvancedCustom {
 		return true
@@ -255,7 +262,12 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	var modelRequest ModelRequest
 	shouldSelectChannel := true
 	var err error
-	if strings.Contains(c.Request.URL.Path, "/mj/") {
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/mj/") {
+		modelRequest.Model = getILiuMidjourneyModel(c.Request.URL.Path)
+		if modelRequest.Model == "" {
+			return nil, false, fmt.Errorf("unsupported iLiu Midjourney endpoint")
+		}
+	} else if strings.Contains(c.Request.URL.Path, "/mj/") {
 		relayMode := relayconstant.Path2RelayModeMidjourney(c.Request.URL.Path)
 		if relayMode == relayconstant.RelayModeMidjourneyTaskFetch ||
 			relayMode == relayconstant.RelayModeMidjourneyTaskFetchByCondition ||
@@ -415,6 +427,29 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		modelRequest.Model = ratio_setting.WithCompactModelSuffix(modelRequest.Model)
 	}
 	return &modelRequest, shouldSelectChannel, nil
+}
+
+func getILiuMidjourneyModel(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/submit/imagine"):
+		return "mj_imagine"
+	case strings.HasSuffix(path, "/submit/blend"):
+		return "mj_blend"
+	case strings.HasSuffix(path, "/submit/describe"):
+		return "mj_describe"
+	case strings.HasSuffix(path, "/submit/shorten"):
+		return "mj_shorten"
+	case strings.HasSuffix(path, "/submit/edits"):
+		return "mj_edits"
+	case strings.HasSuffix(path, "/submit/video"):
+		return "mj_video"
+	case strings.HasSuffix(path, "/insight-face/swap"):
+		return "swap_face"
+	case strings.HasSuffix(path, "/submit/upload-discord-images"):
+		return "mj_upload"
+	default:
+		return ""
+	}
 }
 
 // 修复 #4834: GET /v1/video/generations/:task_id && /v1/video/:task_id 此前不解析 model，

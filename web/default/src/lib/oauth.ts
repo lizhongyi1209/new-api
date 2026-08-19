@@ -16,16 +16,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import {
-  getOAuthSessionStorage,
-  markOAuthBindPopup,
-} from '@/features/auth/lib/oauth-callback-mode'
-
-import { api } from './api'
-
 // ============================================================================
 // OAuth URL Builders
 // ============================================================================
+
+export interface CustomOAuthBinding {
+  provider_id: number
+  provider_name: string
+  provider_slug: string
+  provider_icon: string
+  provider_user_id: string
+}
+
+export function indexCustomOAuthBindings(
+  bindings: CustomOAuthBinding[]
+): Map<number, CustomOAuthBinding> {
+  return new Map(bindings.map((binding) => [binding.provider_id, binding]))
+}
 
 /**
  * Build GitHub OAuth URL
@@ -72,117 +79,4 @@ export function buildOIDCOAuthUrl(
  */
 export function buildLinuxDOOAuthUrl(clientId: string, state: string): string {
   return `https://connect.linux.do/oauth2/authorize?response_type=code&client_id=${clientId}&state=${state}`
-}
-
-// ============================================================================
-// OAuth Helper Functions
-// ============================================================================
-
-/**
- * Get OAuth state token
- * Includes affiliate code from localStorage if available
- */
-export async function getOAuthState(): Promise<string | null> {
-  try {
-    let path = '/api/oauth/state'
-    const affCode = localStorage.getItem('aff')
-    if (affCode && affCode.length > 0) {
-      path += `?aff=${affCode}`
-    }
-    const res = await api.get(path)
-    if (res.data.success) {
-      return res.data.data
-    }
-    return null
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to get OAuth state:', error)
-    return null
-  }
-}
-
-export type OAuthFlowMode = 'login' | 'bind'
-
-async function startOAuthFlow(
-  provider: string,
-  buildUrl: (state: string) => string,
-  mode: OAuthFlowMode
-): Promise<void> {
-  const popup = mode === 'bind' ? window.open('about:blank', '_blank') : null
-  if (mode === 'bind' && !popup) return
-
-  const state = await getOAuthState()
-  if (!state) {
-    popup?.close()
-    return
-  }
-
-  const url = buildUrl(state)
-  if (mode === 'bind' && popup) {
-    if (!markOAuthBindPopup(getOAuthSessionStorage(popup), provider, state)) {
-      popup.close()
-      return
-    }
-    popup.location.replace(url)
-    return
-  }
-
-  window.open(url, '_blank')
-}
-
-/**
- * Handle GitHub OAuth binding/login
- */
-export async function handleGitHubOAuth(
-  clientId: string,
-  mode: OAuthFlowMode = 'login'
-): Promise<void> {
-  return startOAuthFlow(
-    'github',
-    (state) => buildGitHubOAuthUrl(clientId, state),
-    mode
-  )
-}
-
-/**
- * Handle Discord OAuth binding/login
- */
-export async function handleDiscordOAuth(
-  clientId: string,
-  mode: OAuthFlowMode = 'login'
-): Promise<void> {
-  return startOAuthFlow(
-    'discord',
-    (state) => buildDiscordOAuthUrl(clientId, state),
-    mode
-  )
-}
-
-/**
- * Handle OIDC OAuth binding/login
- */
-export async function handleOIDCOAuth(
-  authUrl: string,
-  clientId: string,
-  mode: OAuthFlowMode = 'login'
-): Promise<void> {
-  return startOAuthFlow(
-    'oidc',
-    (state) => buildOIDCOAuthUrl(authUrl, clientId, state),
-    mode
-  )
-}
-
-/**
- * Handle LinuxDO OAuth binding/login
- */
-export async function handleLinuxDOOAuth(
-  clientId: string,
-  mode: OAuthFlowMode = 'login'
-): Promise<void> {
-  return startOAuthFlow(
-    'linuxdo',
-    (state) => buildLinuxDOOAuthUrl(clientId, state),
-    mode
-  )
 }

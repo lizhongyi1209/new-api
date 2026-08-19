@@ -47,6 +47,7 @@ import {
   Row,
   InputNumber,
   Select,
+  Switch,
 } from '@douyinfe/semi-ui';
 import {
   IconCreditCard,
@@ -73,7 +74,9 @@ const EditTokenModal = (props) => {
   const [groups, setGroups] = useState([]);
   const [showQuotaInput, setShowQuotaInput] = useState(false);
   const [selectedGroups, setSelectedGroups] = useState([]);
+  const [customAutoMode, setCustomAutoMode] = useState(false);
   const [dragIndex, setDragIndex] = useState(null);
+  const [maxAutoGroups, setMaxAutoGroups] = useState(5);
   const pendingTokenGroupRef = useRef(null); // 编辑时暂存令牌分组数据，等 groups 加载完成后初始化
   const isEdit = props.editingToken.id !== undefined;
 
@@ -88,7 +91,7 @@ const EditTokenModal = (props) => {
     allow_ips: '',
     group: '',
     cross_group_retry: false,
-    auto_group_priority: '',
+    auto_groups: [],
     tokenCount: 1,
   });
 
@@ -142,8 +145,8 @@ const EditTokenModal = (props) => {
   };
 
   const loadGroups = async () => {
-    let res = await API.get(`/api/user/self/groups`);
-    const { success, message, data } = res.data;
+    const groupsRes = await API.get(`/api/user/self/groups`);
+    const { success, message, data } = groupsRes.data;
     if (success) {
       let localGroupOptions = Object.entries(data).map(([group, info]) => ({
         label: info.desc,
@@ -159,23 +162,35 @@ const EditTokenModal = (props) => {
         });
       }
       setGroups(localGroupOptions);
+      try {
+        const autoGroupsRes = await API.get(`/api/token/auto-groups`);
+        const configuredMax = Number(autoGroupsRes.data?.data?.max_count);
+        if (Number.isInteger(configuredMax) && configuredMax > 0) {
+          setMaxAutoGroups(configuredMax);
+        }
+      } catch (_error) {
+        // The regular group selector remains usable if this optional setting fails.
+      }
     } else {
       showError(t(message));
     }
   };
 
   // 根据已保存数据初始化 selectedGroups
-  const initSelectedGroups = (savedGroup, savedAutoGroupPriority) => {
+  const initSelectedGroups = (savedGroup, savedAutoGroups) => {
     const groupValues = groups.map((g) => g.value);
     if (savedGroup === 'auto') {
-      if (savedAutoGroupPriority) {
+      if (savedAutoGroups) {
         try {
-          const parsed = JSON.parse(savedAutoGroupPriority);
+          const parsed = Array.isArray(savedAutoGroups)
+            ? savedAutoGroups
+            : JSON.parse(savedAutoGroups);
           if (Array.isArray(parsed) && parsed.length > 0) {
             // 有自定义优先级 → 展示具体选中的分组
             const valid = parsed.filter((g) => groupValues.includes(g));
             if (valid.length > 0) {
               setSelectedGroups(valid);
+              setCustomAutoMode(true);
               return;
             }
           }
@@ -185,11 +200,14 @@ const EditTokenModal = (props) => {
       }
       // 没有自定义优先级 → 展示 "auto"（走系统管理员设置的默认排序）
       setSelectedGroups(['auto']);
+      setCustomAutoMode(false);
     } else if (savedGroup && groupValues.includes(savedGroup)) {
       // 单选某个具体分组
       setSelectedGroups([savedGroup]);
+      setCustomAutoMode(false);
     } else {
       setSelectedGroups([]);
+      setCustomAutoMode(false);
     }
   };
 
@@ -214,12 +232,12 @@ const EditTokenModal = (props) => {
       }
       // 初始化多选分组：groups 可能尚未加载完成，先暂存，等 groups 就绪后再初始化
       if (groups.length > 0) {
-        initSelectedGroups(data.group, data.auto_group_priority || '');
+        initSelectedGroups(data.group, data.auto_groups || []);
         pendingTokenGroupRef.current = null;
       } else {
         pendingTokenGroupRef.current = {
           group: data.group,
-          auto_group_priority: data.auto_group_priority || '',
+          auto_groups: data.auto_groups || [],
         };
       }
     } else {
@@ -250,10 +268,12 @@ const EditTokenModal = (props) => {
         } else {
           setSelectedGroups([]);
         }
+        setCustomAutoMode(false);
       }
     } else {
       formApiRef.current?.reset();
       setSelectedGroups([]);
+      setCustomAutoMode(false);
       pendingTokenGroupRef.current = null;
     }
   }, [props.visiable, props.editingToken.id]);
@@ -266,7 +286,7 @@ const EditTokenModal = (props) => {
       // 编辑模式：loadToken 时 groups 未就绪，现在补初始化
       initSelectedGroups(
         pendingTokenGroupRef.current.group,
-        pendingTokenGroupRef.current.auto_group_priority,
+        pendingTokenGroupRef.current.auto_groups,
       );
       pendingTokenGroupRef.current = null;
     }
@@ -288,6 +308,7 @@ const EditTokenModal = (props) => {
   const handleGroupSelectChange = (newValues) => {
     if (!newValues || newValues.length === 0) {
       setSelectedGroups([]);
+      setCustomAutoMode(false);
       return;
     }
     const prevHadAuto = selectedGroups.includes('auto');
@@ -296,11 +317,14 @@ const EditTokenModal = (props) => {
     if (nowHasAuto && !prevHadAuto) {
       // 用户刚选中 auto → 仅保留 auto，移除其他分组
       setSelectedGroups(['auto']);
+      setCustomAutoMode(false);
       return;
     }
     if (nowHasAuto && prevHadAuto && newValues.length > 1) {
       // auto 已选中，用户又选了具体分组 → 移除 auto，保留具体分组
-      setSelectedGroups(newValues.filter((g) => g !== 'auto'));
+      const concreteGroups = newValues.filter((g) => g !== 'auto');
+      setSelectedGroups(concreteGroups);
+      setCustomAutoMode(concreteGroups.length > 1);
       return;
     }
     // 正常多选（不含 auto）：保持已有顺序，新加入的放末尾
@@ -311,7 +335,20 @@ const EditTokenModal = (props) => {
         ordered.push(g);
       }
     });
+    if (ordered.length > maxAutoGroups) {
+      showError(
+        t('每个令牌最多可选择 {{max}} 个自动分组', {
+          max: maxAutoGroups,
+        }),
+      );
+      setSelectedGroups(ordered.slice(0, maxAutoGroups));
+      setCustomAutoMode(true);
+      return;
+    }
     setSelectedGroups(ordered);
+    if (ordered.length > 1) {
+      setCustomAutoMode(true);
+    }
   };
 
   // 从优先级列表中移除某个分组
@@ -339,6 +376,7 @@ const EditTokenModal = (props) => {
 
   const resetSelectedGroups = () => {
     setSelectedGroups(['auto']);
+    setCustomAutoMode(false);
   };
 
   // 拖拽排序
@@ -377,17 +415,20 @@ const EditTokenModal = (props) => {
     return found?.ratio;
   };
 
-  // 根据 selectedGroups 推导 group 和 auto_group_priority
+  // 根据 selectedGroups 推导 group 和 auto_groups
   const deriveGroupFields = () => {
     if (selectedGroups.length === 0) {
-      return { group: '', auto_group_priority: '' };
+      return { group: '', auto_groups: [] };
     }
-    if (selectedGroups.length === 1) {
-      return { group: selectedGroups[0], auto_group_priority: '' };
+    if (selectedGroups[0] === 'auto') {
+      return { group: 'auto', auto_groups: [] };
+    }
+    if (!customAutoMode) {
+      return { group: selectedGroups[0], auto_groups: [] };
     }
     return {
       group: 'auto',
-      auto_group_priority: JSON.stringify(selectedGroups),
+      auto_groups: selectedGroups,
     };
   };
 
@@ -416,7 +457,7 @@ const EditTokenModal = (props) => {
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
       localInputs.group = derived.group;
-      localInputs.auto_group_priority = derived.auto_group_priority;
+      localInputs.auto_groups = derived.auto_groups;
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -462,7 +503,7 @@ const EditTokenModal = (props) => {
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
         localInputs.group = derived.group;
-        localInputs.auto_group_priority = derived.auto_group_priority;
+        localInputs.auto_groups = derived.auto_groups;
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
@@ -482,14 +523,22 @@ const EditTokenModal = (props) => {
     formApiRef.current?.setValues(getInitValues());
   };
 
-  const isAutoMode = selectedGroups.length === 1 && selectedGroups[0] === 'auto';
-  // 仅当多选 ≥2 个具体分组时显示优先级面板（auto 模式不显示）
-  const showPriorityPanel = selectedGroups.length >= 2 && !selectedGroups.includes('auto');
+  const isAutoMode = selectedGroups[0] === 'auto' || customAutoMode;
+  const showPriorityPanel =
+    customAutoMode &&
+    selectedGroups.length > 0 &&
+    !selectedGroups.includes('auto');
   const getGroupHint = () => {
     if (selectedGroups.length === 0) return t('不选 = 继承用户默认分组');
-    if (isAutoMode) return t('自动模式，使用系统默认分组排序');
-    if (selectedGroups.length === 1) return t('单选 = 固定使用该分组');
-    return t(`多选 = 自动模式，按优先级尝试 ${selectedGroups.length} 个分组`);
+    if (selectedGroups[0] === 'auto') {
+      return t('自动模式，使用系统默认分组排序');
+    }
+    if (customAutoMode) {
+      return t('自动模式，按优先级尝试 {{count}} 个分组', {
+        count: selectedGroups.length,
+      });
+    }
+    return t('单选 = 固定使用该分组');
   };
 
   return (
@@ -595,9 +644,30 @@ const EditTokenModal = (props) => {
                             showClear
                             style={{ width: '100%' }}
                           />
-                          <div className='text-xs mt-1' style={{ color: 'var(--semi-color-text-2)' }}>
+                          <div
+                            className='text-xs mt-1'
+                            style={{ color: 'var(--semi-color-text-2)' }}
+                          >
                             {getGroupHint()}
                           </div>
+                          {selectedGroups.length > 0 &&
+                            !selectedGroups.includes('auto') && (
+                              <div className='flex items-center justify-between mt-2'>
+                                <Typography.Text size='small'>
+                                  {t('自动分组')}
+                                </Typography.Text>
+                                <Switch
+                                  checked={customAutoMode}
+                                  onChange={(checked) => {
+                                    setCustomAutoMode(checked);
+                                    if (!checked && selectedGroups.length > 1) {
+                                      setSelectedGroups([selectedGroups[0]]);
+                                    }
+                                  }}
+                                  size='default'
+                                />
+                              </div>
+                            )}
                         </Form.Slot>
                       </div>
                     ) : (
@@ -613,7 +683,8 @@ const EditTokenModal = (props) => {
                   <Col
                     span={24}
                     style={{
-                      display: (isAutoMode || showPriorityPanel) ? 'block' : 'none',
+                      display:
+                        isAutoMode || showPriorityPanel ? 'block' : 'none',
                     }}
                   >
                     <Form.Switch
@@ -646,8 +717,14 @@ const EditTokenModal = (props) => {
                           {t('恢复默认')}
                         </Button>
                       </div>
-                      <Typography.Text type='tertiary' size='small' className='block mb-2'>
-                        {t('拖拽或点击按钮调整尝试顺序，排在上方的分组优先被使用')}
+                      <Typography.Text
+                        type='tertiary'
+                        size='small'
+                        className='block mb-2'
+                      >
+                        {t(
+                          '拖拽或点击按钮调整尝试顺序，排在上方的分组优先被使用',
+                        )}
                       </Typography.Text>
                       <div
                         style={{
@@ -856,7 +933,10 @@ const EditTokenModal = (props) => {
                         ? `▾ ${t('收起原生额度输入')}`
                         : `▸ ${t('使用原生额度输入')}`}
                     </div>
-                    <div style={{ display: showQuotaInput ? 'block' : 'none' }} className='mt-2'>
+                    <div
+                      style={{ display: showQuotaInput ? 'block' : 'none' }}
+                      className='mt-2'
+                    >
                       <Form.InputNumber
                         field='remain_quota'
                         label={t('额度')}

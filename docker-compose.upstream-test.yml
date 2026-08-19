@@ -1,0 +1,108 @@
+services:
+  upstream-test-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${UPSTREAM_TEST_GIT_COMMIT:-unknown}
+        BUILD_TIME: ${UPSTREAM_TEST_BUILD_TIME:-unknown}
+    image: new-api-upstream-test:${TEST_IMAGE_TAG:-local}
+    container_name: new-api-upstream-test-api
+    restart: unless-stopped
+    command: --log-dir /app/logs
+    ports:
+      - "127.0.0.1:${UPSTREAM_TEST_PORT:-3302}:3000"
+    environment:
+      - SQL_DSN=postgresql://newapi_test:newapi_test_password@upstream-test-postgres:5432/newapi_test
+      - REDIS_CONN_STRING=redis://upstream-test-redis:6379
+      - TZ=UTC
+      - ERROR_LOG_ENABLED=true
+      - NODE_NAME=new-api-upstream-test
+      - BATCH_UPDATE_ENABLED=true
+      - BATCH_UPDATE_INTERVAL=3
+      - SYNC_FREQUENCY=30
+      - TASK_TIMEOUT_MINUTES=30
+      - SESSION_SECRET=upstream-test-session-secret-not-for-production
+      - CRYPTO_SECRET=upstream-test-crypto-secret-not-for-production
+      - TRUSTED_PROXIES=none
+    depends_on:
+      upstream-test-postgres:
+        condition: service_healthy
+      upstream-test-redis:
+        condition: service_healthy
+    volumes:
+      - upstream_test_data:/data
+      - upstream_test_logs:/app/logs
+    networks:
+      - upstream-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:3000/api/status | grep -q '\"success\":true'"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  upstream-test-redis:
+    image: redis:7-alpine
+    container_name: new-api-upstream-test-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    networks:
+      - upstream-test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  upstream-test-postgres:
+    image: postgres:15-alpine
+    container_name: new-api-upstream-test-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: newapi_test
+      POSTGRES_PASSWORD: newapi_test_password
+      POSTGRES_DB: newapi_test
+    ports:
+      - "127.0.0.1:${UPSTREAM_TEST_POSTGRES_PORT:-35432}:5432"
+    volumes:
+      - upstream_test_pg_data:/var/lib/postgresql/data
+    networks:
+      - upstream-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U newapi_test -d newapi_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  upstream-test-mysql:
+    image: mysql:8.4
+    container_name: new-api-upstream-test-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_USER: newapi_test
+      MYSQL_PASSWORD: newapi_test_password
+      MYSQL_DATABASE: newapi_crossdb
+      MYSQL_ROOT_PASSWORD: newapi_test_root_password
+    ports:
+      - "127.0.0.1:${UPSTREAM_TEST_MYSQL_PORT:-33306}:3306"
+    volumes:
+      - upstream_test_mysql_data:/var/lib/mysql
+    networks:
+      - upstream-test-network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u newapi_test -pnewapi_test_password --silent"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+volumes:
+  upstream_test_data:
+  upstream_test_logs:
+  upstream_test_pg_data:
+  upstream_test_mysql_data:
+
+networks:
+  upstream-test-network:
+    driver: bridge

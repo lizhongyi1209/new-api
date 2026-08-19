@@ -230,12 +230,9 @@ R2_STORAGE_HOSTS="api.o1key.cn,cf-api.o1key.cn"
 LOCAL_STORAGE_HOSTS=""
 ```
 
-### Q: 上传的图片没有压缩？
+### Q: 上传的图片会被重新编码吗？
 
-使用 `compression` 参数（在代码中调用 `UploadBase64ImageToLocalCompressed`）：
-- `"jpg"` - JPEG 压缩（quality 95）
-- `"webp"` - WebP 压缩
-- `"origin"` - 保持原格式
+不会。`UploadBase64ImageToLocal` 保持原始图片字节，仅检测格式用于生成正确的文件扩展名。
 
 ## 测试
 

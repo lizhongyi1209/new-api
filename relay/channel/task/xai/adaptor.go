@@ -120,14 +120,35 @@ func (a *TaskAdaptor) ParseTaskResult(body []byte) (*relaycommon.TaskInfo, error
 		return nil, err
 	}
 	result := &relaycommon.TaskInfo{}
+	if response.Progress != nil {
+		progress := *response.Progress
+		if progress < 0 {
+			progress = 0
+		} else if progress > 100 {
+			progress = 100
+		}
+		result.Progress = fmt.Sprintf("%d%%", progress)
+	}
 	switch response.Status {
 	case "pending":
 		result.Status = model.TaskStatusInProgress
 	case "done":
 		result.Status = model.TaskStatusSuccess
+		if result.Progress == "" {
+			result.Progress = taskcommon.ProgressComplete
+		}
 		if response.Video != nil {
 			result.Url = response.Video.URL
-			result.Metadata = map[string]any{"duration": response.Video.Duration}
+			result.Metadata = map[string]any{
+				"duration":           response.Video.Duration,
+				"respect_moderation": response.Video.RespectModeration,
+			}
+			if response.Video.FileOutput != nil {
+				result.Metadata["file_output"] = response.Video.FileOutput
+			}
+			if response.Video.StorageError != nil {
+				result.Metadata["storage_error"] = *response.Video.StorageError
+			}
 		}
 	case "failed", "expired":
 		result.Status = model.TaskStatusFailure
@@ -137,6 +158,53 @@ func (a *TaskAdaptor) ParseTaskResult(body []byte) (*relaycommon.TaskInfo, error
 		}
 	default:
 		return nil, fmt.Errorf("unknown xAI video status %q", response.Status)
+	}
+	if response.Usage != nil {
+		if response.Usage.InputTokens != nil && *response.Usage.InputTokens > 0 {
+			result.PromptTokens = *response.Usage.InputTokens
+		}
+		if response.Usage.OutputTokens != nil && *response.Usage.OutputTokens > 0 {
+			result.CompletionTokens = *response.Usage.OutputTokens
+		}
+		if response.Usage.TotalTokens != nil && *response.Usage.TotalTokens > 0 {
+			result.TotalTokens = *response.Usage.TotalTokens
+		}
+		if result.Metadata == nil {
+			result.Metadata = map[string]any{}
+		}
+		result.Metadata["cost_in_usd_ticks"] = response.Usage.CostInUSDTicks
+		if response.Usage.InputTokensDetails != nil {
+			cachedTokens := response.Usage.InputTokensDetails.CachedTokens
+			textTokens := response.Usage.InputTokensDetails.TextTokens
+			imageTokens := response.Usage.InputTokensDetails.ImageTokens
+			if cachedTokens < 0 {
+				cachedTokens = 0
+			}
+			if textTokens < 0 {
+				textTokens = 0
+			}
+			if imageTokens < 0 {
+				imageTokens = 0
+			}
+			result.InputTokensByModality = map[string]int{"text": textTokens, "image": imageTokens}
+			result.Metadata["cached_tokens"] = cachedTokens
+		}
+		if response.Usage.OutputTokensDetails != nil {
+			textTokens := response.Usage.OutputTokensDetails.TextTokens
+			imageTokens := response.Usage.OutputTokensDetails.ImageTokens
+			reasoningTokens := response.Usage.OutputTokensDetails.ReasoningTokens
+			if textTokens < 0 {
+				textTokens = 0
+			}
+			if imageTokens < 0 {
+				imageTokens = 0
+			}
+			if reasoningTokens < 0 {
+				reasoningTokens = 0
+			}
+			result.OutputTokensByModality = map[string]int{"text": textTokens, "image": imageTokens}
+			result.ThoughtTokens = reasoningTokens
+		}
 	}
 	return result, nil
 }

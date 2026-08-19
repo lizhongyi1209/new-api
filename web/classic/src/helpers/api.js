@@ -26,16 +26,83 @@ import {
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
 
+const dashboardBaseURL = import.meta.env.VITE_REACT_APP_SERVER_URL || '';
+let dashboardAccessToken = '';
+let dashboardRefreshPromise = null;
+let dashboardBootstrapPromise = null;
+
+export function getAuthUser(data) {
+  return data?.user || data;
+}
+
+export function setDashboardAuthBundle(data) {
+  dashboardAccessToken = data?.access_token || '';
+  return getAuthUser(data);
+}
+
+export function clearDashboardAuthentication() {
+  dashboardAccessToken = '';
+}
+
+export async function logoutDashboardSession() {
+  try {
+    await API.post('/api/user/auth/logout', null, {
+      skipAuthRefresh: true,
+      skipErrorHandler: true,
+    });
+  } finally {
+    try {
+      await API.get('/api/user/logout', {
+        skipAuthRefresh: true,
+        skipErrorHandler: true,
+      });
+    } finally {
+      clearDashboardAuthentication();
+      localStorage.removeItem('user');
+    }
+  }
+}
+
+async function refreshDashboardAuthentication() {
+  if (dashboardRefreshPromise) return dashboardRefreshPromise;
+  dashboardRefreshPromise = axios
+    .post(`${dashboardBaseURL}/api/user/auth/refresh`, null, {
+      withCredentials: true,
+    })
+    .then((response) => {
+      if (!response.data?.success || !response.data?.data?.access_token) {
+        throw new Error(response.data?.message || '会话刷新失败');
+      }
+      setDashboardAuthBundle(response.data.data);
+      return response.data.data;
+    })
+    .finally(() => {
+      dashboardRefreshPromise = null;
+    });
+  return dashboardRefreshPromise;
+}
+
+function createAPIInstance() {
+  const instance = axios.create({
+    baseURL: dashboardBaseURL,
+    withCredentials: true,
+    headers: {
+      'New-API-User': getUserIdFromLocalStorage(),
+      'Cache-Control': 'no-store',
+    },
+  });
+  patchAPIInstance(instance);
+  return instance;
+}
+
 export let API = axios.create({
-  baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-    ? import.meta.env.VITE_REACT_APP_SERVER_URL
-    : '',
+  baseURL: dashboardBaseURL,
+  withCredentials: true,
   headers: {
     'New-API-User': getUserIdFromLocalStorage(),
     'Cache-Control': 'no-store',
   },
 });
-
 
 function redirectToOAuthUrl(url, options = {}) {
   const { openInNewTab = false } = options;
@@ -48,7 +115,6 @@ function redirectToOAuthUrl(url, options = {}) {
 
   window.location.assign(targetUrl);
 }
-
 
 function patchAPIInstance(instance) {
   const originalGet = instance.get.bind(instance);
@@ -76,35 +142,61 @@ function patchAPIInstance(instance) {
     inFlightGetRequests.set(key, reqPromise);
     return reqPromise;
   };
+
+  instance.interceptors.request.use(async (config) => {
+    if (dashboardBootstrapPromise && !config.skipAuthRefresh) {
+      await dashboardBootstrapPromise;
+    }
+    if (dashboardAccessToken) {
+      config.headers.Authorization = `Bearer ${dashboardAccessToken}`;
+    }
+    return config;
+  });
+
+  instance.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+      const config = error.config || {};
+      const isRefreshRequest = config.url?.includes('/api/user/auth/refresh');
+      if (
+        error.response?.status === 401 &&
+        !config._dashboardAuthRetried &&
+        !config.skipAuthRefresh &&
+        !isRefreshRequest
+      ) {
+        config._dashboardAuthRetried = true;
+        try {
+          await refreshDashboardAuthentication();
+          config.headers = config.headers || {};
+          config.headers.Authorization = `Bearer ${dashboardAccessToken}`;
+          return instance.request(config);
+        } catch {
+          clearDashboardAuthentication();
+          localStorage.removeItem('user');
+        }
+      }
+      if (!config.skipErrorHandler) showError(error);
+      return Promise.reject(error);
+    },
+  );
 }
 
 patchAPIInstance(API);
 
 export function updateAPI() {
-  API = axios.create({
-    baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-      ? import.meta.env.VITE_REACT_APP_SERVER_URL
-      : '',
-    headers: {
-      'New-API-User': getUserIdFromLocalStorage(),
-      'Cache-Control': 'no-store',
-    },
-  });
-
-  patchAPIInstance(API);
+  API = createAPIInstance();
 }
 
-API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
-    if (error.config && error.config.skipErrorHandler) {
-      return Promise.reject(error);
-    }
-    showError(error);
-    return Promise.reject(error);
-  },
-);
+if (localStorage.getItem('user')) {
+  dashboardBootstrapPromise = refreshDashboardAuthentication()
+    .catch(() => {
+      clearDashboardAuthentication();
+      localStorage.removeItem('user');
+    })
+    .finally(() => {
+      dashboardBootstrapPromise = null;
+    });
+}
 
 // playground
 
@@ -240,36 +332,33 @@ export const processGroupsData = (data, userGroup) => {
 
 // 原来components中的utils.js
 
-export async function getOAuthState() {
-  let path = '/api/oauth/state';
-  let affCode = localStorage.getItem('aff');
-  if (affCode && affCode.length > 0) {
-    path += `?aff=${affCode}`;
-  }
-  const res = await API.get(path);
+export async function getOAuthState(provider, intent = 'login') {
+  const affCode = intent === 'login' ? localStorage.getItem('aff') || '' : '';
+  const res = await API.post('/api/oauth/state', {
+    provider,
+    intent,
+    aff: affCode || undefined,
+  });
   const { success, message, data } = res.data;
   if (success) {
-    return data;
+    return typeof data === 'string' ? data : data?.flow_token || '';
   } else {
     showError(message);
     return '';
   }
 }
 
-async function prepareOAuthState(options = {}) {
+async function prepareOAuthState(provider, options = {}) {
   const { shouldLogout = false } = options;
   if (shouldLogout) {
-    try {
-      await API.get('/api/user/logout', { skipErrorHandler: true });
-    } catch (err) {}
-    localStorage.removeItem('user');
+    await logoutDashboardSession().catch(() => {});
     updateAPI();
   }
-  return await getOAuthState();
+  return await getOAuthState(provider, shouldLogout ? 'login' : 'bind');
 }
 
 export async function onDiscordOAuthClicked(client_id, options = {}) {
-  const state = await prepareOAuthState(options);
+  const state = await prepareOAuthState('discord', options);
   if (!state) return;
   const redirect_uri = `${window.location.origin}/oauth/discord`;
   const response_type = 'code';
@@ -285,7 +374,7 @@ export async function onOIDCClicked(
   openInNewTab = false,
   options = {},
 ) {
-  const state = await prepareOAuthState(options);
+  const state = await prepareOAuthState('oidc', options);
   if (!state) return;
   const url = new URL(auth_url);
   url.searchParams.set('client_id', client_id);
@@ -297,7 +386,7 @@ export async function onOIDCClicked(
 }
 
 export async function onGitHubOAuthClicked(github_client_id, options = {}) {
-  const state = await prepareOAuthState(options);
+  const state = await prepareOAuthState('github', options);
   if (!state) return;
   redirectToOAuthUrl(
     `https://github.com/login/oauth/authorize?client_id=${github_client_id}&state=${state}&scope=user:email`,
@@ -308,7 +397,7 @@ export async function onLinuxDOOAuthClicked(
   linuxdo_client_id,
   options = { shouldLogout: false },
 ) {
-  const state = await prepareOAuthState(options);
+  const state = await prepareOAuthState('linuxdo', options);
   if (!state) return;
   redirectToOAuthUrl(
     `https://connect.linux.do/oauth2/authorize?response_type=code&client_id=${linuxdo_client_id}&state=${state}`,
@@ -326,7 +415,7 @@ export async function onLinuxDOOAuthClicked(
  * @param {boolean} options.shouldLogout - Whether to logout first
  */
 export async function onCustomOAuthClicked(provider, options = {}) {
-  const state = await prepareOAuthState(options);
+  const state = await prepareOAuthState(provider.slug, options);
   if (!state) return;
 
   try {

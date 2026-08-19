@@ -28,6 +28,7 @@ export {
   getRedemptionFormSchema,
   type RedemptionFormValues,
   REDEMPTION_FORM_DEFAULT_VALUES,
+  resolveRedemptionQuotaForUpdate,
   transformFormDataToPayload,
   transformRedemptionToFormDefaults,
 } from './redemption-form'

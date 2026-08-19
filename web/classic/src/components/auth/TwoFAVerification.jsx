@@ -16,7 +16,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { API, showError, showSuccess } from '../../helpers';
+import {
+  API,
+  setDashboardAuthBundle,
+  showError,
+  showSuccess,
+} from '../../helpers';
 import {
   Button,
   Card,
@@ -29,7 +34,12 @@ import React, { useState } from 'react';
 
 const { Title, Text, Paragraph } = Typography;
 
-const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
+const TwoFAVerification = ({
+  flowToken,
+  onSuccess,
+  onBack,
+  isModal = false,
+}) => {
   const [loading, setLoading] = useState(false);
   const [useBackupCode, setUseBackupCode] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
@@ -52,14 +62,15 @@ const TwoFAVerification = ({ onSuccess, onBack, isModal = false }) => {
     try {
       const res = await API.post('/api/user/login/2fa', {
         code: verificationCode,
+        flow_token: flowToken,
       });
 
       if (res.data.success) {
         showSuccess('登录成功');
-        // 保存用户信息到本地存储
-        localStorage.setItem('user', JSON.stringify(res.data.data));
+        const user = setDashboardAuthBundle(res.data.data);
+        localStorage.setItem('user', JSON.stringify(user));
         if (onSuccess) {
-          onSuccess(res.data.data);
+          onSuccess(user);
         }
       } else {
         showError(res.data.message);

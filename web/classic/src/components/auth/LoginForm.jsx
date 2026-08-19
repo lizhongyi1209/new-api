@@ -31,6 +31,7 @@ import {
   getSystemName,
   getOAuthProviderIcon,
   setUserData,
+  setDashboardAuthBundle,
   onGitHubOAuthClicked,
   onDiscordOAuthClicked,
   onOIDCClicked,
@@ -102,6 +103,7 @@ const LoginForm = () => {
     useState(false);
   const [wechatCodeSubmitLoading, setWechatCodeSubmitLoading] = useState(false);
   const [showTwoFA, setShowTwoFA] = useState(false);
+  const [twoFAFlowToken, setTwoFAFlowToken] = useState('');
   const [passkeySupported, setPasskeySupported] = useState(false);
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -135,12 +137,12 @@ const LoginForm = () => {
     (status.custom_oauth_providers || []).length > 0;
   const hasOAuthLoginOptions = Boolean(
     status.github_oauth ||
-      status.discord_oauth ||
-      status.oidc_enabled ||
-      status.wechat_login ||
-      status.linuxdo_oauth ||
-      status.telegram_oauth ||
-      hasCustomOAuthProviders,
+    status.discord_oauth ||
+    status.oidc_enabled ||
+    status.wechat_login ||
+    status.linuxdo_oauth ||
+    status.telegram_oauth ||
+    hasCustomOAuthProviders,
   );
 
   useEffect(() => {
@@ -189,14 +191,18 @@ const LoginForm = () => {
     }
     setWechatCodeSubmitLoading(true);
     try {
-      const res = await API.get(
-        `/api/oauth/wechat?code=${inputs.wechat_verification_code}`,
-      );
+      const res = await API.get('/api/oauth/wechat', {
+        params: {
+          code: inputs.wechat_verification_code,
+          aff: localStorage.getItem('aff') || undefined,
+        },
+        skipAuthRefresh: true,
+      });
       const { success, message, data } = res.data;
       if (success) {
-        userDispatch({ type: 'login', payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
-        setUserData(data);
+        const user = setDashboardAuthBundle(data);
+        userDispatch({ type: 'login', payload: user });
+        setUserData(user);
         updateAPI();
         navigate('/');
         showSuccess('登录成功！');
@@ -239,13 +245,15 @@ const LoginForm = () => {
         if (success) {
           // 检查是否需要2FA验证
           if (data && data.require_2fa) {
+            setTwoFAFlowToken(data.flow_token || '');
             setShowTwoFA(true);
             setLoginLoading(false);
             return;
           }
 
-          userDispatch({ type: 'login', payload: data });
-          setUserData(data);
+          const user = setDashboardAuthBundle(data);
+          userDispatch({ type: 'login', payload: user });
+          setUserData(user);
           updateAPI();
           showSuccess('登录成功！');
           if (username === 'root' && password === '123456') {
@@ -295,10 +303,10 @@ const LoginForm = () => {
       const res = await API.get(`/api/oauth/telegram/login`, { params });
       const { success, message, data } = res.data;
       if (success) {
-        userDispatch({ type: 'login', payload: data });
-        localStorage.setItem('user', JSON.stringify(data));
+        const user = setDashboardAuthBundle(data);
+        userDispatch({ type: 'login', payload: user });
         showSuccess('登录成功！');
-        setUserData(data);
+        setUserData(user);
         updateAPI();
         navigate('/');
       } else {
@@ -437,6 +445,11 @@ const LoginForm = () => {
       const publicKeyOptions = prepareCredentialRequestOptions(
         data?.options || data?.publicKey || data,
       );
+      const flowToken = data?.flow_token;
+      if (!flowToken) {
+        showError('登录流程已过期，请重新登录');
+        return;
+      }
       const assertion = await navigator.credentials.get({
         publicKey: publicKeyOptions,
       });
@@ -448,12 +461,14 @@ const LoginForm = () => {
 
       const finishRes = await API.post(
         '/api/user/passkey/login/finish',
-        payload,
+        { flow_token: flowToken, credential: payload },
+        { skipAuthRefresh: true },
       );
       const finish = finishRes.data;
       if (finish.success) {
-        userDispatch({ type: 'login', payload: finish.data });
-        setUserData(finish.data);
+        const user = setDashboardAuthBundle(finish.data);
+        userDispatch({ type: 'login', payload: user });
+        setUserData(user);
         updateAPI();
         showSuccess('登录成功！');
         navigate('/console');
@@ -497,6 +512,7 @@ const LoginForm = () => {
   // 返回登录页面
   const handleBackToLogin = () => {
     setShowTwoFA(false);
+    setTwoFAFlowToken('');
     setInputs({ username: '', password: '', wechat_verification_code: '' });
   };
 
@@ -938,6 +954,7 @@ const LoginForm = () => {
         centered
       >
         <TwoFAVerification
+          flowToken={twoFAFlowToken}
           onSuccess={handle2FASuccess}
           onBack={handleBackToLogin}
           isModal={true}
@@ -958,8 +975,7 @@ const LoginForm = () => {
         style={{ top: '50%', left: '-120px' }}
       />
       <div className='w-full max-w-sm mt-[60px]'>
-        {showEmailLogin ||
-        !hasOAuthLoginOptions
+        {showEmailLogin || !hasOAuthLoginOptions
           ? renderEmailLoginForm()
           : renderOAuthOptions()}
         {renderWeChatLoginModal()}

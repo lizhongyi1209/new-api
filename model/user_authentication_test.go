@@ -3,16 +3,46 @@ package model
 import (
 	"context"
 	"errors"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-redis/redis/v8"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
+
+type failCommittedAuthPublishHook struct {
+	userID      int
+	evalCount   atomic.Int64
+	afterCommit atomic.Bool
+}
+
+func (hook *failCommittedAuthPublishHook) BeforeProcess(ctx context.Context, cmd redis.Cmder) (context.Context, error) {
+	if cmd.Name() != "eval" || hook.evalCount.Add(1) != 2 {
+		return ctx, nil
+	}
+	var count int64
+	if err := DB.Unscoped().Model(&User{}).Where("id = ?", hook.userID).Count(&count).Error; err == nil && count == 0 {
+		hook.afterCommit.Store(true)
+	}
+	return ctx, errors.New("forced redis failure")
+}
+
+func (*failCommittedAuthPublishHook) AfterProcess(context.Context, redis.Cmder) error {
+	return nil
+}
+
+func (*failCommittedAuthPublishHook) BeforeProcessPipeline(ctx context.Context, _ []redis.Cmder) (context.Context, error) {
+	return ctx, nil
+}
+
+func (*failCommittedAuthPublishHook) AfterProcessPipeline(context.Context, []redis.Cmder) error {
+	return nil
+}
 
 func TestHardDeleteUserPurgesAuthenticationDataWhenRedisFails(t *testing.T) {
 	truncateTables(t)
@@ -27,24 +57,17 @@ func TestHardDeleteUserPurgesAuthenticationDataWhenRedisFails(t *testing.T) {
 
 	oldRedisEnabled, oldRDB := common.RedisEnabled, common.RDB
 	common.RedisEnabled = true
-	var cacheInvalidatedAfterCommit atomic.Bool
-	common.RDB = redis.NewClient(&redis.Options{
-		Dialer: func(context.Context, string, string) (net.Conn, error) {
-			var count int64
-			if err := DB.Unscoped().Model(&User{}).Where("id = ?", user.Id).Count(&count).Error; err == nil && count == 0 {
-				cacheInvalidatedAfterCommit.Store(true)
-			}
-			return nil, errors.New("forced redis failure")
-		},
-		MaxRetries: -1,
-	})
+	redisServer := miniredis.RunT(t)
+	common.RDB = redis.NewClient(&redis.Options{Addr: redisServer.Addr()})
+	hook := &failCommittedAuthPublishHook{userID: user.Id}
+	common.RDB.AddHook(hook)
 	t.Cleanup(func() {
 		_ = common.RDB.Close()
 		common.RedisEnabled, common.RDB = oldRedisEnabled, oldRDB
 	})
 
 	require.NoError(t, HardDeleteUserById(user.Id))
-	assert.True(t, cacheInvalidatedAfterCommit.Load())
+	assert.True(t, hook.afterCommit.Load())
 
 	var count int64
 	require.NoError(t, DB.Unscoped().Model(&User{}).Where("id = ?", user.Id).Count(&count).Error)
@@ -94,7 +117,9 @@ func TestValidateBackupCodeCanOnlySucceedOnce(t *testing.T) {
 	truncateTables(t)
 
 	const code = "ABCD-1234"
-	require.NoError(t, CreateBackupCodes(123, []string{code}))
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		return replaceBackupCodesWithTx(tx, 123, []string{code})
+	}))
 
 	const attempts = 2
 	results := make(chan bool, attempts)

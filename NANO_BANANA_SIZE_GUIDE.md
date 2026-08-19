@@ -29,7 +29,6 @@ curl -X POST https://cf-api.o1key.com/async/v1/images/generations \
     "prompt": "一只可爱的猫",
     "aspect_ratio": "1:1",
     "size": "1K",
-    "image_compression": "webp",
     "n": 1
   }'
 ```
@@ -45,7 +44,6 @@ curl -X POST https://cf-api.o1key.com/async/v1/images/generations \
     "prompt": "一只可爱的猫",
     "aspect_ratio": "16:9",
     "size": "2K",
-    "image_compression": "webp",
     "n": 1
   }'
 ```
@@ -61,7 +59,6 @@ curl -X POST https://cf-api.o1key.com/async/v1/images/generations \
     "prompt": "一只可爱的猫",
     "aspect_ratio": "16:9",
     "size": "4K",
-    "image_compression": "webp",
     "n": 1
   }'
 ```
@@ -138,9 +135,6 @@ curl -X POST https://cf-api.o1key.com/async/v1/images/generations \
   // 响应模式（可选）
   "response_modalities": ["IMAGE"],  // ["IMAGE"] 或 ["TEXT", "IMAGE"]
   
-  // 压缩模式（可选）
-  "image_compression": "webp",  // webp, jpg, origin
-  
   // 生成数量（可选）
   "n": 1,
   
@@ -178,7 +172,6 @@ for size in sizes:
             "prompt": "一只可爱的猫",
             "aspect_ratio": "1:1",
             "size": size,
-            "image_compression": "webp",
             "n": 1
         }
     )
@@ -199,15 +192,11 @@ for size in sizes:
    - 2K: 约 20-40 秒
    - 4K: 约 40-80 秒
 
-2. **文件大小**
-   - 使用 `image_compression: "webp"` 可以显著减小文件大小
-   - 4K 图片建议使用压缩
-
-3. **配额消耗**
+2. **配额消耗**
    - 不同分辨率可能消耗不同的配额
    - 具体以实际扣费为准
 
-4. **兼容性**
+3. **兼容性**
    - 旧版本可能不支持 `1K` 和 `2K`
    - 如果遇到错误，请升级到最新版本
 
@@ -260,6 +249,5 @@ payload = {"size": "1K"}
 - ✅ 支持 `1K`, `2K`, `4K` 三种分辨率
 - ✅ 可与 `aspect_ratio` 组合使用
 - ✅ 推荐使用 `2K` 作为日常使用的默认值
-- ✅ 使用 `webp` 压缩可以减小文件大小
 
 如有问题，请查看完整文档或联系技术支持。

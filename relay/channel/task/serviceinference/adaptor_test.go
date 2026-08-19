@@ -62,18 +62,19 @@ func requireBearer(t *testing.T, r *http.Request) {
 	assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 }
 
-func TestGrokOfficialRequestConvertsToServiceInferencePayload(t *testing.T) {
+func TestGrokServiceInferencePreservesOfficialImageRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
 	info.OriginModelName = "grok-imagine-video-1.5"
-	context := newTaskContextForPath("/grok/v1/videos/generations", `{
+	requestBody := `{
 		"model":"grok-imagine-video-1.5",
 		"prompt":"make the light move",
 		"image":{"image_url":"https://cdn.example.com/reference.png"},
 		"duration":15,
 		"resolution":"720p",
 		"aspect_ratio":"9:16"
-	}`)
+	}`
+	context := newTaskContextForPath("/grok/v1/videos/generations", requestBody)
 
 	adaptor := &TaskAdaptor{}
 	adaptor.Init(info)
@@ -89,15 +90,8 @@ func TestGrokOfficialRequestConvertsToServiceInferencePayload(t *testing.T) {
 	require.NoError(t, err)
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
-	var payload grokVideoRequestPayload
-	require.NoError(t, common.Unmarshal(data, &payload))
-	assert.Equal(t, "grok-imagine-video-1.5", payload.Model)
-	assert.Equal(t, "make the light move", payload.Prompt)
-	require.NotNil(t, payload.Duration)
-	assert.Equal(t, 15, *payload.Duration)
-	assert.Equal(t, "720p", payload.Resolution)
-	assert.Equal(t, "9:16", payload.AspectRatio)
-	assert.Equal(t, []grokReferenceImage{{URL: "https://cdn.example.com/reference.png"}}, payload.ReferenceImages)
+	assert.JSONEq(t, requestBody, string(data))
+	assert.NotContains(t, string(data), "reference_images")
 
 	taskRequest, err := relaycommon.GetTaskRequest(context)
 	require.NoError(t, err)
@@ -105,15 +99,16 @@ func TestGrokOfficialRequestConvertsToServiceInferencePayload(t *testing.T) {
 	assert.Equal(t, "720p", taskRequest.EffectiveResolution)
 }
 
-func TestGrokServiceInferencePayloadUsesGatewayDefaults(t *testing.T) {
+func TestGrokServiceInferenceDoesNotInjectWrapperDefaults(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
 	info.OriginModelName = "grok-imagine-video-1.5"
-	context := newTaskContextForPath("/grok/v1/videos/generations", `{
+	requestBody := `{
 		"model":"grok-imagine-video-1.5",
 		"prompt":"move",
 		"image":{"url":"https://cdn.example.com/reference.png"}
-	}`)
+	}`
+	context := newTaskContextForPath("/grok/v1/videos/generations", requestBody)
 
 	adaptor := &TaskAdaptor{}
 	adaptor.Init(info)
@@ -122,17 +117,52 @@ func TestGrokServiceInferencePayloadUsesGatewayDefaults(t *testing.T) {
 	require.NoError(t, err)
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
-	var payload grokVideoRequestPayload
-	require.NoError(t, common.Unmarshal(data, &payload))
-	require.NotNil(t, payload.Duration)
-	assert.Equal(t, 8, *payload.Duration)
-	assert.Equal(t, "480p", payload.Resolution)
-	assert.Equal(t, "16:9", payload.AspectRatio)
+	assert.JSONEq(t, requestBody, string(data))
+	assert.NotContains(t, string(data), "duration")
+	assert.NotContains(t, string(data), "resolution")
+	assert.NotContains(t, string(data), "aspect_ratio")
 	assert.Equal(t, map[string]float64{
 		"seconds":     8,
 		"resolution":  1,
 		"image_input": 0.65 / 0.64,
 	}, adaptor.EstimateBilling(context, info))
+}
+
+func TestGrokServiceInferenceSupportsOfficialTextAndReferenceModes(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name   string
+		body   string
+		action string
+	}{
+		{
+			name:   "text to video",
+			body:   `{"model":"grok-imagine-video-1.5","prompt":"a rocket launch"}`,
+			action: constant.TaskActionTextGenerate,
+		},
+		{
+			name:   "reference to video",
+			body:   `{"model":"grok-imagine-video-1.5","prompt":"the subject walks on stage","reference_images":[{"url":"https://cdn.example.com/subject.png"},{"image_url":"https://cdn.example.com/outfit.png"}],"duration":15,"resolution":"720p"}`,
+			action: constant.TaskActionReferenceGenerate,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+			context := newTaskContextForPath("/grok/v1/videos/generations", test.body)
+			adaptor := &TaskAdaptor{}
+			adaptor.Init(info)
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+			assert.Equal(t, test.action, info.Action)
+
+			reader, err := adaptor.BuildRequestBody(context, info)
+			require.NoError(t, err)
+			data, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			assert.JSONEq(t, test.body, string(data))
+		})
+	}
 }
 
 func TestGrokServiceInferenceAcceptsOfficialDurationAliases(t *testing.T) {
@@ -152,6 +182,7 @@ func TestGrokServiceInferenceAcceptsOfficialDurationAliases(t *testing.T) {
 				"model":"grok-imagine-video-1.5",
 				"prompt":"move",
 				"image":{"url":"https://cdn.example.com/reference.png"},
+				"aspect_ratio":"16:9",
 				`+test.field+`
 			}`)
 			adaptor := &TaskAdaptor{}
@@ -161,40 +192,73 @@ func TestGrokServiceInferenceAcceptsOfficialDurationAliases(t *testing.T) {
 			require.NoError(t, err)
 			data, err := io.ReadAll(reader)
 			require.NoError(t, err)
-			var payload grokVideoRequestPayload
+			var payload map[string]any
 			require.NoError(t, common.Unmarshal(data, &payload))
-			require.NotNil(t, payload.Duration)
-			assert.Equal(t, test.expected, *payload.Duration)
+			assert.Equal(t, float64(test.expected), payload["duration"])
+			assert.NotContains(t, payload, "seconds")
 		})
 	}
 }
 
-func TestGrokServiceInferenceRejectsUnsupportedOfficialInputs(t *testing.T) {
+func TestGrokServiceInferencePassesOfficialOnlyInputs(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	tests := []struct {
-		name string
-		body string
-		code string
+		name   string
+		path   string
+		body   string
+		action string
 	}{
 		{
-			name: "file id cannot be sent to wrapper",
-			body: `{"model":"grok-imagine-video-1.5","prompt":"move","image":{"file_id":"file-image"}}`,
-			code: "invalid_image",
+			name:   "file id image",
+			body:   `{"model":"grok-imagine-video-1.5","prompt":"move","image":{"file_id":"file-image"}}`,
+			action: constant.TaskActionGenerate,
 		},
 		{
-			name: "wrapper requires prompt",
-			body: `{"model":"grok-imagine-video-1.5","image":{"url":"https://cdn.example.com/reference.png"}}`,
-			code: "invalid_request",
+			name:   "image without prompt or aspect ratio",
+			body:   `{"model":"grok-imagine-video-1.5","image":{"url":"https://cdn.example.com/reference.png"}}`,
+			action: constant.TaskActionGenerate,
+		},
+		{
+			name:   "reference audio voice",
+			body:   `{"model":"grok-imagine-video-1.5","prompt":"speak","reference_audios":[{"voice_id":"eve"}]}`,
+			action: constant.TaskActionReferenceGenerate,
+		},
+		{
+			name:   "storage and user",
+			body:   `{"model":"grok-imagine-video-1.5","prompt":"orbit","storage_options":{"filename":"result.mp4"},"user":"user-1"}`,
+			action: constant.TaskActionTextGenerate,
+		},
+		{
+			name:   "video edit",
+			path:   "/grok/v1/videos/edits",
+			body:   `{"model":"grok-imagine-video-1.5","prompt":"add snow","video":{"url":"https://cdn.example.com/video.mp4"}}`,
+			action: constant.TaskActionVideoEdit,
+		},
+		{
+			name:   "video extension",
+			path:   "/grok/v1/videos/extensions",
+			body:   `{"model":"grok-imagine-video-1.5","prompt":"continue","video":{"file_id":"file-video"},"duration":6}`,
+			action: constant.TaskActionVideoExtend,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
-			context := newTaskContextForPath("/grok/v1/videos/generations", test.body)
-			taskErr := (&TaskAdaptor{}).ValidateRequestAndSetAction(context, info)
-			require.NotNil(t, taskErr)
-			assert.Equal(t, test.code, taskErr.Code)
-			assert.True(t, taskErr.LocalError)
+			path := test.path
+			if path == "" {
+				path = "/grok/v1/videos/generations"
+			}
+			context := newTaskContextForPath(path, test.body)
+			adaptor := &TaskAdaptor{}
+			adaptor.Init(info)
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+			assert.Equal(t, test.action, info.Action)
+
+			reader, err := adaptor.BuildRequestBody(context, info)
+			require.NoError(t, err)
+			data, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			assert.JSONEq(t, test.body, string(data))
 		})
 	}
 }

@@ -55,6 +55,7 @@ export const useSecureVerification = ({
     loading: false,
     code: '',
     apiCall: null,
+    scope: null,
   });
 
   // 检查可用的验证方式
@@ -77,6 +78,7 @@ export const useSecureVerification = ({
       loading: false,
       code: '',
       apiCall: null,
+      scope: null,
     });
     setIsModalVisible(false);
   }, []);
@@ -84,7 +86,10 @@ export const useSecureVerification = ({
   // 开始验证流程
   const startVerification = useCallback(
     async (apiCall, options = {}) => {
-      const { preferredMethod, title, description } = options;
+      const { preferredMethod, title, description, scope } = options;
+      if (!scope) {
+        throw new Error(t('验证配置错误'));
+      }
 
       // 检查验证方式
       const methods = await checkVerificationMethods();
@@ -112,6 +117,7 @@ export const useSecureVerification = ({
         apiCall,
         title,
         description,
+        scope,
       }));
       setIsModalVisible(true);
 
@@ -132,10 +138,13 @@ export const useSecureVerification = ({
 
       try {
         // 先调用验证 API，成功后后端会设置 session
-        await SecureVerificationService.verify(method, code);
+        const proof = await SecureVerificationService.verify(
+          method,
+          code,
+          verificationState.scope,
+        );
 
-        // 验证成功，调用业务 API（此时中间件会通过）
-        const result = await verificationState.apiCall();
+        const result = await verificationState.apiCall(proof?.proof_token);
 
         // 显示成功消息
         if (successMessage) {
@@ -161,6 +170,7 @@ export const useSecureVerification = ({
     },
     [
       verificationState.apiCall,
+      verificationState.scope,
       successMessage,
       onSuccess,
       onError,

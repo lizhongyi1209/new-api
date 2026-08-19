@@ -174,10 +174,9 @@ const (
 **修改**：`service/storage.go`
 ```go
 // 新增分类上传函数
-UploadBase64ImageToLocalCompressedWithCategory(
+UploadBase64ImageToLocalWithCategory(
     mimeType, 
     base64Data, 
-    compression, 
     UploadDirElements  // 可灵元素专用目录
 )
 ```

@@ -184,6 +184,8 @@ func (p *LinuxDOProvider) GetProviderPrefix() string {
 	return "linuxdo_"
 }
 
+func (p *LinuxDOProvider) ProviderUserIDColumn() string { return "linux_do_id" }
+
 // TrustLevelError indicates the user's trust level is too low
 type TrustLevelError struct {
 	Required int

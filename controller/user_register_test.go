@@ -123,3 +123,24 @@ func TestRegisterStoresInviterFromInvitationCode(t *testing.T) {
 	require.NoError(t, model.DB.Where("username = ?", "new-user").First(&registeredUser).Error)
 	assert.Equal(t, inviter.Id, registeredUser.InviterId)
 }
+
+func TestExternalRegistrationRequiresValidInvitationCode(t *testing.T) {
+	setupRegisterControllerTest(t)
+
+	_, err := resolveRequiredInviter("")
+	assert.ErrorIs(t, err, errAffiliateCodeRequired)
+	_, err = resolveRequiredInviter("unknown")
+	assert.ErrorIs(t, err, errAffiliateCodeInvalid)
+
+	inviter := model.User{
+		Username: "oauth-inviter",
+		AffCode:  "oauth-join",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+	}
+	require.NoError(t, model.DB.Create(&inviter).Error)
+
+	inviterID, err := resolveRequiredInviter(" oauth-join ")
+	require.NoError(t, err)
+	assert.Equal(t, inviter.Id, inviterID)
+}

@@ -592,7 +592,7 @@ func TaskModel2Dto(task *model.Task, includeUpstreamData bool) *dto.TaskDto {
 }
 
 // BuildGrokVideoTaskResponse exposes the stable Grok deferred-video contract
-// across supported upstreams without leaking provider IDs, cost, or moderation detail.
+// across supported upstreams without leaking provider IDs or upstream cost.
 func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 	var upstream map[string]any
 	_ = common.Unmarshal(task.Data, &upstream)
@@ -625,9 +625,7 @@ func BuildGrokVideoTaskResponse(task *model.Task) map[string]any {
 		if video != nil {
 			publicVideo := make(map[string]any, len(video))
 			for key, value := range video {
-				if key != "respect_moderation" {
-					publicVideo[key] = value
-				}
+				publicVideo[key] = value
 			}
 			if resultURL := strings.TrimSpace(task.GetResultURL()); resultURL != "" {
 				publicVideo["url"] = resultURL

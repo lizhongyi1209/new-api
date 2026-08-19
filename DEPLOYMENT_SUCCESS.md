@@ -50,7 +50,7 @@ Nginx 配置: ✓ 已加载
    - 新增 `ImageStorageProviderLocal` 
    - `SelectImageStorageProvider` 为 api.o1key.cn 返回 local
    - `GenerateLocalPresignedUploadURL` - 生成本地上传 URL
-   - `UploadBase64ImageToLocalCompressed` - 处理 base64 图片上传
+   - `UploadBase64ImageToLocal` - 处理 base64 原图上传
 
 2. **controller/storage.go**
    - 新增 `UploadLocalFile` - 接收文件上传请求

@@ -39,19 +39,6 @@ type requestPayload struct {
 	ReturnLastFrame *bool         `json:"return_last_frame,omitempty"`
 }
 
-type grokVideoRequestPayload struct {
-	Model           string               `json:"model"`
-	Prompt          string               `json:"prompt"`
-	Duration        *int                 `json:"duration,omitempty"`
-	Resolution      string               `json:"resolution"`
-	AspectRatio     string               `json:"aspect_ratio,omitempty"`
-	ReferenceImages []grokReferenceImage `json:"reference_images,omitempty"`
-}
-
-type grokReferenceImage struct {
-	URL string `json:"url"`
-}
-
 type taskResponse struct {
 	Task videoTask `json:"task"`
 }
@@ -172,20 +159,10 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	}
 	if strings.HasPrefix(modelRequest.Model, "grok-imagine-video") {
 		if modelRequest.Model != "grok-imagine-video-1.5" {
-			return service.TaskErrorWrapperLocal(fmt.Errorf("ServiceInference only supports grok-imagine-video-1.5"), "invalid_model", http.StatusBadRequest)
+			return service.TaskErrorWrapperLocal(fmt.Errorf("ServiceInference does not support model %s", modelRequest.Model), "channel_capability_mismatch", http.StatusServiceUnavailable)
 		}
-		request, taskErr := grokvideo.ParseAndValidate(c, info)
-		if taskErr != nil {
-			return taskErr
-		}
-		if strings.TrimSpace(request.Prompt) == "" {
-			return service.TaskErrorWrapperLocal(fmt.Errorf("prompt is required for ServiceInference grok video"), "invalid_request", http.StatusBadRequest)
-		}
-		imageURL := request.Image.ResolvedURL()
-		if !strings.HasPrefix(imageURL, "http://") && !strings.HasPrefix(imageURL, "https://") {
-			return service.TaskErrorWrapperLocal(fmt.Errorf("ServiceInference grok video image requires a public http(s) URL"), "invalid_image", http.StatusBadRequest)
-		}
-		return nil
+		_, taskErr := grokvideo.ParseAndValidate(c, info)
+		return taskErr
 	}
 	var nativeReq requestPayload
 	if err := common.UnmarshalBodyReusable(c, &nativeReq); err != nil {
@@ -240,35 +217,14 @@ func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *r
 
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
 	if request, ok := grokvideo.GetRequest(c); ok {
-		duration := grokvideo.DefaultDuration
-		if request.Duration != nil {
-			duration = *request.Duration
-		}
-		resolution := request.Resolution
-		if resolution == "" {
-			resolution = grokvideo.DefaultResolution
-		}
-		aspectRatio := request.AspectRatio
-		if aspectRatio == "" {
-			aspectRatio = grokvideo.DefaultAspectRatio
-		}
 		modelName := request.Model
 		if info.IsModelMapped {
 			modelName = info.UpstreamModelName
 		} else {
 			info.UpstreamModelName = modelName
 		}
-		body := grokVideoRequestPayload{
-			Model:       modelName,
-			Prompt:      request.Prompt,
-			Duration:    &duration,
-			Resolution:  resolution,
-			AspectRatio: aspectRatio,
-			ReferenceImages: []grokReferenceImage{{
-				URL: request.Image.ResolvedURL(),
-			}},
-		}
-		data, err := common.Marshal(body)
+		request.Model = modelName
+		data, err := common.Marshal(request)
 		if err != nil {
 			return nil, err
 		}

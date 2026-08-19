@@ -29,8 +29,8 @@ func TestBuildGrokVideoTaskResponse(t *testing.T) {
 	assert.Equal(t, "https://assetcache.o1key.com/output/cached-video.mp4", video["url"])
 	assert.Equal(t, float64(8), video["duration"])
 	assert.Equal(t, map[string]any{"file_id": "file-video"}, video["file_output"])
+	assert.Equal(t, true, video["respect_moderation"])
 	assert.Equal(t, float64(100), response["progress"])
-	assert.NotContains(t, video, "respect_moderation")
 	assert.NotContains(t, response, "usage")
 	assert.NotContains(t, response, "request_id")
 }
@@ -68,7 +68,7 @@ func TestBuildGrokVideoTaskResponseFromServiceInferenceWrapper(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "https://cache.example/video.mp4", video["url"])
 	assert.Equal(t, float64(5.04), video["duration"])
-	assert.NotContains(t, video, "respect_moderation")
+	assert.Equal(t, true, video["respect_moderation"])
 	assert.NotContains(t, response, "task")
 	assert.NotContains(t, response, "usage")
 }

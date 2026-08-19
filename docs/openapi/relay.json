@@ -1167,7 +1167,7 @@
       "post": {
         "summary": "创建视频生成任务",
         "deprecated": false,
-        "description": "提交视频生成任务，支持文生视频和图生视频。\n\n返回任务 ID，可通过 GET 接口查询任务状态。\n",
+        "description": "提交视频生成任务，支持多种视频模型。Seedance 2.0 支持多模态参考、首帧、首尾帧和文生视频四种生成方式。\n\n首帧、首尾帧和多模态参考互斥，不要在同一个请求中混用 `first_frame`、`last_frame` 和 `reference_image`。多模态输入中的音频不能单独作为参考，至少还需一张图片或一个视频。\n\n返回任务 ID，可通过 GET 接口查询任务状态。\n",
         "operationId": "createVideoGeneration",
         "tags": [
           "视频生成"
@@ -1177,14 +1177,134 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/VideoRequest"
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/VideoRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SeedanceVideoRequest"
+                  }
+                ]
               },
-              "example": {
-                "model": "kling-v1",
-                "prompt": "宇航员在月球上漫步",
-                "duration": 5,
-                "width": 1280,
-                "height": 720
+              "examples": {
+                "seedanceMultimodal": {
+                  "summary": "Seedance 2.0：多模态参考生视频",
+                  "description": "同时使用参考图片、参考视频和参考音频。音频不能单独作为参考，至少还需一张图片或一个视频。",
+                  "value": {
+                    "model": "seedance-2-0-260128-d-ep",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "以图片1中的人物为主体，参考视频1的运镜和动作节奏，并使用音频1作为背景音乐，生成电影感街头短片"
+                      },
+                      {
+                        "type": "image_url",
+                        "image_url": {
+                          "url": "https://example.com/character.jpg"
+                        },
+                        "role": "reference_image"
+                      },
+                      {
+                        "type": "video_url",
+                        "video_url": {
+                          "url": "https://example.com/camera-motion.mp4"
+                        },
+                        "role": "reference_video"
+                      },
+                      {
+                        "type": "audio_url",
+                        "audio_url": {
+                          "url": "https://example.com/background-music.mp3"
+                        },
+                        "role": "reference_audio"
+                      }
+                    ],
+                    "duration": 8,
+                    "resolution": "720p",
+                    "ratio": "16:9",
+                    "generate_audio": true,
+                    "watermark": false,
+                    "return_last_frame": true
+                  }
+                },
+                "seedanceFirstFrame": {
+                  "summary": "Seedance 2.0：首帧生视频",
+                  "description": "使用一张图片作为视频首帧。单张图片场景可以省略 role，但建议明确传入 first_frame。",
+                  "value": {
+                    "model": "seedance-2-0-260128-d-ep",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "人物缓慢转身看向镜头，微风吹动头发，镜头平滑向前推进"
+                      },
+                      {
+                        "type": "image_url",
+                        "image_url": {
+                          "url": "https://example.com/first-frame.jpg"
+                        },
+                        "role": "first_frame"
+                      }
+                    ],
+                    "duration": 5,
+                    "resolution": "720p",
+                    "ratio": "16:9",
+                    "generate_audio": true,
+                    "watermark": false,
+                    "return_last_frame": true
+                  }
+                },
+                "seedanceFirstLastFrame": {
+                  "summary": "Seedance 2.0：首尾帧生视频",
+                  "description": "第一张图片必须标记为 first_frame，第二张图片必须标记为 last_frame。",
+                  "value": {
+                    "model": "seedance-2-0-260128-d-ep",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "从雨夜街头平滑过渡到清晨海边，人物动作和镜头运动保持自然连续"
+                      },
+                      {
+                        "type": "image_url",
+                        "image_url": {
+                          "url": "https://example.com/first-frame.jpg"
+                        },
+                        "role": "first_frame"
+                      },
+                      {
+                        "type": "image_url",
+                        "image_url": {
+                          "url": "https://example.com/last-frame.jpg"
+                        },
+                        "role": "last_frame"
+                      }
+                    ],
+                    "duration": 8,
+                    "resolution": "720p",
+                    "ratio": "16:9",
+                    "generate_audio": true,
+                    "watermark": false,
+                    "return_last_frame": true
+                  }
+                },
+                "seedanceTextToVideo": {
+                  "summary": "Seedance 2.0：文生视频",
+                  "description": "只传文本提示词，不传任何媒体项。",
+                  "value": {
+                    "model": "seedance-2-0-260128-d-ep",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "电影感航拍镜头掠过日出时的未来海滨城市，云层流动，暖色阳光映照玻璃建筑"
+                      }
+                    ],
+                    "duration": 8,
+                    "resolution": "720p",
+                    "ratio": "16:9",
+                    "generate_audio": true,
+                    "watermark": false,
+                    "return_last_frame": false
+                  }
+                }
               }
             }
           },
@@ -4229,6 +4349,136 @@
             "description": "扩展参数 (如 negative_prompt, style, quality_level 等)",
             "additionalProperties": true,
             "properties": {}
+          }
+        }
+      },
+      "SeedanceMediaURL": {
+        "type": "object",
+        "description": "Seedance 参考媒体地址",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "公网可访问的媒体 URL。图片还支持已创建的 asset:// 素材地址。",
+            "example": "https://example.com/reference.jpg"
+          }
+        }
+      },
+      "SeedanceContentItem": {
+        "type": "object",
+        "description": "Seedance 输入内容项。type 为 text 时填写 text；媒体类型填写对应的 URL 对象和 role。",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "输入内容类型",
+            "enum": [
+              "text",
+              "image_url",
+              "video_url",
+              "audio_url"
+            ],
+            "example": "image_url"
+          },
+          "text": {
+            "type": "string",
+            "description": "文本提示词，仅 type=text 时使用",
+            "example": "人物缓慢转身看向镜头"
+          },
+          "image_url": {
+            "$ref": "#/components/schemas/SeedanceMediaURL"
+          },
+          "video_url": {
+            "$ref": "#/components/schemas/SeedanceMediaURL"
+          },
+          "audio_url": {
+            "$ref": "#/components/schemas/SeedanceMediaURL"
+          },
+          "role": {
+            "type": "string",
+            "description": "媒体用途。首帧、首尾帧和多模态参考场景互斥。",
+            "enum": [
+              "reference_image",
+              "reference_video",
+              "reference_audio",
+              "first_frame",
+              "last_frame"
+            ],
+            "example": "reference_image"
+          }
+        }
+      },
+      "SeedanceVideoRequest": {
+        "type": "object",
+        "description": "Seedance 2.0 视频生成请求。支持多模态参考、首帧、首尾帧和文生视频。",
+        "required": [
+          "model",
+          "content"
+        ],
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "本站公开的 Seedance 模型名称",
+            "example": "seedance-2-0-260128-d-ep"
+          },
+          "content": {
+            "type": "array",
+            "description": "按顺序排列的文本、图片、视频和音频输入",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/SeedanceContentItem"
+            }
+          },
+          "duration": {
+            "type": "integer",
+            "description": "视频时长，单位为秒",
+            "minimum": 4,
+            "maximum": 15,
+            "example": 8
+          },
+          "resolution": {
+            "type": "string",
+            "description": "输出分辨率，具体支持范围取决于模型",
+            "enum": [
+              "480p",
+              "720p",
+              "1080p",
+              "4k"
+            ],
+            "example": "720p"
+          },
+          "ratio": {
+            "type": "string",
+            "description": "输出宽高比",
+            "enum": [
+              "adaptive",
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16",
+              "21:9"
+            ],
+            "example": "16:9"
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "description": "是否生成同步音频",
+            "example": true
+          },
+          "watermark": {
+            "type": "boolean",
+            "description": "是否添加水印",
+            "example": false
+          },
+          "return_last_frame": {
+            "type": "boolean",
+            "description": "是否在任务结果中返回生成视频的最后一帧",
+            "example": true
           }
         }
       },
