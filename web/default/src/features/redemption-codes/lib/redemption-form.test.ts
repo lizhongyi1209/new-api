@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import assert from 'node:assert/strict'
-import { afterEach, test } from 'node:test'
+import { afterEach, expect, test } from 'vitest'
 
 import {
   getEditableQuotaStep,
@@ -42,16 +41,15 @@ test('keeps the exact stored quota when another redemption field changes', () =>
   const displayed = quotaUnitsToEditableAmount(storedQuota)
   const converted = parseQuotaFromDollars(displayed)
 
-  assert.equal(displayed, 1)
-  assert.equal(converted, 500000)
-  assert.equal(
-    resolveRedemptionQuotaForUpdate(storedQuota, converted, false),
+  expect(displayed).toBe(1)
+  expect(converted).toBe(500000)
+  expect(resolveRedemptionQuotaForUpdate(storedQuota, converted, false)).toBe(
     storedQuota
   )
 })
 
 test('uses the converted quota after the operator edits the quota field', () => {
-  assert.equal(resolveRedemptionQuotaForUpdate(500001, 1000000, true), 1000000)
+  expect(resolveRedemptionQuotaForUpdate(500001, 1000000, true)).toBe(1000000)
 })
 
 test('uses configured CNY precision for editable quota and input step', () => {
@@ -63,7 +61,7 @@ test('uses configured CNY precision for editable quota and input step', () => {
     },
   })
 
-  assert.equal(quotaUnitsToEditableAmount(13888889), 200)
-  assert.equal(parseQuotaFromDollars(200), 13888889)
-  assert.equal(getEditableQuotaStep(), 0.0001)
+  expect(quotaUnitsToEditableAmount(13888889)).toBe(200)
+  expect(parseQuotaFromDollars(200)).toBe(13888889)
+  expect(getEditableQuotaStep()).toBe(0.0001)
 })

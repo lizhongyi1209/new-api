@@ -116,6 +116,11 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAIResponsesCompaction)
 		})
 
+		// alpha search route
+		httpRouter.POST("/alpha/search", func(c *gin.Context) {
+			controller.Relay(c, types.RelayFormatAlphaSearch)
+		})
+
 		// image related routes
 		httpRouter.POST("/edits", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)

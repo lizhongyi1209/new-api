@@ -134,6 +134,10 @@ func (a *Adaptor) GetChannelName() string {
 	return ChannelName
 }
 
+func (a *Adaptor) SupportsStreamOptions() bool {
+	return true
+}
+
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if info.RelayMode != relayconstant.RelayModeResponses && info.RelayMode != relayconstant.RelayModeResponsesCompact {
 		return "", errors.New("codex channel: only /v1/responses and /v1/responses/compact are supported")

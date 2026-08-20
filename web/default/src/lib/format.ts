@@ -137,7 +137,12 @@ export function getEditableQuotaStep(): number {
     return 1
   }
 
-  return 10 ** -getCurrencyFractionDigits(0)
+  // Divide instead of using a negative exponent: in V8, `10 ** -4` evaluates to
+  // 0.00009999999999999999 (and `10 ** -5` likewise), which leaks into the
+  // number input's `step` attribute and makes the browser reject otherwise
+  // valid 4-decimal amounts. `1 / 10 ** digits` is exact for every digit count
+  // we support.
+  return 1 / 10 ** getCurrencyFractionDigits(0)
 }
 
 // ============================================================================

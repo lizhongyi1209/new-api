@@ -38,6 +38,8 @@ func GetAndValidateRequest(c *gin.Context, format types.RelayFormat) (request dt
 		request, err = GetAndValidateResponsesRequest(c)
 	case types.RelayFormatOpenAIResponsesCompaction:
 		request, err = GetAndValidateResponsesCompactionRequest(c)
+	case types.RelayFormatAlphaSearch:
+		request, err = GetAndValidateAlphaSearchRequest(c)
 
 	case types.RelayFormatOpenAIImage:
 		request, err = GetAndValidOpenAIImageRequest(c, relayMode)
@@ -386,6 +388,24 @@ func GetAndValidateGeminiBatchEmbeddingRequest(c *gin.Context) (*dto.GeminiBatch
 	err := common.UnmarshalBodyReusable(c, request)
 	if err != nil {
 		return nil, err
+	}
+	return request, nil
+}
+
+func GetAndValidateAlphaSearchRequest(c *gin.Context) (*dto.AlphaSearchRequest, error) {
+	request := &dto.AlphaSearchRequest{}
+	err := common.UnmarshalBodyReusable(c, request)
+	if err != nil {
+		return nil, err
+	}
+	if request.Model == "" {
+		return nil, errors.New("model is required")
+	}
+	// Store raw body for forwarding unknown fields
+	if bodyBytes, exists := c.Get("request_body"); exists {
+		if rawBody, ok := bodyBytes.([]byte); ok {
+			request.RawBody = rawBody
+		}
 	}
 	return request, nil
 }

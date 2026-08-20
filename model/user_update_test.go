@@ -278,3 +278,72 @@ func TestResetUserPasswordByEmailRequiresSingleActiveMatch(t *testing.T) {
 	err = ResetUserPasswordByEmail("missing@example.com", "NewPassword123")
 	require.True(t, errors.Is(err, ErrEmailNotFound))
 }
+
+func TestUserUpdateDoesNotOverwriteAffiliateFields(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := User{
+		Id:              20,
+		Username:        "aff-race-user",
+		Password:        "password",
+		DisplayName:     "before",
+		Status:          common.UserStatusEnabled,
+		AffCode:         "aff-race-code",
+		AffCount:        1,
+		AffQuota:        100,
+		AffHistoryQuota: 100,
+	}
+	require.NoError(t, DB.Create(&user).Error)
+
+	staleUser, err := GetUserById(user.Id, true)
+	require.NoError(t, err)
+
+	// A concurrent invite credits the inviter while the snapshot above is held.
+	require.NoError(t, inviteUser(user.Id))
+
+	staleUser.DisplayName = "after"
+	require.NoError(t, staleUser.Update(false))
+
+	var got User
+	require.NoError(t, DB.First(&got, user.Id).Error)
+	assert.Equal(t, "after", got.DisplayName)
+	assert.Equal(t, 2, got.AffCount)
+	assert.Equal(t, 100+common.QuotaForInviter, got.AffQuota)
+	assert.Equal(t, 100+common.QuotaForInviter, got.AffHistoryQuota)
+}
+
+func TestUserUpdateDoesNotOverwriteAccessToken(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	user := User{
+		Id:       21,
+		Username: "token-race-user",
+		Password: "password",
+		Status:   common.UserStatusEnabled,
+		AffCode:  "token-race-code",
+	}
+	user.SetAccessToken("original-token")
+	require.NoError(t, DB.Create(&user).Error)
+
+	staleUser, err := GetUserById(user.Id, true)
+	require.NoError(t, err)
+
+	// A concurrent rotation replaces the token while the snapshot is held.
+	require.NoError(t, UpdateUserAccessToken(user.Id, "rotated-token"))
+
+	staleUser.DisplayName = "after"
+	require.NoError(t, staleUser.Update(false))
+
+	var got User
+	require.NoError(t, DB.First(&got, user.Id).Error)
+	assert.Equal(t, "after", got.DisplayName)
+	require.NotNil(t, got.AccessToken)
+	assert.Equal(t, "rotated-token", *got.AccessToken)
+}
+
+func TestUpdateUserAccessTokenRejectsMissingUser(t *testing.T) {
+	setupUserUpdateTestState(t)
+
+	assert.True(t, errors.Is(UpdateUserAccessToken(999999, "x"), gorm.ErrRecordNotFound))
+	assert.Error(t, UpdateUserAccessToken(0, "x"))
+}

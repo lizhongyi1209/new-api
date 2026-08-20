@@ -368,6 +368,7 @@ type ResponsesOutput struct {
 	Content   []ResponsesOutputContent `json:"content"`
 	Quality   string                   `json:"quality"`
 	Size      string                   `json:"size"`
+	Result    string                   `json:"result"`
 	CallId    string                   `json:"call_id,omitempty"`
 	Name      string                   `json:"name,omitempty"`
 	Arguments json.RawMessage          `json:"arguments,omitempty"`
@@ -399,11 +400,17 @@ type ResponsesReasoningSummaryPart struct {
 
 const (
 	BuildInToolWebSearchPreview = "web_search_preview"
+	BuildInToolWebSearch        = "web_search"
+	BuildInToolGoogleSearch     = "google_search"
+	BuildInToolImageGeneration  = "image_generation"
 	BuildInToolFileSearch       = "file_search"
 )
 
 const (
-	BuildInCallWebSearchCall = "web_search_call"
+	BuildInCallWebSearchCall  = "web_search_call"
+	BuildInCallFileSearchCall = "file_search_call"
+	BuildInCallFunctionCall   = "function_call"
+	BuildInCallToolUse        = "tool_use"
 )
 
 const (

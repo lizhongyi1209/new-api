@@ -79,17 +79,23 @@ func ChannelType2APIType(channelType int) (int, bool) {
 		apiType = constant.APITypeAdvancedCustom
 	case constant.ChannelTypeILiuMidjourney:
 		apiType = constant.APITypeILiuMidjourney
+	case constant.ChannelTypeSub2API:
+		apiType = constant.APITypeSub2API
+	case constant.ChannelTypeNewAPI:
+		apiType = constant.APITypeNewAPI
 	}
 	if apiType == -1 {
 		return constant.APITypeOpenAI, false
 	}
 	return apiType, true
 }
-func IsResponsesCompactAPIType(apiType int) bool {
+func SupportsResponsesCompact(channelType, apiType int) bool {
 	switch apiType {
 	case constant.APITypeOpenAI,
 		constant.APITypeCodex,
-		constant.APITypeAdvancedCustom:
+		constant.APITypeAdvancedCustom,
+		constant.APITypeSub2API,
+		constant.APITypeNewAPI:
 		return true
 	default:
 		return false

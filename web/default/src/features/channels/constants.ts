@@ -81,12 +81,14 @@ export const CHANNEL_TYPES = {
   60: 'TokenMartSeedance',
   61: 'xinhankr',
   62: 'iLiu Midjourney',
+  63: 'Sub2API',
+  64: 'New API',
 } as const
 
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
   1, 14, 33, 24, 43, 3, 41, 48, 58, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15, 46,
   23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 2, 5, 36,
-  50, 51, 52, 53, 54, 55, 56, 60, 61, 62,
+  50, 51, 52, 53, 54, 55, 56, 60, 61, 62, 63, 64,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -388,7 +390,42 @@ export const FIELD_DESCRIPTIONS = {
 // ============================================================================
 
 export const MODEL_FETCHABLE_TYPES = new Set([
-  1, 4, 14, 17, 20, 23, 24, 25, 26, 27, 31, 34, 35, 40, 42, 43, 47, 48, 57,
+  1, 4, 14, 17, 20, 23, 24, 25, 26, 27, 31, 34, 35, 40, 42, 43, 47, 48, 57, 59,
+  63, 64,
+])
+
+// Gateway-style channels that relay a full upstream protocol and therefore
+// support passing client fields through untouched.
+// NOTE: our channel numbering diverges from upstream. Upstream uses
+// 58=Advanced Custom, 59=Sub2API, 60=New API; ours are 59, 63 and 64.
+// Do not copy upstream's literals verbatim — 58 is TencentVideo here and 60 is
+// TokenMartSeedance.
+export const CHANNEL_TYPE_ADVANCED_CUSTOM = 59
+export const CHANNEL_TYPE_SUB2API = 63
+export const CHANNEL_TYPE_NEW_API = 64
+
+export const FIELD_PASSTHROUGH_TYPES = new Set([
+  1,
+  14,
+  57,
+  CHANNEL_TYPE_ADVANCED_CUSTOM,
+  CHANNEL_TYPE_SUB2API,
+  CHANNEL_TYPE_NEW_API,
+])
+
+export const OPENAI_FIELD_PASSTHROUGH_TYPES = new Set([
+  1,
+  57,
+  CHANNEL_TYPE_ADVANCED_CUSTOM,
+  CHANNEL_TYPE_SUB2API,
+  CHANNEL_TYPE_NEW_API,
+])
+
+export const CLAUDE_FIELD_PASSTHROUGH_TYPES = new Set([
+  14,
+  CHANNEL_TYPE_ADVANCED_CUSTOM,
+  CHANNEL_TYPE_SUB2API,
+  CHANNEL_TYPE_NEW_API,
 ])
 
 export const TYPE_TO_KEY_PROMPT: Record<number, string> = {
