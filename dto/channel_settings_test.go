@@ -46,7 +46,7 @@ func TestAdvancedCustomValidateResponsesToChatConverterPath(t *testing.T) {
 }
 
 func TestChannelOtherSettingsValidateImageOutputStrategy(t *testing.T) {
-	for _, strategy := range []string{"", ImageOutputStrategyOSS, ImageOutputStrategyR2, ImageOutputStrategyPassthrough} {
+	for _, strategy := range []string{"", ImageOutputStrategyOSS, ImageOutputStrategyR2, ImageOutputStrategyLocalTemp, ImageOutputStrategyPassthrough} {
 		t.Run(strategy, func(t *testing.T) {
 			settings := ChannelOtherSettings{ImageOutputStrategy: strategy}
 			require.NoError(t, settings.ValidateImageOutputStrategy())

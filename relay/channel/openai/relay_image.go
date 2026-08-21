@@ -60,16 +60,12 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 
 	updateOpenAIImageCount(info, gjson.GetBytes(responseBody, "data.#").Int())
 
-	// When the client requests URL format (?image_format=url), upload every
-	// returned image to R2 and rewrite the response so data[i] carries a short
-	// url instead of a multi-MB b64_json blob. This mirrors the Gemini native
-	// path (replaceInlineDataWithR2URLs): some upstreams (e.g. gpt-image) return
-	// b64_json, others return a transient upstream url — both are normalized to a
-	// stable R2 url here so the browser only ever holds a tiny string. On any
-	// failure we fall back to the original body so a generation never fails just
-	// because the rewrite/upload did.
+	// When a storage strategy is selected (or ?image_format=url requests the
+	// historical R2 behavior), replace large base64/transient upstream values
+	// with a storage URL. Durable storage failures keep the historical raw-body
+	// fallback; local_temp fails closed so it never leaks a non-local image.
 	strategy := info.ChannelOtherSettings.ImageOutputStrategy
-	shouldRewrite := strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 ||
+	shouldRewrite := dto.IsImageOutputStorageStrategy(strategy) ||
 		(strategy == "" && strings.EqualFold(c.Query("image_format"), "url"))
 	if shouldRewrite {
 		uploadStrategy := strategy
@@ -77,6 +73,9 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 			uploadStrategy = dto.ImageOutputStrategyR2
 		}
 		if rewritten, err := uploadOpenAIImagesToStorage(c, responseBody, uploadStrategy); err != nil {
+			if strategy == dto.ImageOutputStrategyLocalTemp {
+				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			}
 			logger.LogError(c, "openai image storage upload failed, falling back to raw response: "+err.Error())
 			service.IOCopyBytesGracefully(c, resp, responseBody)
 		} else {
@@ -178,6 +177,18 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 			}
 			if chunk.Type == "image_generation.completed" || chunk.Type == "image_edit.completed" {
 				completedImages++
+				if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp {
+					rewritten, err := uploadOpenAIStreamImageToStorage(c, raw, dto.ImageOutputStrategyLocalTemp)
+					if err != nil {
+						sr.Stop(fmt.Errorf("temporary image storage upload: %w", err))
+						return
+					}
+					raw = rewritten
+				}
+			}
+			if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp &&
+				(chunk.Type == "image_generation.partial_image" || chunk.Type == "image_edit.partial_image") {
+				return
 			}
 		}
 		if err := writeOpenaiImageStreamChunk(c, raw); err != nil {
@@ -284,6 +295,12 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
+	if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp {
+		responseBody, err = uploadOpenAIImagesToStorage(c, responseBody, dto.ImageOutputStrategyLocalTemp)
+		if err != nil {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		}
+	}
 
 	// Only decode usage/error. Do not unmarshal data[] into dto.ImageResponse:
 	// b64_json values are large and would be copied into Go strings and then
@@ -380,16 +397,16 @@ func writeOpenaiImageStreamDone(c *gin.Context) error {
 }
 
 // uploadOpenAIImagesToStorage rewrites an OpenAI image response body so every image
-// in data[] is served from the configured storage as a stable URL.
+// in data[] is served from the configured storage URL.
 //   - data[i].url      : a transient upstream url; downloaded then re-uploaded
-//     to R2 so the link does not expire out from under the browser.
+//     so the upstream link does not expire out from under the browser.
 //
-// On success the rewritten body carries data[i].url (pointing at R2) with
+// On success the rewritten body carries data[i].url with
 // b64_json cleared; all other top-level fields (created/usage/size/quality/...)
 // are preserved verbatim by editing only the "data" field of the raw object.
 // Images are uploaded without re-encoding. Returns an error only when the body
-// cannot be parsed or an upload fails, in which case the caller falls back to
-// the raw response.
+// cannot be parsed or an upload fails; the caller decides whether fallback is
+// allowed for the selected strategy.
 func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) ([]byte, error) {
 	var root map[string]json.RawMessage
 	if err := common.Unmarshal(body, &root); err != nil {
@@ -445,4 +462,34 @@ func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) (
 		return nil, fmt.Errorf("marshal rewritten response: %w", err)
 	}
 	return out, nil
+}
+
+func uploadOpenAIStreamImageToStorage(c *gin.Context, body []byte, strategy string) ([]byte, error) {
+	b64 := gjson.GetBytes(body, "b64_json").String()
+	mimeType := "image/png"
+	if b64 == "" {
+		upstreamURL := gjson.GetBytes(body, "url").String()
+		if upstreamURL == "" {
+			return nil, fmt.Errorf("completed image event has no b64_json or url")
+		}
+		var err error
+		mimeType, b64, err = service.GetImageFromUrl(upstreamURL)
+		if err != nil {
+			return nil, fmt.Errorf("download completed image: %w", err)
+		}
+	}
+
+	url, err := service.UploadBase64ImageWithOutputStrategy(mimeType, b64, strategy, c.Request.Host)
+	if err != nil {
+		return nil, err
+	}
+	rewritten, err := sjson.SetBytes(body, "url", url)
+	if err != nil {
+		return nil, err
+	}
+	rewritten, err = sjson.DeleteBytes(rewritten, "b64_json")
+	if err != nil {
+		return nil, err
+	}
+	return rewritten, nil
 }

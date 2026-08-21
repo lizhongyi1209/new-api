@@ -260,7 +260,9 @@ export const channelFormSchema = z
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
     azure_responses_version: z.string().optional(), // Azure specific
-    image_output_strategy: z.enum(['oss', 'r2', 'passthrough']).optional(),
+    image_output_strategy: z
+      .enum(['oss', 'r2', 'local_temp', 'passthrough'])
+      .optional(),
     // Field passthrough controls (stored in settings JSON)
     allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
     disable_store: z.boolean().optional(), // OpenAI only
@@ -498,7 +500,12 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
-  let imageOutputStrategy: 'oss' | 'r2' | 'passthrough' | undefined
+  let imageOutputStrategy:
+    | 'oss'
+    | 'r2'
+    | 'local_temp'
+    | 'passthrough'
+    | undefined
 
   if (channel.settings) {
     try {

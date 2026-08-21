@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -42,4 +43,6 @@ func SetStaticUploadRouter(router *gin.Engine) {
 	}
 
 	router.Static("/upload", uploadDir)
+	router.GET("/tmp/output/:filename", controller.ServeTemporaryOutputImage)
+	router.HEAD("/tmp/output/:filename", controller.ServeTemporaryOutputImage)
 }

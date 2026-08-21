@@ -554,6 +554,20 @@ func TestPrepareGenerateImageResultsPreservesUpstreamShapeWithoutStorageStrategy
 	}
 }
 
+func TestPrepareGenerateImageResultsStoresLocalTemporaryOutput(t *testing.T) {
+	t.Setenv("TEMP_STORAGE_DIR", t.TempDir())
+	t.Setenv("TEMP_STORAGE_PUBLIC_BASE_URL", "https://api.o1key.cn")
+	const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+
+	images, err := prepareGenerateImageResultsWithStrategy([]dto.GenerateImageData{
+		{B64Json: pngBase64, MimeType: "image/png"},
+	}, "api.o1key.cn", dto.ImageOutputStrategyLocalTemp)
+	require.NoError(t, err)
+	require.Len(t, images, 1)
+	assert.Empty(t, images[0].B64Json)
+	assert.True(t, strings.HasPrefix(images[0].Url, "https://api.o1key.cn/tmp/output/"))
+}
+
 func TestExtractGeminiImagesSupportsInlineAndFileData(t *testing.T) {
 	const fileURI = "https://flowapi.gaorui.cc/tmp/d357508ddebea305feeacad77a63e34a.jpg"
 	geminiResp := map[string]interface{}{

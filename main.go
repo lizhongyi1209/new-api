@@ -132,6 +132,7 @@ func main() {
 
 	// Periodically blank base64 image payloads from old generate_image tasks
 	service.StartGenerateImageDataCleanupTask()
+	service.StartTemporaryImageCleanupTask()
 
 	// Wire task polling adaptor factory (breaks service -> relay import cycle).
 	// Must run before the system task runner starts: the async_task_poll handler

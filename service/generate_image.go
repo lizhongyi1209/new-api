@@ -1089,7 +1089,7 @@ func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, req
 	out := make([]dto.GenerateImageData, 0, len(images))
 	for _, image := range images {
 		if image.Url != "" {
-			if strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 {
+			if dto.IsImageOutputStorageStrategy(strategy) {
 				mimeType, base64Data, err := GetImageFromUrl(image.Url)
 				if err != nil {
 					return nil, err

@@ -153,6 +153,8 @@ func UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, request
 		return UploadBase64ImageToOSS(mimeType, base64Data)
 	case dto.ImageOutputStrategyR2:
 		return UploadBase64ImageToR2(mimeType, base64Data)
+	case dto.ImageOutputStrategyLocalTemp:
+		return UploadBase64ImageToTemporaryOutput(mimeType, base64Data)
 	default:
 		return UploadBase64ImageToHostStorage(mimeType, base64Data, requestHost)
 	}

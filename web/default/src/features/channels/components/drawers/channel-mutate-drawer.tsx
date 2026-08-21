@@ -4390,6 +4390,12 @@ export function ChannelMutateDrawer({
                                         label: t('Cloudflare R2 URL'),
                                       },
                                       {
+                                        value: 'local_temp',
+                                        label: t(
+                                          'Local temporary URL (24 hours)'
+                                        ),
+                                      },
+                                      {
                                         value: 'passthrough',
                                         label: t('Upstream passthrough'),
                                       },
@@ -4413,6 +4419,11 @@ export function ChannelMutateDrawer({
                                         </SelectItem>
                                         <SelectItem value='r2'>
                                           {t('Cloudflare R2 URL')}
+                                        </SelectItem>
+                                        <SelectItem value='local_temp'>
+                                          {t(
+                                            'Local temporary URL (24 hours)'
+                                          )}
                                         </SelectItem>
                                         <SelectItem value='passthrough'>
                                           {t('Upstream passthrough')}

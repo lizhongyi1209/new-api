@@ -91,7 +91,7 @@ export interface ChannelSettings {
 }
 
 export interface ChannelOtherSettings {
-  image_output_strategy?: 'oss' | 'r2' | 'passthrough'
+  image_output_strategy?: 'oss' | 'r2' | 'local_temp' | 'passthrough'
   azure_responses_version?: string
   vertex_key_type?: 'json' | 'api_key'
   openrouter_enterprise?: boolean

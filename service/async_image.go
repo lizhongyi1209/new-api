@@ -905,7 +905,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			"data": b64List,
 		}
 	} else {
-		// Upload to the storage provider selected by request Host and return URLs.
+		// Apply the channel strategy and return URLs from the selected storage.
 		for _, imgData := range imageResp.Data {
 			if imgData.B64Json != "" {
 				// Detect actual mime type from base64 data
@@ -922,7 +922,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 				}
 				uploadedURLs = append(uploadedURLs, publicURL)
 			} else if imgData.Url != "" {
-				// Download from upstream URL and re-upload for durable storage.
+				// Download from the upstream URL and re-upload to selected storage.
 				// Note: This downloads the generated image from upstream, not user input, so we use default limit
 				mimeType, b64Data, err := GetImageFromUrl(imgData.Url)
 				if err != nil {
@@ -1852,7 +1852,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 							if isThought {
 								continue
 							}
-							// Upload final image to object storage
+							// Upload the final image to the selected storage.
 							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
 								if base64Data, ok := inlineData["data"].(string); ok {
 									if strategy == dto.ImageOutputStrategyPassthrough {

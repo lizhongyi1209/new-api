@@ -43,9 +43,9 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 	// 计算使用量（基于 UsageMetadata）
 	usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
-	// When the client requests URL format, upload inline_data images to R2 and replace them with fileData URLs.
+	// Upload inline_data images to the selected storage and return fileData URLs.
 	strategy := info.ChannelOtherSettings.ImageOutputStrategy
-	shouldRewrite := strategy == dto.ImageOutputStrategyOSS || strategy == dto.ImageOutputStrategyR2 ||
+	shouldRewrite := dto.IsImageOutputStorageStrategy(strategy) ||
 		(strategy == "" && strings.EqualFold(c.Query("image_format"), "url"))
 	if shouldRewrite {
 		uploadStrategy := strategy
@@ -53,12 +53,18 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 			uploadStrategy = dto.ImageOutputStrategyR2
 		}
 		if err := replaceInlineDataWithStorageURLs(c, &geminiResponse, uploadStrategy); err != nil {
+			if strategy == dto.ImageOutputStrategyLocalTemp {
+				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			}
 			logger.LogError(c, "image storage upload failed, falling back to raw response: "+err.Error())
 			service.IOCopyBytesGracefully(c, resp, responseBody)
 			return &usage, nil
 		}
 		modifiedBody, err := common.Marshal(geminiResponse)
 		if err != nil {
+			if strategy == dto.ImageOutputStrategyLocalTemp {
+				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			}
 			service.IOCopyBytesGracefully(c, resp, responseBody)
 			return &usage, nil
 		}
@@ -130,6 +136,18 @@ func GeminiTextGenerationStreamHandler(c *gin.Context, info *relaycommon.RelayIn
 	helper.SetEventStreamHeaders(c)
 
 	return geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
+		if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp {
+			if err := replaceInlineDataWithStorageURLs(c, geminiResponse, dto.ImageOutputStrategyLocalTemp); err != nil {
+				logger.LogError(c, "temporary image storage upload failed: "+err.Error())
+				return false
+			}
+			rewritten, err := common.Marshal(geminiResponse)
+			if err != nil {
+				logger.LogError(c, "failed to marshal temporary image stream response: "+err.Error())
+				return false
+			}
+			data = string(rewritten)
+		}
 		err := helper.StringData(c, data)
 		if err != nil {
 			logger.LogError(c, "failed to write stream data: "+err.Error())
