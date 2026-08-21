@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/QuantumNous/new-api/dto"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +22,7 @@ func TestUploadBase64ImageToTemporaryOutputStoresPublicImage(t *testing.T) {
 	t.Setenv("TEMP_STORAGE_DIR", storageDir)
 	t.Setenv("TEMP_STORAGE_PUBLIC_BASE_URL", "https://images.example.com/")
 
-	publicURL, err := UploadBase64ImageToTemporaryOutput("image/jpeg", temporaryImageTestPNG)
+	publicURL, err := UploadBase64ImageToTemporaryOutput("image/jpeg", temporaryImageTestPNG, "")
 	require.NoError(t, err)
 	assert.True(t, strings.HasPrefix(publicURL, "https://images.example.com/tmp/output/"))
 	assert.True(t, strings.HasSuffix(publicURL, ".png"))
@@ -33,12 +35,45 @@ func TestUploadBase64ImageToTemporaryOutputStoresPublicImage(t *testing.T) {
 	assert.Equal(t, want, stored)
 }
 
+func TestUploadBase64ImageWithOutputStrategySelectsTemporaryPublicDomain(t *testing.T) {
+	t.Setenv("TEMP_STORAGE_DIR", t.TempDir())
+	t.Setenv("TEMP_STORAGE_PUBLIC_BASE_URL", "https://legacy.example.com")
+
+	tests := []struct {
+		name       string
+		strategy   string
+		wantPrefix string
+	}{
+		{name: "legacy configurable domain", strategy: dto.ImageOutputStrategyLocalTemp, wantPrefix: "https://legacy.example.com/tmp/output/"},
+		{name: "cloudflare", strategy: dto.ImageOutputStrategyLocalTempCF, wantPrefix: "https://cf-api.o1key.com/tmp/output/"},
+		{name: "esa", strategy: dto.ImageOutputStrategyLocalTempESA, wantPrefix: "https://api.o1key.cn/tmp/output/"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			publicURL, err := UploadBase64ImageWithOutputStrategy("image/png", temporaryImageTestPNG, test.strategy, "request.example.com")
+			require.NoError(t, err)
+			assert.True(t, strings.HasPrefix(publicURL, test.wantPrefix))
+		})
+	}
+}
+
+func TestUploadBase64ImageToTemporaryOutputDefaultsToCloudflare(t *testing.T) {
+	t.Setenv("TEMP_STORAGE_DIR", t.TempDir())
+	t.Setenv("TEMP_STORAGE_PUBLIC_BASE_URL", "")
+	t.Setenv("LOCAL_PUBLIC_BASE_URL", "")
+
+	publicURL, err := UploadBase64ImageToTemporaryOutput("image/png", temporaryImageTestPNG, "")
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(publicURL, "https://cf-api.o1key.com/tmp/output/"))
+}
+
 func TestUploadBase64ImageToTemporaryOutputRejectsNonImageData(t *testing.T) {
 	t.Setenv("TEMP_STORAGE_DIR", t.TempDir())
 
 	_, err := UploadBase64ImageToTemporaryOutput(
 		"image/png",
 		base64.StdEncoding.EncodeToString([]byte("not an image")),
+		"",
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not a supported image")
@@ -49,7 +84,7 @@ func TestOpenTemporaryOutputImageRejectsExpiredFile(t *testing.T) {
 	t.Setenv("TEMP_STORAGE_DIR", storageDir)
 	t.Setenv("TEMP_STORAGE_PUBLIC_BASE_URL", "https://images.example.com")
 
-	publicURL, err := UploadBase64ImageToTemporaryOutput("image/png", temporaryImageTestPNG)
+	publicURL, err := UploadBase64ImageToTemporaryOutput("image/png", temporaryImageTestPNG, "")
 	require.NoError(t, err)
 	filename := strings.TrimPrefix(publicURL, "https://images.example.com/tmp/output/")
 	path := filepath.Join(storageDir, TemporaryImageOutputCategory, filename)

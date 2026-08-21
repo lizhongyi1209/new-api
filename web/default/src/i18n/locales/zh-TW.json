@@ -2530,6 +2530,8 @@
     "Local Billing": "本地收費",
     "Local models": "本地模型",
     "Local temporary URL (24 hours)": "本機臨時 URL（24 小時）",
+    "Local temporary URL via Cloudflare (24 hours)": "本機臨時 URL（Cloudflare，24 小時）",
+    "Local temporary URL via ESA (24 hours)": "本機臨時 URL（ESA，24 小時）",
     "Locations": "位置",
     "Locked": "鎖定",
     "log": "日誌的完整詳情",

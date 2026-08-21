@@ -32,7 +32,7 @@ type TemporaryImageCleanupStats struct {
 	Bytes   int64
 }
 
-func UploadBase64ImageToTemporaryOutput(mimeType, base64Data string) (string, error) {
+func UploadBase64ImageToTemporaryOutput(mimeType, base64Data, publicBaseURL string) (string, error) {
 	if base64Data == "" || base64.StdEncoding.DecodedLen(len(base64Data)) > maxTemporaryOutputImageBytes {
 		return "", fmt.Errorf("temporary output image size must be between 1 and %d bytes", maxTemporaryOutputImageBytes)
 	}
@@ -84,9 +84,10 @@ func UploadBase64ImageToTemporaryOutput(mimeType, base64Data string) (string, er
 	committed = true
 
 	publicBase := normalizeHTTPBaseURL(firstNonEmptyString(
+		publicBaseURL,
 		os.Getenv("TEMP_STORAGE_PUBLIC_BASE_URL"),
 		os.Getenv("LOCAL_PUBLIC_BASE_URL"),
-		"https://api.o1key.cn",
+		"https://cf-api.o1key.com",
 	))
 	return fmt.Sprintf("%s/tmp/%s/%s", publicBase, TemporaryImageOutputCategory, filename), nil
 }

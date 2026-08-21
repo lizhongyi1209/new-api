@@ -90,18 +90,29 @@ type ChannelOtherSettings struct {
 }
 
 const (
-	ImageOutputStrategyOSS         = "oss"
-	ImageOutputStrategyR2          = "r2"
-	ImageOutputStrategyLocalTemp   = "local_temp"
-	ImageOutputStrategyPassthrough = "passthrough"
+	ImageOutputStrategyOSS          = "oss"
+	ImageOutputStrategyR2           = "r2"
+	ImageOutputStrategyLocalTemp    = "local_temp"
+	ImageOutputStrategyLocalTempCF  = "local_temp_cf"
+	ImageOutputStrategyLocalTempESA = "local_temp_esa"
+	ImageOutputStrategyPassthrough  = "passthrough"
 )
 
-func IsImageOutputStorageStrategy(strategy string) bool {
+func IsImageOutputTemporaryStrategy(strategy string) bool {
 	switch strategy {
-	case ImageOutputStrategyOSS, ImageOutputStrategyR2, ImageOutputStrategyLocalTemp:
+	case ImageOutputStrategyLocalTemp, ImageOutputStrategyLocalTempCF, ImageOutputStrategyLocalTempESA:
 		return true
 	default:
 		return false
+	}
+}
+
+func IsImageOutputStorageStrategy(strategy string) bool {
+	switch strategy {
+	case ImageOutputStrategyOSS, ImageOutputStrategyR2:
+		return true
+	default:
+		return IsImageOutputTemporaryStrategy(strategy)
 	}
 }
 
@@ -110,7 +121,9 @@ func (s *ChannelOtherSettings) ValidateImageOutputStrategy() error {
 		return nil
 	}
 	switch s.ImageOutputStrategy {
-	case "", ImageOutputStrategyOSS, ImageOutputStrategyR2, ImageOutputStrategyLocalTemp, ImageOutputStrategyPassthrough:
+	case "", ImageOutputStrategyOSS, ImageOutputStrategyR2,
+		ImageOutputStrategyLocalTemp, ImageOutputStrategyLocalTempCF, ImageOutputStrategyLocalTempESA,
+		ImageOutputStrategyPassthrough:
 		return nil
 	default:
 		return fmt.Errorf("invalid image_output_strategy: %s", s.ImageOutputStrategy)

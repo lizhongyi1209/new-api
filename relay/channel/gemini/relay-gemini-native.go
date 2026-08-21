@@ -53,7 +53,7 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 			uploadStrategy = dto.ImageOutputStrategyR2
 		}
 		if err := replaceInlineDataWithStorageURLs(c, &geminiResponse, uploadStrategy); err != nil {
-			if strategy == dto.ImageOutputStrategyLocalTemp {
+			if dto.IsImageOutputTemporaryStrategy(strategy) {
 				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 			}
 			logger.LogError(c, "image storage upload failed, falling back to raw response: "+err.Error())
@@ -62,7 +62,7 @@ func GeminiTextGenerationHandler(c *gin.Context, info *relaycommon.RelayInfo, re
 		}
 		modifiedBody, err := common.Marshal(geminiResponse)
 		if err != nil {
-			if strategy == dto.ImageOutputStrategyLocalTemp {
+			if dto.IsImageOutputTemporaryStrategy(strategy) {
 				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 			}
 			service.IOCopyBytesGracefully(c, resp, responseBody)
@@ -136,8 +136,8 @@ func GeminiTextGenerationStreamHandler(c *gin.Context, info *relaycommon.RelayIn
 	helper.SetEventStreamHeaders(c)
 
 	return geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
-		if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp {
-			if err := replaceInlineDataWithStorageURLs(c, geminiResponse, dto.ImageOutputStrategyLocalTemp); err != nil {
+		if dto.IsImageOutputTemporaryStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
+			if err := replaceInlineDataWithStorageURLs(c, geminiResponse, info.ChannelOtherSettings.ImageOutputStrategy); err != nil {
 				logger.LogError(c, "temporary image storage upload failed: "+err.Error())
 				return false
 			}

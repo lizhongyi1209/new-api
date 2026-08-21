@@ -55,7 +55,7 @@ services:
       - LOCAL_STORAGE_HOSTS=${LOCAL_STORAGE_HOSTS:-local-storage-disabled.invalid}
       # 24-hour image outputs live on the persistent /data volume.
       - TEMP_STORAGE_DIR=${TEMP_STORAGE_DIR:-/data/tmp}
-      - TEMP_STORAGE_PUBLIC_BASE_URL=${TEMP_STORAGE_PUBLIC_BASE_URL:-https://api.o1key.cn}
+      - TEMP_STORAGE_PUBLIC_BASE_URL=${TEMP_STORAGE_PUBLIC_BASE_URL:-https://cf-api.o1key.com}
       # Aliyun OSS Storage
       - ALIYUN_OSS_ACCESS_KEY_ID=${ALIYUN_OSS_ACCESS_KEY_ID}
       - ALIYUN_OSS_ACCESS_KEY_SECRET=${ALIYUN_OSS_ACCESS_KEY_SECRET}

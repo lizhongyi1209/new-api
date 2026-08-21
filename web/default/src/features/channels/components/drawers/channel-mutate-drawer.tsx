@@ -4390,9 +4390,15 @@ export function ChannelMutateDrawer({
                                         label: t('Cloudflare R2 URL'),
                                       },
                                       {
-                                        value: 'local_temp',
+                                        value: 'local_temp_cf',
                                         label: t(
-                                          'Local temporary URL (24 hours)'
+                                          'Local temporary URL via Cloudflare (24 hours)'
+                                        ),
+                                      },
+                                      {
+                                        value: 'local_temp_esa',
+                                        label: t(
+                                          'Local temporary URL via ESA (24 hours)'
                                         ),
                                       },
                                       {
@@ -4420,9 +4426,14 @@ export function ChannelMutateDrawer({
                                         <SelectItem value='r2'>
                                           {t('Cloudflare R2 URL')}
                                         </SelectItem>
-                                        <SelectItem value='local_temp'>
+                                        <SelectItem value='local_temp_cf'>
                                           {t(
-                                            'Local temporary URL (24 hours)'
+                                            'Local temporary URL via Cloudflare (24 hours)'
+                                          )}
+                                        </SelectItem>
+                                        <SelectItem value='local_temp_esa'>
+                                          {t(
+                                            'Local temporary URL via ESA (24 hours)'
                                           )}
                                         </SelectItem>
                                         <SelectItem value='passthrough'>

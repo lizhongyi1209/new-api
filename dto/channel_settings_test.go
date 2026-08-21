@@ -46,7 +46,15 @@ func TestAdvancedCustomValidateResponsesToChatConverterPath(t *testing.T) {
 }
 
 func TestChannelOtherSettingsValidateImageOutputStrategy(t *testing.T) {
-	for _, strategy := range []string{"", ImageOutputStrategyOSS, ImageOutputStrategyR2, ImageOutputStrategyLocalTemp, ImageOutputStrategyPassthrough} {
+	for _, strategy := range []string{
+		"",
+		ImageOutputStrategyOSS,
+		ImageOutputStrategyR2,
+		ImageOutputStrategyLocalTemp,
+		ImageOutputStrategyLocalTempCF,
+		ImageOutputStrategyLocalTempESA,
+		ImageOutputStrategyPassthrough,
+	} {
 		t.Run(strategy, func(t *testing.T) {
 			settings := ChannelOtherSettings{ImageOutputStrategy: strategy}
 			require.NoError(t, settings.ValidateImageOutputStrategy())
@@ -57,4 +65,16 @@ func TestChannelOtherSettingsValidateImageOutputStrategy(t *testing.T) {
 	err := settings.ValidateImageOutputStrategy()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid image_output_strategy")
+}
+
+func TestImageOutputTemporaryStrategyIncludesExplicitCDNDomains(t *testing.T) {
+	for _, strategy := range []string{
+		ImageOutputStrategyLocalTemp,
+		ImageOutputStrategyLocalTempCF,
+		ImageOutputStrategyLocalTempESA,
+	} {
+		assert.True(t, IsImageOutputTemporaryStrategy(strategy))
+		assert.True(t, IsImageOutputStorageStrategy(strategy))
+	}
+	assert.False(t, IsImageOutputTemporaryStrategy(ImageOutputStrategyR2))
 }

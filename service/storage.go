@@ -154,7 +154,11 @@ func UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, request
 	case dto.ImageOutputStrategyR2:
 		return UploadBase64ImageToR2(mimeType, base64Data)
 	case dto.ImageOutputStrategyLocalTemp:
-		return UploadBase64ImageToTemporaryOutput(mimeType, base64Data)
+		return UploadBase64ImageToTemporaryOutput(mimeType, base64Data, "")
+	case dto.ImageOutputStrategyLocalTempCF:
+		return UploadBase64ImageToTemporaryOutput(mimeType, base64Data, "https://cf-api.o1key.com")
+	case dto.ImageOutputStrategyLocalTempESA:
+		return UploadBase64ImageToTemporaryOutput(mimeType, base64Data, "https://api.o1key.cn")
 	default:
 		return UploadBase64ImageToHostStorage(mimeType, base64Data, requestHost)
 	}

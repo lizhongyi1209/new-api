@@ -2530,6 +2530,8 @@
     "Local Billing": "Локальная тарификация",
     "Local models": "Локальные модели",
     "Local temporary URL (24 hours)": "Локальный временный URL (24 часа)",
+    "Local temporary URL via Cloudflare (24 hours)": "Локальный временный URL через Cloudflare (24 часа)",
+    "Local temporary URL via ESA (24 hours)": "Локальный временный URL через ESA (24 часа)",
     "Locations": "Местоположения",
     "Locked": "Заблокировано",
     "log": "записи",

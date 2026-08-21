@@ -2530,6 +2530,8 @@
     "Local Billing": "Thanh toán nội địa",
     "Local models": "Mô hình cục bộ",
     "Local temporary URL (24 hours)": "URL tạm thời cục bộ (24 giờ)",
+    "Local temporary URL via Cloudflare (24 hours)": "URL tạm thời cục bộ qua Cloudflare (24 giờ)",
+    "Local temporary URL via ESA (24 hours)": "URL tạm thời cục bộ qua ESA (24 giờ)",
     "Locations": "Vị trí",
     "Locked": "Đã khóa",
     "log": "nhật ký",

@@ -73,7 +73,7 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 			uploadStrategy = dto.ImageOutputStrategyR2
 		}
 		if rewritten, err := uploadOpenAIImagesToStorage(c, responseBody, uploadStrategy); err != nil {
-			if strategy == dto.ImageOutputStrategyLocalTemp {
+			if dto.IsImageOutputTemporaryStrategy(strategy) {
 				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 			}
 			logger.LogError(c, "openai image storage upload failed, falling back to raw response: "+err.Error())
@@ -177,8 +177,8 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 			}
 			if chunk.Type == "image_generation.completed" || chunk.Type == "image_edit.completed" {
 				completedImages++
-				if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp {
-					rewritten, err := uploadOpenAIStreamImageToStorage(c, raw, dto.ImageOutputStrategyLocalTemp)
+				if dto.IsImageOutputTemporaryStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
+					rewritten, err := uploadOpenAIStreamImageToStorage(c, raw, info.ChannelOtherSettings.ImageOutputStrategy)
 					if err != nil {
 						sr.Stop(fmt.Errorf("temporary image storage upload: %w", err))
 						return
@@ -186,7 +186,7 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 					raw = rewritten
 				}
 			}
-			if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp &&
+			if dto.IsImageOutputTemporaryStrategy(info.ChannelOtherSettings.ImageOutputStrategy) &&
 				(chunk.Type == "image_generation.partial_image" || chunk.Type == "image_edit.partial_image") {
 				return
 			}
@@ -295,8 +295,8 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
-	if info.ChannelOtherSettings.ImageOutputStrategy == dto.ImageOutputStrategyLocalTemp {
-		responseBody, err = uploadOpenAIImagesToStorage(c, responseBody, dto.ImageOutputStrategyLocalTemp)
+	if dto.IsImageOutputTemporaryStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
+		responseBody, err = uploadOpenAIImagesToStorage(c, responseBody, info.ChannelOtherSettings.ImageOutputStrategy)
 		if err != nil {
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 		}

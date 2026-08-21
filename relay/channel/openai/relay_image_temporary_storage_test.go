@@ -59,13 +59,13 @@ func TestOpenAIImageStreamLocalTemporaryStrategyOnlyReturnsFinalLocalURL(t *test
 		``,
 	}, "\n")
 	c, recorder, resp, info := newImageTestContext(t, body, "text/event-stream", true)
-	info.ChannelOtherSettings.ImageOutputStrategy = dto.ImageOutputStrategyLocalTemp
+	info.ChannelOtherSettings.ImageOutputStrategy = dto.ImageOutputStrategyLocalTempCF
 
 	_, relayErr := OpenaiImageStreamHandler(c, info, resp)
 	require.Nil(t, relayErr)
 	responseBody := recorder.Body.String()
 	assert.NotContains(t, responseBody, "partial_image")
 	assert.NotContains(t, responseBody, "b64_json")
-	assert.Contains(t, responseBody, `"url":"https://api.o1key.cn/tmp/output/`)
+	assert.Contains(t, responseBody, `"url":"https://cf-api.o1key.com/tmp/output/`)
 	assert.Contains(t, responseBody, "data: [DONE]")
 }

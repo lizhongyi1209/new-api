@@ -31,7 +31,7 @@ func TestReplaceInlineDataWithLocalTemporaryStorageURL(t *testing.T) {
 		}},
 	}
 
-	err := replaceInlineDataWithStorageURLs(c, &response, dto.ImageOutputStrategyLocalTemp)
+	err := replaceInlineDataWithStorageURLs(c, &response, dto.ImageOutputStrategyLocalTempESA)
 	require.NoError(t, err)
 	part := response.Candidates[0].Content.Parts[0]
 	assert.Nil(t, part.InlineData)

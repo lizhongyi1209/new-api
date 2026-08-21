@@ -561,11 +561,11 @@ func TestPrepareGenerateImageResultsStoresLocalTemporaryOutput(t *testing.T) {
 
 	images, err := prepareGenerateImageResultsWithStrategy([]dto.GenerateImageData{
 		{B64Json: pngBase64, MimeType: "image/png"},
-	}, "api.o1key.cn", dto.ImageOutputStrategyLocalTemp)
+	}, "api.o1key.cn", dto.ImageOutputStrategyLocalTempCF)
 	require.NoError(t, err)
 	require.Len(t, images, 1)
 	assert.Empty(t, images[0].B64Json)
-	assert.True(t, strings.HasPrefix(images[0].Url, "https://api.o1key.cn/tmp/output/"))
+	assert.True(t, strings.HasPrefix(images[0].Url, "https://cf-api.o1key.com/tmp/output/"))
 }
 
 func TestExtractGeminiImagesSupportsInlineAndFileData(t *testing.T) {

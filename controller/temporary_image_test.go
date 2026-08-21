@@ -20,7 +20,7 @@ func TestServeTemporaryOutputImageReturnsStoredImage(t *testing.T) {
 	t.Setenv("TEMP_STORAGE_PUBLIC_BASE_URL", "https://api.o1key.cn")
 	const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
-	publicURL, err := service.UploadBase64ImageToTemporaryOutput("image/png", pngBase64)
+	publicURL, err := service.UploadBase64ImageToTemporaryOutput("image/png", pngBase64, "")
 	require.NoError(t, err)
 	requestPath := strings.TrimPrefix(publicURL, "https://api.o1key.cn")
 

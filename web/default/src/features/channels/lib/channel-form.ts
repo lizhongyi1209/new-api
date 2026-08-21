@@ -261,7 +261,14 @@ export const channelFormSchema = z
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
     azure_responses_version: z.string().optional(), // Azure specific
     image_output_strategy: z
-      .enum(['oss', 'r2', 'local_temp', 'passthrough'])
+      .enum([
+        'oss',
+        'r2',
+        'local_temp',
+        'local_temp_cf',
+        'local_temp_esa',
+        'passthrough',
+      ])
       .optional(),
     // Field passthrough controls (stored in settings JSON)
     allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
@@ -504,6 +511,8 @@ export function transformChannelToFormDefaults(
     | 'oss'
     | 'r2'
     | 'local_temp'
+    | 'local_temp_cf'
+    | 'local_temp_esa'
     | 'passthrough'
     | undefined
 
@@ -522,7 +531,10 @@ export function transformChannelToFormDefaults(
       allowSpeed = parsed.allow_speed === true
       claudeBetaQuery = parsed.claude_beta_query === true
       disableTaskPollingSleep = parsed.disable_task_polling_sleep === true
-      imageOutputStrategy = parsed.image_output_strategy
+      imageOutputStrategy =
+        parsed.image_output_strategy === 'local_temp'
+          ? 'local_temp_cf'
+          : parsed.image_output_strategy
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
       upstreamModelUpdateAutoSyncEnabled =
