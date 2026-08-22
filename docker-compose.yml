@@ -53,7 +53,7 @@ services:
       - R2_STORAGE_HOSTS=${R2_STORAGE_HOSTS:-api.o1key.cn,cf-api.o1key.com}
       # Local Storage (本地磁盘存储) - 当前不按请求域名自动选择
       - LOCAL_STORAGE_HOSTS=${LOCAL_STORAGE_HOSTS:-local-storage-disabled.invalid}
-      # 24-hour image outputs live on the persistent /data volume.
+      # 24-hour temporary inputs and image outputs live on the persistent /data volume.
       - TEMP_STORAGE_DIR=${TEMP_STORAGE_DIR:-/data/tmp}
       - TEMP_STORAGE_PUBLIC_BASE_URL=${TEMP_STORAGE_PUBLIC_BASE_URL:-https://cf-api.o1key.com}
       # Aliyun OSS Storage

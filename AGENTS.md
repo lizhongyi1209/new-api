@@ -6,6 +6,13 @@ DO NOT send optional commentary
 
 This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI providers (OpenAI, Claude, Gemini, Azure, AWS Bedrock, etc.) behind a unified API, with user management, billing, rate limiting, and an admin dashboard.
 
+## Project Map First (Required)
+
+- In every new conversation that involves locating, inspecting, debugging, or changing an existing feature, MUST read `docs/PROJECT_MAP.md` before doing a repository-wide search.
+- Check the feature aliases and entry files in the map first, then verify the listed route, controller, service, relay, frontend, and test paths against the current code.
+- If the feature is missing from the map or an entry is stale, use `rg` to locate it and update `docs/PROJECT_MAP.md` in the same change whenever a stable feature entry point is added or moved.
+- Treat the map as a navigation index, not a substitute for reading the implementation or following the more specific `AGENTS.md` files in the target directory.
+
 ## Tech Stack
 
 - **Backend**: Go 1.22+, Gin web framework, GORM v2 ORM

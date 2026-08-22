@@ -43,6 +43,8 @@ func SetStaticUploadRouter(router *gin.Engine) {
 	}
 
 	router.Static("/upload", uploadDir)
+	router.GET("/tmp/input/:filename", controller.ServeTemporaryInputAttachment)
+	router.HEAD("/tmp/input/:filename", controller.ServeTemporaryInputAttachment)
 	router.GET("/tmp/output/:filename", controller.ServeTemporaryOutputImage)
 	router.HEAD("/tmp/output/:filename", controller.ServeTemporaryOutputImage)
 }

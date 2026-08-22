@@ -30,6 +30,13 @@ func SetRelayRouter(router *gin.Engine) {
 	publicStorageRouter := router.Group("/v1/storage/public")
 	publicStorageRouter.Use(middleware.RouteTag("relay"))
 	publicStorageRouter.POST("/presign", controller.PublicR2Presign)
+
+	temporaryUploadRouter := router.Group("/v1/o1key")
+	temporaryUploadRouter.Use(middleware.RouteTag("relay"))
+	temporaryUploadRouter.Use(middleware.SystemPerformanceCheck())
+	temporaryUploadRouter.Use(middleware.TokenAuth())
+	temporaryUploadRouter.Use(middleware.UploadRateLimit())
+	temporaryUploadRouter.POST("/uploads", controller.UploadTemporaryInputAttachment)
 	{
 		modelsRouter.GET("", func(c *gin.Context) {
 			switch {

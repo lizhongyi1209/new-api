@@ -18,6 +18,7 @@ require (
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-contrib/static v0.0.1
 	github.com/gin-gonic/gin v1.9.1
+	github.com/gabriel-vasile/mimetype v1.4.3
 	github.com/glebarez/sqlite v1.9.0
 	github.com/go-audio/aiff v1.1.0
 	github.com/go-audio/wav v1.1.0
@@ -119,7 +120,6 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/expr-lang/expr v1.17.8
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/go-audio/audio v1.0.0 // indirect

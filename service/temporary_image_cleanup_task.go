@@ -27,12 +27,19 @@ func StartTemporaryImageCleanupTask() {
 }
 
 func runTemporaryImageCleanupOnce() {
-	stats, err := CleanupExpiredTemporaryOutputImages(time.Now())
-	if err != nil {
-		logger.LogWarn(context.Background(), "temporary image cleanup failed: "+err.Error())
+	now := time.Now()
+	outputStats, outputErr := CleanupExpiredTemporaryOutputImages(now)
+	if outputErr != nil {
+		logger.LogWarn(context.Background(), "temporary image cleanup failed: "+outputErr.Error())
 	}
-	if stats.Deleted > 0 {
+	inputStats, inputErr := CleanupExpiredTemporaryInputAttachments(now)
+	if inputErr != nil {
+		logger.LogWarn(context.Background(), "temporary input cleanup failed: "+inputErr.Error())
+	}
+	deleted := outputStats.Deleted + inputStats.Deleted
+	deletedBytes := outputStats.Bytes + inputStats.Bytes
+	if deleted > 0 {
 		logger.LogInfo(context.Background(), fmt.Sprintf(
-			"temporary image cleanup: deleted=%d bytes=%d", stats.Deleted, stats.Bytes))
+			"temporary file cleanup: deleted=%d bytes=%d", deleted, deletedBytes))
 	}
 }
