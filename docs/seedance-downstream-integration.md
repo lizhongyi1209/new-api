@@ -175,7 +175,36 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 
 ## 5. 本站内部素材创建流程
 
-当 `content` 中的 `image_url.url` 是公网 HTTP(S) URL 时，本站渠道 265 自动执行以下流程：
+当 `content` 中的 `image_url.url` 是公网 HTTP(S) URL 时，本站渠道 265 会先按模型选择素材工作流，再把图片转换为 `asset://{asset_id}`。
+
+DF 模型使用直接素材接口：
+
+```http
+POST /v1/sd-5/assets
+```
+
+```json
+{
+  "URL": "https://cdn.example.com/reference.jpg",
+  "Name": "reference_image",
+  "AssetType": "Image"
+}
+```
+
+素材未完成时查询：
+
+```http
+GET /v1/sd-5/assets/{asset_id}
+```
+
+以下四个上游模型归入 DF 素材工作流：
+
+- `dreamina-seedance-2-0-260128-df`
+- `dreamina-seedance-2-0-fast-260128-df`
+- `dreamina-seedance-2-0-mini-260615-df`
+- `dreamina-seedance-2-5-260628-df`
+
+其他 ServiceInference Seedance 模型继续使用素材组工作流：
 
 1. 检查或创建素材组。
 2. 调用素材创建接口导入图片 URL。
@@ -242,6 +271,29 @@ GET /v1/asset-groups/{group_id}
 ## 6. 可选方式：下游手动创建并复用素材
 
 本站公开了素材代理接口。下游如需复用同一张图片，可以使用本站 API Token 调用以下接口；本站会在服务端使用渠道 265 的凭据访问真实上游：
+
+HC 和 DF 客户端可以使用统一入口。由于上游 HC 工作流已进入退役迁移，`type=hc` 作为兼容别名与 `type=df` 一样转发到 DF 素材接口：
+
+```http
+POST https://cf-api.o1key.com/v1/seedance/assets
+```
+
+```json
+{
+  "type": "df",
+  "url": "https://cdn.example.com/reference.jpg",
+  "name": "reference_image",
+  "asset_type": "image"
+}
+```
+
+将 `type` 设为 `hc` 或 `df` 都会转发到 `/v1/sd-5/assets`，已有客户端无需修改 `type=hc`。状态查询接口为：
+
+```http
+GET https://cf-api.o1key.com/v1/seedance/assets/{asset_id}?type=df
+```
+
+原有素材组接口保持可用：
 
 ```text
 POST https://cf-api.o1key.com/v1/asset-groups

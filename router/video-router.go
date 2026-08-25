@@ -58,7 +58,7 @@ func SetVideoRouter(router *gin.Engine) {
 	// channel points here with a gateway token; the real upstream key stays on
 	// this instance (see controller.ProxySeedanceAssetAPI). The /v1/sd/assets
 	// routes expose the HC-model asset contract alongside the existing grouped
-	// asset workflow.
+	// asset workflow. DF models use the parallel /v1/sd-5/assets contract.
 	seedanceAssetProxyRouter := router.Group("/v1")
 	seedanceAssetProxyRouter.Use(middleware.RouteTag("relay"))
 	seedanceAssetProxyRouter.Use(middleware.TokenAuth())
@@ -69,6 +69,8 @@ func SetVideoRouter(router *gin.Engine) {
 		seedanceAssetProxyRouter.POST("/assets/get", controller.ProxySeedanceAssetAPI)
 		seedanceAssetProxyRouter.POST("/sd/assets", controller.ProxySeedanceAssetAPI)
 		seedanceAssetProxyRouter.GET("/sd/assets/:asset_id", controller.ProxySeedanceAssetAPI)
+		seedanceAssetProxyRouter.POST("/sd-5/assets", controller.ProxySeedanceAssetAPI)
+		seedanceAssetProxyRouter.GET("/sd-5/assets/:asset_id", controller.ProxySeedanceAssetAPI)
 		// Stable dispatcher for downstream New API sites. Provider-specific routes
 		// above remain available and unchanged.
 		seedanceAssetProxyRouter.POST("/seedance/assets", controller.CreateUnifiedSeedanceAsset)

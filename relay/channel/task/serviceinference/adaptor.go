@@ -94,6 +94,18 @@ type getAssetResponse struct {
 	Error  any    `json:"error,omitempty"`
 }
 
+type dfAssetRecord struct {
+	ID     string `json:"Id"`
+	Status string `json:"Status"`
+	Error  any    `json:"Error,omitempty"`
+}
+
+type dfAssetAPIResponse struct {
+	Success bool          `json:"success"`
+	Data    dfAssetRecord `json:"data"`
+	Error   any           `json:"error,omitempty"`
+}
+
 type assetConfig struct {
 	GroupID          string
 	GroupName        string
@@ -511,13 +523,93 @@ func (a *TaskAdaptor) prepareImageAssets(ctx context.Context, payload *requestPa
 		if name == "" {
 			name = "reference-image"
 		}
-		assetID, err := a.ensureImageAsset(ctx, rawURL, name)
+		var assetID string
+		var err error
+		if isSeedanceDFModel(payload.Model) {
+			assetID, err = a.ensureDFImageAsset(ctx, rawURL, name)
+		} else {
+			assetID, err = a.ensureImageAsset(ctx, rawURL, name)
+		}
 		if err != nil {
 			return err
 		}
 		item.ImageURL.URL = "asset://" + assetID
 	}
 	return nil
+}
+
+func (a *TaskAdaptor) ensureDFImageAsset(ctx context.Context, imageURL string, name string) (string, error) {
+	body := map[string]any{
+		"URL":       imageURL,
+		"AssetType": "Image",
+	}
+	if name != "" {
+		body["Name"] = name
+	}
+
+	var createResponse dfAssetAPIResponse
+	_, _, err := a.doJSON(ctx, http.MethodPost, seedanceDFAssetBasePath, body, &createResponse)
+	if err != nil {
+		return "", err
+	}
+	if !createResponse.Success {
+		errorDetail := createResponse.Data.Error
+		if errorDetail == nil {
+			errorDetail = createResponse.Error
+		}
+		if reason := formatUpstreamError(errorDetail); reason != "" {
+			return "", fmt.Errorf("service inference df asset failed: %s", reason)
+		}
+		return "", fmt.Errorf("service inference df asset creation failed")
+	}
+	assetID := strings.TrimSpace(createResponse.Data.ID)
+	if assetID == "" {
+		return "", fmt.Errorf("service inference df asset id is empty")
+	}
+	switch strings.ToLower(strings.TrimSpace(createResponse.Data.Status)) {
+	case "active", "completed", "succeeded", "success":
+		return assetID, nil
+	}
+
+	for attempt := 0; attempt < a.assetConfig.PollAttempts; attempt++ {
+		var statusResponse dfAssetAPIResponse
+		_, _, err = a.doJSON(ctx, http.MethodGet, seedanceDFAssetBasePath+"/"+url.PathEscape(assetID), nil, &statusResponse)
+		if err != nil {
+			return "", err
+		}
+		if !statusResponse.Success {
+			errorDetail := statusResponse.Data.Error
+			if errorDetail == nil {
+				errorDetail = statusResponse.Error
+			}
+			if reason := formatUpstreamError(errorDetail); reason != "" {
+				return "", fmt.Errorf("service inference df asset failed: %s", reason)
+			}
+			return "", fmt.Errorf("service inference df asset status query failed")
+		}
+		switch strings.ToLower(strings.TrimSpace(statusResponse.Data.Status)) {
+		case "active", "completed", "succeeded", "success":
+			return assetID, nil
+		case "failed", "failure", "error":
+			if reason := formatUpstreamError(statusResponse.Data.Error); reason != "" {
+				return "", fmt.Errorf("service inference df asset failed: %s", reason)
+			}
+			return "", fmt.Errorf("service inference df asset failed")
+		}
+		if attempt == a.assetConfig.PollAttempts-1 {
+			break
+		}
+		if a.assetConfig.PollInterval > 0 {
+			timer := time.NewTimer(a.assetConfig.PollInterval)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return "", ctx.Err()
+			case <-timer.C:
+			}
+		}
+	}
+	return "", fmt.Errorf("service inference df asset %s did not become active", assetID)
 }
 
 func (a *TaskAdaptor) ensureImageAsset(ctx context.Context, imageURL string, name string) (string, error) {

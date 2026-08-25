@@ -12,6 +12,10 @@ const seedance25VideoInputPriceRatio = 42.0 / 70.0
 
 var ModelList = []string{
 	"dreamina-seedance-2-0-260128",
+	"dreamina-seedance-2-0-260128-df",
+	"dreamina-seedance-2-0-fast-260128-df",
+	"dreamina-seedance-2-0-mini-260615-df",
+	"dreamina-seedance-2-5-260628-df",
 	"grok-imagine-video-1.5",
 }
 
@@ -20,7 +24,20 @@ const (
 	defaultAssetGroupDescription = "TokenMartSeedance video assets"
 	defaultAssetPollAttempts     = 30
 	defaultAssetPollIntervalMS   = 1000
+	seedanceDFAssetBasePath      = "/v1/sd-5/assets"
 )
+
+func isSeedanceDFModel(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "dreamina-seedance-2-0-260128-df",
+		"dreamina-seedance-2-0-fast-260128-df",
+		"dreamina-seedance-2-0-mini-260615-df",
+		"dreamina-seedance-2-5-260628-df":
+		return true
+	default:
+		return false
+	}
+}
 
 // doubaoPricingModel 仅把既有 Seedance 2.0 模型族对应到 doubao 价格表。
 // 未知模型不应默认套用 2.0 价格，避免后续新模型被错误计费。

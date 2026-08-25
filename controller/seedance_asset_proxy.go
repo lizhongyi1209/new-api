@@ -23,10 +23,21 @@ type UnifiedSeedanceAssetRequest struct {
 	AssetType string `json:"asset_type,omitempty"`
 }
 
-type serviceInferenceHCAssetRequest struct {
+type serviceInferenceAssetRequest struct {
 	URL       string `json:"URL"`
 	Name      string `json:"Name,omitempty"`
 	AssetType string `json:"AssetType"`
+}
+
+func seedanceAssetBasePath(assetWorkflow string) (string, bool) {
+	switch strings.ToLower(strings.TrimSpace(assetWorkflow)) {
+	case "hc", "df":
+		// HC is retained as a downstream compatibility alias while the retired
+		// upstream HC workflow is migrated to DF.
+		return "/v1/sd-5/assets", true
+	default:
+		return "", false
+	}
 }
 
 // CreateUnifiedSeedanceAsset dispatches a stable downstream request to the
@@ -70,9 +81,9 @@ func seedanceAssetInvalidRequest(c *gin.Context, message string) {
 }
 
 func buildUnifiedSeedanceAssetRequest(request UnifiedSeedanceAssetRequest) (string, []byte, error) {
-	assetWorkflow := strings.ToLower(strings.TrimSpace(request.Type))
-	if assetWorkflow != "hc" {
-		return "", nil, fmt.Errorf("unsupported type %q; currently supported: hc", request.Type)
+	upstreamPath, ok := seedanceAssetBasePath(request.Type)
+	if !ok {
+		return "", nil, fmt.Errorf("unsupported type %q; currently supported: hc, df", request.Type)
 	}
 
 	sourceURL := strings.TrimSpace(request.URL)
@@ -93,31 +104,32 @@ func buildUnifiedSeedanceAssetRequest(request UnifiedSeedanceAssetRequest) (stri
 		return "", nil, fmt.Errorf("asset_type must be image, video, or audio")
 	}
 
-	body, err := common.Marshal(serviceInferenceHCAssetRequest{
+	body, err := common.Marshal(serviceInferenceAssetRequest{
 		URL:       sourceURL,
 		Name:      strings.TrimSpace(request.Name),
 		AssetType: assetType,
 	})
 	if err != nil {
-		return "", nil, fmt.Errorf("marshal hc asset request: %w", err)
+		return "", nil, fmt.Errorf("marshal seedance asset request: %w", err)
 	}
-	return "/v1/sd/assets", body, nil
+	return upstreamPath, body, nil
 }
 
 func buildUnifiedSeedanceAssetQuery(assetWorkflow string, assetID string) (string, error) {
-	if strings.ToLower(strings.TrimSpace(assetWorkflow)) != "hc" {
-		return "", fmt.Errorf("unsupported type %q; currently supported: hc", assetWorkflow)
+	upstreamPath, ok := seedanceAssetBasePath(assetWorkflow)
+	if !ok {
+		return "", fmt.Errorf("unsupported type %q; currently supported: hc, df", assetWorkflow)
 	}
 
 	assetID = strings.TrimSpace(assetID)
 	if assetID == "" {
 		return "", fmt.Errorf("asset_id is required")
 	}
-	return "/v1/sd/assets/" + url.PathEscape(assetID), nil
+	return upstreamPath + "/" + url.PathEscape(assetID), nil
 }
 
 // ProxySeedanceAssetAPI transparently forwards ServiceInference asset-management
-// calls (/v1/asset-groups*, /v1/assets*, /v1/sd/assets*) to the upstream provider
+// calls (/v1/asset-groups*, /v1/assets*, /v1/sd/assets*, /v1/sd-5/assets*) to the upstream provider
 // using this instance's type-60 channel credentials. Sub-stations point their
 // type-60 channel at this gateway with a gateway token, so the real upstream key
 // never leaves the main site.

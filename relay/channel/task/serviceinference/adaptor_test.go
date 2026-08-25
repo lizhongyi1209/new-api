@@ -365,6 +365,84 @@ func TestBuildRequestBodyNativeContentUploadsImageAsset(t *testing.T) {
 	assert.Equal(t, "reference_image", createdAsset["name"])
 }
 
+func TestBuildRequestBodyDFContentUsesDirectAssetWorkflow(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	var createdAsset map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requireBearer(t, r)
+		switch r.URL.Path {
+		case "/v1/sd-5/assets":
+			require.Equal(t, http.MethodPost, r.Method)
+			require.NoError(t, common.DecodeJson(r.Body, &createdAsset))
+			writeJSON(t, w, http.StatusOK, map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"Id":     "asset-df-1",
+					"Status": nil,
+					"Error":  nil,
+				},
+			})
+		case "/v1/sd-5/assets/asset-df-1":
+			require.Equal(t, http.MethodGet, r.Method)
+			writeJSON(t, w, http.StatusOK, map[string]any{
+				"success": true,
+				"data": map[string]any{
+					"Id":     "asset-df-1",
+					"Status": "Active",
+					"Error":  nil,
+				},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	info := newTestRelayInfo(server.URL, dto.ChannelOtherSettings{
+		ServiceInferenceAssetPollAttempts:   1,
+		ServiceInferenceAssetPollIntervalMS: -1,
+	})
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	c := newTaskContext(`{
+		"model": "dreamina-seedance-2-0-260128-df",
+		"content": [
+			{"type": "text", "text": "dancing"},
+			{"type": "image_url", "image_url": {"url": "https://cdn.example.com/ref.png"}, "role": "reference_image"}
+		]
+	}`)
+
+	taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+	require.Nil(t, taskErr)
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	var payload requestPayload
+	require.NoError(t, common.Unmarshal(data, &payload))
+	require.Len(t, payload.Content, 2)
+	assert.Equal(t, "asset://asset-df-1", payload.Content[1].ImageURL.URL)
+	assert.Equal(t, "https://cdn.example.com/ref.png", createdAsset["URL"])
+	assert.Equal(t, "reference_image", createdAsset["Name"])
+	assert.Equal(t, "Image", createdAsset["AssetType"])
+}
+
+func TestSeedanceDFModelClassification(t *testing.T) {
+	for _, modelName := range []string{
+		"dreamina-seedance-2-0-260128-df",
+		"dreamina-seedance-2-0-fast-260128-df",
+		"dreamina-seedance-2-0-mini-260615-df",
+		"dreamina-seedance-2-5-260628-df",
+	} {
+		assert.True(t, isSeedanceDFModel(modelName), modelName)
+		assert.Contains(t, ModelList, modelName)
+	}
+	assert.False(t, isSeedanceDFModel("dreamina-seedance-2-0-hc"))
+	assert.False(t, isSeedanceDFModel("dreamina-seedance-2-0-260128"))
+}
+
 func TestBuildRequestBodyRecreatesMissingConfiguredAssetGroup(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	resetAssetGroupCache()

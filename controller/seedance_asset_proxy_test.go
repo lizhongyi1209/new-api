@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildUnifiedSeedanceAssetRequestHC(t *testing.T) {
+func TestBuildUnifiedSeedanceAssetRequestHCAliasUsesDF(t *testing.T) {
 	path, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
 		Type:      " hc ",
 		URL:       " https://cdn.example.com/avatar.png ",
@@ -17,10 +17,27 @@ func TestBuildUnifiedSeedanceAssetRequestHC(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "/v1/sd/assets", path)
+	assert.Equal(t, "/v1/sd-5/assets", path)
 	assert.JSONEq(t, `{
 		"URL": "https://cdn.example.com/avatar.png",
 		"Name": "avatar-front",
+		"AssetType": "Image"
+	}`, string(body))
+}
+
+func TestBuildUnifiedSeedanceAssetRequestDF(t *testing.T) {
+	path, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
+		Type:      " DF ",
+		URL:       "https://cdn.example.com/reference.png",
+		Name:      "0.jpg",
+		AssetType: "image",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/sd-5/assets", path)
+	assert.JSONEq(t, `{
+		"URL": "https://cdn.example.com/reference.png",
+		"Name": "0.jpg",
 		"AssetType": "Image"
 	}`, string(body))
 }
@@ -73,7 +90,7 @@ func TestBuildUnifiedSeedanceAssetRequestRejectsInvalidInput(t *testing.T) {
 		{
 			name:    "unsupported workflow",
 			request: UnifiedSeedanceAssetRequest{Type: "standard", URL: "https://cdn.example.com/a.png"},
-			wantErr: "currently supported: hc",
+			wantErr: "currently supported: hc, df",
 		},
 		{
 			name:    "non https url",
@@ -96,11 +113,18 @@ func TestBuildUnifiedSeedanceAssetRequestRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestBuildUnifiedSeedanceAssetQueryHC(t *testing.T) {
+func TestBuildUnifiedSeedanceAssetQueryHCAliasUsesDF(t *testing.T) {
 	path, err := buildUnifiedSeedanceAssetQuery(" hc ", " asset 123 ")
 
 	require.NoError(t, err)
-	assert.Equal(t, "/v1/sd/assets/asset%20123", path)
+	assert.Equal(t, "/v1/sd-5/assets/asset%20123", path)
+}
+
+func TestBuildUnifiedSeedanceAssetQueryDF(t *testing.T) {
+	path, err := buildUnifiedSeedanceAssetQuery("df", "asset-123")
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/sd-5/assets/asset-123", path)
 }
 
 func TestBuildUnifiedSeedanceAssetQueryRejectsInvalidInput(t *testing.T) {
@@ -114,7 +138,7 @@ func TestBuildUnifiedSeedanceAssetQueryRejectsInvalidInput(t *testing.T) {
 			name:          "unsupported workflow",
 			assetWorkflow: "standard",
 			assetID:       "asset-123",
-			wantErr:       "currently supported: hc",
+			wantErr:       "currently supported: hc, df",
 		},
 		{
 			name:          "missing asset id",
