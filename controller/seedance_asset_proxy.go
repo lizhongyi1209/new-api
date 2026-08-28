@@ -31,9 +31,9 @@ type serviceInferenceAssetRequest struct {
 
 func seedanceAssetBasePath(assetWorkflow string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(assetWorkflow)) {
-	case "hc", "df":
-		// HC is retained as a downstream compatibility alias while the retired
-		// upstream HC workflow is migrated to DF.
+	case "hc":
+		return "/v1/sd/assets", true
+	case "df":
 		return "/v1/sd-5/assets", true
 	default:
 		return "", false

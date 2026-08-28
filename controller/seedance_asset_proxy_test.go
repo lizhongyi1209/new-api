@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildUnifiedSeedanceAssetRequestHCAliasUsesDF(t *testing.T) {
+func TestBuildUnifiedSeedanceAssetRequestHC(t *testing.T) {
 	path, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
 		Type:      " hc ",
 		URL:       " https://cdn.example.com/avatar.png ",
@@ -17,7 +17,7 @@ func TestBuildUnifiedSeedanceAssetRequestHCAliasUsesDF(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	assert.Equal(t, "/v1/sd-5/assets", path)
+	assert.Equal(t, "/v1/sd/assets", path)
 	assert.JSONEq(t, `{
 		"URL": "https://cdn.example.com/avatar.png",
 		"Name": "avatar-front",
@@ -113,11 +113,11 @@ func TestBuildUnifiedSeedanceAssetRequestRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestBuildUnifiedSeedanceAssetQueryHCAliasUsesDF(t *testing.T) {
+func TestBuildUnifiedSeedanceAssetQueryHC(t *testing.T) {
 	path, err := buildUnifiedSeedanceAssetQuery(" hc ", " asset 123 ")
 
 	require.NoError(t, err)
-	assert.Equal(t, "/v1/sd-5/assets/asset%20123", path)
+	assert.Equal(t, "/v1/sd/assets/asset%20123", path)
 }
 
 func TestBuildUnifiedSeedanceAssetQueryDF(t *testing.T) {

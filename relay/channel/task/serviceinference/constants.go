@@ -24,8 +24,21 @@ const (
 	defaultAssetGroupDescription = "TokenMartSeedance video assets"
 	defaultAssetPollAttempts     = 30
 	defaultAssetPollIntervalMS   = 1000
+	seedanceHCAssetBasePath      = "/v1/sd/assets"
 	seedanceDFAssetBasePath      = "/v1/sd-5/assets"
 )
+
+func isSeedanceHCModel(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "dreamina-seedance-2-0-hc",
+		"dreamina-seedance-2-0-fast-hc",
+		"dreamina-seedance-2-0-mini-hc",
+		"dreamina-seedance-2-5-hc":
+		return true
+	default:
+		return false
+	}
+}
 
 func isSeedanceDFModel(model string) bool {
 	switch strings.ToLower(strings.TrimSpace(model)) {
@@ -37,6 +50,16 @@ func isSeedanceDFModel(model string) bool {
 	default:
 		return false
 	}
+}
+
+func seedanceDirectAssetWorkflow(model string) (string, string, bool) {
+	if isSeedanceHCModel(model) {
+		return "hc", seedanceHCAssetBasePath, true
+	}
+	if isSeedanceDFModel(model) {
+		return "df", seedanceDFAssetBasePath, true
+	}
+	return "", "", false
 }
 
 // doubaoPricingModel 仅把既有 Seedance 2.0 模型族对应到 doubao 价格表。

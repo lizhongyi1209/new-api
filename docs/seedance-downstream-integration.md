@@ -204,7 +204,14 @@ GET /v1/sd-5/assets/{asset_id}
 - `dreamina-seedance-2-0-mini-260615-df`
 - `dreamina-seedance-2-5-260628-df`
 
-其他 ServiceInference Seedance 模型继续使用素材组工作流：
+HC 模型使用对应的直接素材接口 `POST /v1/sd/assets`，并通过 `GET /v1/sd/assets/{asset_id}` 查询状态：
+
+- `dreamina-seedance-2-0-hc`
+- `dreamina-seedance-2-0-fast-hc`
+- `dreamina-seedance-2-0-mini-hc`
+- `dreamina-seedance-2-5-hc`
+
+其他 ServiceInference 模型继续使用素材组工作流：
 
 1. 检查或创建素材组。
 2. 调用素材创建接口导入图片 URL。
@@ -272,7 +279,7 @@ GET /v1/asset-groups/{group_id}
 
 本站公开了素材代理接口。下游如需复用同一张图片，可以使用本站 API Token 调用以下接口；本站会在服务端使用渠道 265 的凭据访问真实上游：
 
-HC 和 DF 客户端可以使用统一入口。由于上游 HC 工作流已进入退役迁移，`type=hc` 作为兼容别名与 `type=df` 一样转发到 DF 素材接口：
+HC 和 DF 客户端可以使用统一入口，服务端会按 `type` 选择对应的素材接口：
 
 ```http
 POST https://cf-api.o1key.com/v1/seedance/assets
@@ -287,7 +294,7 @@ POST https://cf-api.o1key.com/v1/seedance/assets
 }
 ```
 
-将 `type` 设为 `hc` 或 `df` 都会转发到 `/v1/sd-5/assets`，已有客户端无需修改 `type=hc`。状态查询接口为：
+将 `type` 设为 `hc` 时转发到 `/v1/sd/assets`，设为 `df` 时转发到 `/v1/sd-5/assets`。状态查询接口为：
 
 ```http
 GET https://cf-api.o1key.com/v1/seedance/assets/{asset_id}?type=df
