@@ -404,6 +404,30 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		return
 	}
 
+	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
+	isServiceInferenceVideo := originTask.Platform == constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeServiceInferenceVideo))
+
+	// ServiceInference backs the documented Seedance downstream API. Keep both
+	// video query routes on the same public OpenAI-style contract and never fall
+	// through to TaskDto, which exposes internal task, channel, and billing data.
+	if isServiceInferenceVideo {
+		adaptor := GetTaskAdaptor(originTask.Platform)
+		if adaptor == nil {
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)
+			return
+		}
+		converter, ok := adaptor.(channel.OpenAIVideoConverter)
+		if !ok {
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
+			return
+		}
+		respBody, err = converter.ConvertToOpenAIVideo(originTask)
+		if err != nil {
+			taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)
+		}
+		return
+	}
+
 	if strings.HasPrefix(originTask.Properties.OriginModelName, "seedance-2.0") {
 		respBody, err = common.Marshal(BuildSeedance20VideoTaskResponse(originTask))
 		if err != nil {
@@ -411,8 +435,6 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		}
 		return
 	}
-
-	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(c.Request.Context(), originTask, isOpenAIVideoAPI); len(realtimeResp) > 0 {
@@ -427,16 +449,15 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)
 			return
 		}
-		if converter, ok := adaptor.(channel.OpenAIVideoConverter); ok {
-			openAIVideoData, err := converter.ConvertToOpenAIVideo(originTask)
-			if err != nil {
-				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)
-				return
-			}
-			respBody = openAIVideoData
+		converter, ok := adaptor.(channel.OpenAIVideoConverter)
+		if !ok {
+			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
 			return
 		}
-		taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
+		respBody, err = converter.ConvertToOpenAIVideo(originTask)
+		if err != nil {
+			taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)
+		}
 		return
 	}
 

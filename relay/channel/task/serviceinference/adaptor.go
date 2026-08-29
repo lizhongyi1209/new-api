@@ -423,7 +423,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
 	openAIVideo.CreatedAt = originTask.CreatedAt
-	openAIVideo.CompletedAt = originTask.UpdatedAt
+	openAIVideo.CompletedAt = originTask.FinishTime
 	openAIVideo.Model = originTask.Properties.OriginModelName
 
 	if len(bytes.TrimSpace(originTask.Data)) == 0 {

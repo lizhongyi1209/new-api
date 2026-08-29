@@ -681,6 +681,48 @@ func TestConvertToOpenAIVideoQueuedTaskWithoutData(t *testing.T) {
 	assert.Nil(t, video.Metadata)
 }
 
+func TestConvertToOpenAIVideoCompletedTaskMatchesDownstreamContract(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	task := &model.Task{
+		TaskID:     "task-public",
+		Status:     model.TaskStatusSuccess,
+		Progress:   "100%",
+		CreatedAt:  1785768134,
+		UpdatedAt:  1785768400,
+		FinishTime: 1785768366,
+		Properties: model.Properties{
+			OriginModelName: "dreamina-seedance-2-0-hc",
+		},
+		Data: []byte(`{
+			"task": {
+				"id": "mvt-upstream",
+				"status": "completed",
+				"outputs": ["https://cdn.example.com/result.mp4"],
+				"usage": {"completion_tokens": 174794, "total_tokens": 174794}
+			}
+		}`),
+	}
+
+	data, err := adaptor.ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(data, &video))
+	assert.Equal(t, "task-public", video.ID)
+	assert.Equal(t, "task-public", video.TaskID)
+	assert.Equal(t, "video", video.Object)
+	assert.Equal(t, "dreamina-seedance-2-0-hc", video.Model)
+	assert.Equal(t, dto.VideoStatusCompleted, video.Status)
+	assert.Equal(t, 100, video.Progress)
+	assert.Equal(t, int64(1785768134), video.CreatedAt)
+	assert.Equal(t, int64(1785768366), video.CompletedAt)
+	require.NotNil(t, video.Metadata)
+	assert.Equal(t, "https://cdn.example.com/result.mp4", video.Metadata["url"])
+	assert.Equal(t, []any{"https://cdn.example.com/result.mp4"}, video.Metadata["outputs"])
+	assert.NotNil(t, video.Metadata["usage"])
+	assert.Nil(t, video.Error)
+}
+
 // TestVideoInputRatio 锁定 TokenMartSeedance 各模型的视频输入计费倍率。
 func TestVideoInputRatio(t *testing.T) {
 	cases := []struct {
