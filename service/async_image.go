@@ -5,15 +5,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
-	"net/url"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -430,12 +426,9 @@ func validateSingleImageSize(imageData []byte) error {
 
 	// Check if it's a URL
 	if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
-		if err := ValidateSSRFProtectedFetchURL(imageStr); err != nil {
-			return fmt.Errorf("URL 图片地址不允许访问: %w", err)
-		}
 		// For URLs, we'll validate size when downloading
 		// Pre-check: try to get Content-Length from HEAD request
-		resp, err := GetSSRFProtectedHTTPClient().Head(imageStr)
+		resp, err := http.Head(imageStr)
 		if err != nil {
 			// If HEAD fails, we'll let the actual download handle it
 			return nil
@@ -1407,368 +1400,91 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	_ = task.Update()
 }
 
-type GeminiFileDataOptions struct {
-	Enabled       bool
-	downloadImage func(string, int) (string, string, error)
-}
-
-type GenerateImageInputPreparation struct {
-	ClientFormat   string
-	UpstreamFormat string
-	Conversion     string
-	Fallback       string
-	ImageCount     int
-	InputBytes     int64
-	Download       time.Duration
-	Decode         time.Duration
-	LocalWrite     time.Duration
-	Total          time.Duration
-}
-
-type geminiPreparedImagePart struct {
-	part           map[string]interface{}
-	clientFormat   string
-	upstreamFormat string
-	conversion     string
-	fallback       string
-	inputBytes     int64
-	download       time.Duration
-	decode         time.Duration
-	localWrite     time.Duration
-}
-
-// ConvertAsyncImageToGeminiNative preserves the legacy converter contract: URLs
-// are downloaded and every image is sent upstream as inlineData.
+// ConvertAsyncImageToGeminiNative converts an OpenAI-format AsyncImageRequest to Gemini
+// native generateContent format. Reference image URLs are downloaded and converted to base64
+// inlineData format. Returns the native request ready for ProcessAsyncGeminiTask.
 func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncImageRequest) (map[string]interface{}, error) {
-	inputs := make([]dto.GenerateImageInput, 0, len(asyncReq.Images)+1)
+	// Build parts array: text prompt + optional reference image
+	parts := []interface{}{
+		map[string]interface{}{
+			"text": asyncReq.Prompt,
+		},
+	}
+
+	// Add reference image as inlineData part
 	if len(asyncReq.Image) > 0 {
-		var imageValue string
-		if err := common.Unmarshal(asyncReq.Image, &imageValue); err == nil {
-			inputs = append(inputs, dto.GenerateImageInput{Value: &imageValue})
-		} else {
-			var imageObject struct {
-				B64JSON string `json:"b64_json"`
-			}
-			if err := common.Unmarshal(asyncReq.Image, &imageObject); err == nil && imageObject.B64JSON != "" {
-				inputs = append(inputs, dto.GenerateImageInput{InlineData: &dto.GenerateImageInlineData{
-					MimeType: "image/png",
-					Data:     imageObject.B64JSON,
-				}})
-			}
-		}
-	}
-	for _, imageValue := range asyncReq.Images {
-		value := imageValue
-		inputs = append(inputs, dto.GenerateImageInput{Value: &value})
-	}
-	nativeReq, _, err := PrepareGenerateImageGeminiNative(ctx, asyncReq, inputs, GeminiFileDataOptions{})
-	return nativeReq, err
-}
-
-// PrepareGenerateImageGeminiNative converts the unified image inputs according
-// to the selected channel's declared fileData capability.
-func PrepareGenerateImageGeminiNative(
-	_ context.Context,
-	asyncReq *dto.AsyncImageRequest,
-	inputs []dto.GenerateImageInput,
-	options GeminiFileDataOptions,
-) (map[string]interface{}, GenerateImageInputPreparation, error) {
-	startedAt := time.Now()
-	preparation := GenerateImageInputPreparation{
-		ClientFormat:   "none",
-		UpstreamFormat: "none",
-		Conversion:     "passthrough",
-		Fallback:       "none",
-		ImageCount:     len(inputs),
-	}
-	parts := []interface{}{map[string]interface{}{"text": asyncReq.Prompt}}
-	clientFormats := make(map[string]struct{})
-	upstreamFormats := make(map[string]struct{})
-	conversions := make(map[string]struct{})
-	fallbacks := make(map[string]struct{})
-
-	for i, input := range inputs {
-		prepared, err := prepareGeminiImageInput(input, options)
-		if err != nil {
-			preparation.Total = time.Since(startedAt)
-			return nil, preparation, fmt.Errorf("images[%d]: %w", i, err)
-		}
-		parts = append(parts, prepared.part)
-		clientFormats[prepared.clientFormat] = struct{}{}
-		upstreamFormats[prepared.upstreamFormat] = struct{}{}
-		conversions[prepared.conversion] = struct{}{}
-		if prepared.fallback != "none" {
-			fallbacks[prepared.fallback] = struct{}{}
-		}
-		preparation.InputBytes += prepared.inputBytes
-		preparation.Download += prepared.download
-		preparation.Decode += prepared.decode
-		preparation.LocalWrite += prepared.localWrite
-	}
-
-	preparation.ClientFormat = summarizeGenerateImageInputValues(clientFormats, "none")
-	preparation.UpstreamFormat = summarizeGenerateImageInputValues(upstreamFormats, "none")
-	preparation.Conversion = summarizeGenerateImageInputValues(conversions, "passthrough")
-	preparation.Fallback = summarizeGenerateImageInputValues(fallbacks, "none")
-	preparation.Total = time.Since(startedAt)
-	nativeReq := buildGeminiNativeImageRequest(asyncReq, parts)
-	if preparation.Fallback != "none" {
-		jsonData, err := common.Marshal(nativeReq)
-		if err != nil {
-			return nil, preparation, fmt.Errorf("serialize fallback request: %w", err)
-		}
-		if len(jsonData) > nanoBananaGenerateContentMaxBodyBytes {
-			return nil, preparation, fmt.Errorf(
-				"fileData fallback request body is %.2f MB, exceeding the %d MB upstream limit",
-				float64(len(jsonData))/1024/1024,
-				nanoBananaGenerateContentMaxBodyBytes/1024/1024,
-			)
-		}
-	}
-	return nativeReq, preparation, nil
-}
-
-func prepareGeminiImageInput(input dto.GenerateImageInput, options GeminiFileDataOptions) (geminiPreparedImagePart, error) {
-	if input.FileData != nil {
-		mimeType := normalizeGenerateImageMIMEType(input.FileData.MimeType)
-		fileURI := strings.TrimSpace(input.FileData.FileURI)
-		if options.Enabled {
-			return geminiPreparedImagePart{
-				part:           geminiFileDataPart(mimeType, fileURI),
-				clientFormat:   "file_data",
-				upstreamFormat: "file_data",
-				conversion:     "passthrough",
-				fallback:       "none",
-			}, nil
-		}
-		return downloadGeminiImageToInline(fileURI, mimeType, "file_data", "none", options.downloadImage)
-	}
-
-	if input.Value != nil {
-		value := strings.TrimSpace(*input.Value)
-		if isHTTPImageURL(value) {
-			if options.Enabled {
-				if mimeType := inferImageMIMETypeFromURL(value); mimeType != "" {
-					return geminiPreparedImagePart{
-						part:           geminiFileDataPart(mimeType, value),
-						clientFormat:   "legacy_url",
-						upstreamFormat: "file_data",
-						conversion:     "passthrough",
-						fallback:       "none",
-					}, nil
+		var imageStr string
+		if err := common.Unmarshal(asyncReq.Image, &imageStr); err == nil {
+			var mimeType, b64Data string
+			if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
+				var err error
+				mimeType, b64Data, err = GetImageFromUrlWithLimit(imageStr, AsyncImageMaxURLSizeMB)
+				if err != nil {
+					return nil, fmt.Errorf("download reference image failed: %w", err)
 				}
-				return downloadGeminiImageToInline(value, "", "legacy_url", "mime_unknown", options.downloadImage)
+			} else if strings.HasPrefix(imageStr, "data:") {
+				// Parse data URI: data:image/png;base64,xxxx
+				mimeType, b64Data = parseDataURI(imageStr)
+				if mimeType == "" {
+					return nil, fmt.Errorf("failed to parse data URI")
+				}
+			} else {
+				// Assume raw base64
+				b64Data = imageStr
+				mimeType = "image/png"
 			}
-			return downloadGeminiImageToInline(value, "", "legacy_url", "none", options.downloadImage)
-		}
-		mimeType := "image/png"
-		base64Data := value
-		if strings.HasPrefix(value, "data:") {
-			mimeType, base64Data = parseDataURI(value)
-			if mimeType == "" || base64Data == "" {
-				return geminiPreparedImagePart{}, fmt.Errorf("invalid data URL")
+			parts = append(parts, map[string]interface{}{
+				"inlineData": map[string]interface{}{
+					"mimeType": mimeType,
+					"data":     b64Data,
+				},
+			})
+		} else {
+			// Non-string format (object with b64_json), pass as-is via task data
+			var imgObj map[string]interface{}
+			if err := common.Unmarshal(asyncReq.Image, &imgObj); err == nil {
+				if b64, ok := imgObj["b64_json"].(string); ok {
+					parts = append(parts, map[string]interface{}{
+						"inlineData": map[string]interface{}{
+							"mimeType": "image/png",
+							"data":     b64,
+						},
+					})
+				}
 			}
 		}
-		return prepareGeminiBase64Input(mimeType, base64Data, "legacy_base64", options)
 	}
 
-	if input.InlineData != nil {
-		return prepareGeminiBase64Input(
-			normalizeGenerateImageMIMEType(input.InlineData.MimeType),
-			strings.TrimSpace(input.InlineData.Data),
-			"inline_data",
-			options,
-		)
-	}
-	return geminiPreparedImagePart{}, fmt.Errorf("image input is empty")
-}
-
-func prepareGeminiBase64Input(mimeType, base64Data, clientFormat string, options GeminiFileDataOptions) (geminiPreparedImagePart, error) {
-	if !options.Enabled {
-		return geminiPreparedImagePart{
-			part:           geminiInlineDataPart(mimeType, base64Data),
-			clientFormat:   clientFormat,
-			upstreamFormat: "inline_data",
-			conversion:     "passthrough",
-			fallback:       "none",
-			inputBytes:     int64(base64.StdEncoding.DecodedLen(len(base64Data))),
-		}, nil
-	}
-
-	decodeStartedAt := time.Now()
-	raw, err := base64.StdEncoding.DecodeString(base64Data)
-	decodeDuration := time.Since(decodeStartedAt)
-	if err != nil {
-		return geminiPreparedImagePart{}, fmt.Errorf("base64 decode failed: %w", err)
-	}
-
-	writeStartedAt := time.Now()
-	attachment, storeErr := StoreTemporaryInputAttachment(
-		bytes.NewReader(raw),
-		"image."+temporaryInputExtensionForMIME(mimeType),
-		"cf-api.o1key.com",
-	)
-	writeDuration := time.Since(writeStartedAt)
-	if storeErr == nil {
-		return geminiPreparedImagePart{
-			part:           geminiFileDataPart(attachment.ContentType, attachment.URL),
-			clientFormat:   clientFormat,
-			upstreamFormat: "file_data",
-			conversion:     "local_cf_to_file_data",
-			fallback:       "none",
-			inputBytes:     int64(len(raw)),
-			decode:         decodeDuration,
-			localWrite:     writeDuration,
-		}, nil
-	}
-
-	if errors.Is(storeErr, ErrTemporaryInputEmpty) || errors.Is(storeErr, ErrTemporaryInputTooLarge) {
-		return geminiPreparedImagePart{}, storeErr
-	}
-	return geminiPreparedImagePart{
-		part:           geminiInlineDataPart(mimeType, base64Data),
-		clientFormat:   clientFormat,
-		upstreamFormat: "inline_data",
-		conversion:     "passthrough",
-		fallback:       "storage_error",
-		inputBytes:     int64(len(raw)),
-		decode:         decodeDuration,
-		localWrite:     writeDuration,
-	}, nil
-}
-
-func downloadGeminiImageToInline(
-	fileURI, declaredMIMEType, clientFormat, fallback string,
-	downloadImage func(string, int) (string, string, error),
-) (geminiPreparedImagePart, error) {
-	if downloadImage == nil {
-		downloadImage = GetImageFromUrlWithLimit
-	}
-	downloadStartedAt := time.Now()
-	mimeType, base64Data, err := downloadImage(fileURI, AsyncImageMaxURLSizeMB)
-	downloadDuration := time.Since(downloadStartedAt)
-	if err != nil {
-		var urlError *url.Error
-		if errors.As(err, &urlError) {
-			return geminiPreparedImagePart{}, fmt.Errorf("download reference image failed during %s: %v", urlError.Op, urlError.Err)
+	// Add multiple reference images
+	if len(asyncReq.Images) > 0 {
+		for _, imgURL := range asyncReq.Images {
+			var mimeType, b64Data string
+			var err error
+			if strings.HasPrefix(imgURL, "http://") || strings.HasPrefix(imgURL, "https://") {
+				mimeType, b64Data, err = GetImageFromUrlWithLimit(imgURL, AsyncImageMaxURLSizeMB)
+			} else if strings.HasPrefix(imgURL, "data:") {
+				mimeType, b64Data = parseDataURI(imgURL)
+				if mimeType == "" {
+					err = fmt.Errorf("failed to parse data URI")
+				}
+			} else {
+				// Assume raw base64
+				b64Data = imgURL
+				mimeType = "image/png"
+			}
+			if err != nil {
+				return nil, fmt.Errorf("process reference image %s failed: %w", imgURL, err)
+			}
+			parts = append(parts, map[string]interface{}{
+				"inlineData": map[string]interface{}{
+					"mimeType": mimeType,
+					"data":     b64Data,
+				},
+			})
 		}
-		return geminiPreparedImagePart{}, fmt.Errorf("download reference image failed: %w", err)
 	}
-	mimeType = normalizeGenerateImageMIMEType(mimeType)
-	if declaredMIMEType != "" && !sameGenerateImageMIMEType(declaredMIMEType, mimeType) {
-		return geminiPreparedImagePart{}, fmt.Errorf("downloaded image MIME type %s does not match declared MIME type %s", mimeType, declaredMIMEType)
-	}
-	return geminiPreparedImagePart{
-		part:           geminiInlineDataPart(mimeType, base64Data),
-		clientFormat:   clientFormat,
-		upstreamFormat: "inline_data",
-		conversion:     "download_to_inline",
-		fallback:       fallback,
-		inputBytes:     int64(base64.StdEncoding.DecodedLen(len(base64Data))),
-		download:       downloadDuration,
-	}, nil
-}
 
-func geminiInlineDataPart(mimeType, data string) map[string]interface{} {
-	return map[string]interface{}{
-		"inlineData": map[string]interface{}{
-			"mimeType": mimeType,
-			"data":     data,
-		},
-	}
-}
-
-func geminiFileDataPart(mimeType, fileURI string) map[string]interface{} {
-	return map[string]interface{}{
-		"fileData": map[string]interface{}{
-			"mimeType": mimeType,
-			"fileUri":  fileURI,
-		},
-	}
-}
-
-func inferImageMIMETypeFromURL(value string) string {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return ""
-	}
-	switch strings.ToLower(path.Ext(parsed.Path)) {
-	case ".png":
-		return "image/png"
-	case ".jpg", ".jpeg":
-		return "image/jpeg"
-	case ".webp":
-		return "image/webp"
-	case ".gif":
-		return "image/gif"
-	case ".bmp":
-		return "image/bmp"
-	case ".tif", ".tiff":
-		return "image/tiff"
-	case ".heic":
-		return "image/heic"
-	case ".heif":
-		return "image/heif"
-	case ".avif":
-		return "image/avif"
-	default:
-		return ""
-	}
-}
-
-func temporaryInputExtensionForMIME(mimeType string) string {
-	switch normalizeGenerateImageMIMEType(mimeType) {
-	case "image/jpeg":
-		return "jpg"
-	case "image/webp":
-		return "webp"
-	case "image/gif":
-		return "gif"
-	case "image/bmp":
-		return "bmp"
-	case "image/tiff":
-		return "tiff"
-	case "image/heic":
-		return "heic"
-	case "image/heif":
-		return "heif"
-	case "image/avif":
-		return "avif"
-	default:
-		return "png"
-	}
-}
-
-func normalizeGenerateImageMIMEType(value string) string {
-	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(value))
-	if err != nil {
-		return strings.ToLower(strings.TrimSpace(value))
-	}
-	mediaType = strings.ToLower(mediaType)
-	if mediaType == "image/jpg" {
-		return "image/jpeg"
-	}
-	return mediaType
-}
-
-func sameGenerateImageMIMEType(first, second string) bool {
-	return normalizeGenerateImageMIMEType(first) == normalizeGenerateImageMIMEType(second)
-}
-
-func summarizeGenerateImageInputValues(values map[string]struct{}, emptyValue string) string {
-	if len(values) == 0 {
-		return emptyValue
-	}
-	if len(values) > 1 {
-		return "mixed"
-	}
-	for value := range values {
-		return value
-	}
-	return emptyValue
-}
-
-func buildGeminiNativeImageRequest(asyncReq *dto.AsyncImageRequest, parts []interface{}) map[string]interface{} {
+	// Build generationConfig
 	imageConfig := map[string]interface{}{}
 	if asyncReq.AspectRatio != "" {
 		imageConfig["aspectRatio"] = asyncReq.AspectRatio
@@ -1811,7 +1527,7 @@ func buildGeminiNativeImageRequest(asyncReq *dto.AsyncImageRequest, parts []inte
 		generationConfig["thinkingConfig"] = thinkingConfig
 	}
 
-	return map[string]interface{}{
+	geminiReq := map[string]interface{}{
 		"contents": []interface{}{
 			map[string]interface{}{
 				"role":  "user",
@@ -1820,6 +1536,8 @@ func buildGeminiNativeImageRequest(asyncReq *dto.AsyncImageRequest, parts []inte
 		},
 		"generationConfig": generationConfig,
 	}
+
+	return geminiReq, nil
 }
 
 // parseDataURI extracts mimeType and base64 data from a data URI string.

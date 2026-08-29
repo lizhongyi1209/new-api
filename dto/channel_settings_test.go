@@ -3,7 +3,6 @@ package dto
 import (
 	"testing"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,16 +43,6 @@ func TestAdvancedCustomValidateResponsesToChatConverterPath(t *testing.T) {
 			assert.Contains(t, err.Error(), "converter does not match incoming_path")
 		})
 	}
-}
-
-func TestChannelOtherSettingsGeminiFileDataCapabilityDefaultsOff(t *testing.T) {
-	var defaultSettings ChannelOtherSettings
-	require.NoError(t, common.Unmarshal([]byte(`{}`), &defaultSettings))
-	assert.False(t, defaultSettings.GeminiFileDataEnabled)
-
-	var enabledSettings ChannelOtherSettings
-	require.NoError(t, common.Unmarshal([]byte(`{"gemini_file_data_enabled":true}`), &enabledSettings))
-	assert.True(t, enabledSettings.GeminiFileDataEnabled)
 }
 
 func TestChannelOtherSettingsValidateImageOutputStrategy(t *testing.T) {

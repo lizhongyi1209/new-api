@@ -38,8 +38,8 @@ jobs:
 
       - name: Create frontend embed placeholder
         run: |
-          mkdir -p web/default/dist web/classic/dist
-          touch web/default/dist/index.html web/classic/dist/index.html
+          mkdir -p web/dist
+          touch web/dist/index.html
 
       - name: Vet root module
         run: go vet ./...
@@ -75,7 +75,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Typecheck
-        run: bun run --filter newapi-web typecheck
+        run: bun run typecheck
 
       - name: Test
-        run: bun run --filter newapi-web test
+        run: bun test

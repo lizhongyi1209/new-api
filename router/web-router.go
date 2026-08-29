@@ -19,7 +19,6 @@ type ThemeAssets struct {
 	DefaultIndexPage []byte
 	ClassicBuildFS   embed.FS
 	ClassicIndexPage []byte
-	APIDocPage       []byte
 }
 
 func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
@@ -30,7 +29,6 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 	router.Use(gzip.Gzip(gzip.DefaultCompression))
 	router.Use(middleware.GlobalWebRateLimit())
 	router.Use(middleware.Cache())
-	SetAPIDocRouter(router, assets.APIDocPage)
 	router.Use(static.Serve("/", themeFS))
 	router.NoRoute(func(c *gin.Context) {
 		c.Set(middleware.RouteTagKey, "web")
@@ -45,18 +43,4 @@ func SetWebRouter(router *gin.Engine, assets ThemeAssets) {
 			c.Data(http.StatusOK, "text/html; charset=utf-8", assets.DefaultIndexPage)
 		}
 	})
-}
-
-func SetAPIDocRouter(router *gin.Engine, page []byte) {
-	servePage := func(c *gin.Context) {
-		c.Header("Cache-Control", "no-cache")
-		c.Header("Content-Type", "text/html; charset=utf-8")
-		if c.Request.Method == http.MethodHead {
-			c.Status(http.StatusOK)
-			return
-		}
-		c.Data(http.StatusOK, "text/html; charset=utf-8", page)
-	}
-	router.GET("/docs/api-doc", servePage)
-	router.HEAD("/docs/api-doc", servePage)
 }
