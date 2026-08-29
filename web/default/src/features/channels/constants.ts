@@ -394,6 +394,8 @@ export const MODEL_FETCHABLE_TYPES = new Set([
   63, 64,
 ])
 
+export const GEMINI_FILE_DATA_CHANNEL_TYPES = new Set([24, 41])
+
 // Gateway-style channels that relay a full upstream protocol and therefore
 // support passing client fields through untouched.
 // NOTE: our channel numbering diverges from upstream. Upstream uses

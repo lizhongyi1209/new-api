@@ -63,6 +63,7 @@ const (
 
 type ChannelOtherSettings struct {
 	ImageOutputStrategy                   string                `json:"image_output_strategy,omitempty"`
+	GeminiFileDataEnabled                 bool                  `json:"gemini_file_data_enabled,omitempty"`
 	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`
 	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"` // "json" or "api_key"
 	OpenRouterEnterprise                  *bool                 `json:"openrouter_enterprise,omitempty"`

@@ -98,6 +98,7 @@ export interface ChannelOtherSettings {
     | 'local_temp_cf'
     | 'local_temp_esa'
     | 'passthrough'
+  gemini_file_data_enabled?: boolean
   azure_responses_version?: string
   vertex_key_type?: 'json' | 'api_key'
   openrouter_enterprise?: boolean

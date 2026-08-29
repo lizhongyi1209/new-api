@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"regexp"
 	"strings"
 	"sync"
@@ -495,6 +496,21 @@ func keepUpstreamRedirectResponse(_ *http.Request, _ []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
+func applyUpstreamHTTPTrace(c *gin.Context, req *http.Request) *http.Request {
+	if c == nil || req == nil {
+		return req
+	}
+	traceValue, ok := c.Get(common2.UpstreamHTTPTraceKey)
+	if !ok {
+		return req
+	}
+	trace, ok := traceValue.(*httptrace.ClientTrace)
+	if !ok || trace == nil {
+		return req
+	}
+	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+}
+
 func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
 	client, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
 	if err != nil {
@@ -502,6 +518,7 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 	}
 	relayClient := *client
 	relayClient.CheckRedirect = keepUpstreamRedirectResponse
+	req = applyUpstreamHTTPTrace(c, req)
 	if common2.DebugEnabled && req != nil && req.URL != nil {
 		policy := service.NormalizeHTTPTransportPolicy(info.ChannelSetting)
 		logger.LogDebug(c, fmt.Sprintf(

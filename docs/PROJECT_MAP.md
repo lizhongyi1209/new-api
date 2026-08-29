@@ -69,6 +69,38 @@ Aliases: 图片输出策略, image output strategy, 图片落盘, 本机临时�
 
 When changing this feature, preserve legacy `local_temp`, verify both explicit domains, cover stream and non-stream response paths, and keep the 24-hour expiry behavior fail-closed.
 
+## Unified image `fileData` input
+
+Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 URL, `/async/v1/generateImage` 参考图.
+
+### Behavior contract
+
+- `/async/v1/generateImage` accepts legacy string items plus explicit `inlineData` and `fileData` objects in `images`.
+- Channel setting `other.gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration.
+- With the setting disabled, Gemini reference URLs are downloaded and sent as `inlineData`, preserving the legacy behavior.
+- With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are atomically stored under `${TEMP_STORAGE_DIR:-tmp}/input` and exposed through the CF `/tmp/input` URL.
+- Unknown URL MIME types fall back to the legacy download-to-inline path. Local storage failures fall back to `inlineData` only when the resulting Gemini request remains within the 20 MiB upstream limit.
+- Input preparation logs contain only format/timing/size summaries and never include Base64 payloads or signed URL query parameters.
+
+### Entry points
+
+| Concern | Source entry |
+| --- | --- |
+| Mixed string/object input DTO | `dto/generate_image.go` |
+| Input validation, route dispatch, and fallback body limit | `service/generate_image.go` |
+| Gemini `inlineData`/`fileData` preparation and timing summary | `service/async_image.go` |
+| Submission-time channel capability selection and input preparation log | `controller/generate_image.go` |
+| Channel capability setting | `dto/channel_settings.go` |
+| Reused atomic `/tmp/input` storage | `service/temporary_upload.go` |
+| Channel editor setting | `web/default/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/default/src/features/channels/lib/channel-form.ts` |
+
+### Regression coverage
+
+- `dto/generate_image_test.go`
+- `service/generate_image_file_data_test.go`
+- `controller/generate_image_test.go`
+- `dto/channel_settings_test.go`
+
 ## Asset and material upload
 
 Aliases: 素材上传, 文件上传, 上传素材, asset upload, element image upload, presign, R2 upload, local upload, Seedance asset, 上传管理.

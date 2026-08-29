@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/bytedance/gopkg/util/gopool"
@@ -20,6 +21,7 @@ import (
 // GenerateImageSubmit 是统一异步生图端点 POST /async/v1/generateImage 的入口。
 // 收扁平参数 → 校验 → 预扣费 → 按模型分发 provider → 建任务 → 异步处理 → 返回 task_id。
 func GenerateImageSubmit(c *gin.Context) {
+	handlerStartedAt := time.Now()
 	var rawReq map[string]json.RawMessage
 	if err := unmarshalGenerateImageBody(c, &rawReq); err != nil {
 		generateImageError(c, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("请求参数错误: %v", err))
@@ -52,11 +54,13 @@ func GenerateImageSubmit(c *gin.Context) {
 	channelId := common.GetContextKeyInt(c, constant.ContextKeyChannelId)
 	tokenId := c.GetInt("token_id")
 
+	billingStartedAt := time.Now()
 	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, req.Model)
 	if billingErr != nil {
 		generateImageError(c, billingErr.StatusCode, "billing_error", billingErr.Error())
 		return
 	}
+	billingFinishedAt := time.Now()
 
 	action, isGeminiNative := service.ResolveImageRoute(req.Model, relayInfo.ChannelMeta.ChannelType)
 
@@ -78,6 +82,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			RequestHost:     c.Request.Host,
 		},
 	}
+	task.PrivateData.RequestID = c.GetString(common.RequestIdKey)
 
 	// 存储计费上下文，供后续退款/结算
 	// tiered_expr 模型即使预扣为 0（信任用户）也必须存 BillingContext，否则完成时无法结算
@@ -106,7 +111,35 @@ func GenerateImageSubmit(c *gin.Context) {
 	// - 通用 OpenAI image：存扁平的 AsyncImageRequest
 	var processData any
 	if isGeminiNative {
-		nativeReq, convertErr := service.ConvertAsyncImageToGeminiNative(context.Background(), asyncReq)
+		nativeReq, inputPreparation, convertErr := service.PrepareGenerateImageGeminiNative(
+			context.Background(),
+			asyncReq,
+			req.Images,
+			service.GeminiFileDataOptions{Enabled: relayInfo.ChannelOtherSettings.GeminiFileDataEnabled},
+		)
+		logger.LogInfo(c, fmt.Sprintf(
+			"generate_image_timing: phase=input_prepare task=%s request_id=%s channel=%d client_format=%s upstream_format=%s conversion=%s image_count=%d input_bytes=%d download_ms=%.3f decode_ms=%.3f local_write_ms=%.3f prepare_ms=%.3f fallback=%s error=%t",
+			task.TaskID,
+			task.PrivateData.RequestID,
+			task.ChannelId,
+			inputPreparation.ClientFormat,
+			inputPreparation.UpstreamFormat,
+			inputPreparation.Conversion,
+			inputPreparation.ImageCount,
+			inputPreparation.InputBytes,
+			inputPreparation.Download.Seconds()*1000,
+			inputPreparation.Decode.Seconds()*1000,
+			inputPreparation.LocalWrite.Seconds()*1000,
+			inputPreparation.Total.Seconds()*1000,
+			inputPreparation.Fallback,
+			convertErr != nil,
+		))
+		if inputPreparation.Fallback != "none" {
+			logger.LogWarn(c, fmt.Sprintf(
+				"generate_image: task=%s request_id=%s channel=%d file_data_fallback=%s",
+				task.TaskID, task.PrivateData.RequestID, task.ChannelId, inputPreparation.Fallback,
+			))
+		}
 		if convertErr != nil {
 			if relayInfo.Billing != nil {
 				relayInfo.Billing.Refund(c)
@@ -122,6 +155,7 @@ func GenerateImageSubmit(c *gin.Context) {
 		processData = asyncReq
 	}
 
+	taskInsertStartedAt := time.Now()
 	if err := task.Insert(); err != nil {
 		if relayInfo != nil && relayInfo.Billing != nil {
 			relayInfo.Billing.Refund(c)
@@ -129,10 +163,48 @@ func GenerateImageSubmit(c *gin.Context) {
 		generateImageError(c, http.StatusInternalServerError, "internal_error", fmt.Sprintf("创建任务失败: %v", err))
 		return
 	}
+	taskInsertFinishedAt := time.Now()
 
 	// 记录提交时的消费日志，并持久化 log ID 供完成后更新
+	submitLogStartedAt := time.Now()
 	service.RecordAsyncImageSubmitLog(c, task, asyncReq, relayInfo)
+	submitLogFinishedAt := time.Now()
+	taskUpdateStartedAt := time.Now()
 	_ = task.Update()
+	taskUpdateFinishedAt := time.Now()
+
+	requestBodyBytes := c.Request.ContentLength
+	if storageValue, ok := c.Get(common.KeyBodyStorage); ok {
+		if storage, ok := storageValue.(common.BodyStorage); ok {
+			requestBodyBytes = storage.Size()
+		}
+	}
+	requestReceivedAt := common.GetContextKeyTime(c, constant.ContextKeyRequestReceivedTime)
+	requestBodyReadyAt := common.GetContextKeyTime(c, constant.ContextKeyRequestBodyReadyTime)
+	if requestReceivedAt.IsZero() {
+		requestReceivedAt = handlerStartedAt
+	}
+	if requestBodyReadyAt.IsZero() {
+		requestBodyReadyAt = handlerStartedAt
+	}
+	logger.LogInfo(c, fmt.Sprintf(
+		"generate_image_timing: phase=submit task=%s request_id=%s host=%s model=%s channel=%d request_bytes=%d body_receive_ms=%.3f decode_validate_ms=%.3f billing_ms=%.3f prepare_ms=%.3f task_insert_ms=%.3f submit_log_ms=%.3f task_update_ms=%.3f post_body_submit_ms=%.3f total_submit_ms=%.3f",
+		task.TaskID,
+		task.PrivateData.RequestID,
+		task.Properties.RequestHost,
+		task.Properties.OriginModelName,
+		task.ChannelId,
+		requestBodyBytes,
+		requestBodyReadyAt.Sub(requestReceivedAt).Seconds()*1000,
+		billingStartedAt.Sub(handlerStartedAt).Seconds()*1000,
+		billingFinishedAt.Sub(billingStartedAt).Seconds()*1000,
+		taskInsertStartedAt.Sub(billingFinishedAt).Seconds()*1000,
+		taskInsertFinishedAt.Sub(taskInsertStartedAt).Seconds()*1000,
+		submitLogFinishedAt.Sub(submitLogStartedAt).Seconds()*1000,
+		taskUpdateFinishedAt.Sub(taskUpdateStartedAt).Seconds()*1000,
+		time.Since(requestBodyReadyAt).Seconds()*1000,
+		time.Since(requestReceivedAt).Seconds()*1000,
+	))
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)
 	gopool.Go(func() {
@@ -148,6 +220,10 @@ func GenerateImageSubmit(c *gin.Context) {
 // generateImageToAsyncRequest 把统一生图入参映射为既有的 AsyncImageRequest，
 // 以复用现成的图片校验、Gemini 转换、提交日志逻辑。
 func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageRequest {
+	images := make([]string, 0, len(req.Images))
+	for _, input := range req.Images {
+		images = append(images, input.LegacyString())
+	}
 	return &dto.AsyncImageRequest{
 		Model:              req.Model,
 		Prompt:             req.Prompt,
@@ -160,7 +236,7 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		MediaResolution:    req.MediaResolution,
 		ThinkingLevel:      req.ThinkingLevel,
 		IncludeThoughts:    req.IncludeThoughts,
-		Images:             req.Images,
+		Images:             images,
 		Mask:               req.Mask,
 	}
 }

@@ -23,6 +23,7 @@ import {
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
   ERROR_MESSAGES,
   FIELD_PASSTHROUGH_TYPES,
+  GEMINI_FILE_DATA_CHANNEL_TYPES,
   MODEL_FETCHABLE_TYPES,
   OPENAI_FIELD_PASSTHROUGH_TYPES,
 } from '../constants'
@@ -270,6 +271,7 @@ export const channelFormSchema = z
         'passthrough',
       ])
       .optional(),
+    gemini_file_data_enabled: z.boolean().optional(),
     // Field passthrough controls (stored in settings JSON)
     allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
     disable_store: z.boolean().optional(), // OpenAI only
@@ -430,6 +432,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   aws_key_type: 'ak_sk',
   azure_responses_version: '',
   image_output_strategy: undefined,
+  gemini_file_data_enabled: false,
   // Field passthrough controls
   allow_service_tier: false,
   disable_store: false,
@@ -507,6 +510,7 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
+  let geminiFileDataEnabled = false
   let imageOutputStrategy:
     | 'oss'
     | 'r2'
@@ -535,6 +539,7 @@ export function transformChannelToFormDefaults(
         parsed.image_output_strategy === 'local_temp'
           ? 'local_temp_cf'
           : parsed.image_output_strategy
+      geminiFileDataEnabled = parsed.gemini_file_data_enabled === true
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true
       upstreamModelUpdateAutoSyncEnabled =
@@ -599,6 +604,7 @@ export function transformChannelToFormDefaults(
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
     image_output_strategy: imageOutputStrategy,
+    gemini_file_data_enabled: geminiFileDataEnabled,
   }
 }
 
@@ -730,6 +736,13 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.image_output_strategy = formData.image_output_strategy
   } else if ('image_output_strategy' in settingsObj) {
     delete settingsObj.image_output_strategy
+  }
+
+  if (GEMINI_FILE_DATA_CHANNEL_TYPES.has(formData.type)) {
+    settingsObj.gemini_file_data_enabled =
+      formData.gemini_file_data_enabled === true
+  } else if ('gemini_file_data_enabled' in settingsObj) {
+    delete settingsObj.gemini_file_data_enabled
   }
 
   // Upstream model update settings (for model-fetchable channel types)

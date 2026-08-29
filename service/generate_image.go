@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,9 +14,11 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -27,6 +30,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-gonic/gin"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/webp"
@@ -168,7 +172,81 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	if err := validateGenerateImageMask(req.Mask); err != nil {
 		return err
 	}
+	for i := range req.Images {
+		if err := validateGenerateImageInput(&req.Images[i]); err != nil {
+			return fmt.Errorf("images[%d]: %w", i, err)
+		}
+	}
 	return nil
+}
+
+func validateGenerateImageInput(input *dto.GenerateImageInput) error {
+	if input == nil {
+		return fmt.Errorf("image input is required")
+	}
+	if input.Value != nil {
+		value := strings.TrimSpace(*input.Value)
+		if value == "" {
+			return fmt.Errorf("image string must not be empty")
+		}
+		if isHTTPImageURL(value) {
+			if err := ValidateSSRFProtectedFetchURL(value); err != nil {
+				return fmt.Errorf("image URL is not allowed: %w", err)
+			}
+		}
+		*input.Value = value
+		return nil
+	}
+	if input.InlineData != nil {
+		mimeType := normalizeGenerateImageMIMEType(input.InlineData.MimeType)
+		data := strings.TrimSpace(input.InlineData.Data)
+		if !strings.HasPrefix(mimeType, "image/") {
+			return fmt.Errorf("inlineData.mimeType must start with image/")
+		}
+		if data == "" {
+			return fmt.Errorf("inlineData.data must not be empty")
+		}
+		if strings.HasPrefix(data, "data:") {
+			return fmt.Errorf("inlineData.data must contain raw base64 without a data URL prefix")
+		}
+		raw, err := base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return fmt.Errorf("inlineData.data is not valid base64: %w", err)
+		}
+		maxBytes := AsyncImageMaxBase64SizeMB * 1024 * 1024
+		if len(raw) > maxBytes {
+			return fmt.Errorf("inlineData image size %.2f MB exceeds limit %d MB", float64(len(raw))/1024/1024, AsyncImageMaxBase64SizeMB)
+		}
+		if !mimetype.Detect(raw).Is(mimeType) {
+			return fmt.Errorf("inlineData content does not match declared MIME type %s", mimeType)
+		}
+		input.InlineData.MimeType = mimeType
+		input.InlineData.Data = data
+		return nil
+	}
+	if input.FileData != nil {
+		mimeType := normalizeGenerateImageMIMEType(input.FileData.MimeType)
+		fileURI := strings.TrimSpace(input.FileData.FileURI)
+		if !strings.HasPrefix(mimeType, "image/") {
+			return fmt.Errorf("fileData.mimeType must start with image/")
+		}
+		if fileURI == "" {
+			return fmt.Errorf("fileData.fileUri must not be empty")
+		}
+		if len(fileURI) > generateImageMaskImageURLMaxLength {
+			return fmt.Errorf("fileData.fileUri length must be <= %d", generateImageMaskImageURLMaxLength)
+		}
+		if !isHTTPImageURL(fileURI) {
+			return fmt.Errorf("fileData.fileUri must be a fully qualified http(s) URL")
+		}
+		if err := ValidateSSRFProtectedFetchURL(fileURI); err != nil {
+			return fmt.Errorf("fileData.fileUri is not allowed: %w", err)
+		}
+		input.FileData.MimeType = mimeType
+		input.FileData.FileURI = fileURI
+		return nil
+	}
+	return fmt.Errorf("image input must provide a string, inlineData, or fileData")
 }
 
 func validateGenerateImageMask(mask *dto.ImageReference) error {
@@ -208,6 +286,14 @@ func isGenerateImageURLReference(value string) bool {
 	if strings.HasPrefix(lowerValue, "data:") {
 		return strings.Contains(lowerValue, ";base64,")
 	}
+	parsedURL, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	return (strings.EqualFold(parsedURL.Scheme, "http") || strings.EqualFold(parsedURL.Scheme, "https")) && parsedURL.Host != ""
+}
+
+func isHTTPImageURL(value string) bool {
 	parsedURL, err := url.Parse(value)
 	if err != nil {
 		return false
@@ -615,6 +701,173 @@ func defaultImageRetryAfterSeconds(status int) int {
 	}
 }
 
+type generateImageUpstreamTrace struct {
+	mu sync.Mutex
+
+	startedAt          time.Time
+	dnsStartedAt       time.Time
+	dnsDoneAt          time.Time
+	connectStartedAt   time.Time
+	connectDoneAt      time.Time
+	tlsStartedAt       time.Time
+	tlsDoneAt          time.Time
+	gotConnAt          time.Time
+	wroteRequestAt     time.Time
+	firstResponseAt    time.Time
+	connectionReused   bool
+	connectionWasIdle  bool
+	connectionIdleTime time.Duration
+	wroteRequestError  bool
+	requestWrites      int
+}
+
+func newGenerateImageUpstreamTrace(startedAt time.Time) (*generateImageUpstreamTrace, *httptrace.ClientTrace) {
+	timing := &generateImageUpstreamTrace{startedAt: startedAt}
+	trace := &httptrace.ClientTrace{
+		DNSStart: func(httptrace.DNSStartInfo) {
+			timing.mu.Lock()
+			if timing.dnsStartedAt.IsZero() {
+				timing.dnsStartedAt = time.Now()
+			}
+			timing.mu.Unlock()
+		},
+		DNSDone: func(httptrace.DNSDoneInfo) {
+			timing.mu.Lock()
+			timing.dnsDoneAt = time.Now()
+			timing.mu.Unlock()
+		},
+		ConnectStart: func(_, _ string) {
+			timing.mu.Lock()
+			if timing.connectStartedAt.IsZero() {
+				timing.connectStartedAt = time.Now()
+			}
+			timing.mu.Unlock()
+		},
+		ConnectDone: func(_, _ string, err error) {
+			if err != nil {
+				return
+			}
+			timing.mu.Lock()
+			timing.connectDoneAt = time.Now()
+			timing.mu.Unlock()
+		},
+		TLSHandshakeStart: func() {
+			timing.mu.Lock()
+			timing.tlsStartedAt = time.Now()
+			timing.mu.Unlock()
+		},
+		TLSHandshakeDone: func(tls.ConnectionState, error) {
+			timing.mu.Lock()
+			timing.tlsDoneAt = time.Now()
+			timing.mu.Unlock()
+		},
+		GotConn: func(info httptrace.GotConnInfo) {
+			timing.mu.Lock()
+			timing.gotConnAt = time.Now()
+			timing.connectionReused = info.Reused
+			timing.connectionWasIdle = info.WasIdle
+			timing.connectionIdleTime = info.IdleTime
+			timing.mu.Unlock()
+		},
+		WroteRequest: func(info httptrace.WroteRequestInfo) {
+			timing.mu.Lock()
+			timing.wroteRequestAt = time.Now()
+			timing.wroteRequestError = info.Err != nil
+			timing.requestWrites++
+			timing.mu.Unlock()
+		},
+		GotFirstResponseByte: func() {
+			timing.mu.Lock()
+			timing.firstResponseAt = time.Now()
+			timing.mu.Unlock()
+		},
+	}
+	return timing, trace
+}
+
+func generateImageDurationMilliseconds(start, end time.Time) float64 {
+	if start.IsZero() || end.IsZero() || end.Before(start) {
+		return -1
+	}
+	return end.Sub(start).Seconds() * 1000
+}
+
+func traceGenerateImageUpstreamRequest(
+	ctx context.Context,
+	c *gin.Context,
+	task *model.Task,
+	relayInfo *relaycommon.RelayInfo,
+	provider string,
+	requestBytes int64,
+	request func() (any, error),
+) (any, error) {
+	startedAt := time.Now()
+	timing, trace := newGenerateImageUpstreamTrace(startedAt)
+	previousTrace, hadPreviousTrace := c.Get(common.UpstreamHTTPTraceKey)
+	c.Set(common.UpstreamHTTPTraceKey, trace)
+	response, err := request()
+	if hadPreviousTrace {
+		c.Set(common.UpstreamHTTPTraceKey, previousTrace)
+	} else {
+		c.Set(common.UpstreamHTTPTraceKey, nil)
+	}
+	finishedAt := time.Now()
+
+	timing.mu.Lock()
+	dnsMilliseconds := generateImageDurationMilliseconds(timing.dnsStartedAt, timing.dnsDoneAt)
+	connectMilliseconds := generateImageDurationMilliseconds(timing.connectStartedAt, timing.connectDoneAt)
+	tlsMilliseconds := generateImageDurationMilliseconds(timing.tlsStartedAt, timing.tlsDoneAt)
+	connectionWaitMilliseconds := generateImageDurationMilliseconds(timing.startedAt, timing.gotConnAt)
+	requestWriteMilliseconds := generateImageDurationMilliseconds(timing.gotConnAt, timing.wroteRequestAt)
+	upstreamWaitMilliseconds := generateImageDurationMilliseconds(timing.wroteRequestAt, timing.firstResponseAt)
+	responseHeaderMilliseconds := generateImageDurationMilliseconds(timing.firstResponseAt, finishedAt)
+	connectionReused := timing.connectionReused
+	connectionWasIdle := timing.connectionWasIdle
+	connectionIdleMilliseconds := timing.connectionIdleTime.Seconds() * 1000
+	wroteRequestError := timing.wroteRequestError
+	transportAttempts := timing.requestWrites
+	timing.mu.Unlock()
+	requestMegabitsPerSecond := -1.0
+	if requestWriteMilliseconds > 0 && requestBytes >= 0 {
+		requestMegabitsPerSecond = float64(requestBytes) * 8 / 1000 / requestWriteMilliseconds
+	}
+
+	status := 0
+	protocol := "unknown"
+	if httpResponse, ok := response.(*http.Response); ok && httpResponse != nil {
+		status = httpResponse.StatusCode
+		protocol = httpResponse.Proto
+	}
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=upstream_headers task=%s request_id=%s provider=%s model=%s channel=%d attempt=%d transport_attempts=%d status=%d protocol=%s request_bytes=%d total_ms=%.3f dns_ms=%.3f connect_ms=%.3f tls_ms=%.3f connection_wait_ms=%.3f request_write_ms=%.3f request_mbps=%.3f upstream_wait_ms=%.3f response_header_ms=%.3f conn_reused=%t conn_was_idle=%t conn_idle_ms=%.3f write_error=%t request_error=%t",
+		task.TaskID,
+		task.PrivateData.RequestID,
+		provider,
+		relayInfo.UpstreamModelName,
+		task.ChannelId,
+		len(task.PrivateData.UsedChannels),
+		transportAttempts,
+		status,
+		protocol,
+		requestBytes,
+		finishedAt.Sub(startedAt).Seconds()*1000,
+		dnsMilliseconds,
+		connectMilliseconds,
+		tlsMilliseconds,
+		connectionWaitMilliseconds,
+		requestWriteMilliseconds,
+		requestMegabitsPerSecond,
+		upstreamWaitMilliseconds,
+		responseHeaderMilliseconds,
+		connectionReused,
+		connectionWasIdle,
+		connectionIdleMilliseconds,
+		wroteRequestError,
+		err != nil,
+	))
+	return response, err
+}
+
 // doGenerateImageRequestWithStatusRetry applies the global relay retry policy to
 // unified asynchronous image requests. Retries stay on the channel selected when
 // the task was created so task attribution and billing remain consistent.
@@ -651,7 +904,11 @@ func imageTaskAdminInfo(task *model.Task) map[string]interface{} {
 }
 
 // newAsyncGinContext 构造一个用于异步执行的最小 gin.Context，并写入用户名供日志使用。
-func newAsyncGinContext(userId int) *gin.Context {
+func newAsyncGinContext(task *model.Task) *gin.Context {
+	requestContext := context.Background()
+	if task.PrivateData.RequestID != "" {
+		requestContext = context.WithValue(requestContext, common.RequestIdKey, task.PrivateData.RequestID)
+	}
 	c := &gin.Context{
 		Request: &http.Request{
 			Method: "POST",
@@ -659,7 +916,9 @@ func newAsyncGinContext(userId int) *gin.Context {
 			Body:   http.NoBody,
 		},
 	}
-	if user, err := model.GetUserById(userId, false); err == nil {
+	c.Request = c.Request.WithContext(requestContext)
+	c.Set(common.RequestIdKey, task.PrivateData.RequestID)
+	if user, err := model.GetUserById(task.UserId, false); err == nil {
 		c.Set("username", user.Username)
 	}
 	return c
@@ -681,12 +940,17 @@ func ProcessGenerateImageTask(ctx context.Context, task *model.Task, requestData
 		}
 	}()
 
-	c := newAsyncGinContext(task.UserId)
+	c := newAsyncGinContext(task)
 
+	taskStartUpdateStartedAt := time.Now()
 	task.Status = model.TaskStatusInProgress
 	task.StartTime = time.Now().Unix()
 	task.Progress = "50%"
 	_ = task.Update()
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=task_start task=%s request_id=%s model=%s channel=%d task_start_update_ms=%.3f coarse_queue_ms=%d",
+		task.TaskID, task.PrivateData.RequestID, task.Properties.OriginModelName, task.ChannelId, time.Since(taskStartUpdateStartedAt).Seconds()*1000, (task.StartTime-task.SubmitTime)*1000,
+	))
 
 	switch task.Action {
 	case "generateContent":
@@ -813,7 +1077,9 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		relayInfo.UpstreamModelName, relayInfo.ChannelBaseUrl, len(jsonData)))
 
 	httpResp, relayErr, err := doGenerateImageRequestWithStatusRetry(ctx, task, func() (any, error) {
-		return adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+		return traceGenerateImageUpstreamRequest(ctx, c, task, relayInfo, "gemini", int64(len(jsonData)), func() (any, error) {
+			return adaptor.DoRequest(c, relayInfo, bytes.NewReader(jsonData))
+		})
 	})
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("请求上游失败: %v", err))
@@ -825,12 +1091,18 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithRelayError(task, relayErr, httpResp.Header)
 		return
 	}
+	bodyReadStartedAt := time.Now()
 	bodyBytes, err := io.ReadAll(httpResp.Body)
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=upstream_body task=%s request_id=%s provider=gemini channel=%d body_bytes=%d body_read_ms=%.3f read_error=%t",
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(bodyBytes), time.Since(bodyReadStartedAt).Seconds()*1000, err != nil,
+	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("读取响应失败: %v", err))
 		return
 	}
 
+	parseStartedAt := time.Now()
 	var geminiResp map[string]interface{}
 	if err := common.Unmarshal(bodyBytes, &geminiResp); err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("解析响应失败: %v", err))
@@ -843,7 +1115,15 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
-	images, err = prepareGenerateImageResultsWithStrategy(images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=response_parse task=%s request_id=%s provider=gemini channel=%d images=%d parse_ms=%.3f",
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), time.Since(parseStartedAt).Seconds()*1000,
+	))
+	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=output_storage task=%s request_id=%s provider=gemini channel=%d strategy=%s images=%d source_base64=%d source_url=%d download_ms=%.3f upload_ms=%.3f upload_mbps=%.3f upload_transport_attempts=%d upload_connection_wait_ms=%.3f upload_request_write_ms=%.3f upload_server_wait_ms=%.3f upload_conn_reused=%t total_ms=%.3f output_bytes=%d storage_error=%t",
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, relayInfo.ChannelOtherSettings.ImageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
+	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
 		return
@@ -1027,13 +1307,17 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		if firstRequestBody != nil {
 			body := firstRequestBody
 			firstRequestBody = nil
-			return adaptor.DoRequest(c, relayInfo, body)
+			return traceGenerateImageUpstreamRequest(ctx, c, task, relayInfo, "openai", int64(requestBodyLen), func() (any, error) {
+				return adaptor.DoRequest(c, relayInfo, body)
+			})
 		}
-		requestBody, _, buildErr := buildAsyncOpenAIImageRequestBody(c, adaptor, relayInfo, upstreamImageReq)
+		requestBody, rebuiltRequestBodyLen, buildErr := buildAsyncOpenAIImageRequestBody(c, adaptor, relayInfo, upstreamImageReq)
 		if buildErr != nil {
 			return nil, buildErr
 		}
-		return adaptor.DoRequest(c, relayInfo, requestBody)
+		return traceGenerateImageUpstreamRequest(ctx, c, task, relayInfo, "openai", int64(rebuiltRequestBodyLen), func() (any, error) {
+			return adaptor.DoRequest(c, relayInfo, requestBody)
+		})
 	})
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("请求上游失败: %v", err))
@@ -1045,12 +1329,18 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithRelayError(task, relayErr, httpResp.Header)
 		return
 	}
+	bodyReadStartedAt := time.Now()
 	bodyBytes, err := io.ReadAll(httpResp.Body)
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=upstream_body task=%s request_id=%s provider=openai channel=%d body_bytes=%d body_read_ms=%.3f read_error=%t",
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(bodyBytes), time.Since(bodyReadStartedAt).Seconds()*1000, err != nil,
+	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("读取响应失败: %v", err))
 		return
 	}
 
+	parseStartedAt := time.Now()
 	var imageResp dto.ImageResponse
 	if err := common.Unmarshal(bodyBytes, &imageResp); err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("解析响应失败: %v", err))
@@ -1075,7 +1365,15 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
-	images, err = prepareGenerateImageResultsWithStrategy(images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=response_parse task=%s request_id=%s provider=openai channel=%d images=%d parse_ms=%.3f",
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), time.Since(parseStartedAt).Seconds()*1000,
+	))
+	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=output_storage task=%s request_id=%s provider=openai channel=%d strategy=%s images=%d source_base64=%d source_url=%d download_ms=%.3f upload_ms=%.3f upload_mbps=%.3f upload_transport_attempts=%d upload_connection_wait_ms=%.3f upload_request_write_ms=%.3f upload_server_wait_ms=%.3f upload_conn_reused=%t total_ms=%.3f output_bytes=%d storage_error=%t",
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, relayInfo.ChannelOtherSettings.ImageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
+	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
 		return
@@ -1085,18 +1383,94 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		relayInfo.UpstreamModelName, relayInfo.IsModelMapped, modelVersion)
 }
 
+type generateImageOutputTiming struct {
+	SourceBase64                     int
+	SourceURL                        int
+	OutputBytes                      int64
+	Download                         time.Duration
+	Upload                           time.Duration
+	Total                            time.Duration
+	UploadTransportAttempts          int
+	UploadConnectionWaitMilliseconds float64
+	UploadRequestWriteMilliseconds   float64
+	UploadServerWaitMilliseconds     float64
+	UploadConnectionReused           bool
+}
+
+func (timing generateImageOutputTiming) UploadMegabitsPerSecond() float64 {
+	if timing.Upload <= 0 {
+		return -1
+	}
+	return float64(timing.OutputBytes) * 8 / 1_000_000 / timing.Upload.Seconds()
+}
+
+func generateImageBase64DecodedSize(data string) int64 {
+	if comma := strings.IndexByte(data, ','); comma >= 0 {
+		data = data[comma+1:]
+	}
+	data = strings.TrimSpace(data)
+	if data == "" {
+		return 0
+	}
+	decodedSize := int64(base64.StdEncoding.DecodedLen(len(data)))
+	if strings.HasSuffix(data, "==") {
+		return decodedSize - 2
+	}
+	if strings.HasSuffix(data, "=") {
+		return decodedSize - 1
+	}
+	return decodedSize
+}
+
+func (timing *generateImageOutputTiming) upload(ctx context.Context, mimeType, base64Data, strategy, requestHost string) (string, error) {
+	startedAt := time.Now()
+	if strategy != dto.ImageOutputStrategyOSS {
+		url, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, requestHost)
+		timing.Upload += time.Since(startedAt)
+		return url, err
+	}
+
+	httpTiming, trace := newGenerateImageUpstreamTrace(startedAt)
+	uploadContext := httptrace.WithClientTrace(ctx, trace)
+	url, err := UploadBase64ImageToOSSContext(uploadContext, mimeType, base64Data)
+	finishedAt := time.Now()
+	timing.Upload += finishedAt.Sub(startedAt)
+
+	httpTiming.mu.Lock()
+	timing.UploadTransportAttempts += httpTiming.requestWrites
+	timing.UploadConnectionWaitMilliseconds += generateImageDurationMilliseconds(httpTiming.startedAt, httpTiming.gotConnAt)
+	timing.UploadRequestWriteMilliseconds += generateImageDurationMilliseconds(httpTiming.gotConnAt, httpTiming.wroteRequestAt)
+	timing.UploadServerWaitMilliseconds += generateImageDurationMilliseconds(httpTiming.wroteRequestAt, httpTiming.firstResponseAt)
+	timing.UploadConnectionReused = httpTiming.connectionReused
+	httpTiming.mu.Unlock()
+	return url, err
+}
+
 func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, requestHost, strategy string) ([]dto.GenerateImageData, error) {
+	out, _, err := prepareGenerateImageResultsWithStrategyTiming(context.Background(), images, requestHost, strategy)
+	return out, err
+}
+
+func prepareGenerateImageResultsWithStrategyTiming(ctx context.Context, images []dto.GenerateImageData, requestHost, strategy string) ([]dto.GenerateImageData, generateImageOutputTiming, error) {
+	startedAt := time.Now()
+	timing := generateImageOutputTiming{}
 	out := make([]dto.GenerateImageData, 0, len(images))
 	for _, image := range images {
 		if image.Url != "" {
+			timing.SourceURL++
 			if dto.IsImageOutputStorageStrategy(strategy) {
+				downloadStartedAt := time.Now()
 				mimeType, base64Data, err := GetImageFromUrl(image.Url)
+				timing.Download += time.Since(downloadStartedAt)
 				if err != nil {
-					return nil, err
+					timing.Total = time.Since(startedAt)
+					return nil, timing, err
 				}
-				url, err := UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, requestHost)
+				timing.OutputBytes += generateImageBase64DecodedSize(base64Data)
+				url, err := timing.upload(ctx, mimeType, base64Data, strategy, requestHost)
 				if err != nil {
-					return nil, err
+					timing.Total = time.Since(startedAt)
+					return nil, timing, err
 				}
 				out = append(out, dto.GenerateImageData{Url: url, MimeType: mimeType})
 				continue
@@ -1110,6 +1484,8 @@ func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, req
 		if image.B64Json == "" {
 			continue
 		}
+		timing.SourceBase64++
+		timing.OutputBytes += generateImageBase64DecodedSize(image.B64Json)
 		mimeType := image.MimeType
 		if mimeType == "" {
 			mimeType = detectImageMimeType(image.B64Json)
@@ -1121,9 +1497,10 @@ func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, req
 			})
 			continue
 		}
-		url, err := UploadBase64ImageWithOutputStrategy(mimeType, image.B64Json, strategy, requestHost)
+		url, err := timing.upload(ctx, mimeType, image.B64Json, strategy, requestHost)
 		if err != nil {
-			return nil, err
+			timing.Total = time.Since(startedAt)
+			return nil, timing, err
 		}
 		out = append(out, dto.GenerateImageData{
 			Url:      url,
@@ -1131,9 +1508,11 @@ func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, req
 		})
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("上游未返回图片数据")
+		timing.Total = time.Since(startedAt)
+		return nil, timing, fmt.Errorf("上游未返回图片数据")
 	}
-	return out, nil
+	timing.Total = time.Since(startedAt)
+	return out, timing, nil
 }
 
 // extractOpenAIImageUsage 从 OpenAI-格式 image 响应原始体提取 token 用量与 modelVersion。
@@ -1257,6 +1636,7 @@ func resolveReferenceImagesForUpstream(image json.RawMessage, images []string) (
 func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []dto.GenerateImageData,
 	promptTokens, completionTokens int, tokenDetails map[string]interface{},
 	upstreamModelName string, isModelMapped bool, upstreamModelVersion string) {
+	finalizeStartedAt := time.Now()
 
 	result := dto.GenerateImageResult{
 		Model:   task.Properties.OriginModelName,
@@ -1270,13 +1650,19 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	task.Status = model.TaskStatusSuccess
 	task.Progress = "100%"
 	task.FinishTime = time.Now().Unix()
+	resultUpdateStartedAt := time.Now()
 	_ = task.Update()
+	resultUpdateDuration := time.Since(resultUpdateStartedAt)
 
 	// 完成后用真实用量重新结算差额（tiered_expr 或按 token 模型）
+	billingStartedAt := time.Now()
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
+	billingDuration := time.Since(billingStartedAt)
 
 	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费
+	refundCheckStartedAt := time.Now()
 	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, len(images), "generate_image")
+	refundCheckDuration := time.Since(refundCheckStartedAt)
 
 	// 更新提交时的消费日志为完成态
 	useTime := int(task.FinishTime - task.StartTime)
@@ -1296,10 +1682,26 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	if upstreamModelVersion != "" {
 		otherUpdates["upstream_model_version"] = upstreamModelVersion
 	}
+	logUpdateStartedAt := time.Now()
 	model.UpdateConsumeLogOnComplete(task.PrivateData.SubmitLogID, useTime, promptTokens, completionTokens, updateContent, otherUpdates)
+	logUpdateDuration := time.Since(logUpdateStartedAt)
 
 	task.Properties.UpstreamModelName = upstreamModelName
+	metadataUpdateStartedAt := time.Now()
 	_ = task.Update()
+	metadataUpdateDuration := time.Since(metadataUpdateStartedAt)
+	logger.LogInfo(ctx, fmt.Sprintf(
+		"generate_image_timing: phase=finalize task=%s request_id=%s channel=%d result_update_ms=%.3f billing_ms=%.3f refund_check_ms=%.3f log_update_ms=%.3f metadata_update_ms=%.3f total_ms=%.3f",
+		task.TaskID,
+		task.PrivateData.RequestID,
+		task.ChannelId,
+		resultUpdateDuration.Seconds()*1000,
+		billingDuration.Seconds()*1000,
+		refundCheckDuration.Seconds()*1000,
+		logUpdateDuration.Seconds()*1000,
+		metadataUpdateDuration.Seconds()*1000,
+		time.Since(finalizeStartedAt).Seconds()*1000,
+	))
 
 	logger.LogInfo(ctx, fmt.Sprintf("generate_image: task %s 完成，生成 %d 张图片", task.TaskID, len(images)))
 }

@@ -364,6 +364,11 @@ func GenerateOSSPresignedUploadURL(filename, contentType string, maxSize int64) 
 
 // UploadBase64ImageToOSS uploads a generated base64 image to Aliyun OSS without re-encoding it.
 func UploadBase64ImageToOSS(mimeType, base64Data string) (string, error) {
+	return UploadBase64ImageToOSSContext(context.Background(), mimeType, base64Data)
+}
+
+// UploadBase64ImageToOSSContext is the context-aware variant used by request-level tracing.
+func UploadBase64ImageToOSSContext(ctx context.Context, mimeType, base64Data string) (string, error) {
 	client, _, err := getAliyunOSSClient()
 	if err != nil {
 		return "", err
@@ -381,7 +386,7 @@ func UploadBase64ImageToOSS(mimeType, base64Data string) (string, error) {
 	}
 
 	key := fmt.Sprintf("uploads/oss/%s.%s", uuid.New().String(), ext)
-	_, err = client.PutObject(context.Background(), &s3.PutObjectInput{
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
 		Body:        bytes.NewReader(uploadBytes),

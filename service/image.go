@@ -102,15 +102,15 @@ func GetImageFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data 
 		return "", "", fmt.Errorf("image size %d exceeds maximum allowed size of %d bytes", resp.ContentLength, maxImageSize)
 	}
 
-	// Use LimitReader to prevent reading oversized images
-	limitReader := io.LimitReader(resp.Body, maxImageSize)
+	// Read one byte beyond the limit so an image exactly at the limit remains valid.
+	limitReader := io.LimitReader(resp.Body, maxImageSize+1)
 	buffer := &bytes.Buffer{}
 
 	written, err := io.Copy(buffer, limitReader)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to read image data: %w", err)
 	}
-	if written >= maxImageSize {
+	if written > maxImageSize {
 		return "", "", fmt.Errorf("image size exceeds maximum allowed size of %d bytes", maxImageSize)
 	}
 

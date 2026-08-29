@@ -146,6 +146,7 @@ import {
   FIELD_DESCRIPTIONS,
   FIELD_PASSTHROUGH_TYPES,
   FIELD_PLACEHOLDERS,
+  GEMINI_FILE_DATA_CHANNEL_TYPES,
   MODEL_FETCHABLE_TYPES,
   OPENAI_FIELD_PASSTHROUGH_TYPES,
 } from '../../constants'
@@ -286,6 +287,7 @@ const SENSITIVE_FORM_FIELDS = [
   'aws_key_type',
   'azure_responses_version',
   'image_output_strategy',
+  'gemini_file_data_enabled',
   'force_format',
   'thinking_to_content',
   'proxy',
@@ -754,6 +756,8 @@ export function ChannelMutateDrawer({
   const currentDisableTaskPollingSleep = form.watch(
     'disable_task_polling_sleep'
   )
+  const currentGeminiFileDataEnabled = form.watch('gemini_file_data_enabled')
+  const currentImageOutputStrategy = form.watch('image_output_strategy')
   const currentProxy = form.watch('proxy')
   const currentHttpProtocol = form.watch('http_protocol')
   const currentHttp2ConnectionShards = form.watch('http2_connection_shards')
@@ -1027,6 +1031,9 @@ export function ChannelMutateDrawer({
     (currentHttpProtocol && currentHttpProtocol !== 'auto') ||
     (currentHttp2ConnectionShards != null && currentHttp2ConnectionShards > 1)
   )
+  const imageOutputConfigured = Boolean(
+    currentImageOutputStrategy || currentGeminiFileDataEnabled
+  )
   let fieldPassthroughConfigured = false
   if (OPENAI_FIELD_PASSTHROUGH_TYPES.has(currentType)) {
     fieldPassthroughConfigured = Boolean(
@@ -1057,6 +1064,7 @@ export function ChannelMutateDrawer({
     internalNotesConfigured ||
     overrideRulesConfigured ||
     extraSettingsConfigured ||
+    imageOutputConfigured ||
     fieldPassthroughConfigured ||
     upstreamModelDetectionConfigured
   )
@@ -1082,6 +1090,11 @@ export function ChannelMutateDrawer({
       configured: extraSettingsConfigured,
     },
   ]
+  advancedNavChildren.push({
+    id: ADVANCED_SETTINGS_SECTION_IDS.imageOutput,
+    title: t('Image output strategy'),
+    configured: imageOutputConfigured,
+  })
   if (FIELD_PASSTHROUGH_TYPES.has(currentType)) {
     advancedNavChildren.push({
       id: ADVANCED_SETTINGS_SECTION_IDS.fieldPassthrough,
@@ -4360,7 +4373,12 @@ export function ChannelMutateDrawer({
 
                         <div
                           id={ADVANCED_SETTINGS_SECTION_IDS.imageOutput}
-                          className={sideDrawerSectionClassName('scroll-mt-4')}
+                          className={sideDrawerSectionClassName(
+                            configuredAdvancedSectionClassName(
+                              'scroll-mt-4',
+                              imageOutputConfigured
+                            )
+                          )}
                         >
                           <CardHeading
                             title={t('Image output strategy')}
@@ -4451,6 +4469,39 @@ export function ChannelMutateDrawer({
                                 </FormItem>
                               )}
                             />
+                            {GEMINI_FILE_DATA_CHANNEL_TYPES.has(
+                              currentType
+                            ) && (
+                              <>
+                                <Separator className='my-4' />
+                                <FormField
+                                  control={form.control}
+                                  name='gemini_file_data_enabled'
+                                  render={({ field }) => (
+                                    <FormItem className='flex items-center justify-between gap-3'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel>
+                                          {t(
+                                            'Use Gemini fileData for input images'
+                                          )}
+                                        </FormLabel>
+                                        <FormDescription>
+                                          {t(
+                                            'Let this upstream fetch public image URLs instead of uploading inline Base64 data. Enable only after verifying upstream support.'
+                                          )}
+                                        </FormDescription>
+                                      </div>
+                                      <FormControl>
+                                        <Switch
+                                          checked={field.value}
+                                          onCheckedChange={field.onChange}
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </>
+                            )}
                           </fieldset>
                         </div>
 

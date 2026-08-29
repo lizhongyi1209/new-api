@@ -145,7 +145,7 @@ func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 		Mask: &dto.ImageReference{
 			ImageURL: testStringPtr(" data:image/png;base64,AAAA "),
 		},
-		Images: []string{"data:image/png;base64,BBBB"},
+		Images: []dto.GenerateImageInput{{Value: testStringPtr("data:image/png;base64,BBBB")}},
 	}
 
 	if err := ValidateGenerateImageRequest(req); err != nil {
@@ -550,6 +550,25 @@ func TestPrepareGenerateImageResultsPreservesUpstreamShapeWithoutStorageStrategy
 			assert.Empty(t, images[0].Url)
 			assert.Equal(t, "https://upstream.example/image.png", images[1].Url)
 			assert.Empty(t, images[1].B64Json)
+		})
+	}
+}
+
+func TestGenerateImageBase64DecodedSize(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want int64
+	}{
+		{name: "raw padded", data: "aGVsbG8=", want: 5},
+		{name: "data URL", data: "data:image/png;base64,aGVsbG8=", want: 5},
+		{name: "double padding", data: "YQ==", want: 1},
+		{name: "empty", data: "", want: 0},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.want, generateImageBase64DecodedSize(test.data))
 		})
 	}
 }

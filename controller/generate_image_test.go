@@ -7,6 +7,8 @@ import (
 
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUnmarshalGenerateImageBodyWithoutContentType(t *testing.T) {
@@ -83,4 +85,23 @@ func TestGenerateImageToAsyncRequestPreservesThinkingConfig(t *testing.T) {
 	if asyncReq.IncludeThoughts == nil || *asyncReq.IncludeThoughts {
 		t.Fatalf("IncludeThoughts = %v, want explicit false", asyncReq.IncludeThoughts)
 	}
+}
+
+func TestGenerateImageToAsyncRequestNormalizesExplicitImageInputs(t *testing.T) {
+	legacyValue := "https://example.com/legacy.png"
+	request := &dto.GenerateImageRequest{
+		Model:  "nano-banana-pro",
+		Prompt: "draw",
+		Images: []dto.GenerateImageInput{
+			{Value: &legacyValue},
+			{InlineData: &dto.GenerateImageInlineData{MimeType: "image/png", Data: "AAAA"}},
+			{FileData: &dto.GenerateImageFileData{MimeType: "image/jpeg", FileURI: "https://example.com/file.jpg"}},
+		},
+	}
+
+	asyncRequest := generateImageToAsyncRequest(request)
+	require.Len(t, asyncRequest.Images, 3)
+	assert.Equal(t, legacyValue, asyncRequest.Images[0])
+	assert.Equal(t, "data:image/png;base64,AAAA", asyncRequest.Images[1])
+	assert.Equal(t, "https://example.com/file.jpg", asyncRequest.Images[2])
 }
