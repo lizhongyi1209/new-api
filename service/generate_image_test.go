@@ -145,7 +145,7 @@ func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 		Mask: &dto.ImageReference{
 			ImageURL: testStringPtr(" data:image/png;base64,AAAA "),
 		},
-		Images: []string{"data:image/png;base64,BBBB"},
+		Images: []dto.GenerateImageInput{{Value: testStringPtr("data:image/png;base64,BBBB")}},
 	}
 
 	if err := ValidateGenerateImageRequest(req); err != nil {

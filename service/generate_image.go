@@ -27,6 +27,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-gonic/gin"
 	xdraw "golang.org/x/image/draw"
 	"golang.org/x/image/webp"
@@ -168,7 +169,81 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	if err := validateGenerateImageMask(req.Mask); err != nil {
 		return err
 	}
+	for i := range req.Images {
+		if err := validateGenerateImageInput(&req.Images[i]); err != nil {
+			return fmt.Errorf("images[%d]: %w", i, err)
+		}
+	}
 	return nil
+}
+
+func validateGenerateImageInput(input *dto.GenerateImageInput) error {
+	if input == nil {
+		return fmt.Errorf("image input is required")
+	}
+	if input.Value != nil {
+		value := strings.TrimSpace(*input.Value)
+		if value == "" {
+			return fmt.Errorf("image string must not be empty")
+		}
+		if isHTTPImageURL(value) {
+			if err := ValidateSSRFProtectedFetchURL(value); err != nil {
+				return fmt.Errorf("image URL is not allowed: %w", err)
+			}
+		}
+		*input.Value = value
+		return nil
+	}
+	if input.InlineData != nil {
+		mimeType := normalizeGenerateImageMIMEType(input.InlineData.MimeType)
+		data := strings.TrimSpace(input.InlineData.Data)
+		if !strings.HasPrefix(mimeType, "image/") {
+			return fmt.Errorf("inlineData.mimeType must start with image/")
+		}
+		if data == "" {
+			return fmt.Errorf("inlineData.data must not be empty")
+		}
+		if strings.HasPrefix(data, "data:") {
+			return fmt.Errorf("inlineData.data must contain raw base64 without a data URL prefix")
+		}
+		raw, err := base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return fmt.Errorf("inlineData.data is not valid base64: %w", err)
+		}
+		maxBytes := AsyncImageMaxBase64SizeMB * 1024 * 1024
+		if len(raw) > maxBytes {
+			return fmt.Errorf("inlineData image size %.2f MB exceeds limit %d MB", float64(len(raw))/1024/1024, AsyncImageMaxBase64SizeMB)
+		}
+		if !mimetype.Detect(raw).Is(mimeType) {
+			return fmt.Errorf("inlineData content does not match declared MIME type %s", mimeType)
+		}
+		input.InlineData.MimeType = mimeType
+		input.InlineData.Data = data
+		return nil
+	}
+	if input.FileData != nil {
+		mimeType := normalizeGenerateImageMIMEType(input.FileData.MimeType)
+		fileURI := strings.TrimSpace(input.FileData.FileURI)
+		if !strings.HasPrefix(mimeType, "image/") {
+			return fmt.Errorf("fileData.mimeType must start with image/")
+		}
+		if fileURI == "" {
+			return fmt.Errorf("fileData.fileUri must not be empty")
+		}
+		if len(fileURI) > generateImageMaskImageURLMaxLength {
+			return fmt.Errorf("fileData.fileUri length must be <= %d", generateImageMaskImageURLMaxLength)
+		}
+		if !isHTTPImageURL(fileURI) {
+			return fmt.Errorf("fileData.fileUri must be a fully qualified http(s) URL")
+		}
+		if err := ValidateSSRFProtectedFetchURL(fileURI); err != nil {
+			return fmt.Errorf("fileData.fileUri is not allowed: %w", err)
+		}
+		input.FileData.MimeType = mimeType
+		input.FileData.FileURI = fileURI
+		return nil
+	}
+	return fmt.Errorf("image input must provide a string, inlineData, or fileData")
 }
 
 func validateGenerateImageMask(mask *dto.ImageReference) error {
@@ -208,6 +283,14 @@ func isGenerateImageURLReference(value string) bool {
 	if strings.HasPrefix(lowerValue, "data:") {
 		return strings.Contains(lowerValue, ";base64,")
 	}
+	parsedURL, err := url.Parse(value)
+	if err != nil {
+		return false
+	}
+	return (strings.EqualFold(parsedURL.Scheme, "http") || strings.EqualFold(parsedURL.Scheme, "https")) && parsedURL.Host != ""
+}
+
+func isHTTPImageURL(value string) bool {
 	parsedURL, err := url.Parse(value)
 	if err != nil {
 		return false

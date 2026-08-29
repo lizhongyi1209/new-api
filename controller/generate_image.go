@@ -11,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/bytedance/gopkg/util/gopool"
@@ -78,6 +79,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			RequestHost:     c.Request.Host,
 		},
 	}
+	task.PrivateData.RequestID = c.GetString(common.RequestIdKey)
 
 	// 存储计费上下文，供后续退款/结算
 	// tiered_expr 模型即使预扣为 0（信任用户）也必须存 BillingContext，否则完成时无法结算
@@ -106,7 +108,35 @@ func GenerateImageSubmit(c *gin.Context) {
 	// - 通用 OpenAI image：存扁平的 AsyncImageRequest
 	var processData any
 	if isGeminiNative {
-		nativeReq, convertErr := service.ConvertAsyncImageToGeminiNative(context.Background(), asyncReq)
+		nativeReq, inputPreparation, convertErr := service.PrepareGenerateImageGeminiNative(
+			context.Background(),
+			asyncReq,
+			req.Images,
+			service.GeminiFileDataOptions{Enabled: relayInfo.ChannelOtherSettings.GeminiFileDataEnabled},
+		)
+		logger.LogInfo(c, fmt.Sprintf(
+			"generate_image_timing: phase=input_prepare task=%s request_id=%s channel=%d client_format=%s upstream_format=%s conversion=%s image_count=%d input_bytes=%d download_ms=%.3f decode_ms=%.3f local_write_ms=%.3f prepare_ms=%.3f fallback=%s error=%t",
+			task.TaskID,
+			task.PrivateData.RequestID,
+			task.ChannelId,
+			inputPreparation.ClientFormat,
+			inputPreparation.UpstreamFormat,
+			inputPreparation.Conversion,
+			inputPreparation.ImageCount,
+			inputPreparation.InputBytes,
+			inputPreparation.Download.Seconds()*1000,
+			inputPreparation.Decode.Seconds()*1000,
+			inputPreparation.LocalWrite.Seconds()*1000,
+			inputPreparation.Total.Seconds()*1000,
+			inputPreparation.Fallback,
+			convertErr != nil,
+		))
+		if inputPreparation.Fallback != "none" {
+			logger.LogWarn(c, fmt.Sprintf(
+				"generate_image: task=%s request_id=%s channel=%d file_data_fallback=%s",
+				task.TaskID, task.PrivateData.RequestID, task.ChannelId, inputPreparation.Fallback,
+			))
+		}
 		if convertErr != nil {
 			if relayInfo.Billing != nil {
 				relayInfo.Billing.Refund(c)
@@ -148,6 +178,10 @@ func GenerateImageSubmit(c *gin.Context) {
 // generateImageToAsyncRequest 把统一生图入参映射为既有的 AsyncImageRequest，
 // 以复用现成的图片校验、Gemini 转换、提交日志逻辑。
 func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageRequest {
+	images := make([]string, 0, len(req.Images))
+	for _, input := range req.Images {
+		images = append(images, input.LegacyString())
+	}
 	return &dto.AsyncImageRequest{
 		Model:              req.Model,
 		Prompt:             req.Prompt,
@@ -160,7 +194,7 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		MediaResolution:    req.MediaResolution,
 		ThinkingLevel:      req.ThinkingLevel,
 		IncludeThoughts:    req.IncludeThoughts,
-		Images:             req.Images,
+		Images:             images,
 		Mask:               req.Mask,
 	}
 }
