@@ -365,18 +365,18 @@ const upload = await response.json();</code></pre>
         <h3>请求参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>填写上方表格中的完整模型名称；版本由模型名决定</td></tr>
-          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>生成或编辑指令</td></tr>
-          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。新接入统一显式使用 <code>fileData</code> 或 <code>inlineData</code>；兼容 URL、Data URI 和原始 Base64 字符串。单图仍使用数组，不要传 <code>image</code>。</td></tr>
-          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>GPT 生成数量；Gemini 不使用此字段</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>Gemini 3 Pro / 3.1 Flash：传 <code>1K</code>、<code>2K</code> 或 <code>4K</code>，必须使用大写 <code>K</code>，默认 <code>1K</code>。GPT Image 2：传 <code>auto</code> 或上方尺寸表中的具体像素值。</td></tr>
-          <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini，传上方兼容表中的值。GPT Image 2 不传此字段，宽高比已包含在 <code>size</code> 中。</td></tr>
-          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>GPT 常用：<code>low</code>/<code>medium</code>/<code>high</code>/<code>auto</code></td></tr>
-          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td>本接口、<code>/v1/images/generations</code> 和 <code>/v1/images/edits</code> 均支持并转发给上游；edits 通过同名 multipart 字段传入。仅限模型名以 <code>gpt-image</code> 开头的模型，可选 <code>auto</code>/<code>transparent</code>；Banana/Gemini 不支持。透明背景需配合 <code>png</code> 或 <code>webp</code>。</td></tr>
-          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td>本接口、<code>/v1/images/generations</code> 和 <code>/v1/images/edits</code> 均支持并转发给上游；edits 通过同名 multipart 字段传入。仅限模型名以 <code>gpt-image</code> 开头的模型，可选 <code>auto</code>/<code>low</code>；Banana/Gemini 不支持。省略时使用上游默认值 <code>auto</code>，<code>low</code> 使用限制较少的内容过滤。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>本接口、<code>/v1/images/generations</code> 和 <code>/v1/images/edits</code> 均支持并转发给上游；edits 通过同名 multipart 字段传入。GPT 输出格式可选 <code>png</code>/<code>jpeg</code>/<code>webp</code>；<code>jpeg</code> 不支持透明背景。</td></tr>
-          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini 3.1 Flash：小写 <code>minimal</code> 或 <code>high</code>；3 Pro 不要传</td></tr>
-          <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td>仅 Gemini：<code>["IMAGE"]</code> 只生成图片；<code>["TEXT","IMAGE"]</code> 生成文字和图片，默认为此值。不要单独传 <code>["TEXT"]</code>。任务查询结果仅返回图片。</td></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>图片模型名称，填写上方模型表中的完整值。</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。建议显式使用 <code>fileData</code> 或 <code>inlineData</code>；也兼容 URL、Data URI 和原始 Base64 字符串。单张参考图仍放入数组，不要使用 <code>image</code> 字段。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>GPT Image 的生成数量；Gemini 模型无需传入。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>Gemini 3 Pro / 3.1 Flash 可选 <code>1K</code>、<code>2K</code>、<code>4K</code>，必须使用大写 <code>K</code>，默认 <code>1K</code>；GPT Image 2 可选 <code>auto</code> 或上方尺寸表中的具体像素值。</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>Gemini 模型的输出宽高比，取值见上方兼容表。GPT Image 2 的宽高比由 <code>size</code> 决定，无需传入。</td></tr>
+          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的生成质量，可选 <code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>。</td></tr>
+          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的背景模式，仅适用于名称以 <code>gpt-image</code> 开头的模型。可选 <code>auto</code>（自动选择背景）或 <code>transparent</code>（透明背景）；使用透明背景时，<code>output_format</code> 必须为 <code>png</code> 或 <code>webp</code>。Banana/Gemini 模型不要传入此字段。</td></tr>
+          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的内容审核强度，仅适用于名称以 <code>gpt-image</code> 开头的模型。可选 <code>auto</code>（标准过滤，默认）或 <code>low</code>（限制较少的过滤）。Banana/Gemini 模型不要传入此字段。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的输出图片格式，可选 <code>png</code>、<code>jpeg</code>、<code>webp</code>。透明背景仅支持 <code>png</code> 或 <code>webp</code>；Banana/Gemini 模型无需传入。</td></tr>
+          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>Gemini 3.1 Flash 的思考级别，可选小写 <code>minimal</code> 或 <code>high</code>；Gemini 3 Pro 不要传入。</td></tr>
+          <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td>Gemini 模型的响应模态。<code>["IMAGE"]</code> 仅生成图片；<code>["TEXT","IMAGE"]</code> 同时生成文字和图片，默认为此值。不要单独传入 <code>["TEXT"]</code>；任务查询结果仅返回图片。</td></tr>
         </table>
         <h3>参考图格式</h3>
         <p>新接入使用以下两种显式格式；同一数组内可以混用：</p>
