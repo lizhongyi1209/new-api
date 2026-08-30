@@ -362,14 +362,6 @@ const upload = await response.json();</code></pre>
           <tr><td><code>2160x3840</code></td><td>4K</td><td>竖版</td><td><code>9:16</code></td></tr>
         </table>
         <div class="callout warn"><b>格式</b>：使用字符串，例如 <code>"size": "3840x2160"</code>。只接受小写 <code>x</code>。</div>
-        <h3>支持这些参数的接口</h3>
-        <table>
-          <tr><th>接口</th><th>请求格式</th><th>支持参数</th></tr>
-          <tr><td><code>POST /async/v1/generateImage</code></td><td>JSON</td><td><code>background</code>、<code>output_format</code>、<code>moderation</code></td></tr>
-          <tr><td><code>POST /v1/images/generations</code></td><td>JSON</td><td><code>background</code>、<code>output_format</code>、<code>moderation</code></td></tr>
-          <tr><td><code>POST /v1/images/edits</code></td><td><code>multipart/form-data</code></td><td><code>background</code>、<code>output_format</code>、<code>moderation</code></td></tr>
-        </table>
-        <p>以上字段会转发给 OpenAI 兼容上游；省略字段时不主动发送，由上游使用默认值。</p>
         <h3>请求参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
@@ -380,13 +372,12 @@ const upload = await response.json();</code></pre>
           <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>Gemini 3 Pro / 3.1 Flash：传 <code>1K</code>、<code>2K</code> 或 <code>4K</code>，必须使用大写 <code>K</code>，默认 <code>1K</code>。GPT Image 2：传 <code>auto</code> 或上方尺寸表中的具体像素值。</td></tr>
           <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini，传上方兼容表中的值。GPT Image 2 不传此字段，宽高比已包含在 <code>size</code> 中。</td></tr>
           <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>GPT 常用：<code>low</code>/<code>medium</code>/<code>high</code>/<code>auto</code></td></tr>
-          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td>仅模型名以 <code>gpt-image</code> 开头的模型：<code>auto</code>/<code>transparent</code>。透明背景需配合 <code>png</code> 或 <code>webp</code>。</td></tr>
-          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td>仅模型名以 <code>gpt-image</code> 开头的模型：<code>auto</code>/<code>low</code>。省略时使用上游默认值 <code>auto</code>；<code>low</code> 使用限制较少的内容过滤。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>GPT 输出格式：<code>png</code>/<code>jpeg</code>/<code>webp</code>；<code>jpeg</code> 不支持透明背景。</td></tr>
+          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td>本接口、<code>/v1/images/generations</code> 和 <code>/v1/images/edits</code> 均支持并转发给上游；edits 通过同名 multipart 字段传入。仅限模型名以 <code>gpt-image</code> 开头的模型，可选 <code>auto</code>/<code>transparent</code>；Banana/Gemini 不支持。透明背景需配合 <code>png</code> 或 <code>webp</code>。</td></tr>
+          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td>本接口、<code>/v1/images/generations</code> 和 <code>/v1/images/edits</code> 均支持并转发给上游；edits 通过同名 multipart 字段传入。仅限模型名以 <code>gpt-image</code> 开头的模型，可选 <code>auto</code>/<code>low</code>；Banana/Gemini 不支持。省略时使用上游默认值 <code>auto</code>，<code>low</code> 使用限制较少的内容过滤。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>本接口、<code>/v1/images/generations</code> 和 <code>/v1/images/edits</code> 均支持并转发给上游；edits 通过同名 multipart 字段传入。GPT 输出格式可选 <code>png</code>/<code>jpeg</code>/<code>webp</code>；<code>jpeg</code> 不支持透明背景。</td></tr>
           <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini 3.1 Flash：小写 <code>minimal</code> 或 <code>high</code>；3 Pro 不要传</td></tr>
           <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td>仅 Gemini：<code>["IMAGE"]</code> 只生成图片；<code>["TEXT","IMAGE"]</code> 生成文字和图片，默认为此值。不要单独传 <code>["TEXT"]</code>。任务查询结果仅返回图片。</td></tr>
         </table>
-        <div class="callout warn"><b>模型限制</b>：<code>background</code> 和 <code>moderation</code> 仅允许模型名以 <code>gpt-image</code> 开头的模型使用，Banana/Gemini 图片模型不支持；向其他模型传入这些字段会返回参数错误。</div>
         <h3>参考图格式</h3>
         <p>新接入使用以下两种显式格式；同一数组内可以混用：</p>
         <table>
