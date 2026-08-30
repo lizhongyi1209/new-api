@@ -95,6 +95,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Channel capability setting | `dto/channel_settings.go` |
 | Reused atomic `/tmp/input` storage | `service/temporary_upload.go` |
 | Channel editor setting | `web/default/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/default/src/features/channels/lib/channel-form.ts` |
+| Public API documentation | Page source: `docs/api-doc.html`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; publish script: `scripts/deploy-api-doc.sh`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
 
 ### Regression coverage
 

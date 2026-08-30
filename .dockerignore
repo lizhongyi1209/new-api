@@ -8,8 +8,7 @@ logs
 .vscode
 .gitignore
 Makefile
-docs/*
-!docs/api-doc.html
+docs
 .eslintcache
 .gocache
 /web/node_modules
