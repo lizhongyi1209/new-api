@@ -522,7 +522,18 @@ func AsyncTaskFetch(c *gin.Context) {
 		resp.Error = task.FailReason
 	}
 
-	c.JSON(http.StatusOK, resp)
+	responseBytes, err := common.Marshal(resp)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("序列化任务响应失败: %v", err),
+				"type":    "internal_error",
+			},
+		})
+		return
+	}
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	service.IOCopyBytesGracefully(c, nil, responseBytes)
 }
 
 // Deprecated: use AsyncTaskFetch
