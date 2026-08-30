@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -31,6 +32,36 @@ func TestUnmarshalGenerateImageBodyWithoutContentType(t *testing.T) {
 	if req.Model != "nano-banana-pro" || req.Prompt != "draw" {
 		t.Fatalf("req = %#v, want parsed model and prompt", req)
 	}
+}
+
+func TestGenerateImageSubmitRejectsBackgroundForBanana(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/async/v1/generateImage", strings.NewReader(
+		`{"model":"nano-banana-pro","prompt":"draw","background":"transparent"}`,
+	))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	GenerateImageSubmit(c)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "background is not supported by Banana/Gemini image models")
+}
+
+func TestGenerateImageSubmitRejectsModerationForBanana(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/async/v1/generateImage", strings.NewReader(
+		`{"model":"nano-banana-pro","prompt":"draw","moderation":"low"}`,
+	))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	GenerateImageSubmit(c)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "moderation is not supported by Banana/Gemini image models")
 }
 
 func TestApplyGenerateImageGoogleSearchTool(t *testing.T) {
@@ -85,6 +116,26 @@ func TestGenerateImageToAsyncRequestPreservesThinkingConfig(t *testing.T) {
 	if asyncReq.IncludeThoughts == nil || *asyncReq.IncludeThoughts {
 		t.Fatalf("IncludeThoughts = %v, want explicit false", asyncReq.IncludeThoughts)
 	}
+}
+
+func TestGenerateImageToAsyncRequestPreservesGPTImageOutputOptions(t *testing.T) {
+	background := "transparent"
+	moderation := "low"
+	outputFormat := "webp"
+	asyncReq := generateImageToAsyncRequest(&dto.GenerateImageRequest{
+		Model:        "gpt-image-2-c-sp",
+		Prompt:       "draw",
+		Background:   &background,
+		Moderation:   &moderation,
+		OutputFormat: &outputFormat,
+	})
+
+	require.NotNil(t, asyncReq.Background)
+	assert.Equal(t, "transparent", *asyncReq.Background)
+	require.NotNil(t, asyncReq.Moderation)
+	assert.Equal(t, "low", *asyncReq.Moderation)
+	require.NotNil(t, asyncReq.OutputFormat)
+	assert.Equal(t, "webp", *asyncReq.OutputFormat)
 }
 
 func TestGenerateImageToAsyncRequestNormalizesExplicitImageInputs(t *testing.T) {

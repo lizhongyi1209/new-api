@@ -82,6 +82,29 @@ func mappedAsyncImageRequest(imageReq *dto.ImageRequest, relayInfo *relaycommon.
 	return &mappedReq
 }
 
+func newAsyncOpenAIImageRequest(asyncReq *dto.AsyncImageRequest, resolvedImage, resolvedImages json.RawMessage) *dto.ImageRequest {
+	if asyncReq == nil {
+		return nil
+	}
+	return &dto.ImageRequest{
+		Model:          asyncReq.Model,
+		Prompt:         asyncReq.Prompt,
+		N:              asyncReq.N,
+		Size:           asyncReq.Size,
+		AspectRatio:    asyncReq.AspectRatio,
+		Quality:        asyncReq.Quality,
+		Background:     stringPtrToRawMessage(asyncReq.Background),
+		Moderation:     stringPtrToRawMessage(asyncReq.Moderation),
+		ResponseFormat: asyncReq.ResponseFormat,
+		OutputFormat:   stringPtrToRawMessage(asyncReq.OutputFormat),
+		Style:          asyncReq.Style,
+		User:           asyncReq.User,
+		Image:          resolvedImage,
+		Images:         resolvedImages,
+		Mask:           imageReferenceToRawMessage(asyncReq.Mask),
+	}
+}
+
 func asyncImageRequestUsesEdits(imageReq *dto.ImageRequest) bool {
 	if imageReq == nil {
 		return false
@@ -702,21 +725,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		resolvedImagesJSON, _ = common.Marshal(resolvedImages)
 	}
 
-	imageReq := &dto.ImageRequest{
-		Model:          asyncReq.Model,
-		Prompt:         asyncReq.Prompt,
-		N:              asyncReq.N,
-		Size:           asyncReq.Size,
-		AspectRatio:    asyncReq.AspectRatio,
-		Quality:        asyncReq.Quality,
-		ResponseFormat: asyncReq.ResponseFormat,
-		OutputFormat:   stringPtrToRawMessage(asyncReq.OutputFormat),
-		Style:          asyncReq.Style,
-		User:           asyncReq.User,
-		Image:          resolvedImage,
-		Images:         resolvedImagesJSON,
-		Mask:           imageReferenceToRawMessage(asyncReq.Mask),
-	}
+	imageReq := newAsyncOpenAIImageRequest(&asyncReq, resolvedImage, resolvedImagesJSON)
 
 	// Create a new gin context for async execution
 	c := &gin.Context{

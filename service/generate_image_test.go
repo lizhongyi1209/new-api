@@ -32,6 +32,18 @@ func testStringPtr(value string) *string {
 	return &value
 }
 
+type passthroughImageAdaptor struct{}
+
+func (passthroughImageAdaptor) Init(*relaycommon.RelayInfo) {}
+
+func (passthroughImageAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
+	return request, nil
+}
+
+func (passthroughImageAdaptor) DoRequest(_ *gin.Context, _ *relaycommon.RelayInfo, _ io.Reader) (any, error) {
+	return nil, nil
+}
+
 func TestIsGeminiImageModelName(t *testing.T) {
 	tests := []struct {
 		model string
@@ -171,6 +183,21 @@ func TestValidateGenerateImageRequestNormalizesNewParameters(t *testing.T) {
 	}
 }
 
+func TestValidateGenerateImageRequestNormalizesGPTImageParameters(t *testing.T) {
+	req := &dto.GenerateImageRequest{
+		Model:      "gpt-image-1",
+		Prompt:     "draw a cat",
+		Background: testStringPtr(" AUTO "),
+		Moderation: testStringPtr(" LOW "),
+	}
+
+	require.NoError(t, ValidateGenerateImageRequest(req))
+	require.NotNil(t, req.Background)
+	assert.Equal(t, "auto", *req.Background)
+	require.NotNil(t, req.Moderation)
+	assert.Equal(t, "low", *req.Moderation)
+}
+
 func TestValidateGenerateImageRequestRejectsInvalidEnums(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -194,6 +221,70 @@ func TestValidateGenerateImageRequestRejectsInvalidEnums(t *testing.T) {
 				OutputFormat: testStringPtr("gif"),
 			},
 			wantErr: "output_format must be one of",
+		},
+		{
+			name: "background value",
+			req: &dto.GenerateImageRequest{
+				Model:      "gpt-image-2",
+				Prompt:     "draw a cat",
+				Background: testStringPtr("opaque"),
+			},
+			wantErr: "background must be one of",
+		},
+		{
+			name: "background on banana",
+			req: &dto.GenerateImageRequest{
+				Model:      "nano-banana-pro",
+				Prompt:     "draw a cat",
+				Background: testStringPtr("transparent"),
+			},
+			wantErr: "not supported by Banana/Gemini",
+		},
+		{
+			name: "background on another model",
+			req: &dto.GenerateImageRequest{
+				Model:      "dall-e-3",
+				Prompt:     "draw a cat",
+				Background: testStringPtr("auto"),
+			},
+			wantErr: "gpt-image prefix",
+		},
+		{
+			name: "moderation value",
+			req: &dto.GenerateImageRequest{
+				Model:      "gpt-image-2",
+				Prompt:     "draw a cat",
+				Moderation: testStringPtr("strict"),
+			},
+			wantErr: "moderation must be one of",
+		},
+		{
+			name: "moderation on banana",
+			req: &dto.GenerateImageRequest{
+				Model:      "nano-banana-pro",
+				Prompt:     "draw a cat",
+				Moderation: testStringPtr("low"),
+			},
+			wantErr: "not supported by Banana/Gemini",
+		},
+		{
+			name: "moderation on another model",
+			req: &dto.GenerateImageRequest{
+				Model:      "dall-e-3",
+				Prompt:     "draw a cat",
+				Moderation: testStringPtr("auto"),
+			},
+			wantErr: "gpt-image prefix",
+		},
+		{
+			name: "transparent jpeg",
+			req: &dto.GenerateImageRequest{
+				Model:        "gpt-image-2-c-sd",
+				Prompt:       "draw a cat",
+				Background:   testStringPtr("transparent"),
+				OutputFormat: testStringPtr("jpeg"),
+			},
+			wantErr: "png or webp",
 		},
 		{
 			name: "empty thinking level",
@@ -329,6 +420,29 @@ func TestMappedAsyncImageRequest(t *testing.T) {
 	if mappedReq != nil {
 		t.Fatalf("nil image request should return nil, got %#v", mappedReq)
 	}
+}
+
+func TestNewAsyncOpenAIImageRequestPreservesGPTImageParameters(t *testing.T) {
+	background := "transparent"
+	moderation := "low"
+	outputFormat := "png"
+	imageReq := newAsyncOpenAIImageRequest(&dto.AsyncImageRequest{
+		Model:        "gpt-image-2",
+		Prompt:       "draw a cat",
+		Background:   &background,
+		Moderation:   &moderation,
+		OutputFormat: &outputFormat,
+	}, nil, nil)
+
+	var gotBackground string
+	require.NoError(t, common.Unmarshal(imageReq.Background, &gotBackground))
+	assert.Equal(t, "transparent", gotBackground)
+	var gotModeration string
+	require.NoError(t, common.Unmarshal(imageReq.Moderation, &gotModeration))
+	assert.Equal(t, "low", gotModeration)
+	var gotOutputFormat string
+	require.NoError(t, common.Unmarshal(imageReq.OutputFormat, &gotOutputFormat))
+	assert.Equal(t, "png", gotOutputFormat)
 }
 
 func TestAsyncOpenAIImageRelayMode(t *testing.T) {
@@ -471,11 +585,21 @@ func TestBuildAsyncOpenAIImageEditMultipartBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal output format: %v", err)
 	}
+	backgroundRaw, err := common.Marshal("transparent")
+	if err != nil {
+		t.Fatalf("marshal background: %v", err)
+	}
+	moderationRaw, err := common.Marshal("low")
+	if err != nil {
+		t.Fatalf("marshal moderation: %v", err)
+	}
 	req := &dto.ImageRequest{
 		Model:        "gpt-image-2",
 		Prompt:       "draw a cat",
 		Size:         "auto",
 		Quality:      "auto",
+		Background:   backgroundRaw,
+		Moderation:   moderationRaw,
 		OutputFormat: outputFormatRaw,
 		Image:        imageRaw,
 	}
@@ -504,6 +628,12 @@ func TestBuildAsyncOpenAIImageEditMultipartBody(t *testing.T) {
 	if got := form.Value["output_format"]; len(got) != 1 || got[0] != "png" {
 		t.Fatalf("output_format field = %#v", got)
 	}
+	if got := form.Value["background"]; len(got) != 1 || got[0] != "transparent" {
+		t.Fatalf("background field = %#v", got)
+	}
+	if got := form.Value["moderation"]; len(got) != 1 || got[0] != "low" {
+		t.Fatalf("moderation field = %#v", got)
+	}
 	imageFiles := form.File["image"]
 	if len(imageFiles) != 1 {
 		t.Fatalf("image files = %d, want 1", len(imageFiles))
@@ -520,6 +650,35 @@ func TestBuildAsyncOpenAIImageEditMultipartBody(t *testing.T) {
 	if !bytes.Equal(data, []byte{1, 2, 3}) {
 		t.Fatalf("image bytes = %v", data)
 	}
+}
+
+func TestBuildAsyncOpenAIImageGenerationBodyPreservesGPTImageParameters(t *testing.T) {
+	backgroundRaw, err := common.Marshal("transparent")
+	require.NoError(t, err)
+	outputFormatRaw, err := common.Marshal("webp")
+	require.NoError(t, err)
+	moderationRaw, err := common.Marshal("low")
+	require.NoError(t, err)
+	request := &dto.ImageRequest{
+		Model:        "gpt-image-2",
+		Prompt:       "draw a cat",
+		Background:   backgroundRaw,
+		Moderation:   moderationRaw,
+		OutputFormat: outputFormatRaw,
+	}
+	relayInfo := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesGenerations}
+	c := &gin.Context{Request: &http.Request{Header: make(http.Header)}}
+
+	body, _, err := buildAsyncOpenAIImageRequestBody(c, passthroughImageAdaptor{}, relayInfo, request)
+	require.NoError(t, err)
+	bodyBytes, err := io.ReadAll(body)
+	require.NoError(t, err)
+
+	var payload map[string]json.RawMessage
+	require.NoError(t, common.Unmarshal(bodyBytes, &payload))
+	assert.JSONEq(t, `"transparent"`, string(payload["background"]))
+	assert.JSONEq(t, `"low"`, string(payload["moderation"]))
+	assert.JSONEq(t, `"webp"`, string(payload["output_format"]))
 }
 
 func readMultipartForm(t *testing.T, body *bytes.Buffer, boundary string) *multipart.Form {

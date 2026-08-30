@@ -34,6 +34,21 @@ func TestGenerateImageInputAcceptsLegacyAndExplicitFormats(t *testing.T) {
 	assert.JSONEq(t, string(requestBody), string(encoded))
 }
 
+func TestGenerateImageRequestPreservesOptionalGPTImageParameters(t *testing.T) {
+	requestBody := []byte(`{"model":"gpt-image-2","prompt":"draw","background":"transparent","moderation":"low","output_format":"webp"}`)
+
+	var request GenerateImageRequest
+	require.NoError(t, common.Unmarshal(requestBody, &request))
+	require.NotNil(t, request.Background)
+	assert.Equal(t, "transparent", *request.Background)
+	require.NotNil(t, request.Moderation)
+	assert.Equal(t, "low", *request.Moderation)
+
+	encoded, err := common.Marshal(request)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(requestBody), string(encoded))
+}
+
 func TestGenerateImageInputRejectsAmbiguousObjects(t *testing.T) {
 	for _, inputJSON := range []string{
 		`{}`,

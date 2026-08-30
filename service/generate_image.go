@@ -127,6 +127,16 @@ var generateImageOutputFormatValues = map[string]struct{}{
 	"webp": {},
 }
 
+var generateImageBackgroundValues = map[string]struct{}{
+	"auto":        {},
+	"transparent": {},
+}
+
+var generateImageModerationValues = map[string]struct{}{
+	"auto": {},
+	"low":  {},
+}
+
 // ValidateGenerateImageRequest validates the unified /async/v1/generateImage request.
 func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	if strings.TrimSpace(req.Model) == "" {
@@ -157,6 +167,37 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 			return fmt.Errorf("output_format must be one of png, jpeg, webp")
 		}
 		*req.OutputFormat = outputFormat
+	}
+
+	if req.Background != nil {
+		background := strings.ToLower(strings.TrimSpace(*req.Background))
+		if _, ok := generateImageBackgroundValues[background]; !ok {
+			return fmt.Errorf("background must be one of auto, transparent")
+		}
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Model)), "gpt-image") {
+			if isGeminiImageModelName(req.Model) {
+				return fmt.Errorf("background is not supported by Banana/Gemini image models; it is only supported by gpt-image models")
+			}
+			return fmt.Errorf("background is only supported by models with the gpt-image prefix")
+		}
+		if background == "transparent" && req.OutputFormat != nil && *req.OutputFormat == "jpeg" {
+			return fmt.Errorf("output_format must be png or webp when background is transparent")
+		}
+		*req.Background = background
+	}
+
+	if req.Moderation != nil {
+		moderation := strings.ToLower(strings.TrimSpace(*req.Moderation))
+		if _, ok := generateImageModerationValues[moderation]; !ok {
+			return fmt.Errorf("moderation must be one of auto, low")
+		}
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Model)), "gpt-image") {
+			if isGeminiImageModelName(req.Model) {
+				return fmt.Errorf("moderation is not supported by Banana/Gemini image models; it is only supported by gpt-image models")
+			}
+			return fmt.Errorf("moderation is only supported by models with the gpt-image prefix")
+		}
+		*req.Moderation = moderation
 	}
 
 	req.MediaResolution = strings.TrimSpace(req.MediaResolution)
@@ -1255,21 +1296,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		return
 	}
 
-	imageReq := &dto.ImageRequest{
-		Model:          asyncReq.Model,
-		Prompt:         asyncReq.Prompt,
-		N:              asyncReq.N,
-		Size:           asyncReq.Size,
-		AspectRatio:    asyncReq.AspectRatio,
-		Quality:        asyncReq.Quality,
-		ResponseFormat: asyncReq.ResponseFormat,
-		OutputFormat:   stringPtrToRawMessage(asyncReq.OutputFormat),
-		Style:          asyncReq.Style,
-		User:           asyncReq.User,
-		Image:          resolvedImage,
-		Images:         resolvedImages,
-		Mask:           imageReferenceToRawMessage(asyncReq.Mask),
-	}
+	imageReq := newAsyncOpenAIImageRequest(&asyncReq, resolvedImage, resolvedImages)
 
 	relayMode := asyncOpenAIImageRelayMode(imageReq)
 	relayInfo, err := buildGenerateImageRelayInfo(c, task, relayMode)

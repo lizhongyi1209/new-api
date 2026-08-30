@@ -183,6 +183,9 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			}
 			imageRequest.Quality = formData.Get("quality")
 			imageRequest.Size = formData.Get("size")
+			if formData.Has("moderation") {
+				imageRequest.Moderation, _ = common.Marshal(formData.Get("moderation"))
+			}
 			if streamValue := strings.TrimSpace(formData.Get("stream")); streamValue != "" {
 				stream, err := strconv.ParseBool(streamValue)
 				if err != nil {
@@ -267,6 +270,30 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 
 		if imageRequest.N == nil || *imageRequest.N == 0 {
 			imageRequest.N = common.GetPointer(uint(1))
+		}
+	}
+
+	if len(imageRequest.Moderation) > 0 {
+		var moderation string
+		if err := common.Unmarshal(imageRequest.Moderation, &moderation); err != nil {
+			return nil, errors.New("moderation must be one of auto, low")
+		}
+		moderation = strings.ToLower(strings.TrimSpace(moderation))
+		if moderation != "auto" && moderation != "low" {
+			return nil, errors.New("moderation must be one of auto, low")
+		}
+		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(imageRequest.Model)), "gpt-image") {
+			return nil, errors.New("moderation is only supported by models with the gpt-image prefix")
+		}
+		imageRequest.Moderation, _ = common.Marshal(moderation)
+		if c.Request.PostForm != nil && c.Request.PostForm.Has("moderation") {
+			c.Request.PostForm.Set("moderation", moderation)
+		}
+		if c.Request.MultipartForm != nil && c.Request.MultipartForm.Value != nil {
+			formData := url.Values(c.Request.MultipartForm.Value)
+			if formData.Has("moderation") {
+				formData.Set("moderation", moderation)
+			}
 		}
 	}
 

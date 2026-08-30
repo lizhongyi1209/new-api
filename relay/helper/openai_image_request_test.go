@@ -158,3 +158,63 @@ func TestGetAndValidOpenAIImageRequestNBounds(t *testing.T) {
 		require.Contains(t, err.Error(), boundErr)
 	})
 }
+
+func TestGetAndValidOpenAIImageRequestModeration(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("generation accepts and normalizes gpt-image alias", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewBufferString(
+			`{"model":"gpt-image-2-custom","prompt":"draw","moderation":" LOW "}`,
+		))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		req, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesGenerations)
+		require.NoError(t, err)
+		var moderation string
+		require.NoError(t, common.Unmarshal(req.Moderation, &moderation))
+		require.Equal(t, "low", moderation)
+	})
+
+	t.Run("generation rejects invalid value", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewBufferString(
+			`{"model":"gpt-image-2","prompt":"draw","moderation":"strict"}`,
+		))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		_, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesGenerations)
+		require.EqualError(t, err, "moderation must be one of auto, low")
+	})
+
+	t.Run("generation rejects non gpt-image model", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewBufferString(
+			`{"model":"dall-e-3","prompt":"draw","moderation":"auto"}`,
+		))
+		c.Request.Header.Set("Content-Type", "application/json")
+
+		_, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesGenerations)
+		require.EqualError(t, err, "moderation is only supported by models with the gpt-image prefix")
+	})
+
+	t.Run("edit accepts normalizes and preserves multipart field", func(t *testing.T) {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		require.NoError(t, writer.WriteField("model", "gpt-image-1-alias"))
+		require.NoError(t, writer.WriteField("prompt", "edit"))
+		require.NoError(t, writer.WriteField("moderation", " AUTO "))
+		require.NoError(t, writer.Close())
+
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/edits", &body)
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+
+		req, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesEdits)
+		require.NoError(t, err)
+		var moderation string
+		require.NoError(t, common.Unmarshal(req.Moderation, &moderation))
+		require.Equal(t, "auto", moderation)
+		require.Equal(t, "auto", c.Request.MultipartForm.Value["moderation"][0])
+	})
+}

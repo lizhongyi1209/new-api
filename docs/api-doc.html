@@ -1,0 +1,2302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>O1Key API接口文档</title>
+<style>
+  :root{
+    color-scheme:light dark;
+    --bg:#f7f8fa;--surface:#fcfcfd;--surface-muted:#f0f2f5;--line:#d9dde4;--line-strong:#c4c9d2;
+    --text:#17191f;--muted:#626873;--accent:#2859c5;--accent-soft:#edf2ff;
+    --success:#16794a;--warn:#94600d;--danger:#bf3b3b;--code:#171a21;--code-text:#e8ebf0;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth;scroll-padding-top:72px}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"SF Pro Text","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;font-size:14px;line-height:1.58;text-rendering:optimizeLegibility}
+  a{color:inherit;text-decoration:none}
+  button{font:inherit}
+  header.top{position:sticky;top:0;z-index:20;height:58px;background:color-mix(in srgb,var(--bg) 94%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+  header.top .wrap{max-width:1680px;height:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:16px}
+  header.top h1{margin:0;font-size:15px;font-weight:680;letter-spacing:-.01em}
+  .header-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .copy-scope{min-width:130px;border:1px solid var(--line-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:5px 28px 5px 9px;font-size:12px;line-height:1.5;cursor:pointer}
+  .copy-scope:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 30%,transparent);outline-offset:2px}
+  .copy-agent{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#f8faff;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:650;cursor:pointer;transition:filter .14s ease,transform .14s ease}
+  .copy-agent:hover{filter:brightness(.94)}
+  .copy-agent:active,.copy-code:active,.example-tab:active{transform:translateY(1px)}
+  .copy-agent:focus-visible,.copy-code:focus-visible,.example-tab:focus-visible,.sidebar a:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 30%,transparent);outline-offset:2px}
+  .copy-agent.copied{background:var(--success);border-color:var(--success)}
+  .copy-status{font-size:11px;color:var(--muted)}
+  .docs-shell{max-width:1680px;margin:0 auto;padding:34px 28px 96px;display:grid;grid-template-columns:172px minmax(0,1fr);gap:44px;align-items:start}
+  aside.sidebar{position:sticky;top:82px;max-height:calc(100dvh - 108px);overflow-x:hidden;overflow-y:auto;padding:0 14px 0 0;border-right:1px solid var(--line);scrollbar-width:thin}
+  aside.sidebar::-webkit-scrollbar{width:4px;height:0}
+  .sidebar-title{margin:0 0 10px;padding:0 10px;color:var(--muted);font-size:11px;font-weight:650}
+  .sidebar nav{display:flex;flex-direction:column;gap:1px}
+  .sidebar a{display:block;padding:7px 10px;border-right:2px solid transparent;color:var(--muted);font-size:12px;font-weight:560;line-height:1.35;transition:color .14s ease,background .14s ease,border-color .14s ease}
+  .sidebar a:hover{color:var(--text);background:var(--surface-muted)}
+  .sidebar a[aria-current="true"]{color:var(--accent);border-right-color:var(--accent);background:var(--accent-soft)}
+  main.api-grid{min-width:0;display:grid;grid-template-columns:1fr;gap:0}
+  .page-intro,.section-heading,.wide-panel,.endpoint-doc{min-width:0}
+  .page-intro{padding:0 0 34px;border-bottom:1px solid var(--line-strong)}
+  .page-intro h2{margin:0 0 16px;font-size:26px;letter-spacing:-.025em}
+  .lead{display:none}
+  .section-heading{padding:64px 0 20px;scroll-margin-top:58px}
+  .section-heading h2{margin:0;font-size:26px;font-weight:700;letter-spacing:-.025em}
+  .section-heading p{max-width:68ch;margin:7px 0 0;color:var(--muted);font-size:13px}
+  .endpoint-doc{display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,.88fr);gap:40px;padding:34px 0 54px;border-top:1px solid var(--line);scroll-margin-top:76px}
+  .reference-panel,.example-panel,.wide-panel{min-width:0;padding:0;background:transparent}
+  .example-panel{padding-left:40px;border-left:1px solid var(--line)}
+  .wide-panel{margin-top:56px;padding-top:34px;border-top:1px solid var(--line)}
+  h2{margin:0 0 10px;font-size:20px;font-weight:680;letter-spacing:-.016em}
+  h3{margin:28px 0 10px;color:var(--text);font-size:13px;font-weight:700}
+  h3:first-child{margin-top:0}
+  h4{margin:20px 0 8px;color:var(--muted);font-size:11px;font-weight:650}
+  h4:first-child{margin-top:0}
+  p{max-width:76ch;margin:8px 0;color:var(--muted)}
+  .endpoint{display:flex;align-items:center;gap:9px;margin:12px 0 18px;padding:8px 10px;background:var(--surface-muted);border-left:2px solid var(--accent);font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:12px;line-height:1.4;flex-wrap:wrap}
+  .method{font-size:10px;font-weight:760;letter-spacing:.045em}
+  .method.get{color:var(--success)}.method.post{color:var(--accent)}.method.put{color:var(--warn)}
+  .path{overflow-wrap:anywhere;color:var(--text)}
+  table{width:100%;margin:10px 0 0;border-collapse:collapse;font-size:12px}
+  th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+  th{background:var(--surface-muted);color:var(--muted);font-size:11px;font-weight:650;white-space:nowrap}
+  td{color:var(--text)}
+  td code,p code,li code{padding:1px 4px;background:var(--accent-soft);color:var(--accent);border-radius:4px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:11px;overflow-wrap:anywhere}
+  .code-block{position:relative;margin:8px 0 16px}
+  pre{margin:0;padding:15px 16px;background:var(--code);border:1px solid color-mix(in srgb,var(--code-text) 14%,transparent);border-radius:8px;overflow:auto}
+  pre code{color:var(--code-text);font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:11px;line-height:1.62;white-space:pre}
+  .copy-code{position:absolute;top:7px;right:7px;z-index:2;appearance:none;border:1px solid #404650;background:#242933;color:#cbd0d9;border-radius:6px;padding:4px 7px;font-size:10px;cursor:pointer;transition:background .14s ease,color .14s ease,transform .14s ease}
+  .copy-code:hover{background:#303641;color:#f3f5f8}
+  .copy-code.copied{background:#17603f;border-color:#2a8a60;color:#f3fff8}
+  .example-switcher{margin:8px 0 18px}
+  .example-tabs{display:flex;gap:18px;margin:0 0 10px;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+  .example-tabs::-webkit-scrollbar{display:none}
+  .example-tab{flex:0 0 auto;appearance:none;margin-bottom:-1px;padding:6px 0 7px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:11px;font-weight:620;white-space:nowrap;cursor:pointer;transition:color .14s ease,border-color .14s ease,transform .14s ease}
+  .example-tab:hover{color:var(--text)}
+  .example-tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+  .example-panels{display:grid;min-width:0}
+  .example-tab-panel{grid-area:1/1;min-width:0;visibility:hidden;opacity:0;pointer-events:none}
+  .example-tab-panel.is-active{visibility:visible;opacity:1;pointer-events:auto}
+  .example-tab-panel h4{margin-top:0}
+  .compact-note{margin:5px 0 9px;color:var(--muted);font-size:11px}
+  .callout{margin:13px 0;padding:7px 0 7px 11px;border-left:2px solid var(--line-strong);color:var(--muted);font-size:12px}
+  .callout b{color:var(--text)}
+  .callout.info{border-left-color:var(--accent)}.callout.warn{border-left-color:var(--warn)}.callout.danger{border-left-color:var(--danger)}
+  .pill{display:inline-block;margin-left:4px;padding:0 5px;border:1px solid var(--line-strong);border-radius:4px;color:var(--muted);font-size:10px;font-weight:600}
+  .pill.success{border-color:color-mix(in srgb,var(--success) 45%,var(--line));color:var(--success)}
+  .pill.danger{border-color:color-mix(in srgb,var(--danger) 45%,var(--line));color:var(--danger)}
+  .req{color:var(--danger);font-weight:650}.opt{color:var(--muted)}
+  ul{margin:8px 0;padding-left:18px;color:var(--muted)}li{margin:3px 0}
+  footer{max-width:1680px;margin:0 auto;padding:20px 28px;color:var(--muted);font-size:11px;border-top:1px solid var(--line)}
+  @media(prefers-color-scheme:dark){
+    :root{--bg:#101216;--surface:#15181d;--surface-muted:#1c2026;--line:#2c3139;--line-strong:#3a404a;--text:#e7e9ed;--muted:#9ba2ad;--accent:#81a5ff;--accent-soft:#202a40;--success:#68c994;--warn:#d7a85a;--danger:#ef8585;--code:#0b0d11;--code-text:#e3e7ee}
+    .copy-agent{color:#101625}.copy-code{background:#20242b;border-color:#3b414b}.copy-code:hover{background:#2a3039}
+  }
+  @media(max-width:1180px){
+    .endpoint-doc{grid-template-columns:1fr;gap:30px}
+    .example-panel{padding:30px 0 0;border-left:0;border-top:1px solid var(--line)}
+  }
+  @media(max-width:820px){
+    header.top{height:auto;min-height:54px}header.top .wrap{padding:9px 16px;flex-wrap:wrap}
+    .docs-shell{grid-template-columns:1fr;gap:24px;padding:22px 16px 72px}
+    aside.sidebar{position:static;max-height:none;padding:0 0 12px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
+    aside.sidebar::-webkit-scrollbar{display:none}
+    .sidebar-title{display:none}.sidebar nav{flex-direction:row;gap:6px;width:max-content}
+    .sidebar a{margin:0;padding:6px 9px;border:1px solid var(--line);border-radius:6px;white-space:nowrap}
+    .sidebar a[aria-current="true"]{border-color:var(--accent)}
+    .section-heading{padding-top:48px}.endpoint-doc{padding:28px 0 44px}
+  }
+  @media(max-width:560px){
+    .header-actions{width:100%;flex-wrap:wrap}.copy-scope{flex:1;min-width:0}.copy-agent{white-space:nowrap}.copy-status{width:100%}
+    .page-intro h2,.section-heading h2{font-size:22px}
+    table{font-size:11px}th,td{padding:6px}
+    pre{padding:13px}.copy-code{top:6px;right:6px}
+  }
+  @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+  @media print{
+    :root{color-scheme:light;--bg:#fcfcfd;--text:#111;--muted:#555;--line:#ddd;--line-strong:#bbb;--surface-muted:#f4f4f4;--accent:#234ca5;--accent-soft:#eef2fa;--code:#f5f5f5;--code-text:#111}
+    body{background:#fcfcfd}.top{position:static}.docs-shell{display:block;padding:0}.sidebar,.header-actions{display:none}
+    .endpoint-doc{display:block}.reference-panel,.example-panel,.wide-panel{margin:0 0 24px;break-inside:avoid}.example-panel{padding:20px 0 0;border-left:0}
+    .copy-code{display:none}
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>O1Key API接口文档</h1>
+    <div class="header-actions">
+      <label for="copy-scope" class="sr-only">复制范围</label>
+      <select class="copy-scope" id="copy-scope" title="选择复制范围">
+        <option value="all">全文</option>
+        <option value="temporary-upload">临时素材上传</option>
+        <option value="image-generation">图片生成</option>
+        <option value="seedance">Seedance</option>
+        <option value="minimax-h3">MiniMax H3</option>
+        <option value="gemini-omni">Gemini Omni</option>
+        <option value="grok-video">Grok 视频</option>
+        <option value="kling-3">Kling 3.0</option>
+      </select>
+      <button type="button" class="copy-agent" id="copy-agent-doc" title="复制所选范围的全部参数和示例">复制给 Agent</button>
+      <span class="copy-status" id="copy-status" aria-live="polite"></span>
+    </div>
+  </div>
+</header>
+
+<div class="docs-shell">
+  <aside class="sidebar" aria-label="接口导航">
+    <p class="sidebar-title">目录</p>
+    <nav>
+      <a href="#temporary-upload" data-section="temporary-upload" aria-current="true">素材上传</a>
+      <a href="#image-generation" data-section="image-generation">图片生成</a>
+      <a href="#seedance" data-section="seedance">Seedance</a>
+      <a href="#minimax-h3" data-section="minimax-h3">MiniMax H3</a>
+      <a href="#gemini-omni" data-section="gemini-omni">Gemini Omni</a>
+      <a href="#grok-video" data-section="grok-video">Grok 视频</a>
+      <a href="#kling-3" data-section="kling-3">Kling 3.0</a>
+    </nav>
+  </aside>
+
+  <main class="api-grid">
+    <section class="page-intro">
+      <h2>接入</h2>
+      <h3>Base URL</h3>
+      <table>
+        <tr><th>入口</th><th>Base URL</th><th>说明</th></tr>
+        <tr><td>国内加速</td><td><code>https://api.o1key.cn</code></td><td>流式请求最长 300 秒</td></tr>
+        <tr><td>Cloudflare</td><td><code>https://cf-api.o1key.com</code></td><td>单次连接最长 100 秒</td></tr>
+        <tr><td>美国直连</td><td><code>https://api.o1key.com</code></td><td>适合长连接</td></tr>
+      </table>
+      <div class="callout info"><b>鉴权</b>：<code>Authorization: Bearer &lt;API Key&gt;</code></div>
+    </section>
+
+    <div class="section-heading" id="temporary-upload">
+      <div><h2>临时素材上传</h2><p>上传图片、音频、视频或文档，获取可供模型读取的临时公开 HTTPS URL。</p></div>
+    </div>
+
+    <section class="endpoint-doc" id="temporary-upload-endpoint" aria-labelledby="temporary-upload-title">
+      <article class="reference-panel">
+        <h2 id="temporary-upload-title">上传单个附件</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
+        <p>请求使用 <code>multipart/form-data</code>，每次上传一个文件。成功后返回一个有效期为 24 小时的公开 URL，可用于后续图片、音频、视频或文档模型请求。</p>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>file</code></td><td class="req">是</td><td>binary</td><td>待上传附件；单文件最大 48 MiB</td></tr>
+        </table>
+        <div class="callout warn"><b>Multipart 请求</b>：浏览器、SDK 或命令行工具应自动生成包含 boundary 的 <code>Content-Type</code>，不要手动填写固定的 <code>multipart/form-data</code> 请求头。</div>
+
+        <h3>支持的文件格式</h3>
+        <table>
+          <tr><th>类别</th><th>扩展名</th></tr>
+          <tr><td>图片</td><td><code>png</code>、<code>jpg</code>、<code>jpeg</code>、<code>webp</code>、<code>gif</code>、<code>bmp</code>、<code>tif</code>、<code>tiff</code>、<code>heic</code>、<code>heif</code>、<code>avif</code></td></tr>
+          <tr><td>音频</td><td><code>mp3</code>、<code>wav</code>、<code>flac</code>、<code>aac</code>、<code>m4a</code>、<code>oga</code>、<code>ogg</code></td></tr>
+          <tr><td>视频</td><td><code>mp4</code>、<code>mov</code>、<code>m4v</code>、<code>webm</code>、<code>avi</code>、<code>mkv</code>、<code>mpeg</code>、<code>mpg</code>、<code>ogv</code>、<code>3gp</code>、<code>3g2</code></td></tr>
+          <tr><td>文档</td><td><code>pdf</code>、<code>txt</code>、<code>md</code>、<code>csv</code>、<code>json</code>、<code>rtf</code>、<code>doc</code>、<code>xls</code>、<code>ppt</code>、<code>docx</code>、<code>xlsx</code>、<code>pptx</code>、<code>odt</code>、<code>ods</code>、<code>odp</code></td></tr>
+        </table>
+        <p>服务端会校验文件扩展名与实际内容类型。扩展名与内容不一致、可执行内容以及未列出的格式会被拒绝。</p>
+
+        <h3>响应字段</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>url</code></td><td>string</td><td>临时公开 HTTPS URL，直接用于后续模型请求</td></tr>
+          <tr><td><code>filename</code></td><td>string</td><td>上传时的原始文件名</td></tr>
+          <tr><td><code>content_type</code></td><td>string</td><td>服务端确认后的 MIME 类型</td></tr>
+          <tr><td><code>size</code></td><td>integer</td><td>文件大小，单位为字节</td></tr>
+          <tr><td><code>expires_at</code></td><td>integer</td><td>URL 失效时间，Unix 秒级时间戳</td></tr>
+        </table>
+
+        <h3>URL 使用规则</h3>
+        <ul>
+          <li>通过 <code>https://cf-api.o1key.com</code> 上传时，返回 Cloudflare 域名 URL。</li>
+          <li>通过 <code>https://api.o1key.cn</code> 上传时，返回国内加速域名 URL。</li>
+          <li>返回的 URL 支持直接 <code>GET</code> 或 <code>HEAD</code>，读取时不需要再次携带 API Key。</li>
+          <li>URL 过期后返回 <code>404</code>。客户端应保存 <code>expires_at</code>，需要继续使用时重新上传。</li>
+          <li>客户端展示文件名时应使用响应中的 <code>filename</code>，不要从临时 URL 推断原始文件名。</li>
+        </ul>
+        <div class="callout danger"><b>安全提示</b>：临时 URL 在有效期内可公开访问，请勿上传 API Key、密码、身份证件或其他高敏感信息。</div>
+
+        <h3>错误处理</h3>
+        <table>
+          <tr><th>HTTP 状态码</th><th>含义</th><th>客户端处理建议</th></tr>
+          <tr><td><code>400</code></td><td>请求格式错误、缺少文件、空文件或格式不支持</td><td>修正请求或提示用户更换文件，不要自动重试</td></tr>
+          <tr><td><code>401</code></td><td>API Key 缺失或无效</td><td>检查鉴权配置</td></tr>
+          <tr><td><code>403</code></td><td>当前凭证无权访问</td><td>检查账号、凭证或访问策略</td></tr>
+          <tr><td><code>413</code></td><td>文件超过大小限制</td><td>压缩文件或选择更小的附件</td></tr>
+          <tr><td><code>429</code></td><td>请求过于频繁</td><td>读取 <code>Retry-After</code> 响应头并延迟重试</td></tr>
+          <tr><td><code>500</code></td><td>服务暂时不可用</td><td>使用退避策略进行有限次数重试</td></tr>
+        </table>
+        <div class="callout info"><b>重试</b>：上传接口不接受幂等键。网络超时后重试可能生成新的 URL，客户端应以最后一次成功响应为准。</div>
+      </article>
+
+      <aside class="example-panel" aria-label="临时素材上传请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="临时素材上传请求格式">
+            <button type="button" class="example-tab" id="temporary-upload-curl-tab" role="tab" aria-selected="true" aria-controls="temporary-upload-curl">cURL</button>
+            <button type="button" class="example-tab" id="temporary-upload-js-tab" role="tab" aria-selected="false" aria-controls="temporary-upload-js">JavaScript</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="temporary-upload-curl" role="tabpanel" aria-labelledby="temporary-upload-curl-tab">
+              <pre><code>curl --fail-with-body \
+  -X POST "$BASE_URL/v1/o1key/uploads" \
+  -H "Authorization: Bearer $API_KEY" \
+  -F "file=@./reference.png"</code></pre>
+            </div>
+            <div class="example-tab-panel" id="temporary-upload-js" role="tabpanel" aria-labelledby="temporary-upload-js-tab" aria-hidden="true">
+              <pre><code>const form = new FormData();
+form.append("file", file, file.name);
+
+const response = await fetch(
+  `${BASE_URL}/v1/o1key/uploads`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: form,
+  },
+);
+
+if (!response.ok) {
+  const retryAfter = response.headers.get("Retry-After");
+  throw new Error(
+    `上传失败：HTTP ${response.status}` +
+      (retryAfter ? `，${retryAfter} 秒后重试` : ""),
+  );
+}
+
+const upload = await response.json();</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>成功响应</h3>
+        <pre><code>{
+  "url": "https://cf-api.o1key.com/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png",
+  "filename": "reference.png",
+  "content_type": "image/png",
+  "size": 11630,
+  "expires_at": 1787495062
+}</code></pre>
+
+        <h3>在后续请求中使用</h3>
+        <pre><code>{
+  "images": [
+    "https://cf-api.o1key.com/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png"
+  ]
+}</code></pre>
+        <p>不同模型的附件字段名称可能不同，请将响应中的 <code>url</code> 填入对应模型要求的 URL 字段。</p>
+
+        <h3>常见错误响应</h3>
+        <pre><code>{
+  "error": "unsupported attachment type"
+}</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="image-generation">
+      <div><h2>异步图片生成</h2></div>
+    </div>
+
+    <section class="endpoint-doc" id="/async/v1/generateImage" aria-labelledby="generate-image-title">
+      <article class="reference-panel">
+        <h2 id="generate-image-title">提交异步生图任务</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
+        <p>返回 <code>task_id</code>。参考图统一使用 <code>images</code> 数组，单图也使用数组。</p>
+        <h3>支持的图片模型</h3>
+        <table>
+          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
+          <tr><td>Gemini 3 Pro Image</td><td><code>gemini-3-pro-image-c-sp</code></td><td><code>gemini-3-pro-image-c-sd</code></td><td><code>gemini-3-pro-image</code></td></tr>
+          <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
+          <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
+        </table>
+        <h3>Gemini 宽高比参数</h3>
+        <p><code>aspect_ratio</code> 传下表值，输出分辨率通过 <code>size</code> 单独指定。</p>
+        <table>
+          <tr><th><code>aspect_ratio</code> 传值</th><th>方向</th><th>Gemini 3 Pro</th><th>Gemini 3.1 Flash</th></tr>
+          <tr><td><code>1:1</code></td><td>正方形</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>2:3</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>3:2</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>3:4</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>4:3</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>4:5</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>5:4</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>9:16</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>16:9</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>21:9</code></td><td>超宽横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>1:4</code></td><td>长竖版</td><td>不支持</td><td>支持</td></tr>
+          <tr><td><code>1:8</code></td><td>超长竖版</td><td>不支持</td><td>支持</td></tr>
+          <tr><td><code>4:1</code></td><td>长横版</td><td>不支持</td><td>支持</td></tr>
+          <tr><td><code>8:1</code></td><td>超长横版</td><td>不支持</td><td>支持</td></tr>
+        </table>
+        <div class="callout info"><b>省略时</b>：有参考图会尽量沿用输入比例，纯文生图通常为 <code>1:1</code>。</div>
+        <h3>GPT Image 2 尺寸参数</h3>
+        <p><code>size</code> 传具体像素尺寸或 <code>auto</code>。分辨率与宽高比无需额外传参。</p>
+        <table>
+          <tr><th><code>size</code> 传值</th><th>分辨率</th><th>方向</th><th>宽高比</th></tr>
+          <tr><td><code>auto</code></td><td>自动</td><td>自动</td><td>自动</td></tr>
+          <tr><td><code>1024x1024</code></td><td>1K</td><td>正方形</td><td><code>1:1</code></td></tr>
+          <tr><td><code>1536x1024</code></td><td>1K</td><td>横版</td><td><code>3:2</code></td></tr>
+          <tr><td><code>1024x1536</code></td><td>1K</td><td>竖版</td><td><code>2:3</code></td></tr>
+          <tr><td><code>1360x1024</code></td><td>1K</td><td>横版</td><td><code>4:3</code></td></tr>
+          <tr><td><code>1024x1360</code></td><td>1K</td><td>竖版</td><td><code>3:4</code></td></tr>
+          <tr><td><code>1824x1024</code></td><td>1K</td><td>横版</td><td><code>16:9</code></td></tr>
+          <tr><td><code>1024x1824</code></td><td>1K</td><td>竖版</td><td><code>9:16</code></td></tr>
+          <tr><td><code>2048x2048</code></td><td>2K</td><td>正方形</td><td><code>1:1</code></td></tr>
+          <tr><td><code>3072x2048</code></td><td>2K</td><td>横版</td><td><code>3:2</code></td></tr>
+          <tr><td><code>2048x3072</code></td><td>2K</td><td>竖版</td><td><code>2:3</code></td></tr>
+          <tr><td><code>2736x2048</code></td><td>2K</td><td>横版</td><td><code>4:3</code></td></tr>
+          <tr><td><code>2048x2736</code></td><td>2K</td><td>竖版</td><td><code>3:4</code></td></tr>
+          <tr><td><code>3648x2048</code></td><td>2K</td><td>横版</td><td><code>16:9</code></td></tr>
+          <tr><td><code>2048x3648</code></td><td>2K</td><td>竖版</td><td><code>9:16</code></td></tr>
+          <tr><td><code>2880x2880</code></td><td>4K</td><td>正方形</td><td><code>1:1</code></td></tr>
+          <tr><td><code>3504x2336</code></td><td>4K</td><td>横版</td><td><code>3:2</code></td></tr>
+          <tr><td><code>2336x3504</code></td><td>4K</td><td>竖版</td><td><code>2:3</code></td></tr>
+          <tr><td><code>3264x2448</code></td><td>4K</td><td>横版</td><td><code>4:3</code></td></tr>
+          <tr><td><code>2448x3264</code></td><td>4K</td><td>竖版</td><td><code>3:4</code></td></tr>
+          <tr><td><code>3840x2160</code></td><td>4K</td><td>横版</td><td><code>16:9</code></td></tr>
+          <tr><td><code>2160x3840</code></td><td>4K</td><td>竖版</td><td><code>9:16</code></td></tr>
+        </table>
+        <div class="callout warn"><b>格式</b>：使用字符串，例如 <code>"size": "3840x2160"</code>。只接受小写 <code>x</code>。</div>
+        <h3>支持这些参数的接口</h3>
+        <table>
+          <tr><th>接口</th><th>请求格式</th><th>支持参数</th></tr>
+          <tr><td><code>POST /async/v1/generateImage</code></td><td>JSON</td><td><code>background</code>、<code>output_format</code>、<code>moderation</code></td></tr>
+          <tr><td><code>POST /v1/images/generations</code></td><td>JSON</td><td><code>background</code>、<code>output_format</code>、<code>moderation</code></td></tr>
+          <tr><td><code>POST /v1/images/edits</code></td><td><code>multipart/form-data</code></td><td><code>background</code>、<code>output_format</code>、<code>moderation</code></td></tr>
+        </table>
+        <p>以上字段会转发给 OpenAI 兼容上游；省略字段时不主动发送，由上游使用默认值。</p>
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>填写上方表格中的完整模型名称；版本由模型名决定</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>生成或编辑指令</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。新接入统一显式使用 <code>fileData</code> 或 <code>inlineData</code>；兼容 URL、Data URI 和原始 Base64 字符串。单图仍使用数组，不要传 <code>image</code>。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>GPT 生成数量；Gemini 不使用此字段</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>Gemini 3 Pro / 3.1 Flash：传 <code>1K</code>、<code>2K</code> 或 <code>4K</code>，必须使用大写 <code>K</code>，默认 <code>1K</code>。GPT Image 2：传 <code>auto</code> 或上方尺寸表中的具体像素值。</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini，传上方兼容表中的值。GPT Image 2 不传此字段，宽高比已包含在 <code>size</code> 中。</td></tr>
+          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>GPT 常用：<code>low</code>/<code>medium</code>/<code>high</code>/<code>auto</code></td></tr>
+          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td>仅模型名以 <code>gpt-image</code> 开头的模型：<code>auto</code>/<code>transparent</code>。透明背景需配合 <code>png</code> 或 <code>webp</code>。</td></tr>
+          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td>仅模型名以 <code>gpt-image</code> 开头的模型：<code>auto</code>/<code>low</code>。省略时使用上游默认值 <code>auto</code>；<code>low</code> 使用限制较少的内容过滤。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>GPT 输出格式：<code>png</code>/<code>jpeg</code>/<code>webp</code>；<code>jpeg</code> 不支持透明背景。</td></tr>
+          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini 3.1 Flash：小写 <code>minimal</code> 或 <code>high</code>；3 Pro 不要传</td></tr>
+          <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td>仅 Gemini：<code>["IMAGE"]</code> 只生成图片；<code>["TEXT","IMAGE"]</code> 生成文字和图片，默认为此值。不要单独传 <code>["TEXT"]</code>。任务查询结果仅返回图片。</td></tr>
+        </table>
+        <div class="callout warn"><b>模型限制</b>：<code>background</code> 和 <code>moderation</code> 仅允许模型名以 <code>gpt-image</code> 开头的模型使用，Banana/Gemini 图片模型不支持；向其他模型传入这些字段会返回参数错误。</div>
+        <h3>参考图格式</h3>
+        <p>新接入使用以下两种显式格式；同一数组内可以混用：</p>
+        <table>
+          <tr><th>格式</th><th>写法</th><th>说明</th></tr>
+          <tr><td><code>fileData</code></td><td><code>{"fileData":{"mimeType":"image/jpeg","fileUri":"https://.../reference.jpg"}}</code></td><td>URL 图片。必须声明图片 MIME 类型和公网 HTTP(S) 地址。</td></tr>
+          <tr><td><code>inlineData</code></td><td><code>{"inlineData":{"mimeType":"image/png","data":"..."}}</code></td><td>Base64 图片。必须声明图片 MIME 类型；<code>data</code> 不含 Data URI 前缀。</td></tr>
+        </table>
+        <div class="callout info"><b>兼容格式</b>：仍接受 URL、Data URI 和原始 Base64 字符串，但新接入应显式声明 <code>fileData</code> 或 <code>inlineData</code>。</div>
+        <div class="callout warn"><b>大小限制</b>：传入参考图时，全部图片的原始数据合计必须大于 0 且不超过 14MiB（14 × 1024 × 1024 字节）。14MiB 经 Base64 编码后约为 18.67MiB，为 20MiB 请求上限预留 JSON、提示词和其他参数空间。URL 必须公网可访问，服务会按响应大小校验，并要求地址在任务完成前保持有效。</div>
+      </article>
+      <aside class="example-panel" aria-label="异步生图请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="异步生图请求格式">
+            <button type="button" class="example-tab" id="image-request-file-tab" role="tab" aria-selected="true" aria-controls="image-request-file">fileData · URL</button>
+            <button type="button" class="example-tab" id="image-request-inline-tab" role="tab" aria-selected="false" aria-controls="image-request-inline">inlineData · Base64</button>
+            <button type="button" class="example-tab" id="image-request-gpt-tab" role="tab" aria-selected="false" aria-controls="image-request-gpt">GPT Image</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="image-request-file" role="tabpanel" aria-labelledby="image-request-file-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://cf-api.o1key.com/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-3.1-flash-image-c-sp",
+    "prompt": "以第一张图的人物为主体，参考第二张图的色彩与构图，生成电影感横幅",
+    "images": [
+      {
+        "fileData": {
+          "mimeType": "image/png",
+          "fileUri": "https://upload.o1key.com/uploads/subject.png"
+        }
+      },
+      {
+        "fileData": {
+          "mimeType": "image/png",
+          "fileUri": "https://upload.o1key.com/uploads/style.png"
+        }
+      }
+    ],
+    "size": "2K",
+    "aspect_ratio": "16:9",
+    "thinking_level": "high",
+    "response_modalities": ["TEXT", "IMAGE"]
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="image-request-inline" role="tabpanel" aria-labelledby="image-request-inline-tab" aria-hidden="true">
+              <p class="compact-note"><code>inlineData.data</code> 中的 <code>BASE64_DATA</code> 请替换为不含 data URI 前缀的完整 Base64。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-3.1-flash-image-c-sp",
+    "prompt": "保留参考图主体，改为电影海报风格",
+    "images": [
+      {
+        "inlineData": {
+          "mimeType": "image/png",
+          "data": "BASE64_DATA"
+        }
+      }
+    ],
+    "size": "2K",
+    "aspect_ratio": "16:9",
+    "response_modalities": ["IMAGE"]
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="image-request-gpt" role="tabpanel" aria-labelledby="image-request-gpt-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://cf-api.o1key.com/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2-c-sp",
+    "prompt": "生成一枚透明背景的蓝色玻璃徽章",
+    "size": "1024x1024",
+    "background": "transparent",
+    "output_format": "png",
+    "moderation": "low"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="异步生图响应状态">
+            <button type="button" class="example-tab" id="image-response-success-tab" role="tab" aria-selected="true" aria-controls="image-response-success">成功 · 200</button>
+            <button type="button" class="example-tab" id="image-response-error-tab" role="tab" aria-selected="false" aria-controls="image-response-error">失败 · 400</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="image-response-success" role="tabpanel" aria-labelledby="image-response-success-tab" aria-hidden="false">
+              <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+            </div>
+            <div class="example-tab-panel" id="image-response-error" role="tabpanel" aria-labelledby="image-response-error-tab" aria-hidden="true">
+              <pre><code>{
+  "error": {
+    "message": "image 参数已废弃，请统一使用 images 字段；单张图也传入 images 数组",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/async/v1/tasks/{task_id}" aria-labelledby="image-task-title">
+      <article class="reference-panel">
+        <h2 id="image-task-title">查询生图任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
+        <h3>路径参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>task_id</code></td><td class="req">是</td><td>path</td><td>提交接口返回的任务 ID</td></tr>
+        </table>
+        <h3>任务状态</h3>
+        <ul><li><code>SUBMITTED</code>：已提交</li><li><code>IN_PROGRESS</code>：处理中</li><li><code>SUCCESS</code>：成功，读取 <code>data.images</code></li><li><code>FAILURE</code>：失败，读取 <code>error</code></li></ul>
+      </article>
+      <aside class="example-panel" aria-label="生图任务查询示例">
+        <h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>响应示例</h3>
+        <h4>生成成功 <span class="pill success">200</span></h4>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "gemini-3.1-flash-image-c-sp",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/example.png",
+        "mime_type": "image/png"
+      }
+    ]
+  }
+}</code></pre>
+        <h4>生成失败 <span class="pill danger">200</span></h4>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "upstream image generation failed"
+}</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="seedance">
+      <div><h2>Seedance 素材与视频</h2><p>申请上传地址 → 上传文件 → 创建素材 → 查询素材 → 生成视频。</p></div>
+    </div>
+
+    <section class="endpoint-doc" id="/v1/storage/presign" aria-labelledby="presign-title">
+      <article class="reference-panel">
+        <h2 id="presign-title">申请预签名上传地址</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/storage/presign</span></div>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>filename</code></td><td class="req">是</td><td>string</td><td>文件名</td></tr>
+          <tr><td><code>content_type</code></td><td class="req">是</td><td>string</td><td><code>image/*</code>、<code>video/*</code> 或 <code>audio/*</code></td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>integer</td><td>文件字节数</td></tr>
+        </table>
+        <p>使用响应中的 <code>upload_url</code> 上传文件，使用 <code>public_url</code> 创建素材。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl -X POST https://cf-api.o1key.com/v1/storage/presign \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"filename":"reference.png","content_type":"image/png","size":204800}'</code></pre>
+        <h3>响应示例</h3>
+        <h4>成功 <span class="pill success">200</span></h4>
+        <pre><code>{
+  "upload_url": "https://&lt;临时上传地址&gt;",
+  "public_url": "https://upload.o1key.com/uploads/reference.png",
+  "expires_at": 1751600000
+}</code></pre>
+        <h4>失败 <span class="pill danger">400</span></h4>
+        <pre><code>{
+  "error": "unsupported content type"
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="upload_url" aria-labelledby="upload-title">
+      <article class="reference-panel">
+        <h2 id="upload-title">直传文件到 R2</h2>
+        <div class="endpoint"><span class="method put">PUT</span><span class="path">&lt;上一步返回的 upload_url&gt;</span></div>
+        <div class="callout warn"><b>注意</b>：发送文件二进制；<code>Content-Type</code> 必须与申请时完全一致，HTTP 200 表示上传成功。</div>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl -X PUT "&lt;upload_url&gt;" \
+  -H "Content-Type: image/png" \
+  --data-binary @reference.png</code></pre>
+        <h3>响应示例</h3>
+        <h4>成功 <span class="pill success">200 · 空响应体</span></h4>
+        <pre><code>HTTP/2 200</code></pre>
+        <h4>签名过期 <span class="pill danger">403</span></h4>
+        <pre><code>&lt;Error&gt;
+  &lt;Code&gt;AccessDenied&lt;/Code&gt;
+  &lt;Message&gt;Request has expired&lt;/Message&gt;
+&lt;/Error&gt;</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/v1/seedance/assets" aria-labelledby="asset-create-title">
+      <article class="reference-panel">
+        <h2 id="asset-create-title">创建 Seedance 素材</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/seedance/assets</span></div>
+        <p>面向下游站点的稳定统一入口，当前支持 <code>type: "hc"</code>。</p>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td>当前支持 <code>hc</code></td></tr>
+          <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开 HTTPS 素材地址</td></tr>
+          <tr><td><code>name</code></td><td class="opt">否</td><td>string</td><td>素材名称</td></tr>
+          <tr><td><code>asset_type</code></td><td class="opt">否</td><td>string</td><td><code>image</code>、<code>video</code> 或 <code>audio</code>；默认 <code>image</code></td></tr>
+        </table>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "hc",
+    "url": "https://upload.o1key.com/uploads/reference.png",
+    "name": "avatar_front",
+    "asset_type": "image"
+  }'</code></pre>
+        <h3>响应示例</h3>
+        <h4>创建成功 <span class="pill success">200</span></h4>
+        <pre><code>{
+  "success": true,
+  "data": {
+    "Id": "asset-20260810224425-w752c",
+    "base_resp": {"status_code": 0, "status_msg": "success"}
+  }
+}</code></pre>
+        <h4>参数失败 <span class="pill danger">400</span></h4>
+        <pre><code>{
+  "error": {
+    "message": "url must be a public HTTPS URL",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/v1/seedance/assets/{asset_id}?type=hc" aria-labelledby="asset-query-title">
+      <article class="reference-panel">
+        <h2 id="asset-query-title">查询 Seedance 素材状态</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/seedance/assets/{asset_id}?type=hc</span></div>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
+          <tr><td><code>asset_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>data.Id</code></td></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td>当前支持 <code>hc</code></td></tr>
+        </table>
+        <p><code>Active</code> 后可生成视频；处理中为 <code>Processing</code>，失败为 <code>Failed</code>。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/asset-20260810224425-w752c?type=hc" \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>响应示例</h3>
+        <h4>查询成功 <span class="pill success">200</span></h4>
+        <pre><code>{
+  "success": true,
+  "data": {
+    "Id": "asset-20260810224425-w752c",
+    "Status": "Active",
+    "AssetType": "Image",
+    "Name": "avatar_front",
+    "URL": "&lt;上游素材地址&gt;"
+  }
+}</code></pre>
+        <h4>查询失败 <span class="pill danger">400</span></h4>
+        <pre><code>{
+  "error": {
+    "message": "unsupported type \"\"; currently supported: hc",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/v1/video/generations" aria-labelledby="video-create-title">
+      <article class="reference-panel">
+        <h2 id="video-create-title">Seedance 多模态视频生成</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
+        <div class="callout info"><b>支持模型</b>：<code>dreamina-seedance-2-0-hc</code>、<code>dreamina-seedance-2-0-fast-hc</code>、<code>dreamina-seedance-2-0-mini-hc</code>、<code>dreamina-seedance-2-5-hc</code></div>
+
+        <h3>顶层参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>支持值与说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>选择上方列出的 HC 模型</td></tr>
+          <tr><td><code>content</code></td><td class="req">是</td><td>array</td><td>有序多模态内容数组；本站当前要求至少包含一项有效的 <code>text</code></td></tr>
+          <tr><td><code>duration</code></td><td class="opt">否</td><td>integer</td><td>单位秒，默认 <code>5</code>；2.0 建议 <code>4-15</code>，2.5 支持 <code>4-30</code></td></tr>
+          <tr><td><code>resolution</code></td><td class="opt">否</td><td>string</td><td>默认 <code>720p</code>；具体范围见下方模型表</td></tr>
+          <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code></td></tr>
+          <tr><td><code>generate_audio</code></td><td class="opt">否</td><td>boolean</td><td>是否生成同步音频；传参考音频时建议设为 <code>true</code></td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>是否添加可见水印</td></tr>
+          <tr><td><code>return_last_frame</code></td><td class="opt">否</td><td>boolean</td><td>是否在任务结果中返回末帧地址，适合续生成</td></tr>
+        </table>
+
+        <h3>模型与分辨率</h3>
+        <table>
+          <tr><th>模型</th><th>支持分辨率</th></tr>
+          <tr><td><code>dreamina-seedance-2-0-hc</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code>、<code>4k</code></td></tr>
+          <tr><td><code>dreamina-seedance-2-0-fast-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
+          <tr><td><code>dreamina-seedance-2-0-mini-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
+          <tr><td><code>dreamina-seedance-2-5-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
+        </table>
+
+        <h3><code>content</code> 多模态项目</h3>
+        <table>
+          <tr><th>类型</th><th>字段</th><th><code>role</code></th><th>说明</th></tr>
+          <tr><td>提示词</td><td><code>text</code></td><td>不适用</td><td><code>{"type":"text","text":"..."}</code></td></tr>
+          <tr><td>首帧图</td><td><code>image_url.url</code></td><td><code>first_frame</code></td><td>首帧生视频时使用；单张图片时也可省略 <code>role</code></td></tr>
+          <tr><td>尾帧图</td><td><code>image_url.url</code></td><td><code>last_frame</code></td><td>首尾帧生视频时使用，必须同时提供 <code>first_frame</code></td></tr>
+          <tr><td>参考图</td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>支持 <code>asset://&lt;素材ID&gt;</code> 或公开 HTTPS URL</td></tr>
+          <tr><td>参考视频</td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>支持素材 ID 或公开直链</td></tr>
+          <tr><td>参考音频</td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>不能作为唯一参考，需同时传图片或视频</td></tr>
+        </table>
+        <div class="callout warn"><b>通用限制</b>：最多 9 张参考图、3 个参考视频和 3 段参考音频；2.0 的参考视频 / 音频单段建议 2-15 秒、各自总时长不超过 15 秒。</div>
+        <div class="callout info"><b>四种生成方式</b>：多模态参考、首帧、首尾帧和文生视频。首帧、首尾帧和多模态参考互斥，不要在同一个请求中混用 <code>first_frame</code>、<code>last_frame</code> 和 <code>reference_*</code>。</div>
+
+        <h3>参考图的两种传法</h3>
+        <table>
+          <tr><th>方式</th><th>适用场景</th><th>步骤</th></tr>
+          <tr><td><code>asset://素材ID</code></td><td>真人、数字人、身份一致性；推荐</td><td><a href="#/v1/storage/presign">申请上传地址</a> → <a href="#upload_url">上传文件</a> → <a href="#/v1/seedance/assets">创建素材</a> → 等待 <code>Active</code> → 在 <code>content</code> 中引用</td></tr>
+          <tr><td>公开 HTTPS URL</td><td>普通公网参考图，调用步骤更少</td><td>直接填写可匿名下载、无 Cookie 和防盗链限制的图片直链；服务器会为参考图准备上游素材</td></tr>
+        </table>
+      </article>
+      <aside class="example-panel" aria-label="Seedance 视频请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedance 视频生成方式">
+            <button type="button" class="example-tab" id="video-request-multimodal-tab" role="tab" aria-selected="true" aria-controls="video-request-multimodal">多模态参考</button>
+            <button type="button" class="example-tab" id="video-request-first-frame-tab" role="tab" aria-selected="false" aria-controls="video-request-first-frame">首帧</button>
+            <button type="button" class="example-tab" id="video-request-first-last-tab" role="tab" aria-selected="false" aria-controls="video-request-first-last">首尾帧</button>
+            <button type="button" class="example-tab" id="video-request-text-tab" role="tab" aria-selected="false" aria-controls="video-request-text">文生视频</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="video-request-multimodal" role="tabpanel" aria-labelledby="video-request-multimodal-tab" aria-hidden="false">
+              <p class="compact-note">参考图片、视频和音频分别使用 <code>reference_image</code>、<code>reference_video</code> 和 <code>reference_audio</code>；音频不能单独作为参考。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-hc",
+    "content": [
+      {
+        "type": "text",
+        "text": "以图片1中的人物为主体，参考视频1的运镜和动作节奏，并使用音频1作为背景音乐，生成电影感街头短片"
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/character.jpg"},
+        "role": "reference_image"
+      },
+      {
+        "type": "video_url",
+        "video_url": {"url": "https://cdn.example.com/camera-motion.mp4"},
+        "role": "reference_video"
+      },
+      {
+        "type": "audio_url",
+        "audio_url": {"url": "https://cdn.example.com/background-music.mp3"},
+        "role": "reference_audio"
+      }
+    ],
+    "duration": 8,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "generate_audio": true,
+    "watermark": false,
+    "return_last_frame": true
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="video-request-first-frame" role="tabpanel" aria-labelledby="video-request-first-frame-tab" aria-hidden="true">
+              <p class="compact-note">使用一张图片作为视频首帧。单图场景可以省略 <code>role</code>，但建议明确传入 <code>first_frame</code>。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-hc",
+    "content": [
+      {
+        "type": "text",
+        "text": "人物缓慢转身看向镜头，微风吹动头发，镜头平滑向前推进"
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/first-frame.jpg"},
+        "role": "first_frame"
+      }
+    ],
+    "duration": 5,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "generate_audio": true,
+    "watermark": false,
+    "return_last_frame": true
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="video-request-first-last" role="tabpanel" aria-labelledby="video-request-first-last-tab" aria-hidden="true">
+              <p class="compact-note">第一张图片必须标记为 <code>first_frame</code>，第二张图片必须标记为 <code>last_frame</code>。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-hc",
+    "content": [
+      {
+        "type": "text",
+        "text": "从雨夜街头平滑过渡到清晨海边，人物动作和镜头运动保持自然连续"
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/first-frame.jpg"},
+        "role": "first_frame"
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/last-frame.jpg"},
+        "role": "last_frame"
+      }
+    ],
+    "duration": 8,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "generate_audio": true,
+    "watermark": false,
+    "return_last_frame": true
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="video-request-text" role="tabpanel" aria-labelledby="video-request-text-tab" aria-hidden="true">
+              <p class="compact-note">只传文本提示词，不传图片、视频、音频及 <code>role</code>。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dreamina-seedance-2-0-hc",
+    "content": [
+      {
+        "type": "text",
+        "text": "电影感航拍镜头掠过日出时的未来海滨城市，云层流动，暖色阳光映照玻璃建筑"
+      }
+    ],
+    "duration": 8,
+    "resolution": "720p",
+    "ratio": "16:9",
+    "generate_audio": true,
+    "watermark": false,
+    "return_last_frame": false
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedance 视频创建响应状态">
+            <button type="button" class="example-tab" id="video-response-success-tab" role="tab" aria-selected="true" aria-controls="video-response-success">成功 · 200</button>
+            <button type="button" class="example-tab" id="video-response-error-tab" role="tab" aria-selected="false" aria-controls="video-response-error">失败 · 400</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="video-response-success" role="tabpanel" aria-labelledby="video-response-success-tab" aria-hidden="false">
+              <pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "dreamina-seedance-2-0-hc",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre>
+            </div>
+            <div class="example-tab-panel" id="video-response-error" role="tabpanel" aria-labelledby="video-response-error-tab" aria-hidden="true">
+              <pre><code>{
+  "error": {
+    "message": "content text is required",
+    "type": "invalid_request_error",
+    "code": "invalid_request"
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/v1/video/generations/{task_id}" aria-labelledby="video-query-title">
+      <article class="reference-panel">
+        <h2 id="video-query-title">查询视频任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/video/generations/{task_id}</span></div>
+        <p>使用视频创建接口返回的任务 ID 查询进度和最终视频地址。</p>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
+          <tr><td><code>task_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的公开 <code>task_...</code>；不要使用上游任务 ID</td></tr>
+        </table>
+        <p>建议每 2-5 秒查询一次，直到 <code>status</code> 变为 <code>completed</code> 或 <code>failed</code>。可能的状态为 <code>queued</code>、<code>in_progress</code>、<code>completed</code> 和 <code>failed</code>。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/video/generations/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedance 视频查询响应状态">
+            <button type="button" class="example-tab" id="video-query-processing-tab" role="tab" aria-selected="true" aria-controls="video-query-processing">处理中 · 200</button>
+            <button type="button" class="example-tab" id="video-query-success-tab" role="tab" aria-selected="false" aria-controls="video-query-success">查询成功 · 200</button>
+            <button type="button" class="example-tab" id="video-query-failed-tab" role="tab" aria-selected="false" aria-controls="video-query-failed">任务失败 · 200</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="video-query-processing" role="tabpanel" aria-labelledby="video-query-processing-tab" aria-hidden="false">
+              <pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "dreamina-seedance-2-0-hc",
+  "status": "in_progress",
+  "progress": 50,
+  "created_at": 1786350000
+}</code></pre>
+            </div>
+            <div class="example-tab-panel" id="video-query-success" role="tabpanel" aria-labelledby="video-query-success-tab" aria-hidden="true">
+              <pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "dreamina-seedance-2-0-hc",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1786350000,
+  "completed_at": 1786350235,
+  "metadata": {
+    "url": "https://cdn.example.com/result.mp4",
+    "outputs": [
+      "https://cdn.example.com/result.mp4"
+    ],
+    "usage": {
+      "completion_tokens": 648900,
+      "total_tokens": 648900
+    }
+  }
+}</code></pre>
+            </div>
+            <div class="example-tab-panel" id="video-query-failed" role="tabpanel" aria-labelledby="video-query-failed-tab" aria-hidden="true">
+              <pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "dreamina-seedance-2-0-hc",
+  "status": "failed",
+  "progress": 100,
+  "created_at": 1786350000,
+  "completed_at": 1786350068,
+  "error": {
+    "message": "upstream task failed",
+    "code": "upstream_error"
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="minimax-h3">
+      <div><h2>MiniMax H3 视频生成</h2></div>
+    </div>
+
+    <section class="endpoint-doc" id="minimax-h3-create" aria-labelledby="minimax-h3-create-title">
+      <article class="reference-panel">
+        <h2 id="minimax-h3-create-title">创建 MiniMax H3 视频任务</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
+        <p>异步接口，返回公开 <code>task_id</code>。</p>
+        <div class="callout info"><b>固定值</b>：<code>model: "MiniMax-H3"</code>。查询使用 <code>GET /v1/videos/{task_id}</code>。</div>
+
+        <h3>顶层参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>固定为 <code>MiniMax-H3</code>。</td></tr>
+          <tr><td><code>content</code></td><td>array</td><td>是</td><td>多模态内容数组；所有场景必须至少包含一个非空 <code>text</code> 项。</td></tr>
+          <tr><td><code>resolution</code></td><td>string</td><td>是</td><td><code>768P</code> 或 <code>2K</code>，区分大小写。</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>是</td><td>4-15 秒的整数。</td></tr>
+          <tr><td><code>ratio</code></td><td>string</td><td>条件</td><td><code>adaptive</code>、<code>21:9</code>、<code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>。</td></tr>
+          <tr><td><code>callback_url</code></td><td>string</td><td>否</td><td>任务状态变化回调地址；仍建议通过查询接口轮询最终结果。</td></tr>
+        </table>
+
+        <h3><code>content</code> 项</h3>
+        <table>
+          <tr><th><code>type</code></th><th>对应字段</th><th><code>role</code></th><th>说明</th></tr>
+          <tr><td><code>text</code></td><td><code>text</code></td><td>不填</td><td>提示词，必需且非空，单项最多 7000 个字符。</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>first_frame</code></td><td>首帧；未填写图片 role 时默认按首帧处理。</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>last_frame</code></td><td>尾帧，必须同时提供首帧。</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>多模态参考图，最多 9 张。</td></tr>
+          <tr><td><code>video_url</code></td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>多模态参考视频，最多 3 个。</td></tr>
+          <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>多模态参考音频，最多 3 个。</td></tr>
+        </table>
+
+        <h3><code>ratio</code> 规则</h3>
+        <ul>
+          <li>文生视频：<code>ratio</code> 必填，且不能使用 <code>adaptive</code>。</li>
+          <li>首帧或首尾帧图生视频：使用 <code>adaptive</code>，输出比例由输入图片决定。</li>
+          <li>多模态参考生视频：<code>ratio</code> 可省略或使用 <code>adaptive</code>，也可以指定具体比例。</li>
+        </ul>
+
+        <h3>素材限制</h3>
+        <ul>
+          <li>请求体总大小不超过 64MB；较大素材应使用公网 URL。</li>
+          <li>图片支持 JPG、JPEG、PNG、WEBP、HEIC、HEIF，单文件不超过 30MB；宽高 256-5760px，宽高比 0.4-2.5。</li>
+          <li>参考视频支持 MP4、MOV，单文件不超过 50MB；单段 2-15 秒，总时长不超过 15 秒，宽高 256-5760px，帧率 23.976-60fps。</li>
+          <li>参考音频支持 WAV、MP3，单文件不超过 15MB；单段 2-15 秒，总时长不超过 15 秒。</li>
+          <li>图片、视频和音频也支持对应的 Base64 Data URI；Base64 会增加请求体积，大文件不建议使用。</li>
+          <li>首尾帧模式与多模态参考模式互斥：<code>first_frame</code>/<code>last_frame</code> 不能和任一 <code>reference_*</code> role 混用。</li>
+        </ul>
+      </article>
+
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="MiniMax H3 请求场景">
+            <button type="button" class="example-tab" id="h3-text-tab" role="tab" aria-selected="true" aria-controls="h3-text">文生视频</button>
+            <button type="button" class="example-tab" id="h3-first-frame-tab" role="tab" aria-selected="false" aria-controls="h3-first-frame">首帧图生视频</button>
+            <button type="button" class="example-tab" id="h3-frames-tab" role="tab" aria-selected="false" aria-controls="h3-frames">首尾帧</button>
+            <button type="button" class="example-tab" id="h3-reference-tab" role="tab" aria-selected="false" aria-controls="h3-reference">多模态参考</button>
+            <button type="button" class="example-tab" id="h3-base64-tab" role="tab" aria-selected="false" aria-controls="h3-base64">Base64 图片</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="h3-text" role="tabpanel" aria-labelledby="h3-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {
+        "type": "text",
+        "text": "Epic space-opera trailer: a fleet jumps into warp beyond a giant observation window while the camera slowly pushes toward the captain."
+      }
+    ],
+    "resolution": "2K",
+    "duration": 5,
+    "ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="h3-first-frame" role="tabpanel" aria-labelledby="h3-first-frame-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {
+        "type": "text",
+        "text": "The camera pulls focus to the people in the background while more steam rises from the ramen bowl."
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/ramen-scene.png"},
+        "role": "first_frame"
+      }
+    ],
+    "resolution": "2K",
+    "duration": 5,
+    "ratio": "adaptive"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="h3-frames" role="tabpanel" aria-labelledby="h3-frames-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {
+        "type": "text",
+        "text": "Create a smooth cinematic transformation from the daytime street into the same location at night."
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/day.jpg"},
+        "role": "first_frame"
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/night.jpg"},
+        "role": "last_frame"
+      }
+    ],
+    "resolution": "768P",
+    "duration": 8,
+    "ratio": "adaptive"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="h3-reference" role="tabpanel" aria-labelledby="h3-reference-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {
+        "type": "text",
+        "text": "Use the character appearance from the reference image, follow the action and camera rhythm of the reference video, and speak with the reference voice."
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/character.png"},
+        "role": "reference_image"
+      },
+      {
+        "type": "video_url",
+        "video_url": {"url": "https://cdn.example.com/action.mp4"},
+        "role": "reference_video"
+      },
+      {
+        "type": "audio_url",
+        "audio_url": {"url": "https://cdn.example.com/voice.mp3"},
+        "role": "reference_audio"
+      }
+    ],
+    "resolution": "2K",
+    "duration": 6,
+    "ratio": "adaptive",
+    "callback_url": "https://example.com/minimax/callback"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="h3-base64" role="tabpanel" aria-labelledby="h3-base64-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {"type": "text", "text": "Animate the first frame with a gentle orbiting camera movement."},
+      {
+        "type": "image_url",
+        "image_url": {"url": "data:image/png;base64,iVBORw0KGgoAAA..."},
+        "role": "first_frame"
+      }
+    ],
+    "resolution": "768P",
+    "duration": 5,
+    "ratio": "adaptive"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>创建响应</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="MiniMax H3 创建响应">
+            <button type="button" class="example-tab" id="h3-create-ok-tab" role="tab" aria-selected="true" aria-controls="h3-create-ok">成功 · 200</button>
+            <button type="button" class="example-tab" id="h3-create-error-tab" role="tab" aria-selected="false" aria-controls="h3-create-error">失败 · 400</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="h3-create-ok" role="tabpanel" aria-labelledby="h3-create-ok-tab" aria-hidden="false"><pre><code>{
+  "id": "task_h3_xxxxxxxxxx",
+  "task_id": "task_h3_xxxxxxxxxx",
+  "object": "video",
+  "model": "MiniMax-H3",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre></div>
+            <div class="example-tab-panel" id="h3-create-error" role="tabpanel" aria-labelledby="h3-create-error-tab" aria-hidden="true"><pre><code>{
+  "code": "invalid_request",
+  "message": "duration must be between 4 and 15",
+  "data": null
+}</code></pre></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="minimax-h3-query" aria-labelledby="minimax-h3-query-title">
+      <article class="reference-panel">
+        <h2 id="minimax-h3-query-title">查询 MiniMax H3 视频任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
+        <p>使用创建接口返回的公开 <code>task_id</code> 查询。状态取值为 <code>queued</code>、<code>in_progress</code>、<code>completed</code>、<code>failed</code>。</p>
+        <table>
+          <tr><th>响应字段</th><th>说明</th></tr>
+          <tr><td><code>id</code></td><td>本平台公开任务 ID。</td></tr>
+          <tr><td><code>seconds</code></td><td>实际输出视频时长。</td></tr>
+          <tr><td><code>size</code></td><td>实际输出分辨率。</td></tr>
+          <tr><td><code>metadata.url</code></td><td>任务成功后的视频下载地址，请及时下载或转存。</td></tr>
+          <tr><td><code>metadata.ratio</code></td><td>最终视频宽高比。</td></tr>
+          <tr><td><code>metadata.usage</code></td><td>输入参考视频秒数、输出秒数和输入图片数量等结算用量。</td></tr>
+        </table>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="MiniMax H3 查询响应">
+            <button type="button" class="example-tab" id="h3-query-ok-tab" role="tab" aria-selected="true" aria-controls="h3-query-ok">成功</button>
+            <button type="button" class="example-tab" id="h3-query-running-tab" role="tab" aria-selected="false" aria-controls="h3-query-running">处理中</button>
+            <button type="button" class="example-tab" id="h3-query-failed-tab" role="tab" aria-selected="false" aria-controls="h3-query-failed">失败</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="h3-query-ok" role="tabpanel" aria-labelledby="h3-query-ok-tab" aria-hidden="false"><pre><code>{
+  "id": "task_h3_xxxxxxxxxx",
+  "object": "video",
+  "model": "MiniMax-H3",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1786350000,
+  "completed_at": 1786350417,
+  "seconds": "5",
+  "size": "2K",
+  "metadata": {
+    "url": "https://cdn.example.com/h3-result.mp4",
+    "ratio": "16:9",
+    "usage": {
+      "total_seconds": 5,
+      "input_seconds": 0,
+      "output_seconds": 5,
+      "input_image_count": 1
+    }
+  }
+}</code></pre></div>
+            <div class="example-tab-panel" id="h3-query-running" role="tabpanel" aria-labelledby="h3-query-running-tab" aria-hidden="true"><pre><code>{
+  "id": "task_h3_xxxxxxxxxx",
+  "object": "video",
+  "model": "MiniMax-H3",
+  "status": "in_progress",
+  "progress": 50,
+  "created_at": 1786350000,
+  "metadata": {"url": ""}
+}</code></pre></div>
+            <div class="example-tab-panel" id="h3-query-failed" role="tabpanel" aria-labelledby="h3-query-failed-tab" aria-hidden="true"><pre><code>{
+  "id": "task_h3_xxxxxxxxxx",
+  "object": "video",
+  "model": "MiniMax-H3",
+  "status": "failed",
+  "progress": 100,
+  "created_at": 1786350000,
+  "completed_at": 1786350120,
+  "seconds": "5",
+  "size": "2K",
+  "error": {
+    "message": "video description contains sensitive content",
+    "code": "1026"
+  },
+  "metadata": {
+    "url": "",
+    "ratio": "16:9"
+  }
+}</code></pre></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="gemini-omni">
+      <div><h2>Gemini Omni 视频</h2></div>
+    </div>
+
+    <section class="endpoint-doc" id="gemini-omni-create" aria-labelledby="gemini-omni-create-title">
+      <article class="reference-panel">
+        <h2 id="gemini-omni-create-title">创建 Gemini Omni 视频任务</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/videos</span></div>
+        <p>固定使用 <code>gemini-omni-flash-preview</code>。返回公开任务 ID。</p>
+        <div class="callout warn"><b>媒体输入</b>：仅接受 Base64 Data URI 或原始 Base64，不接受远程 URL。</div>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>固定为 <code>gemini-omni-flash-preview</code>。</td></tr>
+          <tr><td><code>mode</code></td><td>string</td><td>建议</td><td><code>text_to_video</code>、<code>image_to_video</code>、<code>reference_to_video</code> 或 <code>edit</code>。不传时会根据媒体字段推断。</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>条件</td><td>文生视频必填；其余模式可选。</td></tr>
+          <tr><td><code>image</code></td><td>string</td><td>条件</td><td>单图生视频使用一张 Base64 图片。推荐写成 <code>data:image/png;base64,...</code>。</td></tr>
+          <tr><td><code>images</code></td><td>string[]</td><td>条件</td><td>多参考图模式使用，一张或多张 Base64 图片。单图模式最多一张。</td></tr>
+          <tr><td><code>video_url</code></td><td>string</td><td>条件</td><td>视频编辑模式必填，使用 <code>data:video/mp4;base64,...</code> 或原始 Base64，不接受 HTTP URL。</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>否</td><td>兼容字段，允许 3 到 10 的整数；也可使用 <code>seconds</code>。若两者同时出现，值必须一致。实际输出长度由模型决定，编辑模式不要传。</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td>string</td><td>否</td><td><code>16:9</code> 或 <code>9:16</code>，默认 <code>16:9</code>。编辑模式不要传。</td></tr>
+          <tr><td><code>metadata.thinking_level</code></td><td>string</td><td>否</td><td><code>low</code> 或 <code>high</code>，默认 <code>low</code>。</td></tr>
+          <tr><td><code>metadata.thinking_summaries</code></td><td>string</td><td>否</td><td><code>auto</code> 或 <code>none</code>，默认 <code>auto</code>。</td></tr>
+        </table>
+
+        <h3>模式约束</h3>
+        <table>
+          <tr><th><code>mode</code></th><th>输入要求</th><th>不允许的输入</th></tr>
+          <tr><td><code>text_to_video</code></td><td>非空 <code>prompt</code></td><td>图片、视频</td></tr>
+          <tr><td><code>image_to_video</code></td><td>正好一张图片，可带提示词</td><td>多张图片、视频</td></tr>
+          <tr><td><code>reference_to_video</code></td><td>一张或多张参考图片，可带提示词</td><td>视频</td></tr>
+          <tr><td><code>edit</code></td><td>一个 Base64 视频，可带提示词</td><td>图片、时长、比例和尺寸参数</td></tr>
+        </table>
+
+        <h3>计费说明</h3>
+        <p>系统读取上游返回的输入、文本输出、思考和视频模态 Token 分别结算。720p 视频按每秒 5,792 个视频 Token 计量；最终扣费以上游实际用量为准，不按请求中的预估时长直接结算。</p>
+      </article>
+
+      <aside class="example-panel" aria-label="Gemini Omni 请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Gemini Omni 请求模式">
+            <button type="button" class="example-tab" id="omni-text-tab" role="tab" aria-selected="true" aria-controls="omni-text">文生视频</button>
+            <button type="button" class="example-tab" id="omni-image-tab" role="tab" aria-selected="false" aria-controls="omni-image">单图生视频</button>
+            <button type="button" class="example-tab" id="omni-reference-tab" role="tab" aria-selected="false" aria-controls="omni-reference">多参考图</button>
+            <button type="button" class="example-tab" id="omni-edit-tab" role="tab" aria-selected="false" aria-controls="omni-edit">视频编辑</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-text" role="tabpanel" aria-labelledby="omni-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-omni-flash-preview",
+    "mode": "text_to_video",
+    "prompt": "A blue paper boat drifts slowly across calm studio water, fixed camera.",
+    "aspect_ratio": "16:9",
+    "metadata": {
+      "thinking_level": "low",
+      "thinking_summaries": "none"
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-image" role="tabpanel" aria-labelledby="omni-image-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-omni-flash-preview",
+    "mode": "image_to_video",
+    "image": "data:image/png;base64,iVBORw0KGgoAAA...",
+    "prompt": "Animate the abstract color field with a slow, smooth wave.",
+    "aspect_ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-reference" role="tabpanel" aria-labelledby="omni-reference-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-omni-flash-preview",
+    "mode": "reference_to_video",
+    "images": [
+      "data:image/png;base64,iVBORw0KGgoAAA...",
+      "data:image/jpeg;base64,/9j/4AAQSkZJRg..."
+    ],
+    "prompt": "Create a smooth transition using the colors and shapes from both references.",
+    "aspect_ratio": "9:16"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-edit" role="tabpanel" aria-labelledby="omni-edit-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-omni-flash-preview",
+    "mode": "edit",
+    "video_url": "data:video/mp4;base64,AAAAIGZ0eXBpc29t...",
+    "prompt": "Keep the motion and add a subtle warm sunset color grade.",
+    "metadata": {
+      "thinking_level": "low",
+      "thinking_summaries": "none"
+    }
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>创建响应</h3>
+        <pre><code>{
+  "id": "task_omni_xxxxxxxxxx",
+  "task_id": "task_omni_xxxxxxxxxx",
+  "object": "video",
+  "model": "gemini-omni-flash-preview",
+  "status": "queued",
+  "progress": 10,
+  "created_at": 1786680000
+}</code></pre>
+
+        <h3>参数错误响应</h3>
+        <pre><code>{
+  "error": {
+    "code": "invalid_duration",
+    "message": "duration must be between 3 and 10 seconds",
+    "type": "new_api_error"
+  }
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="gemini-omni-result" aria-labelledby="gemini-omni-result-title">
+      <article class="reference-panel">
+        <h2 id="gemini-omni-result-title">查询与下载 Gemini Omni 视频</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
+        <p>状态：<code>queued</code>、<code>in_progress</code>、<code>completed</code>、<code>failed</code>。</p>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}/content</span></div>
+        <p><code>completed</code> 后调用内容接口下载 MP4。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>查询状态</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>完成响应</h3>
+        <pre><code>{
+  "id": "task_omni_xxxxxxxxxx",
+  "object": "video",
+  "model": "gemini-omni-flash-preview",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1786680000,
+  "completed_at": 1786680632
+}</code></pre>
+
+        <h3>下载视频</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt;/content \
+  -H "Authorization: Bearer $API_KEY" \
+  --output gemini-omni-result.mp4</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="grok-video">
+      <div><h2>Grok 视频生成</h2></div>
+      <p>支持视频生成、视频编辑和视频延长三种操作。三个接口共用同一查询端点。</p>
+    </div>
+
+    <section class="endpoint-doc" id="grok-video-create" aria-labelledby="grok-video-create-title">
+      <article class="reference-panel">
+        <h2 id="grok-video-create-title">视频生成</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/generations</span></div>
+        <p>从文本、图片或多模态参考素材生成视频。</p>
+
+        <h3>模型</h3>
+        <table>
+          <tr><th>模型名称</th><th>最高分辨率</th><th>说明</th></tr>
+          <tr><td><code>grok-imagine-video</code></td><td>720p</td><td>支持文生、图生和多参考素材生成</td></tr>
+          <tr><td><code>grok-imagine-video-1.5</code></td><td>1080p</td><td>文生和图生支持 1080p；多参考素材上限 720p</td></tr>
+        </table>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>条件</td><td>文生视频和多参考素材必填；图生可选</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>否</td><td>1-15 秒，默认 8 秒</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td>string</td><td>否</td><td><code>16:9</code>（默认）、<code>9:16</code>、<code>1:1</code>、<code>4:3</code>、<code>3:4</code>、<code>3:2</code>、<code>2:3</code></td></tr>
+          <tr><td><code>resolution</code></td><td>string</td><td>否</td><td><code>480p</code>（默认）、<code>720p</code>、<code>1080p</code></td></tr>
+          <tr><td><code>image</code></td><td>object</td><td>条件</td><td>图生视频输入，填 <code>url</code> 或 <code>image_url</code>；公网 URL 或 Base64</td></tr>
+          <tr><td><code>reference_images</code></td><td>array</td><td>否</td><td>参考图数组，最多 7 张</td></tr>
+          <tr><td><code>reference_audios</code></td><td>array</td><td>否</td><td>参考音频，每项可用 <code>url</code> 或 <code>voice_id</code>，最多 3 个</td></tr>
+        </table>
+
+        <div class="callout warn"><b>互斥规则</b>：<code>image</code> 和 <code>reference_images</code> 不能同时使用。</div>
+      </article>
+
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Grok 视频请求场景">
+            <button type="button" class="example-tab" id="grok-text-tab" role="tab" aria-selected="true" aria-controls="grok-text">文生视频</button>
+            <button type="button" class="example-tab" id="grok-15-image-tab" role="tab" aria-selected="false" aria-controls="grok-15-image">图生视频</button>
+            <button type="button" class="example-tab" id="grok-references-tab" role="tab" aria-selected="false" aria-controls="grok-references">多参考素材</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="grok-text" role="tabpanel" aria-labelledby="grok-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "A spacecraft crosses Saturn rings, cinematic tracking shot.",
+    "duration": 10,
+    "resolution": "1080p",
+    "aspect_ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="grok-15-image" role="tabpanel" aria-labelledby="grok-15-image-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "image": {"url": "https://cdn.example.com/ref.jpg"},
+    "prompt": "让画面中的人物微笑并挥手",
+    "duration": 10,
+    "resolution": "1080p"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="grok-references" role="tabpanel" aria-labelledby="grok-references-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "Fashion film with character from first image and style from second.",
+    "reference_images": [
+      {"url": "https://cdn.example.com/char.jpg"},
+      {"url": "https://cdn.example.com/style.jpg"}
+    ],
+    "reference_audios": [{"voice_id": "nova"}],
+    "duration": 8,
+    "resolution": "720p"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应</h3>
+        <pre><code>{"request_id": "task_grok_xxxxxxxxxx"}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="grok-video-query" aria-labelledby="grok-video-query-title">
+      <article class="reference-panel">
+        <h2 id="grok-video-query-title">查询任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/grok/v1/videos/{task_id}</span></div>
+        <p>使用创建接口返回的 <code>request_id</code> 查询任务状态和结果。</p>
+        <table>
+          <tr><th>响应字段</th><th>说明</th></tr>
+          <tr><td><code>status</code></td><td><code>pending</code>（处理中）、<code>done</code>（完成）、<code>failed</code>（失败）、<code>expired</code>（过期）</td></tr>
+          <tr><td><code>model</code></td><td>使用的模型名称</td></tr>
+          <tr><td><code>progress</code></td><td>进度百分比（0-100）</td></tr>
+          <tr><td><code>video.url</code></td><td>视频下载地址（完成后可用）</td></tr>
+          <tr><td><code>video.duration</code></td><td>视频时长（秒）</td></tr>
+          <tr><td><code>error</code></td><td>失败时的错误信息</td></tr>
+        </table>
+      </article>
+      <aside class="example-panel">
+        <h3>请求</h3>
+        <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Grok 视频查询响应">
+            <button type="button" class="example-tab" id="grok-query-ok-tab" role="tab" aria-selected="true" aria-controls="grok-query-ok">完成</button>
+            <button type="button" class="example-tab" id="grok-query-pending-tab" role="tab" aria-selected="false" aria-controls="grok-query-pending">处理中</button>
+            <button type="button" class="example-tab" id="grok-query-failed-tab" role="tab" aria-selected="false" aria-controls="grok-query-failed">失败</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="grok-query-ok" role="tabpanel" aria-labelledby="grok-query-ok-tab" aria-hidden="false"><pre><code>{
+  "status": "done",
+  "model": "grok-imagine-video-1.5",
+  "video": {
+    "url": "https://cdn.example.com/grok-result.mp4",
+    "duration": 15
+  },
+  "progress": 100
+}</code></pre></div>
+            <div class="example-tab-panel" id="grok-query-pending" role="tabpanel" aria-labelledby="grok-query-pending-tab" aria-hidden="true"><pre><code>{
+  "status": "pending",
+  "model": "grok-imagine-video-1.5",
+  "progress": 42
+}</code></pre></div>
+            <div class="example-tab-panel" id="grok-query-failed" role="tabpanel" aria-labelledby="grok-query-failed-tab" aria-hidden="true"><pre><code>{
+  "status": "failed",
+  "model": "grok-imagine-video",
+  "error": {
+    "code": "content_policy_violation",
+    "message": "The request could not be completed."
+  }
+}</code></pre></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="grok-video-edit" aria-labelledby="grok-video-edit-title">
+      <article class="reference-panel">
+        <h2 id="grok-video-edit-title">视频编辑</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/edits</span></div>
+        <p>基于提示词编辑输入视频。输出保持输入的时长和宽高比，分辨率上限 720p。</p>
+        <div class="callout warn"><b>时长限制</b>：输入视频不超过 8.7 秒。</div>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>编辑指令</td></tr>
+          <tr><td><code>video</code></td><td>object</td><td>是</td><td>输入视频，填 <code>url</code> 或 <code>file_id</code>；公网 URL 或 Base64</td></tr>
+        </table>
+        <p><strong>不支持的参数</strong>：<code>duration</code>、<code>aspect_ratio</code>、<code>resolution</code>、<code>image</code>、<code>reference_images</code>、<code>reference_audios</code></p>
+      </article>
+
+      <aside class="example-panel">
+        <h3>请求</h3>
+        <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/edits \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "Make the sky turn golden with a dramatic sunset, keep everything else unchanged.",
+    "video": {"url": "https://cdn.example.com/input.mp4"}
+  }'</code></pre>
+
+        <h3>响应</h3>
+        <pre><code>{"request_id": "task_grok_edit_xxxxxxxxxx"}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="grok-video-extend" aria-labelledby="grok-video-extend-title">
+      <article class="reference-panel">
+        <h2 id="grok-video-extend-title">视频延长</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/extensions</span></div>
+        <p>延长输入视频。<code>duration</code> 参数控制延长部分的时长，输出总时长 = 输入时长 + duration。</p>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>延长部分的内容描述</td></tr>
+          <tr><td><code>video</code></td><td>object</td><td>是</td><td>输入视频，填 <code>url</code> 或 <code>file_id</code>；公网 URL 或 Base64</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>否</td><td>延长部分时长 2-10 秒，默认 6 秒</td></tr>
+        </table>
+        <p><strong>不支持的参数</strong>：<code>aspect_ratio</code>、<code>resolution</code>、<code>image</code>、<code>reference_images</code>、<code>reference_audios</code></p>
+      </article>
+
+      <aside class="example-panel">
+        <h3>请求</h3>
+        <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/extensions \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "Continue the camera movement smoothly, revealing more of the landscape.",
+    "video": {"url": "https://cdn.example.com/clip.mp4"},
+    "duration": 5
+  }'</code></pre>
+        <p class="compact-note">输入 10 秒视频 + duration=5 → 输出 15 秒视频。</p>
+
+        <h3>响应</h3>
+        <pre><code>{"request_id": "task_grok_extend_xxxxxxxxxx"}</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="kling-3">
+      <div><h2>Kling VIDEO 3.0</h2></div>
+    </div>
+
+    <section class="endpoint-doc" id="/kling/omni-video/kling-3.0-omni" aria-labelledby="kling-omni-title">
+      <article class="reference-panel">
+        <h2 id="kling-omni-title">Kling 3.0 Omni 视频生成</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-3.0-omni</span></div>
+        <p>使用官方 <code>contents</code>、<code>settings</code>、<code>options</code> 结构。无需传 <code>model</code>。</p>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>提示词、图片和视频输入集合。</td></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>last_frame</code>、<code>refer_image</code>、<code>feature_video</code>、<code>base_video</code>。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td><code>type=prompt</code> 时必填。官方上限 3072 字符，建议不超过 2500 字符。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片支持公开 URL 或 Base64；视频使用可公开访问的 URL。</td></tr>
+          <tr><td><code>contents[].id</code></td><td>string</td><td>否</td><td>任务内唯一的引用 ID，可在提示词中以 <code>@id</code> 引用。</td></tr>
+          <tr><td><code>settings</code></td><td>object</td><td>条件</td><td>输出设置。没有首帧或参考视频时必须提供，并填写 <code>aspect_ratio</code>。</td></tr>
+          <tr><td><code>settings.multi_shot</code></td><td>boolean</td><td>否</td><td>是否生成多镜头，默认 <code>true</code>。</td></tr>
+          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td><code>native</code> 生成原生音频；<code>original</code> 保留参考视频声音；<code>off</code> 无音频。默认 <code>off</code>。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code>、<code>4k</code>，默认 <code>720p</code>。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>条件</td><td><code>16:9</code>、<code>9:16</code>、<code>1:1</code>。没有首帧或参考视频时必填。</td></tr>
+          <tr><td><code>settings.duration</code></td><td>integer</td><td>否</td><td>3-15 秒的整数，默认 5 秒。</td></tr>
+          <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>任务状态变化时接收通知的回调地址。</td></tr>
+          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>调用方自定义且账号内唯一的任务 ID。</td></tr>
+          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
+        </table>
+
+        <h3>素材与组合规则</h3>
+        <ul>
+          <li>图片支持 JPG、JPEG、PNG，单文件不超过 50MB；宽高均不低于 300px，宽高比在 1:2.5 至 2.5:1 之间。</li>
+          <li>首尾帧仅支持“仅首帧”或“首帧 + 尾帧”，不支持只传尾帧。</li>
+          <li>视频支持 MP4、MOV，单文件不超过 200MB，时长 3-15.5 秒；最多传入 1 个参考视频。</li>
+          <li><code>feature_video</code> 用作特征参考：<code>multi_shot</code> 必须为 <code>true</code>，<code>audio</code> 使用 <code>off</code>。</li>
+          <li><code>base_video</code> 用作视频编辑：不能同时传首尾帧，<code>multi_shot</code> 必须为 <code>false</code>，<code>audio</code> 可用 <code>original</code> 或 <code>off</code>。</li>
+          <li>多镜头提示词写法为“镜头序号, 秒数, 描述;”，支持 1-6 个镜头；各镜头时长之和必须等于 <code>settings.duration</code>。</li>
+        </ul>
+      </article>
+
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling Omni 请求场景">
+            <button type="button" class="example-tab" id="omni-prompt-tab" role="tab" aria-selected="true" aria-controls="omni-prompt">纯文本</button>
+            <button type="button" class="example-tab" id="omni-images-tab" role="tab" aria-selected="false" aria-controls="omni-images">首帧 + 参考图</button>
+            <button type="button" class="example-tab" id="omni-frames-tab" role="tab" aria-selected="false" aria-controls="omni-frames">首尾帧</button>
+            <button type="button" class="example-tab" id="omni-base64-tab" role="tab" aria-selected="false" aria-controls="omni-base64">Base64 图片</button>
+            <button type="button" class="example-tab" id="omni-multimodal-tab" role="tab" aria-selected="false" aria-controls="omni-multimodal">多模态 · 图 + 视频</button>
+            <button type="button" class="example-tab" id="omni-multishot-tab" role="tab" aria-selected="false" aria-controls="omni-multishot">多镜头</button>
+            <button type="button" class="example-tab" id="omni-feature-tab" role="tab" aria-selected="false" aria-controls="omni-feature">特征视频</button>
+            <button type="button" class="example-tab" id="omni-base-tab" role="tab" aria-selected="false" aria-controls="omni-base">基础视频</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-prompt" role="tabpanel" aria-labelledby="omni-prompt-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "A cinematic sunrise over a quiet harbor, gentle waves and native ambient sound."}
+    ],
+    "settings": {
+      "resolution": "1080p",
+      "aspect_ratio": "16:9",
+      "duration": 5,
+      "audio": "native",
+      "multi_shot": false
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-images" role="tabpanel" aria-labelledby="omni-images-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "@image_1 walks into the scene; match the color palette of @image_2."},
+      {"type": "first_frame", "url": "https://cdn.example.com/start.png", "id": "image_1"},
+      {"type": "refer_image", "url": "https://cdn.example.com/style.png", "id": "image_2"}
+    ],
+    "settings": {"resolution": "1080p", "duration": 5, "audio": "native", "multi_shot": false}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-frames" role="tabpanel" aria-labelledby="omni-frames-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Create a smooth cinematic transition from @start to @end."},
+      {"type": "first_frame", "url": "https://cdn.example.com/start.jpg", "id": "start"},
+      {"type": "last_frame", "url": "https://cdn.example.com/end.jpg", "id": "end"}
+    ],
+    "settings": {"resolution": "1080p", "duration": 8, "audio": "off", "multi_shot": false}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-base64" role="tabpanel" aria-labelledby="omni-base64-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Animate @image_1 with a slow camera push-in."},
+      {"type": "first_frame", "url": "data:image/png;base64,iVBORw0KGgoAAA...", "id": "image_1"}
+    ],
+    "settings": {"resolution": "720p", "duration": 5, "audio": "off", "multi_shot": false}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-multimodal" role="tabpanel" aria-labelledby="omni-multimodal-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {
+        "type": "prompt",
+        "text": "Use @image_1 as the character and clothing reference; reproduce the camera movement and action rhythm of @video_1."
+      },
+      {
+        "type": "refer_image",
+        "url": "https://cdn.example.com/character.png",
+        "id": "image_1"
+      },
+      {
+        "type": "feature_video",
+        "url": "https://cdn.example.com/camera-and-motion.mp4",
+        "id": "video_1"
+      }
+    ],
+    "settings": {
+      "resolution": "1080p",
+      "audio": "off",
+      "multi_shot": true
+    },
+    "options": {
+      "external_task_id": "omni-multimodal-001",
+      "watermark_info": {"enabled": false}
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-multishot" role="tabpanel" aria-labelledby="omni-multishot-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {
+        "type": "prompt",
+        "text": "shot 1, 3, Wide shot: a traveler walks across a misty mountain ridge at sunrise; shot 2, 3, Close-up: the traveler stops, turns toward the warm sunlight, and smiles;"
+      }
+    ],
+    "settings": {
+      "resolution": "1080p",
+      "aspect_ratio": "16:9",
+      "duration": 6,
+      "audio": "native",
+      "multi_shot": true
+    },
+    "options": {
+      "external_task_id": "omni-multishot-001",
+      "watermark_info": {"enabled": false}
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-feature" role="tabpanel" aria-labelledby="omni-feature-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Use the camera rhythm and visual features of @video_1."},
+      {"type": "feature_video", "url": "https://cdn.example.com/reference.mp4", "id": "video_1"}
+    ],
+    "settings": {"resolution": "4k", "audio": "off", "multi_shot": true}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-base" role="tabpanel" aria-labelledby="omni-base-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Change the weather to light rain while preserving the original subject and motion."},
+      {"type": "base_video", "url": "https://cdn.example.com/source.mov", "id": "video_1"}
+    ],
+    "settings": {"resolution": "1080p", "audio": "original", "multi_shot": false}
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling Omni 创建响应">
+            <button type="button" class="example-tab" id="omni-create-ok-tab" role="tab" aria-selected="true" aria-controls="omni-create-ok">成功 · 200</button>
+            <button type="button" class="example-tab" id="omni-create-error-tab" role="tab" aria-selected="false" aria-controls="omni-create-error">失败 · 400</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-create-ok" role="tabpanel" aria-labelledby="omni-create-ok-tab" aria-hidden="false"><pre><code>{
+  "id": "task_omni_xxxxxxxxxx",
+  "task_id": "task_omni_xxxxxxxxxx",
+  "object": "video",
+  "model": "kling-3.0-omni",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre></div>
+            <div class="example-tab-panel" id="omni-create-error" role="tabpanel" aria-labelledby="omni-create-error-tab" aria-hidden="true"><pre><code>{
+  "error": {
+    "message": "settings.aspect_ratio is required when no first frame or reference video is provided",
+    "type": "invalid_request_error",
+    "code": "invalid_request"
+  }
+}</code></pre></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/kling/omni-video/kling-3.0-omni/{task_id}" aria-labelledby="kling-omni-query-title">
+      <article class="reference-panel">
+        <h2 id="kling-omni-query-title">查询 Kling 3.0 Omni 任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/kling/omni-video/kling-3.0-omni/{task_id}</span></div>
+        <p>使用创建接口返回的 <code>task_id</code> 查询。常见状态为 <code>SUBMITTED</code>、<code>IN_PROGRESS</code>、<code>SUCCESS</code>、<code>FAILURE</code>。</p>
+        <table>
+          <tr><th>响应字段</th><th>说明</th></tr>
+          <tr><td><code>video_url</code></td><td>成功后的视频地址。</td></tr>
+          <tr><td><code>duration</code></td><td>上游返回的实际视频时长（秒）。</td></tr>
+          <tr><td><code>cost</code></td><td>本平台任务结算后的收费金额，不是 Kling 原始账单字段。</td></tr>
+          <tr><td><code>request_id</code></td><td>用于问题追踪的上游请求 ID。</td></tr>
+        </table>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling Omni 查询响应">
+            <button type="button" class="example-tab" id="omni-query-ok-tab" role="tab" aria-selected="true" aria-controls="omni-query-ok">成功</button>
+            <button type="button" class="example-tab" id="omni-query-running-tab" role="tab" aria-selected="false" aria-controls="omni-query-running">处理中</button>
+            <button type="button" class="example-tab" id="omni-query-failed-tab" role="tab" aria-selected="false" aria-controls="omni-query-failed">失败</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-query-ok" role="tabpanel" aria-labelledby="omni-query-ok-tab" aria-hidden="false"><pre><code>{
+  "task_id": "task_omni_xxxxxxxxxx",
+  "status": "SUCCESS",
+  "video_url": "https://cdn.example.com/result.mp4",
+  "duration": 5.041,
+  "model": "kling-3.0-omni",
+  "cost": "3.825",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+            <div class="example-tab-panel" id="omni-query-running" role="tabpanel" aria-labelledby="omni-query-running-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_omni_xxxxxxxxxx",
+  "status": "IN_PROGRESS",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0-omni",
+  "cost": "0",
+  "request_id": ""
+}</code></pre></div>
+            <div class="example-tab-panel" id="omni-query-failed" role="tabpanel" aria-labelledby="omni-query-failed-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_omni_xxxxxxxxxx",
+  "status": "FAILURE",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0-omni",
+  "cost": "0",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/kling/motion-control/kling-3.0" aria-labelledby="kling-motion-title">
+      <article class="reference-panel">
+        <h2 id="kling-motion-title">Kling 3.0 动作模仿</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/motion-control/kling-3.0</span></div>
+        <p>请求体沿用 Kling 3.0 Motion Control 官方结构。每个任务提供 1 张角色外观参考图和 1 个动作参考视频；模型已由路径确定。</p>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>由提示词、角色图片和动作视频组成。</td></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td>本页展示 <code>prompt</code>、<code>image</code>、<code>video</code>。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td><code>type=prompt</code> 时必填，最多 2500 字符；提示词本身可省略。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片支持公开 URL 或 Base64；动作视频使用公开 URL。</td></tr>
+          <tr><td><code>settings.character_orientation</code></td><td>string</td><td>是</td><td><code>video</code>：朝向跟随动作视频；<code>image</code>：朝向跟随参考图。</td></tr>
+          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td><code>original</code> 保留动作视频原声；<code>off</code> 无音频。默认 <code>original</code>。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code>，默认 <code>720p</code>。</td></tr>
+          <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>任务状态变化时接收通知的回调地址。</td></tr>
+          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>调用方自定义且账号内唯一的任务 ID。</td></tr>
+          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
+        </table>
+
+        <h3>素材规则</h3>
+        <ul>
+          <li>必须且只能传 1 个 <code>image</code> 和 1 个 <code>video</code>。</li>
+          <li>图片支持 JPG、JPEG、PNG，最大 50MB；宽高均不低于 300px，宽高比在 1:2.5 至 2.5:1 之间。</li>
+          <li>动作视频支持 MP4、MOV，最大 100MB，宽高均在 340-3850px 之间；建议使用人物完整可见、无遮挡、无切镜、无明显运镜的连续单镜头。</li>
+          <li><code>character_orientation=video</code> 时动作视频可为 3-30 秒；设为 <code>image</code> 时可为 3-10 秒。</li>
+          <li><code>video</code> 更适合复杂动作；<code>image</code> 保持参考图朝向，并更适合通过提示词控制镜头运动。</li>
+        </ul>
+      </article>
+
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling 动作模仿请求场景">
+            <button type="button" class="example-tab" id="motion-video-tab" role="tab" aria-selected="true" aria-controls="motion-video">朝向跟随视频</button>
+            <button type="button" class="example-tab" id="motion-image-tab" role="tab" aria-selected="false" aria-controls="motion-image">朝向跟随图片</button>
+            <button type="button" class="example-tab" id="motion-base64-tab" role="tab" aria-selected="false" aria-controls="motion-base64">Base64 图片</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="motion-video" role="tabpanel" aria-labelledby="motion-video-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "The character wears a loose gray T-shirt and denim shorts."},
+      {"type": "image", "url": "https://cdn.example.com/character.png"},
+      {"type": "video", "url": "https://cdn.example.com/dance-10s.mp4"}
+    ],
+    "settings": {
+      "character_orientation": "video",
+      "resolution": "1080p",
+      "audio": "original"
+    },
+    "options": {
+      "callback_url": "https://example.com/callback",
+      "external_task_id": "motion-order-001",
+      "watermark_info": {"enabled": false}
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="motion-image" role="tabpanel" aria-labelledby="motion-image-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "The camera slowly pulls back while the character performs the reference motion."},
+      {"type": "image", "url": "https://cdn.example.com/character.jpg"},
+      {"type": "video", "url": "https://cdn.example.com/motion-8s.mov"}
+    ],
+    "settings": {
+      "character_orientation": "image",
+      "resolution": "1080p",
+      "audio": "off"
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="motion-base64" role="tabpanel" aria-labelledby="motion-base64-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "image", "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ..."},
+      {"type": "video", "url": "https://cdn.example.com/motion-6s.mp4"}
+    ],
+    "settings": {
+      "character_orientation": "video",
+      "resolution": "720p",
+      "audio": "original"
+    }
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling 动作模仿创建响应">
+            <button type="button" class="example-tab" id="motion-create-ok-tab" role="tab" aria-selected="true" aria-controls="motion-create-ok">成功 · 200</button>
+            <button type="button" class="example-tab" id="motion-create-error-tab" role="tab" aria-selected="false" aria-controls="motion-create-error">失败 · 400</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="motion-create-ok" role="tabpanel" aria-labelledby="motion-create-ok-tab" aria-hidden="false"><pre><code>{
+  "id": "task_motion_xxxxxxxxxx",
+  "task_id": "task_motion_xxxxxxxxxx",
+  "object": "video",
+  "model": "kling-3.0",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre></div>
+            <div class="example-tab-panel" id="motion-create-error" role="tabpanel" aria-labelledby="motion-create-error-tab" aria-hidden="true"><pre><code>{
+  "error": {
+    "message": "motion control requires exactly one image and one video",
+    "type": "invalid_request_error",
+    "code": "invalid_request"
+  }
+}</code></pre></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/kling/motion-control/kling-3.0/{task_id}" aria-labelledby="kling-motion-query-title">
+      <article class="reference-panel">
+        <h2 id="kling-motion-query-title">查询 Kling 3.0 动作模仿任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/kling/motion-control/kling-3.0/{task_id}</span></div>
+        <p>使用动作模仿创建接口返回的 <code>task_id</code> 查询。响应字段与 Kling 3.0 Omni 查询接口一致，<code>model</code> 固定为 <code>kling-3.0</code>。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling 动作模仿查询响应">
+            <button type="button" class="example-tab" id="motion-query-ok-tab" role="tab" aria-selected="true" aria-controls="motion-query-ok">成功</button>
+            <button type="button" class="example-tab" id="motion-query-running-tab" role="tab" aria-selected="false" aria-controls="motion-query-running">处理中</button>
+            <button type="button" class="example-tab" id="motion-query-failed-tab" role="tab" aria-selected="false" aria-controls="motion-query-failed">失败</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="motion-query-ok" role="tabpanel" aria-labelledby="motion-query-ok-tab" aria-hidden="false"><pre><code>{
+  "task_id": "task_motion_xxxxxxxxxx",
+  "status": "SUCCESS",
+  "video_url": "https://cdn.example.com/motion-result.mp4",
+  "duration": 9.966,
+  "model": "kling-3.0",
+  "cost": "4.5",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+            <div class="example-tab-panel" id="motion-query-running" role="tabpanel" aria-labelledby="motion-query-running-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_motion_xxxxxxxxxx",
+  "status": "IN_PROGRESS",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0",
+  "cost": "0",
+  "request_id": ""
+}</code></pre></div>
+            <div class="example-tab-panel" id="motion-query-failed" role="tabpanel" aria-labelledby="motion-query-failed-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_motion_xxxxxxxxxx",
+  "status": "FAILURE",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0",
+  "cost": "0",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="wide-panel">
+      <h2>上传限制</h2>
+      <table>
+        <tr><th>项目</th><th>规则</th></tr>
+        <tr><td>类型</td><td><code>image/*</code>、<code>video/*</code>、<code>audio/*</code></td></tr>
+        <tr><td>大小</td><td>图片 / 音频 ≤ 50MB；视频 ≤ 100MB</td></tr>
+        <tr><td>上传地址</td><td>15 分钟有效</td></tr>
+      </table>
+    </section>
+  </main>
+</div>
+
+<footer>O1Key API接口文档</footer>
+<script>
+  (() => {
+    const copyText = async text => {
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text);
+          return;
+        } catch {
+          // Fall back to document selection when clipboard permission is unavailable.
+        }
+      }
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.setAttribute('aria-hidden', 'true');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-100000px';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textarea.value.length);
+      const copied = document.execCommand('copy');
+      textarea.remove();
+      if (!copied) throw new Error('copy failed');
+    };
+
+    document.querySelectorAll('pre').forEach(pre => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block';
+      pre.parentNode.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'copy-code';
+      button.setAttribute('aria-label', '复制代码示例');
+      button.title = '复制代码';
+      button.textContent = '复制';
+      wrapper.appendChild(button);
+
+      button.addEventListener('click', async () => {
+        try {
+          await copyText(pre.querySelector('code').textContent);
+          button.classList.add('copied');
+          button.textContent = '已复制';
+          window.setTimeout(() => {
+            button.classList.remove('copied');
+            button.textContent = '复制';
+          }, 1800);
+        } catch {
+          button.textContent = '复制失败';
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-example-switcher]').forEach(switcher => {
+      const tabs = Array.from(switcher.querySelectorAll('[role="tab"]'));
+      const panels = Array.from(switcher.querySelectorAll('[role="tabpanel"]'));
+
+      const activateTab = (nextTab, moveFocus = false) => {
+        tabs.forEach(tab => {
+          const active = tab === nextTab;
+          tab.setAttribute('aria-selected', String(active));
+          tab.tabIndex = active ? 0 : -1;
+        });
+        panels.forEach(panel => {
+          const active = panel.id === nextTab.getAttribute('aria-controls');
+          panel.classList.toggle('is-active', active);
+          panel.setAttribute('aria-hidden', String(!active));
+        });
+        if (moveFocus) nextTab.focus();
+      };
+
+      tabs.forEach((tab, index) => {
+        tab.addEventListener('click', () => activateTab(tab));
+        tab.addEventListener('keydown', event => {
+          let nextIndex = index;
+          if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+          else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+          else if (event.key === 'Home') nextIndex = 0;
+          else if (event.key === 'End') nextIndex = tabs.length - 1;
+          else return;
+          event.preventDefault();
+          activateTab(tabs[nextIndex], true);
+        });
+      });
+
+      const selectedTab = tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0];
+      if (selectedTab) activateTab(selectedTab);
+    });
+
+    const sectionLinks = Array.from(document.querySelectorAll('.sidebar nav a[data-section]'));
+    const setCurrentSection = sectionId => {
+      sectionLinks.forEach(link => {
+        const active = link.dataset.section === sectionId;
+        if (active) link.setAttribute('aria-current', 'true');
+        else link.removeAttribute('aria-current');
+      });
+    };
+    const sectionObserver = new IntersectionObserver(entries => {
+      const current = entries
+        .filter(entry => entry.isIntersecting)
+        .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
+      if (current) setCurrentSection(current.target.id);
+    }, {rootMargin: '-72px 0px -68% 0px', threshold: 0});
+    sectionLinks.forEach(link => {
+      const section = document.getElementById(link.dataset.section);
+      if (section) sectionObserver.observe(section);
+      link.addEventListener('click', () => setCurrentSection(link.dataset.section));
+    });
+    if (location.hash) setCurrentSection(decodeURIComponent(location.hash.slice(1)));
+
+    const agentButton = document.getElementById('copy-agent-doc');
+    const copyScope = document.getElementById('copy-scope');
+    const status = document.getElementById('copy-status');
+    const main = document.querySelector('main');
+    agentButton.addEventListener('click', async () => {
+      const scopeId = copyScope.value;
+      const scopeLabel = copyScope.options[copyScope.selectedIndex].textContent;
+      let copySource;
+
+      if (scopeId === 'all') {
+        copySource = main.cloneNode(true);
+      } else {
+        const sectionHeading = document.getElementById(scopeId);
+        if (!sectionHeading) {
+          status.textContent = '未找到所选板块';
+          return;
+        }
+
+        copySource = document.createElement('div');
+        let sectionNode = sectionHeading;
+        while (sectionNode) {
+          if (sectionNode !== sectionHeading && sectionNode.classList.contains('section-heading')) break;
+          if (sectionNode !== sectionHeading && sectionNode.classList.contains('wide-panel')) break;
+          copySource.appendChild(sectionNode.cloneNode(true));
+          sectionNode = sectionNode.nextElementSibling;
+        }
+      }
+
+      copySource.querySelectorAll('.copy-code').forEach(button => button.remove());
+      copySource.querySelectorAll('[data-example-switcher]').forEach(switcher => {
+        const tabLabels = new Map(
+          Array.from(switcher.querySelectorAll('[role="tab"]')).map(tab => [tab.id, tab.textContent.trim()]),
+        );
+        const tabList = switcher.querySelector('.example-tabs');
+        if (tabList) tabList.remove();
+
+        const panels = switcher.querySelector('.example-panels');
+        if (panels) panels.style.display = 'block';
+        switcher.querySelectorAll('[role="tabpanel"]').forEach(panel => {
+          const label = tabLabels.get(panel.getAttribute('aria-labelledby'));
+          if (label) {
+            const heading = document.createElement('h4');
+            heading.textContent = label;
+            panel.prepend(heading);
+          }
+          panel.classList.add('is-active');
+          panel.removeAttribute('aria-hidden');
+          panel.style.display = 'block';
+          panel.style.visibility = 'visible';
+          panel.style.opacity = '1';
+          panel.style.pointerEvents = 'auto';
+        });
+      });
+      copySource.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
+
+      const copyStage = document.createElement('div');
+      copyStage.style.cssText = 'position:fixed;left:-100000px;top:0;width:1200px;opacity:0;pointer-events:none;';
+      copyStage.appendChild(copySource);
+      document.body.appendChild(copyStage);
+      const documentText = copyStage.innerText
+        .split('\n')
+        .map(line => line.trimEnd())
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+      copyStage.remove();
+
+      const text = [
+        '# O1Key API接口文档',
+        '',
+        '复制范围：' + scopeLabel,
+        '文档地址：' + location.origin + location.pathname,
+        '',
+        documentText,
+      ].join('\n');
+      try {
+        await copyText(text);
+        agentButton.textContent = '已复制';
+        agentButton.classList.add('copied');
+        status.textContent = '已复制：' + scopeLabel;
+        window.setTimeout(() => {
+          agentButton.textContent = '复制给 Agent';
+          agentButton.classList.remove('copied');
+          status.textContent = '';
+        }, 2400);
+      } catch {
+        status.textContent = '复制失败，请手动选择正文';
+      }
+    });
+  })();
+</script>
+</body>
+</html>

@@ -36,6 +36,7 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		require.NoError(t, writer.WriteField("partial_images", "3"))
 		require.NoError(t, writer.WriteField("response_format", "b64_json"))
 		require.NoError(t, writer.WriteField("quality", "low"))
+		require.NoError(t, writer.WriteField("moderation", "low"))
 		require.NoError(t, writer.WriteField("size", "1536x1024"))
 		require.NoError(t, writer.WriteField("tag", "first"))
 		require.NoError(t, writer.WriteField("tag", "second"))
@@ -85,6 +86,7 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 			require.False(t, replayedRequest.PostForm.Has("response_format"))
 		}
 		require.Equal(t, "low", replayedRequest.PostForm.Get("quality"))
+		require.Equal(t, "low", replayedRequest.PostForm.Get("moderation"))
 		require.Equal(t, "1536x1024", replayedRequest.PostForm.Get("size"))
 		require.Equal(t, []string{"first", "second"}, replayedRequest.PostForm["tag"])
 		require.Len(t, replayedRequest.MultipartForm.File["image"], 1)
@@ -177,10 +179,13 @@ func TestConvertImageJSONDropsResponseFormatForGPTImage2(t *testing.T) {
 		OriginModelName: "gpt-image-2-c",
 		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-image-2"},
 	}
+	moderation, err := common.Marshal("low")
+	require.NoError(t, err)
 	request := dto.ImageRequest{
 		Model:          "gpt-image-2",
 		Prompt:         "draw a test image",
 		ResponseFormat: "invalid-client-value",
+		Moderation:     moderation,
 	}
 
 	converted, err := (&Adaptor{}).ConvertImageRequest(c, info, request)
@@ -188,4 +193,5 @@ func TestConvertImageJSONDropsResponseFormatForGPTImage2(t *testing.T) {
 	convertedRequest, ok := converted.(dto.ImageRequest)
 	require.True(t, ok)
 	assert.Empty(t, convertedRequest.ResponseFormat)
+	assert.JSONEq(t, `"low"`, string(convertedRequest.Moderation))
 }

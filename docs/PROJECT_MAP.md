@@ -76,6 +76,8 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 ### Behavior contract
 
 - `/async/v1/generateImage` accepts legacy string items plus explicit `inlineData` and `fileData` objects in `images`.
+- Models whose names start with `gpt-image` accept optional `background` values `auto` and `transparent`; Banana/Gemini image models reject the parameter. Transparent output requires `png` or `webp`, and the option is forwarded through both OpenAI image generations and edits requests.
+- `/async/v1/generateImage`, `/v1/images/generations`, and `/v1/images/edits` accept the optional `moderation` values `auto` and `low` only for model names starting with `gpt-image`; the field is forwarded through OpenAI image generation JSON and edit multipart requests.
 - Channel setting `other.gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration.
 - With the setting disabled, Gemini reference URLs are downloaded and sent as `inlineData`, preserving the legacy behavior.
 - With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are atomically stored under `${TEMP_STORAGE_DIR:-tmp}/input` and exposed through the CF `/tmp/input` URL.

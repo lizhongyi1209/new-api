@@ -16,9 +16,11 @@ type GenerateImageRequest struct {
 	Prompt string `json:"prompt" binding:"required"`
 	N      *uint  `json:"n,omitempty"`
 
-	Size        string `json:"size,omitempty"`         // 如 "auto" / "1024x1024" / "1K" / "2K" / "4K"
-	AspectRatio string `json:"aspect_ratio,omitempty"` // 如 "16:9"
-	Quality     string `json:"quality,omitempty"`      // "low" / "medium" / "high" / "auto"
+	Size        string  `json:"size,omitempty"`         // 如 "auto" / "1024x1024" / "1K" / "2K" / "4K"
+	AspectRatio string  `json:"aspect_ratio,omitempty"` // 如 "16:9"
+	Quality     string  `json:"quality,omitempty"`      // "low" / "medium" / "high" / "auto"
+	Background  *string `json:"background,omitempty"`   // gpt-image*: "auto" / "transparent"
+	Moderation  *string `json:"moderation,omitempty"`   // gpt-image*: "auto" / "low"
 
 	// Gemini 原生：响应模态，默认 ["TEXT","IMAGE"]。
 	ResponseModalities []string `json:"response_modalities,omitempty"`

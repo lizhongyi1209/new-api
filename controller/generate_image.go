@@ -230,6 +230,8 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		N:                  req.N,
 		Size:               req.Size,
 		Quality:            req.Quality,
+		Background:         req.Background,
+		Moderation:         req.Moderation,
 		AspectRatio:        req.AspectRatio,
 		OutputFormat:       req.OutputFormat,
 		ResponseModalities: req.ResponseModalities,

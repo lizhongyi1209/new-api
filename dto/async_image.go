@@ -8,6 +8,8 @@ type AsyncImageRequest struct {
 	N                  *uint           `json:"n,omitempty"`
 	Size               string          `json:"size,omitempty"`
 	Quality            string          `json:"quality,omitempty"`
+	Background         *string         `json:"background,omitempty"`
+	Moderation         *string         `json:"moderation,omitempty"`
 	ResponseFormat     string          `json:"response_format,omitempty"`
 	OutputFormat       *string         `json:"output_format,omitempty"`
 	Style              json.RawMessage `json:"style,omitempty"`
