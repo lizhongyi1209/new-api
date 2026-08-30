@@ -15,24 +15,66 @@ import (
 
 const onePixelPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 
-func TestValidateAsyncImageSizeRejectsPrivateURLBeforeHead(t *testing.T) {
-	err := ValidateAsyncImageSize(&dto.AsyncImageRequest{
+func TestValidateAsyncImageReferencesRejectsPrivateURL(t *testing.T) {
+	err := ValidateAsyncImageReferences(&dto.AsyncImageRequest{
 		Images: []string{"http://127.0.0.1/reference.png"},
 	})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "不允许访问")
 }
 
-func TestValidateAsyncImageSizeRejectsCombinedReferenceImagesOverLimit(t *testing.T) {
+func TestValidateAsyncImageReferencesAllowsFormerRawSizeLimit(t *testing.T) {
 	firstImage := base64.StdEncoding.EncodeToString(make([]byte, 7*1024*1024))
 	secondImage := base64.StdEncoding.EncodeToString(make([]byte, 7*1024*1024+1))
 
-	err := ValidateAsyncImageSize(&dto.AsyncImageRequest{
+	err := ValidateAsyncImageReferences(&dto.AsyncImageRequest{
 		Images: []string{firstImage, secondImage},
 	})
+	require.NoError(t, err)
+}
+
+func TestPrepareGenerateImageGeminiNativeUsesFinalSerializedBodyLimit(t *testing.T) {
+	firstImage := base64.StdEncoding.EncodeToString(make([]byte, 7*1024*1024))
+	secondImage := base64.StdEncoding.EncodeToString(make([]byte, 7*1024*1024+1))
+	request, _, err := PrepareGenerateImageGeminiNative(
+		context.Background(),
+		&dto.AsyncImageRequest{Prompt: "draw"},
+		[]dto.GenerateImageInput{
+			{InlineData: &dto.GenerateImageInlineData{MimeType: "image/png", Data: firstImage}},
+			{InlineData: &dto.GenerateImageInlineData{MimeType: "image/png", Data: secondImage}},
+		},
+		GeminiFileDataOptions{},
+	)
+	require.NoError(t, err)
+	require.NoError(t, ValidateGeminiGenerateContentRequestSize(request))
+
+	thirdImage := base64.StdEncoding.EncodeToString(make([]byte, 1024*1024))
+	_, _, err = PrepareGenerateImageGeminiNative(
+		context.Background(),
+		&dto.AsyncImageRequest{Prompt: "draw"},
+		[]dto.GenerateImageInput{
+			{InlineData: &dto.GenerateImageInlineData{MimeType: "image/png", Data: firstImage}},
+			{InlineData: &dto.GenerateImageInlineData{MimeType: "image/png", Data: secondImage}},
+			{InlineData: &dto.GenerateImageInlineData{MimeType: "image/png", Data: thirdImage}},
+		},
+		GeminiFileDataOptions{},
+	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "参考图总大小")
-	assert.Contains(t, err.Error(), "14 MB")
+	assert.Contains(t, err.Error(), "超过 20 MiB 限制")
+}
+
+func TestValidateGeminiGenerateContentRequestSizeIncludesOtherParameters(t *testing.T) {
+	request := map[string]interface{}{
+		"contents": []interface{}{map[string]interface{}{
+			"parts": []interface{}{
+				map[string]interface{}{"text": strings.Repeat("x", geminiGenerateContentMaxBodyBytes)},
+			},
+		}},
+	}
+
+	err := ValidateGeminiGenerateContentRequestSize(request)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "超过 20 MiB 限制")
 }
 
 func TestValidateGenerateImageRequestValidatesExplicitImageInputs(t *testing.T) {

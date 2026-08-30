@@ -417,106 +417,54 @@ func asyncImageExtension(mimeType string) string {
 	}
 }
 
-const (
-	// AsyncImageMaxInputSizeMB limits the combined raw size of all reference images.
-	// 14 MiB expands to about 18.67 MiB after base64 encoding, leaving room under
-	// the 20 MiB upstream request-body limit for JSON, prompts, and other fields.
-	AsyncImageMaxInputSizeMB  = 14
-	AsyncImageMaxBase64SizeMB = AsyncImageMaxInputSizeMB
-	AsyncImageMaxURLSizeMB    = AsyncImageMaxInputSizeMB
-)
+// AsyncImageMaxURLSizeMB bounds gateway downloads independently from Gemini's
+// serialized request-body limit. URL bytes sent as fileData are not part of the
+// generateContent JSON body.
+const AsyncImageMaxURLSizeMB = 50
 
-// ValidateAsyncImageSize validates image size limits for async image requests
-func ValidateAsyncImageSize(req *dto.AsyncImageRequest) error {
-	var totalBytes int64
-	maxBytes := int64(AsyncImageMaxInputSizeMB * 1024 * 1024)
-
-	// Validate single image field
+// ValidateAsyncImageReferences validates reference encoding and URL safety.
+// Gemini request size is checked only after the final upstream body has been
+// Base64 encoded and JSON serialized.
+func ValidateAsyncImageReferences(req *dto.AsyncImageRequest) error {
 	if len(req.Image) > 0 {
-		size, err := validateSingleImageSize(req.Image)
-		if err != nil {
-			return fmt.Errorf("image 字段验证失败: %w", err)
-		}
-		totalBytes += size
-		if totalBytes > maxBytes {
-			return fmt.Errorf("参考图总大小 %.2f MB 超过限制 %d MB", float64(totalBytes)/1024/1024, AsyncImageMaxInputSizeMB)
+		var imageValue string
+		if err := common.Unmarshal(req.Image, &imageValue); err == nil {
+			if err := validateSingleImageReference(imageValue); err != nil {
+				return fmt.Errorf("image 字段验证失败: %w", err)
+			}
 		}
 	}
 
-	// Validate images array
 	for i, img := range req.Images {
-		size, err := validateSingleImageSize([]byte(img))
-		if err != nil {
+		if err := validateSingleImageReference(img); err != nil {
 			return fmt.Errorf("images[%d] 验证失败: %w", i, err)
-		}
-		totalBytes += size
-		if totalBytes > maxBytes {
-			return fmt.Errorf("参考图总大小 %.2f MB 超过限制 %d MB", float64(totalBytes)/1024/1024, AsyncImageMaxInputSizeMB)
 		}
 	}
 
 	return nil
 }
 
-// validateSingleImageSize checks if a single image (base64 or URL) meets size limits
-func validateSingleImageSize(imageData []byte) (int64, error) {
-	if len(imageData) == 0 {
-		return 0, nil
+func validateSingleImageReference(imageValue string) error {
+	imageValue = strings.TrimSpace(imageValue)
+	if imageValue == "" {
+		return nil
 	}
 
-	imageStr := string(imageData)
-
-	// Check if it's a URL
-	if strings.HasPrefix(imageStr, "http://") || strings.HasPrefix(imageStr, "https://") {
-		if err := ValidateSSRFProtectedFetchURL(imageStr); err != nil {
-			return 0, fmt.Errorf("URL 图片地址不允许访问: %w", err)
+	if strings.HasPrefix(imageValue, "http://") || strings.HasPrefix(imageValue, "https://") {
+		if err := ValidateSSRFProtectedFetchURL(imageValue); err != nil {
+			return fmt.Errorf("URL 图片地址不允许访问: %w", err)
 		}
-
-		maxBytes := int64(AsyncImageMaxURLSizeMB * 1024 * 1024)
-		resp, err := GetSSRFProtectedHTTPClient().Head(imageStr)
-		if err == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices && resp.ContentLength >= 0 {
-				if resp.ContentLength > maxBytes {
-					return 0, fmt.Errorf("URL 图片大小 %d 字节超过限制 %d MB", resp.ContentLength, AsyncImageMaxURLSizeMB)
-				}
-				return resp.ContentLength, nil
-			}
-		}
-
-		// Reject oversized URLs even when HEAD is unsupported or omits Content-Length.
-		_, base64Data, downloadErr := GetImageFromUrlWithLimit(imageStr, AsyncImageMaxURLSizeMB)
-		if downloadErr != nil {
-			return 0, fmt.Errorf("URL 图片大小验证失败: %w", downloadErr)
-		}
-		decodedSize := int64(base64.StdEncoding.DecodedLen(len(base64Data)))
-		if strings.HasSuffix(base64Data, "==") {
-			decodedSize -= 2
-		} else if strings.HasSuffix(base64Data, "=") {
-			decodedSize--
-		}
-		return decodedSize, nil
+		return nil
 	}
 
-	// It's base64 data
-	base64Str := imageStr
-	// Remove data URL prefix if present
+	base64Str := imageValue
 	if idx := strings.Index(base64Str, ","); idx != -1 {
 		base64Str = base64Str[idx+1:]
 	}
-
-	// Decode to get actual size
-	decodedData, err := base64.StdEncoding.DecodeString(base64Str)
-	if err != nil {
-		return 0, fmt.Errorf("base64 解码失败: %w", err)
+	if _, err := base64.StdEncoding.DecodeString(base64Str); err != nil {
+		return fmt.Errorf("base64 解码失败: %w", err)
 	}
-
-	maxBytes := AsyncImageMaxBase64SizeMB * 1024 * 1024
-	if len(decodedData) > maxBytes {
-		return 0, fmt.Errorf("base64 图片大小 %.2f MB 超过限制 %d MB", float64(len(decodedData))/1024/1024, AsyncImageMaxBase64SizeMB)
-	}
-
-	return int64(len(decodedData)), nil
+	return nil
 }
 
 // RecordAsyncImageSubmitLog records a usage log at task submission time.
@@ -1159,10 +1107,10 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 		}
 	}
 
-	jsonData, err := common.Marshal(requestBody)
+	jsonData, err := marshalGeminiGenerateContentRequest(requestBody)
 	if err != nil {
 		task.Status = model.TaskStatusFailure
-		task.FailReason = fmt.Sprintf("序列化请求失败: %v", err)
+		task.FailReason = err.Error()
 		task.Progress = "100%"
 		task.FinishTime = time.Now().Unix()
 		_ = task.Update()
@@ -1545,18 +1493,8 @@ func PrepareGenerateImageGeminiNative(
 	preparation.Fallback = summarizeGenerateImageInputValues(fallbacks, "none")
 	preparation.Total = time.Since(startedAt)
 	nativeReq := buildGeminiNativeImageRequest(asyncReq, parts)
-	if preparation.Fallback != "none" {
-		jsonData, err := common.Marshal(nativeReq)
-		if err != nil {
-			return nil, preparation, fmt.Errorf("serialize fallback request: %w", err)
-		}
-		if len(jsonData) > nanoBananaGenerateContentMaxBodyBytes {
-			return nil, preparation, fmt.Errorf(
-				"fileData fallback request body is %.2f MB, exceeding the %d MB upstream limit",
-				float64(len(jsonData))/1024/1024,
-				nanoBananaGenerateContentMaxBodyBytes/1024/1024,
-			)
-		}
+	if err := ValidateGeminiGenerateContentRequestSize(nativeReq); err != nil {
+		return nil, preparation, err
 	}
 	return nativeReq, preparation, nil
 }
@@ -1978,10 +1916,10 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 		logger.LogError(ctx, fmt.Sprintf("async_gemini: failed to normalize contents, type=%T", requestBody["contents"]))
 	}
 
-	jsonData, err := common.Marshal(requestBody)
+	jsonData, err := marshalGeminiGenerateContentRequest(requestBody)
 	if err != nil {
 		task.Status = model.TaskStatusFailure
-		task.FailReason = fmt.Sprintf("序列化请求失败: %v", err)
+		task.FailReason = err.Error()
 		task.Progress = "100%"
 		task.FinishTime = time.Now().Unix()
 		_ = task.Update()

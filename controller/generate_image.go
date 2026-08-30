@@ -42,9 +42,10 @@ func GenerateImageSubmit(c *gin.Context) {
 		return
 	}
 
-	// 复用既有的图片大小校验（images 字段）
+	// 复用既有的图片格式与 URL 安全校验（images 字段）。Gemini 的大小限制
+	// 在最终请求完成 Base64 编码和 JSON 序列化后按完整请求体检查。
 	asyncReq := generateImageToAsyncRequest(&req)
-	if err := service.ValidateAsyncImageSize(asyncReq); err != nil {
+	if err := service.ValidateAsyncImageReferences(asyncReq); err != nil {
 		generateImageError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
 		return
 	}
@@ -148,6 +149,13 @@ func GenerateImageSubmit(c *gin.Context) {
 			return
 		}
 		applyGenerateImageGoogleSearchTool(nativeReq, req.GoogleSearch)
+		if validateErr := service.ValidateGeminiGenerateContentRequestSize(nativeReq); validateErr != nil {
+			if relayInfo.Billing != nil {
+				relayInfo.Billing.Refund(c)
+			}
+			generateImageError(c, http.StatusBadRequest, "invalid_request_error", validateErr.Error())
+			return
+		}
 		service.SetGenerateContentRequestOmittedData(task, "submitted")
 		processData = nativeReq
 	} else {

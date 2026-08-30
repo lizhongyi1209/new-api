@@ -33,8 +33,7 @@ func AsyncImageSubmit(c *gin.Context) {
 		return
 	}
 
-	// Validate image size limits
-	if err := service.ValidateAsyncImageSize(&req); err != nil {
+	if err := service.ValidateAsyncImageReferences(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"message": err.Error(),

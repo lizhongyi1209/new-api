@@ -48,9 +48,32 @@ const (
 const imageRetryActionResubmit = "resubmit"
 
 const (
-	nanoBananaGenerateContentMaxBodyBytes = 20 * 1024 * 1024
-	nanoBananaResizeMaxAttempts           = 8
+	geminiGenerateContentMaxBodyBytes = 20 * 1024 * 1024
+	nanoBananaResizeMaxAttempts       = 8
 )
+
+func marshalGeminiGenerateContentRequest(requestBody map[string]interface{}) ([]byte, error) {
+	jsonData, err := common.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("序列化 Gemini 请求失败: %w", err)
+	}
+	if len(jsonData) > geminiGenerateContentMaxBodyBytes {
+		return nil, fmt.Errorf(
+			"Gemini 请求体（含 Base64 和其他参数）为 %.2f MiB，超过 %d MiB 限制",
+			float64(len(jsonData))/1024/1024,
+			geminiGenerateContentMaxBodyBytes/1024/1024,
+		)
+	}
+	return jsonData, nil
+}
+
+// ValidateGeminiGenerateContentRequestSize checks the exact serialized body
+// that will be sent upstream. fileData content is not present in this body,
+// while inlineData Base64, prompts, and all other parameters are included.
+func ValidateGeminiGenerateContentRequestSize(requestBody map[string]interface{}) error {
+	_, err := marshalGeminiGenerateContentRequest(requestBody)
+	return err
+}
 
 // imageRoute 是一条分发规则：模型名匹配 match 时走对应 provider。
 // provider 与 action 一起决定提交时如何构造任务、处理时走哪个分支。
@@ -253,10 +276,6 @@ func validateGenerateImageInput(input *dto.GenerateImageInput) error {
 		raw, err := base64.StdEncoding.DecodeString(data)
 		if err != nil {
 			return fmt.Errorf("inlineData.data is not valid base64: %w", err)
-		}
-		maxBytes := AsyncImageMaxBase64SizeMB * 1024 * 1024
-		if len(raw) > maxBytes {
-			return fmt.Errorf("inlineData image size %.2f MB exceeds limit %d MB", float64(len(raw))/1024/1024, AsyncImageMaxBase64SizeMB)
 		}
 		if !mimetype.Detect(raw).Is(mimeType) {
 			return fmt.Errorf("inlineData content does not match declared MIME type %s", mimeType)
@@ -1083,24 +1102,10 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 	}
 
 	var jsonData []byte
-	jsonData, err = common.Marshal(requestBody)
+	jsonData, err = marshalGeminiGenerateContentRequest(requestBody)
 	if err != nil {
-		failGenerateImageTask(task, fmt.Sprintf("序列化请求失败: %v", err))
+		failGenerateImageTask(task, err.Error())
 		return
-	}
-	// nano-banana 的上游有 20MB 请求体硬上限。为保证网关 CPU 不被图片缩放
-	// 拖垮，这里不再在服务端做 resize 救场，而是直接打回，让客户端自行压缩。
-	if isNanoBananaModelName(task.Properties.OriginModelName) || isNanoBananaModelName(relayInfo.UpstreamModelName) {
-		if len(jsonData) > nanoBananaGenerateContentMaxBodyBytes {
-			maxMB := nanoBananaGenerateContentMaxBodyBytes / 1024 / 1024
-			curMB := float64(len(jsonData)) / 1024 / 1024
-			// 请求体含 base64 编码（约放大 1.37 倍），据此估算原图体积，便于客户端定位。
-			rawMB := curMB / 1.37
-			failGenerateImageTask(task, fmt.Sprintf(
-				"请求体过大，请缩小图片体积。当前约 %.1f MB（含 base64 编码，原图约 %.1f MB），上限 %d MB。",
-				curMB, rawMB, maxMB))
-			return
-		}
 	}
 
 	if GetGeminiAdaptorFunc == nil {

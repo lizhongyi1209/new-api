@@ -386,7 +386,7 @@ const upload = await response.json();</code></pre>
           <tr><td><code>inlineData</code></td><td><code>{"inlineData":{"mimeType":"image/png","data":"..."}}</code></td><td>Base64 图片。必须声明图片 MIME 类型；<code>data</code> 不含 Data URI 前缀。</td></tr>
         </table>
         <div class="callout info"><b>兼容格式</b>：仍接受 URL、Data URI 和原始 Base64 字符串，但新接入应显式声明 <code>fileData</code> 或 <code>inlineData</code>。</div>
-        <div class="callout warn"><b>大小限制</b>：传入参考图时，全部图片的原始数据合计必须大于 0 且不超过 14MiB（14 × 1024 × 1024 字节）。14MiB 经 Base64 编码后约为 18.67MiB，为 20MiB 请求上限预留 JSON、提示词和其他参数空间。URL 必须公网可访问，服务会按响应大小校验，并要求地址在任务完成前保持有效。</div>
+        <div class="callout warn"><b>大小限制</b>：使用 <code>inlineData</code> 时，Base64 数据、提示词、系统指令和其他参数组成的最终 Gemini JSON 请求体不得超过 20MiB；服务以完成 Base64 编码和 JSON 序列化后的实际字节数为准。使用 <code>fileData</code> 时，图片文件本身不计入该请求体大小；如果 URL 因渠道能力回退为 <code>inlineData</code>，则仍按最终 20MiB 请求体限制校验。URL 必须公网可访问，并要求地址在任务完成前保持有效。</div>
       </article>
       <aside class="example-panel" aria-label="异步生图请求和响应示例">
         <h3>请求示例</h3>
