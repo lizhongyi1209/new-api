@@ -38,8 +38,8 @@ jobs:
 
       - name: Create frontend embed placeholder
         run: |
-          mkdir -p web/dist
-          touch web/dist/index.html
+          mkdir -p web/dist web/classic/dist
+          touch web/dist/index.html web/classic/dist/index.html
 
       - name: Vet root module
         run: go vet ./...
@@ -57,7 +57,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: web
+        working-directory: web/default
 
     steps:
       - name: Checkout
@@ -78,4 +78,4 @@ jobs:
         run: bun run typecheck
 
       - name: Test
-        run: bun test
+        run: bun run test
