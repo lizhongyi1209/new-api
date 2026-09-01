@@ -138,7 +138,7 @@ Important boundaries:
 Aliases: Seedance 视频, Seedance task, 查询视频任务, `/v1/video/generations`, TokenMartSeedance, ServiceInference video, Seedance MAX, `/v2/video/generate`.
 
 - Downstream submission uses `POST /v1/video/generations`; task lookup uses `GET /v1/video/generations/:task_id` with the public `task_...` ID returned at submission.
-- ServiceInference tasks use the public OpenAI-style video object for both submission and lookup. Query states are `queued`, `in_progress`, `completed`, and `failed`; completed results expose URLs and usage under `metadata` and must not expose internal task, channel, user, group, or quota fields.
+- ServiceInference tasks use the public OpenAI-style video object for both submission and lookup. Query states are `queued`, `in_progress`, `completed`, and `failed`; completed results expose URLs and usage under `metadata`, plus a top-level `result_url` compatibility alias for legacy clients, and must not expose internal task, channel, user, group, or quota fields.
 - Seedance HC public model names can map to the corresponding `*-max` upstream names. MAX models submit and poll through the upstream `/v2/video/*` endpoints while all other ServiceInference models retain `/v1/video/*` behavior.
 - MAX v2 media URLs are forwarded unchanged so the upstream task performs preparation. Its `preparing` state is normalized to public `in_progress` while preserved as `metadata.upstream_status`; the complete `prep` object is preserved as `metadata.prep`.
 - The default channel-editor preset exposes the four HC names and fills their HC-to-MAX model mapping, keeping upstream MAX identifiers out of the public model list.

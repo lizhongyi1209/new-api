@@ -451,6 +451,12 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.CreatedAt = originTask.CreatedAt
 	openAIVideo.CompletedAt = originTask.FinishTime
 	openAIVideo.Model = originTask.Properties.OriginModelName
+	if originTask.Status == model.TaskStatusSuccess {
+		if resultURL := strings.TrimSpace(originTask.GetResultURL()); resultURL != "" {
+			openAIVideo.ResultURL = resultURL
+			openAIVideo.SetMetadata("url", resultURL)
+		}
+	}
 
 	if len(bytes.TrimSpace(originTask.Data)) == 0 {
 		if originTask.Status == model.TaskStatusFailure {
@@ -471,6 +477,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		return nil, err
 	}
 	if len(resTask.Outputs) > 0 {
+		openAIVideo.ResultURL = resTask.Outputs[0]
 		openAIVideo.SetMetadata("url", resTask.Outputs[0])
 		openAIVideo.SetMetadata("outputs", resTask.Outputs)
 	}

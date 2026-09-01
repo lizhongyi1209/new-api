@@ -877,6 +877,7 @@ func TestConvertToOpenAIVideoCompletedTaskMatchesDownstreamContract(t *testing.T
 	assert.Equal(t, 100, video.Progress)
 	assert.Equal(t, int64(1785768134), video.CreatedAt)
 	assert.Equal(t, int64(1785768366), video.CompletedAt)
+	assert.Equal(t, "https://cdn.example.com/result.mp4", video.ResultURL)
 	require.NotNil(t, video.Metadata)
 	assert.Equal(t, "https://cdn.example.com/result.mp4", video.Metadata["url"])
 	assert.Equal(t, []any{"https://cdn.example.com/result.mp4"}, video.Metadata["outputs"])

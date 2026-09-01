@@ -151,6 +151,7 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
   "progress": 100,
   "created_at": 1785768134,
   "completed_at": 1785768366,
+  "result_url": "https://cdn.example.com/result.mp4",
   "metadata": {
     "url": "https://cdn.example.com/result.mp4",
     "outputs": [
@@ -394,7 +395,7 @@ POST https://cf-api.o1key.com/v1/assets/get
 | 提交 | `POST https://cf-api.o1key.com/v1/video/generations` | 原样发送本文第 4 节的 `content` 数组请求 |
 | 保存任务 | 读取响应的 `id` | 把本站返回的 `task_...` 保存为下游的上游任务 ID |
 | 查询 | `GET https://cf-api.o1key.com/v1/video/generations/{id}` | 携带同一个本站 API Token |
-| 成功 | `status == "completed"` | 从 `metadata.url` 读取视频地址；也可读取 `metadata.outputs[0]` |
+| 成功 | `status == "completed"` | 旧客户端可继续读取顶层 `result_url`；新客户端也可读取 `metadata.url` 或 `metadata.outputs[0]` |
 | 失败 | `status == "failed"` | 读取 `error.message` 和 `error.code` |
 
 下游适配器不需要实现素材上传逻辑。只要把公网图片 URL 放进 `content[].image_url.url`，素材组创建、`POST /v1/assets`、素材状态查询和 `asset://` 替换都由本站完成。
