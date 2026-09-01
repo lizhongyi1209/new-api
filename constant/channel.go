@@ -59,7 +59,6 @@ const (
 	ChannelTypeAdvancedCustom        = 59
 	ChannelTypeServiceInferenceVideo = 60
 	ChannelTypeXinhankr              = 61
-	ChannelTypeILiuMidjourney        = 62
 	ChannelTypeSub2API               = 63
 	ChannelTypeNewAPI                = 64
 	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
@@ -129,7 +128,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //59
 	"https://model.service-inference.ai",        //60
 	"https://token.xinhankr.com",                //61
-	"https://iliu.ai/v1",                        //62
+	"",                                          //62
 	"",                                          //63
 	"",                                          //64
 }
@@ -193,7 +192,6 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeAdvancedCustom:        "Advanced Custom",
 	ChannelTypeServiceInferenceVideo: "TokenMartSeedance",
 	ChannelTypeXinhankr:              "xinhankr",
-	ChannelTypeILiuMidjourney:        "iLiu Midjourney",
 	ChannelTypeSub2API:               "Sub2API",
 	ChannelTypeNewAPI:                "New API",
 }

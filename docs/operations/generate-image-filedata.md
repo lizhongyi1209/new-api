@@ -1,6 +1,6 @@
 # `/async/v1/generateImage` fileData 输入优化方案
 
-> 状态：代码已实施，已完成自动化测试与单次本地实链路验证，生产环境由人工验收
+> 状态：代码已部署生产，已完成自动化测试与单次本地实链路验证，等待人工实测
 > 记录日期：2026-08-29
 > 目标：在不影响现有 Base64/URL 客户端的前提下，为支持 Gemini `fileData` 的上游降低服务器上传请求体的耗时。
 
@@ -349,7 +349,7 @@ fallback=none|storage_error|mime_unknown
 
 ## 12. 上线后的验收方式
 
-对 `gaorui.cc` 开关前后分别抽取至少 100 条请求，并按客户端输入类型分组。
+选择有代表性的 Base64、普通图片 URL 和显式 `fileData` 请求进行人工实测，并按客户端输入类型记录结果。不要求固定数量的批量对照请求。
 
 预期变化：
 
@@ -378,9 +378,9 @@ input_prepare_ms + request_write_ms + upstream_wait_ms
 5. [x] 按兼容矩阵生成 `inlineData` 或 `fileData`。
 6. [x] 增加 `input_prepare` 分阶段日志。
 7. [x] 增加确定性的 DTO、转换、回退和渠道隔离测试。
-8. [ ] 仅在一个测试渠道开启开关并验证。
-9. [ ] 给 `gaorui.cc` 开启，收集最新 100 条 A/B 数据。
-10. [ ] 根据端到端数据决定是否扩展到其他渠道。
+8. [x] 部署生产代码，渠道开关保持默认关闭。
+9. [ ] 在目标渠道开启开关并进行人工实测。
+10. [ ] 根据端到端结果决定是否扩展到其他渠道。
 
 ## 14. 涉及的现有入口
 
@@ -396,12 +396,11 @@ input_prepare_ms + request_write_ms + upstream_wait_ms
 - 临时文件清理：`service/temporary_image_cleanup_task.go`
 - 渠道编辑表单：`web/default/src/features/channels/`
 
-## 15. 本方案暂不执行的事项
+## 15. 保持不变的事项
 
-- 暂不修改生产渠道配置。
-- 暂不给 `gaorui.cc` 开启开关。
-- 暂不改变任何现有客户端请求行为。
-- 暂不改变图片输出策略。
-- 暂不自动重试上游生成请求。
+- 渠道开关默认关闭，是否启用由人工配置。
+- 不改变现有客户端请求行为。
+- 不改变图片输出策略。
+- 不自动重试上游生成请求。
 
-代码实现采用本文协议、`gemini_file_data_enabled` 开关、未知 MIME 下载回退和本机存储失败时的受限 `inlineData` 回退。渠道开关仍保持默认关闭，待测试渠道验收后再进入生产 A/B 阶段。
+代码实现采用本文协议、`gemini_file_data_enabled` 开关、未知 MIME 下载回退和本机存储失败时的受限 `inlineData` 回退。目标渠道开启后由人工完成真实请求验证。

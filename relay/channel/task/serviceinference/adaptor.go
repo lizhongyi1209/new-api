@@ -44,17 +44,18 @@ type taskResponse struct {
 }
 
 type videoTask struct {
-	ID              string        `json:"id"`
-	Status          string        `json:"status"`
-	Model           string        `json:"model"`
-	DurationSeconds int           `json:"duration_seconds"`
-	Outputs         []string      `json:"outputs"`
-	Error           any           `json:"error"`
-	CreatedAt       string        `json:"created_at"`
-	CompletedAt     string        `json:"completed_at"`
-	Usage           *taskUsage    `json:"usage,omitempty"`
-	Metadata        *taskMetadata `json:"metadata,omitempty"`
-	LastFrameURL    string        `json:"last_frame_url,omitempty"`
+	ID              string         `json:"id"`
+	Status          string         `json:"status"`
+	Model           string         `json:"model"`
+	DurationSeconds int            `json:"duration_seconds"`
+	Outputs         []string       `json:"outputs"`
+	Error           any            `json:"error"`
+	CreatedAt       string         `json:"created_at"`
+	CompletedAt     string         `json:"completed_at"`
+	Usage           *taskUsage     `json:"usage,omitempty"`
+	Metadata        *taskMetadata  `json:"metadata,omitempty"`
+	LastFrameURL    string         `json:"last_frame_url,omitempty"`
+	Prep            map[string]any `json:"prep,omitempty"`
 }
 
 type taskUsage struct {
@@ -216,7 +217,10 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return nil
 }
 
-func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
+func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
+	if isSeedanceMaxModel(info.UpstreamModelName) {
+		return a.baseURL + "/v2/video/generate", nil
+	}
 	return a.baseURL + "/v1/video/generate", nil
 }
 
@@ -255,8 +259,12 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	} else {
 		info.UpstreamModelName = body.Model
 	}
-	if err := a.prepareImageAssets(c.Request.Context(), body); err != nil {
-		return nil, err
+	// Seedance MAX v2 accepts public media URLs directly and performs its own
+	// preparation. Existing v1 models keep the legacy asset conversion flow.
+	if !isSeedanceMaxModel(body.Model) {
+		if err := a.prepareImageAssets(c.Request.Context(), body); err != nil {
+			return nil, err
+		}
 	}
 	data, err := common.Marshal(body)
 	if err != nil {
@@ -315,6 +323,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		ov.TaskID = info.PublicTaskID
 		ov.CreatedAt = time.Now().Unix()
 		ov.Model = info.OriginModelName
+		applyTaskPreparationMetadata(ov, submitResp.Task)
 		c.JSON(http.StatusOK, ov)
 	}
 	return submitResp.Task.ID, responseBody, nil
@@ -334,7 +343,15 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	if !ok || strings.TrimSpace(taskID) == "" {
 		return nil, fmt.Errorf("invalid task_id")
 	}
-	uri := strings.TrimRight(baseUrl, "/") + "/v1/video/tasks/" + url.PathEscape(taskID)
+	upstreamModel, _ := body["upstream_model"].(string)
+	if strings.TrimSpace(upstreamModel) == "" {
+		upstreamModel, _ = body["model"].(string)
+	}
+	apiVersion := "v1"
+	if isSeedanceMaxModel(upstreamModel) {
+		apiVersion = "v2"
+	}
+	uri := strings.TrimRight(baseUrl, "/") + "/" + apiVersion + "/video/tasks/" + url.PathEscape(taskID)
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
 		return nil, err
@@ -374,6 +391,15 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	case "pending", "queued", "submitted":
 		taskResult.Status = model.TaskStatusQueued
 		taskResult.Progress = taskcommon.ProgressQueued
+	case "preparing":
+		taskResult.Status = model.TaskStatusInProgress
+		taskResult.Progress = "0%"
+		taskResult.Metadata = map[string]interface{}{
+			"upstream_status": "preparing",
+		}
+		if len(resTask.Prep) > 0 {
+			taskResult.Metadata["prep"] = resTask.Prep
+		}
 	case "processing", "running", "in_progress":
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
@@ -454,6 +480,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	if resTask.Usage != nil {
 		openAIVideo.SetMetadata("usage", resTask.Usage)
 	}
+	applyTaskPreparationMetadata(openAIVideo, resTask)
 	if originTask.Status == model.TaskStatusFailure {
 		message := formatUpstreamError(resTask.Error)
 		if message == "" {
@@ -468,6 +495,20 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		}
 	}
 	return common.Marshal(openAIVideo)
+}
+
+func applyTaskPreparationMetadata(video *dto.OpenAIVideo, task videoTask) {
+	status := strings.ToLower(strings.TrimSpace(task.Status))
+	if status == "preparing" {
+		video.Status = dto.VideoStatusInProgress
+	}
+	if len(task.Prep) == 0 && status != "preparing" {
+		return
+	}
+	video.SetMetadata("upstream_status", status)
+	if len(task.Prep) > 0 {
+		video.SetMetadata("prep", task.Prep)
+	}
 }
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*requestPayload, error) {

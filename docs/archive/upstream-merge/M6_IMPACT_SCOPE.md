@@ -126,7 +126,6 @@
 | 59 | AdvancedCustom | 生产 | 是 | ⚠️ 官方想给 Sub2API |
 | 60 | ServiceInferenceVideo | 生产 | 是 | ⚠️ 官方未定义 |
 | 61 | Xinhankr | 生产 | 是 | ⚠️ 官方未定义 |
-| 62 | iLiuMidjourney | 生产 | 是 | ⚠️ 官方未定义 |
 
 ### M6 新增编号
 
@@ -369,8 +368,8 @@ go test ./relay/channel/sub2api -v
 ## 十一、文档更新
 
 **已更新文档**：
-- `docs/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md`：M6 状态标记为"已完成"
-- `docs/M6_IMPACT_SCOPE.md`：本文档（影响范围详细记录）
+- `docs/archive/upstream-merge/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md`：M6 状态标记为"已完成"
+- `docs/archive/upstream-merge/M6_IMPACT_SCOPE.md`：本文档（影响范围详细记录）
 
 **待更新文档**（用户可选）：
 - `README.md`：渠道列表添加 Sub2API

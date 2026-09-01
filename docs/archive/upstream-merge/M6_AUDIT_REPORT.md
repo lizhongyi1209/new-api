@@ -21,7 +21,6 @@
 | 59 | Sub2API | **AdvancedCustom** | 🔴 冲突 |
 | 60 | — | **ServiceInferenceVideo** | ⚠️ 当前独有 |
 | 61 | — | **xinhankr** | ⚠️ 当前独有 |
-| 62 | — | **iLiuMidjourney** | ⚠️ 当前独有 |
 
 **影响面**：
 - 生产数据库 `channels` 表已有 type 58-62 的记录
@@ -71,7 +70,6 @@
 ├─ 59: AdvancedCustom 🔴 (高级自定义，有生产数据)
 ├─ 60: ServiceInferenceVideo 🟡 (Seedance，有生产数据)
 ├─ 61: xinhankr 🟡 (套娃网关，有生产数据)
-└─ 62: iLiuMidjourney 🟡 (MJ代理，有生产数据)
 ```
 
 ### 1.2 三个解决方案对比
@@ -101,7 +99,7 @@
 
 **做法**：
 1. 新增编号 63-67
-2. 数据库迁移：TencentVideo 58→63、AdvancedCustom 59→64、ServiceInferenceVideo 60→65、xinhankr 61→66、iLiu 62→67
+2. 数据库迁移：TencentVideo 58→63、AdvancedCustom 59→64、ServiceInferenceVideo 60→65、xinhankr 61→66
 3. 腾出 58-59 给官方 AdvancedCustom 和 Sub2API
 
 **优点**：
@@ -612,7 +610,6 @@ Author: Calcium-Ion
 59: AdvancedCustom — 高级自定义渠道（有生产数据）
 60: ServiceInferenceVideo — Seedance 视频服务（有生产数据）
 61: xinhankr — 套娃网关（有生产数据）
-62: iLiuMidjourney — MJ 代理（有生产数据）
 
 已确认有生产数据的渠道不能改编号，否则会破坏:
 - 渠道配置（channels 表）
@@ -688,4 +685,3 @@ if relayInfo.IsTieredBilling() && relayInfo.HasOtherRatios() {
 
 **审计报告完成日期**：2026-08-19  
 **下次更新**：等待决策后开始实施
-

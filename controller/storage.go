@@ -12,7 +12,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const maxVideoUploadSizeMB = 100
+const (
+	maxImageAudioUploadSizeMB = 50
+	maxVideoUploadSizeMB      = 100
+)
 
 type presignRequest struct {
 	Filename    string `json:"filename" binding:"required"`
@@ -67,7 +70,7 @@ func bindAndValidatePresignRequest(c *gin.Context, req *presignRequest) bool {
 	}
 
 	if req.Size > 0 {
-		maxSizeMB := service.AsyncImageMaxURLSizeMB
+		maxSizeMB := maxImageAudioUploadSizeMB
 		if strings.HasPrefix(contentType, "video/") {
 			maxSizeMB = maxVideoUploadSizeMB
 		}
@@ -116,7 +119,7 @@ func UploadLocalFile(c *gin.Context) {
 
 	// Check file size
 	contentType := c.GetHeader("Content-Type")
-	maxSizeMB := service.AsyncImageMaxURLSizeMB
+	maxSizeMB := maxImageAudioUploadSizeMB
 	if strings.HasPrefix(strings.ToLower(contentType), "video/") {
 		maxSizeMB = maxVideoUploadSizeMB
 	}
@@ -139,9 +142,9 @@ func UploadLocalFile(c *gin.Context) {
 	publicURL := fmt.Sprintf("%s/upload/%s", localPublicBase, objectKey)
 
 	c.JSON(http.StatusOK, gin.H{
-		"public_url":  publicURL,
-		"object_key":  objectKey,
-		"size":        len(body),
+		"public_url":   publicURL,
+		"object_key":   objectKey,
+		"size":         len(body),
 		"content_type": contentType,
 	})
 }

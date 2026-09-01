@@ -162,6 +162,7 @@ import {
   deduplicateKeys,
   getChannelTypeIcon,
   getKeyPromptForType,
+  resolveSeedanceMaxChannelModelDefaults,
   parseModelsString,
   formatModelsArray,
   extractRedirectModels,
@@ -1287,6 +1288,16 @@ export function ChannelMutateDrawer({
   // Handle type change - set default values for specific types
   useEffect(() => {
     if (isEditing) return // Don't auto-set defaults when editing
+
+    if (currentType === 60) {
+      const seedanceDefaults = resolveSeedanceMaxChannelModelDefaults(
+        currentType,
+        form.getValues('models'),
+        form.getValues('model_mapping')
+      )
+      form.setValue('models', seedanceDefaults.models)
+      form.setValue('model_mapping', seedanceDefaults.modelMapping)
+    }
 
     // Type 45 (VolcEngine) - set default base_url
     if (currentType === 45) {

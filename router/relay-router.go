@@ -188,35 +188,6 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.DELETE("/models/:model", controller.RelayNotImplemented)
 	}
 
-	iliuMjSubmitRouter := router.Group("/v1/mj")
-	iliuMjSubmitRouter.Use(middleware.RouteTag("relay"))
-	iliuMjSubmitRouter.Use(middleware.SystemPerformanceCheck())
-	iliuMjSubmitRouter.Use(middleware.TokenAuth())
-	iliuMjSubmitRouter.Use(middleware.ModelRequestRateLimit())
-	iliuMjSubmitRouter.Use(middleware.Distribute())
-	{
-		iliuMjSubmitRouter.POST("/submit/imagine", controller.RelayILiuMidjourneySubmit)
-		iliuMjSubmitRouter.POST("/submit/blend", controller.RelayILiuMidjourneySubmit)
-		iliuMjSubmitRouter.POST("/submit/describe", controller.RelayILiuMidjourneySubmit)
-		iliuMjSubmitRouter.POST("/submit/shorten", controller.RelayILiuMidjourneySubmit)
-		iliuMjSubmitRouter.POST("/submit/edits", controller.RelayILiuMidjourneySubmit)
-		iliuMjSubmitRouter.POST("/submit/video", controller.RelayILiuMidjourneySubmit)
-		iliuMjSubmitRouter.POST("/insight-face/swap", controller.RelayILiuMidjourneySubmit)
-		iliuMjSubmitRouter.POST("/submit/upload-discord-images", controller.RelayILiuMidjourneySubmit)
-	}
-
-	iliuMjOriginRouter := router.Group("/v1/mj")
-	iliuMjOriginRouter.Use(middleware.RouteTag("relay"))
-	iliuMjOriginRouter.Use(middleware.SystemPerformanceCheck())
-	iliuMjOriginRouter.Use(middleware.TokenAuth())
-	{
-		iliuMjOriginRouter.POST("/submit/action", controller.RelayILiuMidjourneyAction)
-		iliuMjOriginRouter.POST("/submit/modal", controller.RelayILiuMidjourneyModal)
-		iliuMjOriginRouter.GET("/task/:id/fetch", controller.RelayILiuMidjourneyTaskFetch)
-		iliuMjOriginRouter.POST("/task/list-by-condition", controller.RelayILiuMidjourneyTaskList)
-		iliuMjOriginRouter.GET("/task/:id/image-seed", controller.RelayILiuMidjourneyImageSeed)
-	}
-
 	relayMjRouter := router.Group("/mj")
 	relayMjRouter.Use(middleware.RouteTag("relay"))
 	relayMjRouter.Use(middleware.SystemPerformanceCheck())

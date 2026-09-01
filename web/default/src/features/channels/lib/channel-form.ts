@@ -35,6 +35,7 @@ import {
   stringifyAdvancedCustomConfig,
   validateAdvancedCustomConfig,
 } from './advanced-custom'
+import { resolveSeedanceMaxChannelModelDefaults } from './channel-type-config'
 
 // ============================================================================
 // Form Validation Schema
@@ -458,6 +459,12 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
 export function transformChannelToFormDefaults(
   channel: Channel
 ): ChannelFormValues {
+  const seedanceModelDefaults = resolveSeedanceMaxChannelModelDefaults(
+    channel.type,
+    channel.models,
+    channel.model_mapping
+  )
+
   // Parse channel extra settings from setting field
   let extraSettings = {
     force_format: false,
@@ -564,9 +571,9 @@ export function transformChannelToFormDefaults(
     base_url: channel.base_url || '',
     key: '', // Never populate key from backend for security
     openai_organization: channel.openai_organization || '',
-    models: channel.models || '',
+    models: seedanceModelDefaults.models,
     group: parseGroups(channel.group || 'default'),
-    model_mapping: channel.model_mapping || '',
+    model_mapping: seedanceModelDefaults.modelMapping,
     priority: channel.priority || 0,
     weight: channel.weight || 0,
     test_model: channel.test_model || '',

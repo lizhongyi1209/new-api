@@ -258,11 +258,14 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
           log.action === TASK_ACTIONS.VIDEO_EXTEND
         const isSuccess = status === TASK_STATUS.SUCCESS
         // 视频链接可能在 result_url（成功任务的标准来源），也可能历史上被塞进 fail_reason。
-        const hasVideoUrl =
-          log.result_url?.startsWith('http') || failReason?.startsWith('http')
+        let videoUrl = ''
+        if (log.result_url?.startsWith('http')) {
+          videoUrl = log.result_url
+        } else if (failReason?.startsWith('http')) {
+          videoUrl = failReason
+        }
 
-        if (isSuccess && isVideoTask && hasVideoUrl) {
-          const videoUrl = `/v1/videos/${log.task_id}/content`
+        if (isSuccess && isVideoTask && videoUrl) {
           return (
             <a
               href={videoUrl}

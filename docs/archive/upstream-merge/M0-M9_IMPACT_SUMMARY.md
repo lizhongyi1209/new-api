@@ -142,7 +142,7 @@
 - 返佣系统（`/referrals`、`/aff_transfer`）
 - R2/OSS/本地存储上传
 - 异步图片任务（nano-banana、generate_image）
-- Seedance/Kling/TencentVideo/iLiu/xinhankr 等定制渠道
+- Seedance/Kling/TencentVideo/xinhankr 等定制渠道
 - Tiered billing 表达式计费
 - 双前端（Classic 与 Default）
 

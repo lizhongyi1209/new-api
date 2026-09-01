@@ -52,6 +52,18 @@ func isSeedanceDFModel(model string) bool {
 	}
 }
 
+func isSeedanceMaxModel(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "dreamina-seedance-2-0-260128-max",
+		"dreamina-seedance-2-0-fast-260128-max",
+		"dreamina-seedance-2-0-mini-260615-max",
+		"dreamina-seedance-2-5-260628-max":
+		return true
+	default:
+		return false
+	}
+}
+
 func seedanceDirectAssetWorkflow(model string) (string, string, bool) {
 	if isSeedanceHCModel(model) {
 		return "hc", seedanceHCAssetBasePath, true

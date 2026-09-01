@@ -175,6 +175,38 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 
 ## 5. 本站内部素材创建流程
 
+### 5.1 MAX v2 自动素材准备
+
+当 HC 公共模型通过渠道模型映射指向对应的 MAX 上游模型时，本站内部使用 v2 视频接口：
+
+| 本站公开模型 | MAX 上游模型 |
+| --- | --- |
+| `dreamina-seedance-2-0-hc` | `dreamina-seedance-2-0-260128-max` |
+| `dreamina-seedance-2-0-fast-hc` | `dreamina-seedance-2-0-fast-260128-max` |
+| `dreamina-seedance-2-0-mini-hc` | `dreamina-seedance-2-0-mini-260615-max` |
+| `dreamina-seedance-2-5-hc` | `dreamina-seedance-2-5-260628-max` |
+
+MAX v2 请求中的公网图片和视频 URL 会原样转发，由上游视频任务自动完成素材准备；本站不会再调用旧素材接口或把图片改写为 `asset://`。上游 `preparing` 状态对外归一化为 `in_progress`，同时保留在响应元数据中：
+
+```json
+{
+  "status": "in_progress",
+  "metadata": {
+    "upstream_status": "preparing",
+    "prep": {
+      "total": 7,
+      "active": 0,
+      "failed": 0,
+      "attempt": 1
+    }
+  }
+}
+```
+
+下游仍然调用本站的 `/v1/video/generations`，并继续使用 HC 模型名和公开 `task_...` ID，不需要感知 MAX 模型名或上游 v2 路径。
+
+### 5.2 v1 素材创建流程
+
 当 `content` 中的 `image_url.url` 是公网 HTTP(S) URL 时，本站渠道 265 会先按模型选择素材工作流，再把图片转换为 `asset://{asset_id}`。
 
 DF 模型使用直接素材接口：

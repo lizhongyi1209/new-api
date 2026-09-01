@@ -70,4 +70,5 @@ gcloud/
 *keystore*
 *secret*.yaml
 *secret*.yml
+docs/seedance-max-test.md
 uploads/

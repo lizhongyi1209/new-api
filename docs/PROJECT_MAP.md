@@ -43,7 +43,7 @@ Aliases: 图片输出策略, image output strategy, 图片落盘, 本机临时�
 | Concern | Source entry |
 | --- | --- |
 | Strategy constants, validation, temporary/storage classification | `dto/channel_settings.go` |
-| Provider selection and CF/ESA domain dispatch | `service/storage.go` |
+| Provider selection, object-storage upload, and CF/ESA domain dispatch | `service/storage.go` |
 | Local file validation, atomic write, URL construction, 24-hour expiry and deletion | `service/temporary_image.go` |
 | Periodic expiry cleanup | `service/temporary_image_cleanup_task.go` |
 | Public `GET`/`HEAD /tmp/output/:filename` route | `router/main.go` |
@@ -96,6 +96,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Reused atomic `/tmp/input` storage | `service/temporary_upload.go` |
 | Channel editor setting | `web/default/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/default/src/features/channels/lib/channel-form.ts` |
 | Public API documentation | Source: `docs/api-doc.html`; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
+| Operations and troubleshooting | `docs/operations/generate-image-filedata.md`, `docs/operations/generate-image-observability.md` |
 
 ### Regression coverage
 
@@ -112,7 +113,7 @@ There are several distinct upload flows. Identify the required contract before e
 
 | Flow | HTTP/UI entry | Backend and frontend source entries |
 | --- | --- | --- |
-| Authenticated temporary attachment upload | `POST /v1/o1key/uploads`; public file: `GET`/`HEAD /tmp/input/:filename` | Route: `router/relay-router.go`; multipart controller and public response: `controller/temporary_upload.go`; content validation, atomic local storage, CF/ESA URL mapping, 24-hour expiry and cleanup: `service/temporary_upload.go`, `service/temporary_image_cleanup_task.go`; contract tests: `service/temporary_upload_test.go`, `controller/temporary_upload_test.go`, `router/temporary_upload_router_test.go` |
+| Authenticated temporary attachment upload | `POST /v1/o1key/uploads`; public file: `GET`/`HEAD /tmp/input/:filename` | Route: `router/relay-router.go`; multipart controller and public response: `controller/temporary_upload.go`; content validation, atomic local storage, CF/ESA URL mapping, 24-hour expiry and cleanup: `service/temporary_upload.go`, `service/temporary_image_cleanup_task.go`; downstream integration guide: `docs/api-doc.html#temporary-upload`; contract tests: `service/temporary_upload_test.go`, `controller/temporary_upload_test.go`, `router/temporary_upload_router_test.go` |
 | Authenticated object-storage upload | `POST /v1/storage/presign` | Route: `router/relay-router.go`; validation/controller: `controller/storage.go`; host-based R2/OSS/local presign selection: `service/storage.go` |
 | Explicit OSS-compatible presign | `POST /v1/storage/oss/presign` | `router/relay-router.go`, `controller/storage.go`, `service/storage.go` |
 | Direct local object upload | `POST /v1/storage/local/upload?object_key=uploads/...` | `router/relay-router.go`, `controller/storage.go`; public files are served by `router/main.go` at `/upload/*` |
@@ -131,3 +132,19 @@ Important boundaries:
 - `POST /v1/seedance/assets` accepts an already public HTTPS URL and creates an upstream asset; it does not receive raw multipart file bytes.
 - Upload management lists and deletes local upload inventory; it is not the object-upload entry point.
 - Storage provider routing, size/type validation, authentication, HMAC/origin checks, and public URL behavior are separate contracts. Trace the complete route → controller → service chain before changing one of them.
+
+## Seedance video generation
+
+Aliases: Seedance 视频, Seedance task, 查询视频任务, `/v1/video/generations`, TokenMartSeedance, ServiceInference video, Seedance MAX, `/v2/video/generate`.
+
+- Downstream submission uses `POST /v1/video/generations`; task lookup uses `GET /v1/video/generations/:task_id` with the public `task_...` ID returned at submission.
+- ServiceInference tasks use the public OpenAI-style video object for both submission and lookup. Query states are `queued`, `in_progress`, `completed`, and `failed`; completed results expose URLs and usage under `metadata` and must not expose internal task, channel, user, group, or quota fields.
+- Seedance HC public model names can map to the corresponding `*-max` upstream names. MAX models submit and poll through the upstream `/v2/video/*` endpoints while all other ServiceInference models retain `/v1/video/*` behavior.
+- MAX v2 media URLs are forwarded unchanged so the upstream task performs preparation. Its `preparing` state is normalized to public `in_progress` while preserved as `metadata.upstream_status`; the complete `prep` object is preserved as `metadata.prep`.
+- The default channel-editor preset exposes the four HC names and fills their HC-to-MAX model mapping, keeping upstream MAX identifiers out of the public model list.
+- Route and relay-mode selection: `router/video-router.go`, `middleware/distributor.go`.
+- Task submission/query response dispatch: `controller/relay.go`, `relay/relay_task.go`.
+- ServiceInference request conversion, upstream polling, result parsing, and public video conversion: `relay/channel/task/serviceinference/adaptor.go`.
+- Channel-editor HC-to-MAX defaults: `web/default/src/features/channels/lib/channel-type-config.ts`, `web/default/src/features/channels/lib/channel-form.ts`, `web/default/src/features/channels/components/drawers/channel-mutate-drawer.tsx`.
+- Downstream reference and examples: `docs/api-doc.html#/v1/video/generations`, `docs/seedance-downstream-integration.md`.
+- Response and mapping contract coverage: `relay/channel/task/serviceinference/adaptor_test.go`, `web/default/src/features/channels/lib/__tests__/channel-type-config.test.ts`.

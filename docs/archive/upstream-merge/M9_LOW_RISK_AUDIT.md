@@ -163,7 +163,7 @@ user_group == "vip" ? merge(request, {"max_tokens": 8192}) : request
 |---|---|---|
 | 1 | `bb234ff41` | **拒绝**：官方删除 `*-openai-compact` 后缀路由。我们 8 处在用（`setting/ratio_setting/compact_suffix.go`、`model_ratio.go:406,440`、`middleware/distributor.go:427`、`relay/helper/model_mapped.go:24-25,75`、`controller/channel-test.go:785`、`relay/channel/codex/constants.go:24`、`service/codex_channel_models.go:87`），采用会破坏已配价格的管理员 |
 | 2 | `ccd535ef8` | 已存在（M1 原子额度） |
-| 3 | `e90a7c48e` | **部分不适用**：字段透传门控优化。官方硬编码 `{1,14,57,58,59,60}` = OpenAI/Claude/Codex/AdvancedCustom/Sub2API/NewAPI，但我们的类型编号已分叉（我们 58=TencentVideo、59=AdvancedCustom、60=ServiceInferenceVideo、61=Xinhankr、62=iLiu、63=Sub2API、64=NewAPI）。照搬字面量会给 TencentVideo 开 Claude 透传。**暂不移植，需产品决策如何对齐编号或改用名称集合** |
+| 3 | `e90a7c48e` | **部分不适用**：字段透传门控优化。官方硬编码 `{1,14,57,58,59,60}` = OpenAI/Claude/Codex/AdvancedCustom/Sub2API/NewAPI，但我们的类型编号已分叉（我们 58=TencentVideo、59=AdvancedCustom、60=ServiceInferenceVideo、61=Xinhankr、63=Sub2API、64=NewAPI）。照搬字面量会给 TencentVideo 开 Claude 透传。**暂不移植，需产品决策如何对齐编号或改用名称集合** |
 | 4 | `47ba9d2c6` | 已存在（M1 钱包额度守卫） |
 | 5 | `e2c7aa7b1` | M8 已完成（测试标准化） |
 | 6 | `cfaba1dd6` | 已存在（M7 tiered billing 分组切换） |
@@ -319,7 +319,7 @@ bun install
 
 **当前状态**：
 - 官方：58=AdvancedCustom, 59=Sub2API, 60=NewAPI
-- 我们：58=TencentVideo, 59=AdvancedCustom, 60=ServiceInferenceVideo, 61=Xinhankr, 62=iLiu, 63=Sub2API, 64=NewAPI
+- 我们：58=TencentVideo, 59=AdvancedCustom, 60=ServiceInferenceVideo, 61=Xinhankr, 63=Sub2API, 64=NewAPI
 
 **影响**：字段透传门控（`allow_inference_geo` / `allow_speed` / `claude_beta_query`）目前仍然硬编码在前端 `channel-form.ts:659,666,686` 和 `channel-mutate-drawer.tsx:1028,1036,1079,4429-4431,4476,4586`，无法用官方的 `FIELD_PASSTHROUGH_TYPES` 集合。
 

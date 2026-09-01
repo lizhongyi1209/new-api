@@ -26,11 +26,11 @@ source_tag=$(git rev-parse --short=12 HEAD)
 # Merge bookkeeping documents are excluded from the candidate digest: they are
 # not product code, and recording a build result into them must not invalidate
 # the tag that was just recorded.
-readonly merge_docs=("UPSTREAM_SELECTIVE_MERGE_PLAN.md" "docs/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md")
+readonly merge_docs=("UPSTREAM_SELECTIVE_MERGE_PLAN.md" "docs/archive/upstream-merge/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md")
 if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   worktree_digest=$(
     {
-      git diff --binary HEAD -- . ':!UPSTREAM_SELECTIVE_MERGE_PLAN.md' ':!docs/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md'
+      git diff --binary HEAD -- . ':!UPSTREAM_SELECTIVE_MERGE_PLAN.md' ':!docs/archive/upstream-merge/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md'
       while IFS= read -r -d '' file; do
         skip=0
         for merge_doc in "${merge_docs[@]}"; do

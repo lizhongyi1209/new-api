@@ -1,5 +1,11 @@
 # CLAUDE.md — Project Conventions for new-api
 
+@AGENTS.md
+
+## Claude Code
+
+- Follow the shared project instructions imported from `AGENTS.md`.
+
 ## Overview
 
 This is an AI API gateway/proxy built with Go. It aggregates 40+ upstream AI providers (OpenAI, Claude, Gemini, Azure, AWS Bedrock, etc.) behind a unified API, with user management, billing, rate limiting, and an admin dashboard.
@@ -36,7 +42,7 @@ pkg/           — Internal packages (cachex, ionet)
 web/             — Frontend themes container
  web/default/   — Default frontend (React 19, Rsbuild, Base UI, Tailwind)
   web/classic/   — Classic frontend (React 18, Vite, Semi Design)
-  web/default/src/i18n/ — Frontend internationalization (i18next, zh/en/fr/ru/ja/vi)
+  web/default/src/i18n/ — Frontend internationalization (i18next, zh/en/zh-TW/fr/ru/ja/vi)
 ```
 
 ## Detailed Directory Structure
@@ -182,7 +188,7 @@ new-api/
 │   ├─ operation_setting/           # Model ratios, cache ratios, general ops
 │   └─ system_setting/oidc.go       # OIDC configuration
 │
-└─ web/src/                         # React frontend
+└─ web/default/src/                 # Default React frontend
     ├─ App.js                       # Root component & routes
     ├─ components/                  # Shared UI components
     │   ├─ ChannelsTable.js         # Channel list & management
@@ -203,7 +209,7 @@ new-api/
     │   └─ Playground/Playground.js # API playground
     ├─ helpers/api.js               # Axios wrapper & API calls
     ├─ context/                     # React context (User, Theme, Status)
-    └─ i18n/locales/                # en.json / zh.json translation files
+    └─ i18n/locales/                # en/zh/zh-TW/fr/ru/ja/vi translation files
 ```
 
 ## Internationalization (i18n)
@@ -214,7 +220,7 @@ new-api/
 
 ### Frontend (`web/default/src/i18n/`)
 - Library: `i18next` + `react-i18next` + `i18next-browser-languagedetector`
-- Languages: en (base), zh (fallback), fr, ru, ja, vi
+- Languages: en (base), zh (fallback), zh-TW, fr, ru, ja, vi
 - Translation files: `web/default/src/i18n/locales/{lang}.json` — flat JSON, keys are English source strings
 - Usage: `useTranslation()` hook, call `t('English key')` in components
 - CLI tools: `bun run i18n:sync` (from `web/default/`)
@@ -249,7 +255,7 @@ Do NOT directly import or call `encoding/json` in business code. `json.RawMessag
   - PostgreSQL uses `"column"` quoting, while MySQL/SQLite use `` `column` ``.
   - Use `commonGroupCol`, `commonKeyCol` from `model/main.go` for reserved-word columns like `group` and `key`.
   - Use `commonTrueVal`/`commonFalseVal` for boolean values.
-  - Use `common.UsingPostgreSQL`, `common.UsingSQLite`, and `common.UsingMySQL` flags for DB-specific branches.
+  - Use `common.UsingMainDatabase(...)` for primary database branches and `common.UsingLogDatabase(...)` for log database branches.
 - Do not use database-specific features without cross-DB fallback, including MySQL-only functions, PostgreSQL-only operators, SQLite-unsupported `ALTER COLUMN`, or database-specific JSON column types without a `TEXT` fallback.
 - Migrations must work on all three databases. For SQLite, use `ALTER TABLE ... ADD COLUMN` instead of `ALTER COLUMN` (see `model/main.go` for patterns).
 - Avoid GORM boolean default tags such as `gorm:"default:true"` when the default is a business rule already enforced by code. MySQL and PostgreSQL can normalize boolean defaults differently, causing GORM `AutoMigrate` to repeatedly issue `ALTER TABLE` on restart. Prefer setting these defaults in request/model normalization, hooks, constructors, or service logic; do not replace `default:true` with `default:1` unless the behavior is verified across SQLite, MySQL, and PostgreSQL.
@@ -348,7 +354,7 @@ git commit -m "feat: describe what you did"
 git push origin custom
 
 docker compose up --build -d
-docker builder prune -f          # clean old build cache
+docker builder prune -af         # clean all build cache
 docker compose logs -f new-api   # Ctrl+C to exit
 ```
 
@@ -377,7 +383,7 @@ echo -n "v1.0.0-rc.NN" > VERSION
 ```bash
 git push origin custom --force-with-lease
 docker compose up --build -d
-docker builder prune -f
+docker builder prune -af
 ```
 
 **Case 2 — Conflicts** (git will show which files conflict):
@@ -389,7 +395,7 @@ git add .
 git rebase --continue
 git push origin custom --force-with-lease
 docker compose up --build -d
-docker builder prune -f
+docker builder prune -af
 ```
 
 ### Common Operations Commands

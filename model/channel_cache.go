@@ -202,10 +202,9 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 	return nil, errors.New("channel not found")
 }
 
-// filterChannelsByRequestPath restricts candidates by request path. iLiu native
-// routes only accept iLiu channels, and iLiu channels only serve those routes plus
-// /v1/chat/completions. Advanced Custom channels are kept only when one of their
-// configured routes matches requestPath. Other channel types pass.
+// filterChannelsByRequestPath restricts candidates by request path. Advanced Custom
+// channels are kept only when one of their configured routes matches requestPath.
+// Other channel types pass.
 // When requestPath is empty (non-relay callers) filtering is skipped.
 // Caller must hold channelSyncLock (read lock). The cached slice is never mutated.
 func filterChannelsByRequestPath(channels []int, requestPath string) []int {
@@ -218,18 +217,6 @@ func filterChannelsByRequestPath(channels []int, requestPath string) []int {
 		if !ok {
 			// keep it so the downstream consistency error is raised as before
 			filtered = append(filtered, channelId)
-			continue
-		}
-		if strings.HasPrefix(requestPath, "/v1/mj/") {
-			if channel.Type == constant.ChannelTypeILiuMidjourney {
-				filtered = append(filtered, channelId)
-			}
-			continue
-		}
-		if channel.Type == constant.ChannelTypeILiuMidjourney {
-			if requestPath == "/v1/chat/completions" {
-				filtered = append(filtered, channelId)
-			}
 			continue
 		}
 		if channel.Type != constant.ChannelTypeAdvancedCustom {

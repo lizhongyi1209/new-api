@@ -25,7 +25,7 @@
 - 异步图片、Gemini 图片和 Gemini Omni 视频任务。
 - Seedance 资产、计费和任务查询。
 - Kling 元素、3.0 Omni、Motion Control。
-- xAI、TencentVideo、ServiceInference、xinhankr 和 iLiu Midjourney 渠道。
+- xAI、TencentVideo、ServiceInference 和 xinhankr 渠道。
 - 日志导出、自定义任务详情、用户设置和定制前端路由。
 - `web/classic` 与 `web/default` 双前端构建。
 
@@ -246,11 +246,11 @@
 审计结论（2026-08-19）：
 
 - 官方 commit `2d23cdf29`，65 文件，+3203/-424 行。
-- **阻塞级冲突**：官方 AdvancedCustom=58、Sub2API=59 与当前生产渠道编号冲突（TencentVideo=58、AdvancedCustom=59、ServiceInferenceVideo=60、xinhankr=61、iLiu=62 已有生产数据）。
+- **阻塞级冲突**：官方 AdvancedCustom=58、Sub2API=59 与当前生产渠道编号冲突（TencentVideo=58、AdvancedCustom=59、ServiceInferenceVideo=60、xinhankr=61 已有生产数据）。
 - **高风险改动**：工具计费架构重构（删除 `service/tool_billing.go`，新增 `relay/common/tool_usage.go` + 348 行测试），与当前 tiered billing 的 `OtherRatios` 存在潜在重复计费风险。
 - **新增功能**：Alpha Search 端点（136 行）、Sub2API 渠道（121 行）、Codex 增强、Gemini grounding 检测。
 - **前端改动**：Default 有工具价格 UI（+544 行含测试），Classic 未同步。
-- **完整审计报告**：`docs/M6_AUDIT_REPORT.md` (15000+ 字)
+- **完整审计报告**：`docs/archive/upstream-merge/M6_AUDIT_REPORT.md` (15000+ 字)
 
 待决策问题：
 
@@ -269,7 +269,7 @@
 强制约束：
 
 - 不复用官方渠道编号 58、59、60。
-- 当前 `TencentVideo`、`AdvancedCustom`、`ServiceInferenceVideo`、`xinhankr` 和 `iLiu` 编号保持兼容。
+- 当前 `TencentVideo`、`AdvancedCustom`、`ServiceInferenceVideo` 和 `xinhankr` 编号保持兼容。
 - 新编号必须附数据库兼容检查和前后端同步测试。
 - 工具计费改动必须先读 `pkg/billingexpr/expr.md`，全链路验证 validation → pre-consume → settle/refund。
 

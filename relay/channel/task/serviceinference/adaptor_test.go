@@ -493,6 +493,47 @@ func TestBuildRequestBodyHCContentUsesHCAssetWorkflow(t *testing.T) {
 	assert.Equal(t, "Image", createdAsset["AssetType"])
 }
 
+func TestBuildRequestBodyMaxPreservesPublicMediaURLs(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Fatalf("MAX v2 request preparation must not call legacy asset endpoint: %s", r.URL.Path)
+	}))
+	defer server.Close()
+
+	info := newTestRelayInfo(server.URL, dto.ChannelOtherSettings{})
+	info.OriginModelName = "dreamina-seedance-2-0-hc"
+	info.UpstreamModelName = "dreamina-seedance-2-0-260128-max"
+	info.IsModelMapped = true
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	c := newTaskContext(`{
+		"model": "dreamina-seedance-2-0-hc",
+		"content": [
+			{"type": "text", "text": "dancing"},
+			{"type": "image_url", "image_url": {"url": "https://cdn.example.com/ref.png"}, "role": "reference_image"},
+			{"type": "video_url", "video_url": {"url": "https://cdn.example.com/ref.mp4"}, "role": "reference_video"}
+		],
+		"duration": 5,
+		"resolution": "480p"
+	}`)
+
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	var payload requestPayload
+	require.NoError(t, common.Unmarshal(data, &payload))
+	assert.Equal(t, "dreamina-seedance-2-0-260128-max", payload.Model)
+	require.Len(t, payload.Content, 3)
+	assert.Equal(t, "https://cdn.example.com/ref.png", payload.Content[1].ImageURL.URL)
+	assert.Equal(t, "https://cdn.example.com/ref.mp4", payload.Content[2].VideoURL.URL)
+	assert.Equal(t, "reference_image", payload.Content[1].Role)
+	assert.Equal(t, "reference_video", payload.Content[2].Role)
+}
+
 func TestSeedanceDFModelClassification(t *testing.T) {
 	for _, modelName := range []string{
 		"dreamina-seedance-2-0-260128-df",
@@ -522,6 +563,41 @@ func TestSeedanceHCModelClassification(t *testing.T) {
 	}
 	assert.False(t, isSeedanceHCModel("dreamina-seedance-2-0-260128-df"))
 	assert.False(t, isSeedanceHCModel("dreamina-seedance-2-0-260128"))
+}
+
+func TestSeedanceMaxModelClassification(t *testing.T) {
+	for _, modelName := range []string{
+		"dreamina-seedance-2-0-260128-max",
+		"dreamina-seedance-2-0-fast-260128-max",
+		"dreamina-seedance-2-0-mini-260615-max",
+		"dreamina-seedance-2-5-260628-max",
+	} {
+		assert.True(t, isSeedanceMaxModel(modelName), modelName)
+	}
+	assert.True(t, isSeedanceMaxModel(" DREAMINA-SEEDANCE-2-5-260628-MAX "))
+	assert.False(t, isSeedanceMaxModel("dreamina-seedance-2-0-hc"))
+	assert.False(t, isSeedanceMaxModel("dreamina-seedance-2-0-260128-df"))
+}
+
+func TestBuildRequestURLSelectsVersionByUpstreamModel(t *testing.T) {
+	adaptor := &TaskAdaptor{baseURL: "https://model.service-inference.ai"}
+
+	v1URL, err := adaptor.BuildRequestURL(&relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "dreamina-seedance-2-0-hc",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://model.service-inference.ai/v1/video/generate", v1URL)
+
+	v2URL, err := adaptor.BuildRequestURL(&relaycommon.RelayInfo{
+		OriginModelName: "dreamina-seedance-2-0-hc",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "dreamina-seedance-2-0-260128-max",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://model.service-inference.ai/v2/video/generate", v2URL)
 }
 
 func TestBuildRequestBodyRecreatesMissingConfiguredAssetGroup(t *testing.T) {
@@ -605,6 +681,30 @@ func TestParseTaskResultCompletedUsage(t *testing.T) {
 	assert.Equal(t, 40594, taskInfo.TotalTokens)
 }
 
+func TestParseTaskResultPreparingPreservesPreparation(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	taskInfo, err := adaptor.ParseTaskResult([]byte(`{
+		"task": {
+			"id": "mvt-1",
+			"status": "preparing",
+			"model": "dreamina-seedance-2-0-260128-max",
+			"prep": {"total": 7, "active": 2, "failed": 0, "attempt": 1}
+		}
+	}`))
+
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusInProgress, taskInfo.Status)
+	assert.Equal(t, "0%", taskInfo.Progress)
+	require.NotNil(t, taskInfo.Metadata)
+	assert.Equal(t, "preparing", taskInfo.Metadata["upstream_status"])
+	assert.Equal(t, map[string]any{
+		"total":   float64(7),
+		"active":  float64(2),
+		"failed":  float64(0),
+		"attempt": float64(1),
+	}, taskInfo.Metadata["prep"])
+}
+
 func TestParseGrokTaskResultReadsMetadataUsage(t *testing.T) {
 	adaptor := &TaskAdaptor{}
 	taskInfo, err := adaptor.ParseTaskResult([]byte(`{
@@ -632,27 +732,88 @@ func TestParseGrokTaskResultReadsMetadataUsage(t *testing.T) {
 }
 
 func TestFetchTaskUsesTaskEndpointAndBearer(t *testing.T) {
-	var requestedPath string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestedPath = r.URL.Path
-		assert.Equal(t, http.MethodGet, r.Method)
-		assert.Equal(t, "Bearer fetch-key", r.Header.Get("Authorization"))
-		writeJSON(t, w, http.StatusOK, map[string]any{
-			"task": map[string]any{
-				"id":     "mvt-1",
-				"status": "pending",
-			},
+	tests := []struct {
+		name          string
+		upstreamModel string
+		expectedPath  string
+	}{
+		{
+			name:          "v1 HC model",
+			upstreamModel: "dreamina-seedance-2-0-hc",
+			expectedPath:  "/v1/video/tasks/mvt-1",
+		},
+		{
+			name:          "v2 MAX model",
+			upstreamModel: "dreamina-seedance-2-0-260128-max",
+			expectedPath:  "/v2/video/tasks/mvt-1",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var requestedPath string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestedPath = r.URL.Path
+				assert.Equal(t, http.MethodGet, r.Method)
+				assert.Equal(t, "Bearer fetch-key", r.Header.Get("Authorization"))
+				writeJSON(t, w, http.StatusOK, map[string]any{
+					"task": map[string]any{
+						"id":     "mvt-1",
+						"status": "pending",
+					},
+				})
+			}))
+			defer server.Close()
+
+			adaptor := &TaskAdaptor{}
+			resp, err := adaptor.FetchTask(server.URL, "fetch-key", map[string]any{
+				"task_id":        "mvt-1",
+				"upstream_model": test.upstreamModel,
+			}, "")
+			require.NoError(t, err)
+			defer resp.Body.Close()
+
+			assert.Equal(t, test.expectedPath, requestedPath)
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
 		})
-	}))
-	defer server.Close()
+	}
+}
 
-	adaptor := &TaskAdaptor{}
-	resp, err := adaptor.FetchTask(server.URL, "fetch-key", map[string]any{"task_id": "mvt-1"}, "")
-	require.NoError(t, err)
-	defer resp.Body.Close()
+func TestDoResponsePreservesPreparingAndPrep(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
+	response := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(`{
+			"task": {
+				"id": "mvt-upstream",
+				"status": "preparing",
+				"model": "dreamina-seedance-2-0-260128-max",
+				"prep": {"total": 7, "active": 0, "failed": 0, "attempt": 1}
+			}
+		}`)),
+	}
+	info := &relaycommon.RelayInfo{
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"},
+		OriginModelName: "dreamina-seedance-2-0-hc",
+	}
 
-	assert.Equal(t, "/v1/video/tasks/mvt-1", requestedPath)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	upstreamID, _, taskErr := (&TaskAdaptor{}).DoResponse(context, response, info)
+	require.Nil(t, taskErr)
+	assert.Equal(t, "mvt-upstream", upstreamID)
+
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &video))
+	assert.Equal(t, dto.VideoStatusInProgress, video.Status)
+	require.NotNil(t, video.Metadata)
+	assert.Equal(t, "preparing", video.Metadata["upstream_status"])
+	assert.Equal(t, map[string]any{
+		"total":   float64(7),
+		"active":  float64(0),
+		"failed":  float64(0),
+		"attempt": float64(1),
+	}, video.Metadata["prep"])
 }
 
 func TestConvertToOpenAIVideoQueuedTaskWithoutData(t *testing.T) {
@@ -721,6 +882,43 @@ func TestConvertToOpenAIVideoCompletedTaskMatchesDownstreamContract(t *testing.T
 	assert.Equal(t, []any{"https://cdn.example.com/result.mp4"}, video.Metadata["outputs"])
 	assert.NotNil(t, video.Metadata["usage"])
 	assert.Nil(t, video.Error)
+}
+
+func TestConvertToOpenAIVideoPreservesPreparingAndPrep(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	task := &model.Task{
+		TaskID:    "task-public",
+		Status:    model.TaskStatusInProgress,
+		Progress:  "0%",
+		CreatedAt: 1785768134,
+		Properties: model.Properties{
+			OriginModelName:   "dreamina-seedance-2-0-hc",
+			UpstreamModelName: "dreamina-seedance-2-0-260128-max",
+		},
+		Data: []byte(`{
+			"task": {
+				"id": "mvt-upstream",
+				"status": "preparing",
+				"prep": {"total": 7, "active": 2, "failed": 0, "attempt": 1}
+			}
+		}`),
+	}
+
+	data, err := adaptor.ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(data, &video))
+	assert.Equal(t, "dreamina-seedance-2-0-hc", video.Model)
+	assert.Equal(t, dto.VideoStatusInProgress, video.Status)
+	require.NotNil(t, video.Metadata)
+	assert.Equal(t, "preparing", video.Metadata["upstream_status"])
+	assert.Equal(t, map[string]any{
+		"total":   float64(7),
+		"active":  float64(2),
+		"failed":  float64(0),
+		"attempt": float64(1),
+	}, video.Metadata["prep"])
 }
 
 // TestVideoInputRatio 锁定 TokenMartSeedance 各模型的视频输入计费倍率。

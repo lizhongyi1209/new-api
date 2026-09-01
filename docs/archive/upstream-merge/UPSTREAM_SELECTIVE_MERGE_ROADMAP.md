@@ -25,11 +25,11 @@
 - 已完成的官方单元：M0-M9（详见第 2 节表格）
 - 下一个待审计单元：M10（RelayKit 重新评估）或更新的官方提交
 
-必须保留当前定制能力：返佣、上传/R2/OSS、本地存储、异步图片/Gemini/视频任务、Seedance/Kling/iLiu/xinhankr 等渠道、定制计费、日志和 Classic/Default 双前端。禁止整体 merge/rebase 覆盖当前版本。所有验证使用隔离测试栈，未得到明确授权不得生产发布。
+必须保留当前定制能力：返佣、上传/R2/OSS、本地存储、异步图片/Gemini/视频任务、Seedance/Kling/xinhankr 等渠道、定制计费、日志和 Classic/Default 双前端。禁止整体 merge/rebase 覆盖当前版本。所有验证使用隔离测试栈，未得到明确授权不得生产发布。
 
 当前 Git 信息：分支为 `custom`；`origin` 是 `https://github.com/lizhongyi1209/new-api.git`，`upstream` 是 `https://github.com/Calcium-Ion/new-api.git`。当前仓库没有把这些工作单元拆成独立提交，后续模型必须依据文件差异和本 Roadmap 继续，不要假设可以通过 cherry-pick 某个 M5 commit 恢复状态。
 
-候选镜像脚本会把工作树 diff 和未跟踪文件计算成 dirty digest，并且排除 `UPSTREAM_SELECTIVE_MERGE_PLAN.md` 与 `docs/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md`；这两份文档不是产品代码，也不作为镜像内容完整性依据。排除 Roadmap 是 M5 期间补上的：否则"构建后把 tag 写进 Roadmap"这个动作本身就会让刚记录的 tag 失效。构建后要从 Docker label/inspect 读取实际 revision 和 digest 并记录。
+候选镜像脚本会把工作树 diff 和未跟踪文件计算成 dirty digest，并且排除 `UPSTREAM_SELECTIVE_MERGE_PLAN.md` 与 `docs/archive/upstream-merge/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md`；这两份文档不是产品代码，也不作为镜像内容完整性依据。排除 Roadmap 是 M5 期间补上的：否则"构建后把 tag 写进 Roadmap"这个动作本身就会让刚记录的 tag 失效。构建后要从 Docker label/inspect 读取实际 revision 和 digest 并记录。
 
 ## 2. 已完成单元（不要重复移植）
 
@@ -41,10 +41,10 @@
 | M3 Access/Refresh 多设备会话、Auth Flow | 完成 | `new-api-upstream-test:5fe45b3f0982-dirty.7e14f6490ea7-candidate` |
 | M4 Trusted Proxy、Origin Guard、输入校验 | 完成 | `new-api-upstream-test:5fe45b3f0982-dirty.5dc3ff151ece-candidate`；digest `sha256:2bdcb2c29b148146bdb9efa8c1d3ddfa2c1ab9b6d7cfa0854a6bdfa4bf286376` |
 | M5 Token 级有序 AutoGroups | 完成 | `new-api-upstream-test:b198b4b54515-dirty.aa76d5cb2337-candidate`；revision `b198b4b545153db25b77c1753a168af03db8e99a-dirty.aa76d5cb2337`；digest `sha256:db673b45e23a7d2a4c1e519de78530ae0cbd7aa15c61e86231f6d3984473b3c8` |
-| M6 Alpha Search、Sub2API | 完成 | 已验证，文件完整；详见 `docs/M6_IMPACT_SCOPE.md` |
-| M7 计费与安全修复 | 完成 | 14 个修复中 12 个已存在，**2 个已实际移植并验证**（Ali 图片模型映射、Claude 无参数工具）；详见 `docs/M7_BILLING_SECURITY_AUDIT.md` |
-| M8 前端测试标准化 + 依赖升级 | 完成 | 25/25 测试文件迁移到 Vitest，135 项全绿；顺带修掉 `getEditableQuotaStep()` 的 V8 浮点缺陷；详见 `docs/M8_TEST_STANDARDIZATION_AUDIT.md` |
-| M9 Electron/UI/依赖/安全修复 | 完成 | **4 个实际移植**（`0cd9dc85e` access_token/aff_* 安全修复、`b941253ae` 渠道测试原生格式、`9c97e78ac` access token 确认对话框、`85feb7a34` 参数覆盖用户/分组上下文）+ **6 个依赖升级**（Electron 2 个、Frontend 4 个）+ **11 个已存在** + **6 个不适用/拒绝**；新增 ChannelTypeSub2API(63)/NewAPI(64) 常量与映射；详见 `docs/M9_LOW_RISK_AUDIT.md` |
+| M6 Alpha Search、Sub2API | 完成 | 已验证，文件完整；详见 `docs/archive/upstream-merge/M6_IMPACT_SCOPE.md` |
+| M7 计费与安全修复 | 完成 | 14 个修复中 12 个已存在，**2 个已实际移植并验证**（Ali 图片模型映射、Claude 无参数工具）；详见 `docs/archive/upstream-merge/M7_BILLING_SECURITY_AUDIT.md` |
+| M8 前端测试标准化 + 依赖升级 | 完成 | 25/25 测试文件迁移到 Vitest，135 项全绿；顺带修掉 `getEditableQuotaStep()` 的 V8 浮点缺陷；详见 `docs/archive/upstream-merge/M8_TEST_STANDARDIZATION_AUDIT.md` |
+| M9 Electron/UI/依赖/安全修复 | 完成 | **4 个实际移植**（`0cd9dc85e` access_token/aff_* 安全修复、`b941253ae` 渠道测试原生格式、`9c97e78ac` access token 确认对话框、`85feb7a34` 参数覆盖用户/分组上下文）+ **6 个依赖升级**（Electron 2 个、Frontend 4 个）+ **11 个已存在** + **6 个不适用/拒绝**；新增 ChannelTypeSub2API(63)/NewAPI(64) 常量与映射；详见 `docs/archive/upstream-merge/M9_LOW_RISK_AUDIT.md` |
 
 M4 最终隔离栈已验证 PostgreSQL/MySQL/Redis/API 健康、跨库额度/认证迁移、安全 E2E 和会话 E2E。生产没有被调用或修改。
 
@@ -168,7 +168,6 @@ ChannelTypeTencentVideo           = 58  // 生产（腾讯视频）
 ChannelTypeAdvancedCustom         = 59  // 生产（高级自定义）
 ChannelTypeServiceInferenceVideo  = 60  // 生产（Seedance）
 ChannelTypeXinhankr               = 61  // 生产（鑫瀚）
-ChannelTypeILiuMidjourney         = 62  // 生产（iLiu MJ）
 ChannelTypeSub2API                = 63  // M6 新增（避让生产编号）
 ```
 
@@ -263,12 +262,12 @@ GOTOOLCHAIN=go1.25.11 go test ./relay/... ./service/... -count=1                
    - OAuth binding: `controller/oauth.go:292` + `model/user.go:187-195` 使用 `UpdateUserBindColumn` 带白名单验证（原本就有）
    - 注释明确说明："只更新绑定列。完整快照的 user.Update 会把读取时刻的 role/status/group 一并写回，覆盖并发发生的封禁、降权或分组变更。"
 
-**详细审计报告**：`docs/M7_BILLING_SECURITY_AUDIT.md`
+**详细审计报告**：`docs/archive/upstream-merge/M7_BILLING_SECURITY_AUDIT.md`
 
 **RelayKit 评估推迟**：
 - 原 M7 RelayKit 重构推迟到 M9/M10
 - 理由：2231 文件改动风险过高，与 M5 AutoGroups UI 冲突，定制渠道兼容性未知
-- 详细分析见 `docs/M7_RELAYKIT_AUDIT.md`
+- 详细分析见 `docs/archive/upstream-merge/M7_RELAYKIT_AUDIT.md`
 
 ---
 
@@ -435,7 +434,7 @@ bun run lint 2>&1 | grep -cE "error "
 - 两个组件测试采用官方版后：24 passed / 1 failed，134 项通过 + 1 项**真实失败**（`getEditableQuotaStep`）
 - 修复 `format.ts` 后：**25 passed，135 项全绿**
 
-**详细审计报告**：`docs/M8_TEST_STANDARDIZATION_AUDIT.md`
+**详细审计报告**：`docs/archive/upstream-merge/M8_TEST_STANDARDIZATION_AUDIT.md`
 
 **风险等级**：🟡 低-中（原评估为 🟢 低）
 - 12 个测试文件改动：🟢 不影响生产
@@ -538,7 +537,7 @@ bun install
 1. **渠道类型编号分叉**：我们的编号已与官方分叉（58-64 区间不同），导致 `e90a7c48e` 字段透传门控无法照搬字面量。建议方案：改用渠道名称集合（而非编号）— 跨 fork 稳定
 2. **移动端 sidebar 优化未完全同步**：`preload={isMobile ? false : undefined}` 在 4 处未同步（低优先级性能影响）
 
-**详细审计报告**：`docs/M9_LOW_RISK_AUDIT.md`
+**详细审计报告**：`docs/archive/upstream-merge/M9_LOW_RISK_AUDIT.md`
 
 **关键成果**：
 - ✅ 修复安全漏洞（access_token/aff_* 快照覆盖）
@@ -568,7 +567,7 @@ bun install
 
 ```bash
 cd /home/ubuntu/new-api
-sed -n '1,200p' docs/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md
+sed -n '1,200p' docs/archive/upstream-merge/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md
 git status --short
 git diff --check
 GOCACHE=/tmp/new-api-go-cache.Q6T90J /usr/local/go/bin/go test ./setting ./model ./middleware ./service ./controller -run 'AutoGroup|ListModelsTokenLimit' -count=1
@@ -593,8 +592,8 @@ M5 已验收完成。上述命令用于确认工作树仍处于 M5 通过状态�
 - **M8 状态**：✅ 已完成。25/25 前端测试文件迁到 Vitest，135 项全绿。12 个文件里 9 个直接采用了官方版本（`git show e2c7aa7b1:web/<路径>`）。**同时修掉一个真实生产缺陷**：`web/default/src/lib/format.ts` 的 `getEditableQuotaStep()` 原本用 `10 ** -digits`，V8 上 `10**-4` = `0.00009999999999999999`（bun 的 JSC 是精确值，所以本地跑业务代码看不出来），已改成 `1 / 10 ** digits`。这是 M8 唯一的生产代码改动，已通过 Default 生产构建。
 - **M8 lint 门禁**：`bun run lint` 有 375 个既存基线错误，验收方式是"stash 前后错误数一致"，不是"全绿"。M8 实测 375 = 375，零新增。
 - **M8 教训**：`node:test` 时代那批打包失败的测试文件里，藏着从未执行过的真实断言。迁移后第一次失败要先当真 bug 查源码，别默认是自己迁移写错了。
-- **M9 状态**：✅ 已完成。27 个提交（42 个区间提交减去 M7 的 14、M8 的 1）：6 个依赖升级已采用、11 个已存在、6 个不适用或拒绝、**4 个已移植**。移植项：`0cd9dc85e`（安全，陈旧快照回写覆盖 `access_token`/`aff_*`，普通用户可触发）、`b941253ae`（Claude/Gemini 渠道测试改原生格式）、`9c97e78ac`（access token 打开对话框即静默作废，已改为二次确认）、`85feb7a34`（参数覆盖暴露用户/分组上下文）。详见 `docs/M9_LOW_RISK_AUDIT.md`
+- **M9 状态**：✅ 已完成。27 个提交（42 个区间提交减去 M7 的 14、M8 的 1）：6 个依赖升级已采用、11 个已存在、6 个不适用或拒绝、**4 个已移植**。移植项：`0cd9dc85e`（安全，陈旧快照回写覆盖 `access_token`/`aff_*`，普通用户可触发）、`b941253ae`（Claude/Gemini 渠道测试改原生格式）、`9c97e78ac`（access token 打开对话框即静默作废，已改为二次确认）、`85feb7a34`（参数覆盖暴露用户/分组上下文）。详见 `docs/archive/upstream-merge/M9_LOW_RISK_AUDIT.md`
 - **M9 拒绝采用项**：`bb234ff41` 官方删除了 `*-openai-compact` 后缀路由功能，但我们 8 处在用（`setting/ratio_setting/compact_suffix.go` 等），采用会破坏已配置该通配符价格的管理员。**不要因为"官方删了"就跟着删。**
-- **M9 连带发现的自有债（未修，需产品决策）**：`APITypeSub2API`/`APITypeNewAPI` 在 `common.ChannelType2APIType` 里没有 case，`ChannelTypeNewAPI` 常量根本不存在 → `relay/channel/sub2api/`、`relay/channel/newapi/` 两个适配器**当前不可达**。补齐要为 New API 渠道选类型号，而我们编号已与官方分叉（官方 58/59/60 = Advanced Custom/Sub2API/New API；我们 58=TencentVideo、59=Advanced Custom、60=ServiceInferenceVideo、61=Xinhankr、62=iLiu、63=Sub2API）。**同一原因导致 `e90a7c48e` 字段透传不能照搬官方字面量集合，否则会给错渠道开错透传。**
+- **M9 连带发现的自有债（未修，需产品决策）**：`APITypeSub2API`/`APITypeNewAPI` 在 `common.ChannelType2APIType` 里没有 case，`ChannelTypeNewAPI` 常量根本不存在 → `relay/channel/sub2api/`、`relay/channel/newapi/` 两个适配器**当前不可达**。补齐要为 New API 渠道选类型号，而我们编号已与官方分叉（官方 58/59/60 = Advanced Custom/Sub2API/New API；我们 58=TencentVideo、59=Advanced Custom、60=ServiceInferenceVideo、61=Xinhankr、63=Sub2API）。**同一原因导致 `e90a7c48e` 字段透传不能照搬官方字面量集合，否则会给错渠道开错透传。**
 - **M9 教训（测试有效性）**：给安全修复补回归测试后，必须**临时把修复改回缺陷状态验证测试真的会失败**。本单元两个新测试都验证过（`AffCount` expected 2 actual 1、token expected rotated actual original）。不做这步无法区分"测试通过"和"测试什么都没断言到"。
 - **M9 i18n 陷阱**：locale 文件不能用 `json.load`+`json.dump` 往返改写 —— 会把受保护品牌 key 里的 `a` 转义还原成字面 `a`（7 个 locale 各丢 1 处），也会因重排产生 1103 行无关 churn。正确做法是**文本行级插入**，保持字节不变，最终每个 locale 应只有 `8 insertions(+), 0 deletions(-)`。

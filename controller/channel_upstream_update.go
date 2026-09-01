@@ -311,13 +311,6 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 		} else {
 			url = fmt.Sprintf("%s/v1/models", baseURL)
 		}
-	case constant.ChannelTypeILiuMidjourney:
-		trimmedBaseURL := strings.TrimRight(baseURL, "/")
-		if strings.HasSuffix(trimmedBaseURL, "/v1") {
-			url = fmt.Sprintf("%s/models", trimmedBaseURL)
-		} else {
-			url = fmt.Sprintf("%s/v1/models", trimmedBaseURL)
-		}
 	default:
 		url = fmt.Sprintf("%s/v1/models", baseURL)
 	}
