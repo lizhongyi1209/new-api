@@ -5102,6 +5102,7 @@
     "Waiting": "等待中",
     "Waiting for email...": "等待電郵...",
     "Wallet": "錢包",
+    "Wallet balance has reached the supported limit. Please use some balance before adding funds.": "錢包餘額已達系統支援的上限，請先使用部分餘額後再儲值。",
     "Wallet First": "優先錢包",
     "Wallet Management": "錢包管理",
     "Wallet management and personal preferences.": "錢包管理和個人偏好設定。",

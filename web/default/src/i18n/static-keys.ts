@@ -409,6 +409,7 @@ export const STATIC_I18N_KEYS = [
   'Update succeeded',
   'Create succeeded',
   'Request failed',
+  'Wallet balance has reached the supported limit. Please use some balance before adding funds.',
   'Please enter plan title',
   'Please enter amount',
   'No subscription plans yet',

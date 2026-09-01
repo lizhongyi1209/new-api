@@ -5102,6 +5102,7 @@
     "Waiting": "待機中",
     "Waiting for email...": "メールを待っています...",
     "Wallet": "ウォレット",
+    "Wallet balance has reached the supported limit. Please use some balance before adding funds.": "ウォレット残高が対応上限に達しています。残高を一部使用してから入金してください。",
     "Wallet First": "ウォレット優先",
     "Wallet Management": "ウォレット管理",
     "Wallet management and personal preferences.": "ウォレット管理と個人設定。",

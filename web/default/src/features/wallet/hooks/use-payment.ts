@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import i18next from 'i18next'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 
 import {
@@ -40,37 +40,57 @@ import {
 
 export function usePayment() {
   const [amount, setAmount] = useState<number>(0)
+  const [calculationError, setCalculationError] = useState<string | null>(null)
   const [calculating, setCalculating] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const calculationIdRef = useRef(0)
 
   // Calculate payment amount
   const calculatePaymentAmount = useCallback(
     async (topupAmount: number, paymentType: string) => {
+      const calculationId = ++calculationIdRef.current
+
       try {
         setCalculating(true)
+        setCalculationError(null)
 
         const isStripe = isStripePayment(paymentType)
         const isPancake = isWaffoPancakePayment(paymentType)
-        const response = isStripe
-          ? await calculateStripeAmount({ amount: topupAmount })
-          : isPancake
-            ? await calculateWaffoPancakeAmount({ amount: topupAmount })
-            : await calculateAmount({ amount: topupAmount })
+        let response
+        if (isStripe) {
+          response = await calculateStripeAmount({ amount: topupAmount })
+        } else if (isPancake) {
+          response = await calculateWaffoPancakeAmount({ amount: topupAmount })
+        } else {
+          response = await calculateAmount({ amount: topupAmount })
+        }
 
         if (isApiSuccess(response) && response.data) {
-          const calculatedAmount = parseFloat(response.data)
+          const calculatedAmount = Number.parseFloat(response.data)
+          if (calculationId !== calculationIdRef.current) {
+            return 0
+          }
           setAmount(calculatedAmount)
           return calculatedAmount
         }
 
-        // Don't show error for calculation, just set to 0
-        setAmount(0)
+        if (calculationId === calculationIdRef.current) {
+          setCalculationError(
+            typeof response.data === 'string' && response.data
+              ? response.data
+              : response.message || 'Payment request failed'
+          )
+        }
         return 0
-      } catch (_error) {
-        setAmount(0)
+      } catch {
+        if (calculationId === calculationIdRef.current) {
+          setCalculationError('Payment request failed')
+        }
         return 0
       } finally {
-        setCalculating(false)
+        if (calculationId === calculationIdRef.current) {
+          setCalculating(false)
+        }
       }
     },
     []
@@ -96,7 +116,15 @@ export function usePayment() {
             })
 
         if (!isApiSuccess(response)) {
-          toast.error(response.message || i18next.t('Payment request failed'))
+          const errorMessage =
+            typeof response.data === 'string' && response.data
+              ? response.data
+              : response.message
+          toast.error(
+            errorMessage && errorMessage !== 'error'
+              ? i18next.t(errorMessage)
+              : i18next.t('Payment request failed')
+          )
           return false
         }
 
@@ -118,7 +146,7 @@ export function usePayment() {
         }
 
         return false
-      } catch (_error) {
+      } catch {
         toast.error(i18next.t('Payment request failed'))
         return false
       } finally {
@@ -130,6 +158,7 @@ export function usePayment() {
 
   return {
     amount,
+    calculationError,
     calculating,
     processing,
     calculatePaymentAmount,

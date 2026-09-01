@@ -61,6 +61,7 @@ interface RechargeFormCardProps {
   topupAmount: number
   onTopupAmountChange: (amount: number) => void
   paymentAmount: number
+  calculationError: string | null
   calculating: boolean
   onPaymentMethodSelect: (method: PaymentMethod) => void
   paymentLoading: string | null
@@ -91,6 +92,7 @@ export function RechargeFormCard({
   topupAmount,
   onTopupAmountChange,
   paymentAmount,
+  calculationError,
   calculating,
   onPaymentMethodSelect,
   paymentLoading,
@@ -142,6 +144,18 @@ export function RechargeFormCard({
     Array.isArray(waffoPayMethods) && waffoPayMethods.length > 0
   const minTopup = getMinTopupAmount(topupInfo)
   const redemptionEnabled = topupInfo?.enable_redemption !== false
+  let paymentAmountContent = (
+    <span className='text-sm font-semibold'>
+      {formatCurrency(paymentAmount)}
+    </span>
+  )
+  if (calculating) {
+    paymentAmountContent = <Skeleton className='h-5 w-16' />
+  } else if (calculationError) {
+    paymentAmountContent = (
+      <span className='text-muted-foreground text-sm font-semibold'>—</span>
+    )
+  }
 
   if (loading) {
     return (
@@ -302,15 +316,22 @@ export function RechargeFormCard({
                     <span className='text-muted-foreground truncate text-xs'>
                       {t('Amount to pay:')}
                     </span>
-                    {calculating ? (
-                      <Skeleton className='h-5 w-16' />
-                    ) : (
-                      <span className='text-sm font-semibold'>
-                        {formatCurrency(paymentAmount)}
-                      </span>
-                    )}
+                    {paymentAmountContent}
                   </div>
                 </div>
+                {calculationError && !calculating ? (
+                  <p
+                    role='alert'
+                    aria-live='polite'
+                    className='text-destructive text-sm'
+                  >
+                    {t(
+                      calculationError === 'top-up quota limit exceeded'
+                        ? 'Wallet balance has reached the supported limit. Please use some balance before adding funds.'
+                        : calculationError
+                    )}
+                  </p>
+                ) : null}
               </div>
 
               <div className='space-y-2.5 sm:space-y-3'>
