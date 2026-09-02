@@ -106,13 +106,14 @@ func (m Properties) Value() (driver.Value, error) {
 }
 
 type TaskPrivateData struct {
-	Key             string               `json:"key,omitempty"`
-	UpstreamTaskID  string               `json:"upstream_task_id,omitempty"` // 上游真实 task ID
-	RequestID       string               `json:"request_id,omitempty"`       // 网关请求 ID，用于任务与消费日志关联
-	RequestSnapshot *TaskRequestSnapshot `json:"request_snapshot,omitempty"` // 脱敏后的原始/生效请求参数
-	SubmitResponse  json.RawMessage      `json:"submit_response,omitempty"`  // 脱敏后的上游提交响应
-	ResultURL       string               `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
-	ErrorDetail     *TaskErrorDetail     `json:"error_detail,omitempty"`     // 任务失败时的结构化错误信息
+	Key                 string                    `json:"key,omitempty"`
+	UpstreamTaskID      string                    `json:"upstream_task_id,omitempty"`      // 上游真实 task ID
+	RequestID           string                    `json:"request_id,omitempty"`            // 网关请求 ID，用于任务与消费日志关联
+	RequestSnapshot     *TaskRequestSnapshot      `json:"request_snapshot,omitempty"`      // 脱敏后的原始/生效请求参数
+	SubmitResponse      json.RawMessage           `json:"submit_response,omitempty"`       // 脱敏后的上游提交响应
+	ResultURL           string                    `json:"result_url,omitempty"`            // 任务成功后的结果 URL（视频地址等）
+	ErrorDetail         *TaskErrorDetail          `json:"error_detail,omitempty"`          // 任务失败时的结构化错误信息
+	GenerateImageTiming *GenerateImageTimingAudit `json:"generate_image_timing,omitempty"` // 统一异步生图的分段耗时与流量审计
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
@@ -121,6 +122,38 @@ type TaskPrivateData struct {
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
 	SubmitLogID    int                 `json:"submit_log_id,omitempty"`   // 提交时消费日志的 ID，任务完成后更新
 	UsedChannels   []string            `json:"used_channels,omitempty"`   // 每次真实上游尝试使用的渠道，保留重复项用于展示重试链路
+}
+
+// GenerateImageTimingAudit records only aggregate durations and byte counts.
+// It intentionally excludes request bodies, image URLs, credentials, and other
+// values that could expose user or upstream data in an administrator log.
+type GenerateImageTimingAudit struct {
+	ClientRequestBytes  int64   `json:"client_request_bytes,omitempty"`
+	ClientBodyReceiveMs float64 `json:"client_body_receive_ms,omitempty"`
+	LocalRequestMs      float64 `json:"local_request_ms,omitempty"`
+
+	InputBytes        int64   `json:"input_bytes,omitempty"`
+	InputPrepareMs    float64 `json:"input_prepare_ms,omitempty"`
+	InputDownloadMs   float64 `json:"input_download_ms,omitempty"`
+	InputDecodeMs     float64 `json:"input_decode_ms,omitempty"`
+	InputLocalWriteMs float64 `json:"input_local_write_ms,omitempty"`
+
+	UpstreamRequestBytes     int64   `json:"upstream_request_bytes,omitempty"`
+	UpstreamTotalMs          float64 `json:"upstream_total_ms,omitempty"`
+	UpstreamConnectionMs     float64 `json:"upstream_connection_ms,omitempty"`
+	UpstreamRequestWriteMs   float64 `json:"upstream_request_write_ms,omitempty"`
+	UpstreamWaitMs           float64 `json:"upstream_wait_ms,omitempty"`
+	UpstreamResponseHeaderMs float64 `json:"upstream_response_header_ms,omitempty"`
+	UpstreamResponseBytes    int64   `json:"upstream_response_bytes,omitempty"`
+	UpstreamResponseReadMs   float64 `json:"upstream_response_read_ms,omitempty"`
+	ResponseParseMs          float64 `json:"response_parse_ms,omitempty"`
+	UpstreamAttempts         int     `json:"upstream_attempts,omitempty"`
+	UpstreamStatus           int     `json:"upstream_status,omitempty"`
+
+	OutputBytes      int64   `json:"output_bytes,omitempty"`
+	OutputDownloadMs float64 `json:"output_download_ms,omitempty"`
+	OutputUploadMs   float64 `json:"output_upload_ms,omitempty"`
+	OutputTotalMs    float64 `json:"output_total_ms,omitempty"`
 }
 
 // TaskRequestSnapshot 是异步任务的审计请求快照，只保存计费与排障需要的参数，

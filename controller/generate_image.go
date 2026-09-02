@@ -84,6 +84,31 @@ func GenerateImageSubmit(c *gin.Context) {
 		},
 	}
 	task.PrivateData.RequestID = c.GetString(common.RequestIdKey)
+	requestBodyBytes := c.Request.ContentLength
+	if storageValue, ok := c.Get(common.KeyBodyStorage); ok {
+		if storage, ok := storageValue.(common.BodyStorage); ok {
+			requestBodyBytes = storage.Size()
+		}
+	}
+	if requestBodyBytes < 0 {
+		requestBodyBytes = 0
+	}
+	requestReceivedAt := common.GetContextKeyTime(c, constant.ContextKeyRequestReceivedTime)
+	requestBodyReadyAt := common.GetContextKeyTime(c, constant.ContextKeyRequestBodyReadyTime)
+	if requestReceivedAt.IsZero() {
+		requestReceivedAt = handlerStartedAt
+	}
+	if requestBodyReadyAt.IsZero() {
+		requestBodyReadyAt = handlerStartedAt
+	}
+	bodyReceiveDuration := requestBodyReadyAt.Sub(requestReceivedAt)
+	if bodyReceiveDuration < 0 {
+		bodyReceiveDuration = 0
+	}
+	task.PrivateData.GenerateImageTiming = &model.GenerateImageTimingAudit{
+		ClientRequestBytes:  requestBodyBytes,
+		ClientBodyReceiveMs: bodyReceiveDuration.Seconds() * 1000,
+	}
 
 	// 存储计费上下文，供后续退款/结算
 	// tiered_expr 模型即使预扣为 0（信任用户）也必须存 BillingContext，否则完成时无法结算
@@ -148,6 +173,11 @@ func GenerateImageSubmit(c *gin.Context) {
 			generateImageError(c, http.StatusBadRequest, "invalid_request_error", fmt.Sprintf("转换请求格式失败: %v", convertErr))
 			return
 		}
+		task.PrivateData.GenerateImageTiming.InputBytes = inputPreparation.InputBytes
+		task.PrivateData.GenerateImageTiming.InputPrepareMs = inputPreparation.Total.Seconds() * 1000
+		task.PrivateData.GenerateImageTiming.InputDownloadMs = inputPreparation.Download.Seconds() * 1000
+		task.PrivateData.GenerateImageTiming.InputDecodeMs = inputPreparation.Decode.Seconds() * 1000
+		task.PrivateData.GenerateImageTiming.InputLocalWriteMs = inputPreparation.LocalWrite.Seconds() * 1000
 		applyGenerateImageGoogleSearchTool(nativeReq, req.GoogleSearch)
 		if validateErr := service.ValidateGeminiGenerateContentRequestSize(nativeReq); validateErr != nil {
 			if relayInfo.Billing != nil {
@@ -180,20 +210,14 @@ func GenerateImageSubmit(c *gin.Context) {
 	taskUpdateStartedAt := time.Now()
 	_ = task.Update()
 	taskUpdateFinishedAt := time.Now()
-
-	requestBodyBytes := c.Request.ContentLength
-	if storageValue, ok := c.Get(common.KeyBodyStorage); ok {
-		if storage, ok := storageValue.(common.BodyStorage); ok {
-			requestBodyBytes = storage.Size()
-		}
+	postBodySubmitDuration := taskUpdateFinishedAt.Sub(requestBodyReadyAt)
+	if postBodySubmitDuration < 0 {
+		postBodySubmitDuration = 0
 	}
-	requestReceivedAt := common.GetContextKeyTime(c, constant.ContextKeyRequestReceivedTime)
-	requestBodyReadyAt := common.GetContextKeyTime(c, constant.ContextKeyRequestBodyReadyTime)
-	if requestReceivedAt.IsZero() {
-		requestReceivedAt = handlerStartedAt
-	}
-	if requestBodyReadyAt.IsZero() {
-		requestBodyReadyAt = handlerStartedAt
+	task.PrivateData.GenerateImageTiming.LocalRequestMs = postBodySubmitDuration.Seconds() * 1000
+	totalSubmitDuration := taskUpdateFinishedAt.Sub(requestReceivedAt)
+	if totalSubmitDuration < 0 {
+		totalSubmitDuration = 0
 	}
 	logger.LogInfo(c, fmt.Sprintf(
 		"generate_image_timing: phase=submit task=%s request_id=%s host=%s model=%s channel=%d request_bytes=%d body_receive_ms=%.3f decode_validate_ms=%.3f billing_ms=%.3f prepare_ms=%.3f task_insert_ms=%.3f submit_log_ms=%.3f task_update_ms=%.3f post_body_submit_ms=%.3f total_submit_ms=%.3f",
@@ -210,8 +234,8 @@ func GenerateImageSubmit(c *gin.Context) {
 		taskInsertFinishedAt.Sub(taskInsertStartedAt).Seconds()*1000,
 		submitLogFinishedAt.Sub(submitLogStartedAt).Seconds()*1000,
 		taskUpdateFinishedAt.Sub(taskUpdateStartedAt).Seconds()*1000,
-		time.Since(requestBodyReadyAt).Seconds()*1000,
-		time.Since(requestReceivedAt).Seconds()*1000,
+		postBodySubmitDuration.Seconds()*1000,
+		totalSubmitDuration.Seconds()*1000,
 	))
 
 	ctx := context.WithValue(context.Background(), "gin_context", c)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptrace"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -21,6 +22,7 @@ import (
 
 func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
+	ensureResponsesTiming(c, info)
 	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
 		!common.SupportsResponsesCompact(info.ChannelType, info.ApiType) {
 		return types.NewErrorWithStatusCode(
@@ -122,8 +124,27 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		requestBody = body
 	}
 
+	var attempt *responsesUpstreamAttempt
+	var previousTrace any
+	var hadPreviousTrace bool
+	if info.ResponsesTiming != nil {
+		var trace *httptrace.ClientTrace
+		attempt, trace = newResponsesUpstreamAttempt(c, info)
+		previousTrace, hadPreviousTrace = c.Get(common.UpstreamHTTPTraceKey)
+		c.Set(common.UpstreamHTTPTraceKey, trace)
+		defer attempt.finish()
+	}
+
 	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)
+	if attempt != nil {
+		if hadPreviousTrace {
+			c.Set(common.UpstreamHTTPTraceKey, previousTrace)
+		} else {
+			c.Set(common.UpstreamHTTPTraceKey, nil)
+		}
+		attempt.recordHeaders(resp, err)
+	}
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
 	}
@@ -132,6 +153,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 
 	if resp != nil {
 		httpResp = resp.(*http.Response)
+		if attempt != nil {
+			attempt.wrapResponseBody(httpResp)
+		}
 
 		if httpResp.StatusCode != http.StatusOK {
 			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
@@ -141,7 +165,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		}
 	}
 
-	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	var usage any
+	if attempt != nil {
+		usage, newAPIError = attempt.measureDownstream(c, func() (any, *types.NewAPIError) {
+			return adaptor.DoResponse(c, httpResp, info)
+		})
+		attempt.finish()
+	} else {
+		usage, newAPIError = adaptor.DoResponse(c, httpResp, info)
+	}
 	if newAPIError != nil {
 		// reset status code 重置状态码
 		service.ResetStatusCode(newAPIError, statusCodeMappingStr)

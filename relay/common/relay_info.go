@@ -166,6 +166,11 @@ type RelayInfo struct {
 	// body, allowing net/http to replay it safely after retryable HTTP/2 resets.
 	UpstreamRequestGetBody func() (io.ReadCloser, error)
 
+	// ResponsesTiming contains admin-only aggregate timing and byte metrics for
+	// the public /v1/responses endpoint. It persists across channel retries and
+	// is attached to the final usage log by GenerateTextOtherInfo.
+	ResponsesTiming *ResponsesTimingAudit
+
 	PriceData types.PriceData
 
 	// QuotaClamp is set (non-nil) when a quota conversion saturated at the

@@ -52,6 +52,7 @@ import {
   renderAuditContent,
   isLegacyTieredRecalcContent,
   getLegacyTieredRecalcTier,
+  formatDurationMilliseconds,
 } from '../../lib/format'
 import {
   isDisplayableLogType,
@@ -789,35 +790,64 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           />
         )
       },
-    },
-
-    {
-      accessorKey: 'content',
-      header: t('Details'),
-      cell: ({ row }) => (
-        <DetailsPreviewCell
-          log={row.original}
-          isAdmin={isAdmin}
-          t={t}
-          className='max-w-[200px]'
-        />
-      ),
-      meta: {
-        label: t('Details'),
-        mobileSpan: 2,
-        mobileCell: (cell: Cell<UsageLog, unknown>) => (
-          <DetailsPreviewCell
-            log={cell.row.original}
-            isAdmin={isAdmin}
-            t={t}
-            className='max-w-full'
-          />
-        ),
-      },
-      size: 180,
-      maxSize: 200,
     }
   )
+
+  if (isAdmin) {
+    columns.push({
+      id: 'upstream_time',
+      header: t('Upstream Time'),
+      cell: ({ row }) => {
+        const other = parseLogOther(row.original.other)
+        let upstreamMilliseconds: number | undefined
+        if (other?.request_path === '/async/v1/generateImage') {
+          upstreamMilliseconds =
+            other.admin_info?.generate_image_timing?.upstream_total_ms
+        } else if (other?.request_path === '/v1/responses') {
+          upstreamMilliseconds =
+            other.admin_info?.responses_timing?.upstream_total_ms
+        }
+
+        if (upstreamMilliseconds == null) {
+          return <span className='text-muted-foreground text-xs'>—</span>
+        }
+
+        return (
+          <span className='font-mono text-xs font-medium tabular-nums'>
+            {formatDurationMilliseconds(upstreamMilliseconds)}
+          </span>
+        )
+      },
+      meta: { label: t('Upstream Time') },
+    })
+  }
+
+  columns.push({
+    accessorKey: 'content',
+    header: t('Details'),
+    cell: ({ row }) => (
+      <DetailsPreviewCell
+        log={row.original}
+        isAdmin={isAdmin}
+        t={t}
+        className='max-w-[200px]'
+      />
+    ),
+    meta: {
+      label: t('Details'),
+      mobileSpan: 2,
+      mobileCell: (cell: Cell<UsageLog, unknown>) => (
+        <DetailsPreviewCell
+          log={cell.row.original}
+          isAdmin={isAdmin}
+          t={t}
+          className='max-w-full'
+        />
+      ),
+    },
+    size: 180,
+    maxSize: 200,
+  })
 
   return columns
 }

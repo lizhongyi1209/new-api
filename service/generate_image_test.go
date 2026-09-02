@@ -13,6 +13,7 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -42,6 +43,54 @@ func (passthroughImageAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaycommo
 
 func (passthroughImageAdaptor) DoRequest(_ *gin.Context, _ *relaycommon.RelayInfo, _ io.Reader) (any, error) {
 	return nil, nil
+}
+
+func TestGenerateImageUpstreamTimingIsIncludedInAdminLogInfo(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	task := &model.Task{
+		TaskID:    "task_timing_audit",
+		ChannelId: 389,
+		PrivateData: model.TaskPrivateData{
+			UsedChannels: []string{"389"},
+		},
+	}
+	relayInfo := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "test-image-model"},
+	}
+
+	response, err := traceGenerateImageUpstreamRequest(
+		context.Background(),
+		c,
+		task,
+		relayInfo,
+		"test",
+		4096,
+		func() (any, error) {
+			return &http.Response{StatusCode: http.StatusOK, Proto: "HTTP/1.1"}, nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.IsType(t, &http.Response{}, response)
+	require.NotNil(t, task.PrivateData.GenerateImageTiming)
+	assert.Equal(t, int64(4096), task.PrivateData.GenerateImageTiming.UpstreamRequestBytes)
+	assert.Equal(t, 1, task.PrivateData.GenerateImageTiming.UpstreamAttempts)
+	assert.Equal(t, http.StatusOK, task.PrivateData.GenerateImageTiming.UpstreamStatus)
+
+	adminInfo := imageTaskAdminInfo(task)
+	require.Contains(t, adminInfo, "generate_image_timing")
+	assert.Same(t, task.PrivateData.GenerateImageTiming, adminInfo["generate_image_timing"])
+
+	encoded, err := common.Marshal(adminInfo)
+	require.NoError(t, err)
+	var decoded map[string]interface{}
+	require.NoError(t, common.Unmarshal(encoded, &decoded))
+	decodedTiming, ok := decoded["generate_image_timing"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, float64(4096), decodedTiming["upstream_request_bytes"])
+	assert.Equal(t, float64(1), decodedTiming["upstream_attempts"])
+	assert.Equal(t, float64(http.StatusOK), decodedTiming["upstream_status"])
 }
 
 func TestIsGeminiImageModelName(t *testing.T) {

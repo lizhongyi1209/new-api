@@ -167,6 +167,55 @@ export function parseLogOther(other: string): LogOtherData | null {
   }
 }
 
+export function formatDurationMilliseconds(
+  milliseconds: number | null | undefined
+): string {
+  if (
+    milliseconds == null ||
+    !Number.isFinite(milliseconds) ||
+    milliseconds < 0
+  ) {
+    return '—'
+  }
+  if (milliseconds < 1000) return `${milliseconds.toFixed(3)} ms`
+  if (milliseconds < 60_000) return `${(milliseconds / 1000).toFixed(3)} s`
+
+  const minutes = Math.floor(milliseconds / 60_000)
+  const seconds = (milliseconds % 60_000) / 1000
+  return `${minutes}m ${seconds.toFixed(3)}s`
+}
+
+export function formatByteSize(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '—'
+  if (bytes < 1024) return `${Math.round(bytes)} B`
+
+  const units = ['KiB', 'MiB', 'GiB', 'TiB']
+  let value = bytes / 1024
+  let unitIndex = 0
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024
+    unitIndex += 1
+  }
+  return `${value.toFixed(2)} ${units[unitIndex]}`
+}
+
+export function formatTransferSpeed(
+  bytes: number | null | undefined,
+  milliseconds: number | null | undefined
+): string {
+  if (
+    bytes == null ||
+    milliseconds == null ||
+    !Number.isFinite(bytes) ||
+    !Number.isFinite(milliseconds) ||
+    bytes <= 0 ||
+    milliseconds <= 0
+  ) {
+    return '—'
+  }
+  return `${((bytes * 8) / 1000 / milliseconds).toFixed(2)} Mbps`
+}
+
 export function isLegacyTieredRecalcContent(
   content: string | null | undefined,
   other?: LogOtherData | null

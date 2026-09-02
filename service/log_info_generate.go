@@ -106,6 +106,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendChannelAffinityAdminInfo(ctx, adminInfo)
+	if relayInfo != nil && relayInfo.ResponsesTiming != nil {
+		adminInfo["responses_timing"] = relayInfo.ResponsesTiming
+	}
 
 	other["admin_info"] = adminInfo
 	appendRequestPath(ctx, relayInfo, other)

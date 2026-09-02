@@ -105,6 +105,30 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 - `controller/generate_image_test.go`
 - `dto/channel_settings_test.go`
 
+## OpenAI Responses timing observability
+
+Aliases: Responses 耗时, 首字耗时, 上游耗时, SSE 耗时, `/v1/responses`, responses timing.
+
+### Behavior contract
+
+- Only the public `POST /v1/responses` endpoint records `other.admin_info.responses_timing`; `/v1/responses/compact` and other relay routes are unchanged.
+- The audit contains aggregate durations and byte counts only. Request/response bodies, URLs, credentials, and other user content are never stored.
+- Client request receipt, local preparation, upstream connection/request write/header wait/response read, first SSE, and server-side downstream writes are measured separately.
+- `upstream_total_ms` covers each upstream attempt from dispatch through the last upstream body read and is accumulated across channel retries.
+- Downstream write timing measures server-side writes and flushes. It cannot prove when a proxy or the final client received the last byte.
+- Timing data is nested under `admin_info`, so non-admin usage-log responses continue to strip it.
+
+### Entry points
+
+| Concern | Source entry |
+| --- | --- |
+| Route and relay dispatch | `router/relay-router.go`, `controller/relay.go` |
+| Request conversion and timing lifecycle | `relay/responses_handler.go`, `relay/responses_timing.go` |
+| Audit schema and retry-persistent relay state | `relay/common/responses_timing.go`, `relay/common/relay_info.go` |
+| Shared upstream HTTP trace attachment | `relay/channel/api_request.go` |
+| Usage-log admin metadata | `service/log_info_generate.go` |
+| Admin usage-log column and detail table | `web/default/src/features/usage-logs/components/columns/common-logs-columns.tsx`, `web/default/src/features/usage-logs/components/dialogs/details-dialog.tsx` |
+
 ## Asset and material upload
 
 Aliases: 素材上传, 文件上传, 上传素材, asset upload, element image upload, presign, R2 upload, local upload, Seedance asset, 上传管理.

@@ -183,6 +183,57 @@ export interface TaskLifecycleAudit {
   refund_status?: string
 }
 
+export interface GenerateImageTimingAudit {
+  client_request_bytes?: number
+  client_body_receive_ms?: number
+  local_request_ms?: number
+  input_bytes?: number
+  input_prepare_ms?: number
+  input_download_ms?: number
+  input_decode_ms?: number
+  input_local_write_ms?: number
+  upstream_request_bytes?: number
+  upstream_total_ms?: number
+  upstream_connection_ms?: number
+  upstream_request_write_ms?: number
+  upstream_wait_ms?: number
+  upstream_response_header_ms?: number
+  upstream_response_bytes?: number
+  upstream_response_read_ms?: number
+  response_parse_ms?: number
+  upstream_attempts?: number
+  upstream_status?: number
+  output_bytes?: number
+  output_download_ms?: number
+  output_upload_ms?: number
+  output_total_ms?: number
+}
+
+export interface ResponsesTimingAudit {
+  client_request_bytes?: number
+  client_body_receive_ms?: number
+  local_request_ms?: number
+  upstream_request_bytes?: number
+  upstream_total_ms?: number
+  upstream_connection_ms?: number
+  upstream_dns_ms?: number
+  upstream_connect_ms?: number
+  upstream_tls_ms?: number
+  upstream_request_write_ms?: number
+  upstream_wait_ms?: number
+  upstream_response_header_ms?: number
+  upstream_first_event_ms?: number
+  upstream_response_bytes?: number
+  upstream_response_read_ms?: number
+  upstream_attempts?: number
+  upstream_transport_attempts?: number
+  upstream_status?: number
+  local_response_ms?: number
+  downstream_response_bytes?: number
+  downstream_write_ms?: number
+  downstream_total_ms?: number
+}
+
 export interface LogOtherData {
   billing_explanation?: string
   admin_info?: {
@@ -210,6 +261,8 @@ export interface LogOtherData {
       original: number
       clamped: number
     }
+    generate_image_timing?: GenerateImageTimingAudit
+    responses_timing?: ResponsesTimingAudit
   }
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.

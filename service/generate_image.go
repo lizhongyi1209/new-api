@@ -898,6 +898,31 @@ func traceGenerateImageUpstreamRequest(
 		status = httpResponse.StatusCode
 		protocol = httpResponse.Proto
 	}
+	audit := task.PrivateData.GenerateImageTiming
+	if audit == nil {
+		audit = &model.GenerateImageTimingAudit{}
+		task.PrivateData.GenerateImageTiming = audit
+	}
+	audit.UpstreamAttempts++
+	if requestBytes > 0 {
+		audit.UpstreamRequestBytes += requestBytes
+	}
+	audit.UpstreamTotalMs += finishedAt.Sub(startedAt).Seconds() * 1000
+	if connectionWaitMilliseconds >= 0 {
+		audit.UpstreamConnectionMs += connectionWaitMilliseconds
+	}
+	if requestWriteMilliseconds >= 0 {
+		audit.UpstreamRequestWriteMs += requestWriteMilliseconds
+	}
+	if upstreamWaitMilliseconds >= 0 {
+		audit.UpstreamWaitMs += upstreamWaitMilliseconds
+	}
+	if responseHeaderMilliseconds >= 0 {
+		audit.UpstreamResponseHeaderMs += responseHeaderMilliseconds
+	}
+	if status > 0 {
+		audit.UpstreamStatus = status
+	}
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=upstream_headers task=%s request_id=%s provider=%s model=%s channel=%d attempt=%d transport_attempts=%d status=%d protocol=%s request_bytes=%d total_ms=%.3f dns_ms=%.3f connect_ms=%.3f tls_ms=%.3f connection_wait_ms=%.3f request_write_ms=%.3f request_mbps=%.3f upstream_wait_ms=%.3f response_header_ms=%.3f conn_reused=%t conn_was_idle=%t conn_idle_ms=%.3f write_error=%t request_error=%t",
 		task.TaskID,
@@ -960,7 +985,11 @@ func doGenerateImageRequestWithStatusRetry(ctx context.Context, task *model.Task
 }
 
 func imageTaskAdminInfo(task *model.Task) map[string]interface{} {
-	return map[string]interface{}{"use_channel": task.PrivateData.UsedChannels}
+	adminInfo := map[string]interface{}{"use_channel": task.PrivateData.UsedChannels}
+	if task.PrivateData.GenerateImageTiming != nil {
+		adminInfo["generate_image_timing"] = task.PrivateData.GenerateImageTiming
+	}
+	return adminInfo
 }
 
 // newAsyncGinContext 构造一个用于异步执行的最小 gin.Context，并写入用户名供日志使用。
@@ -1139,9 +1168,18 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 	}
 	bodyReadStartedAt := time.Now()
 	bodyBytes, err := io.ReadAll(httpResp.Body)
+	bodyReadDuration := time.Since(bodyReadStartedAt)
+	audit := task.PrivateData.GenerateImageTiming
+	if audit == nil {
+		audit = &model.GenerateImageTimingAudit{}
+		task.PrivateData.GenerateImageTiming = audit
+	}
+	audit.UpstreamResponseBytes += int64(len(bodyBytes))
+	audit.UpstreamResponseReadMs += bodyReadDuration.Seconds() * 1000
+	audit.UpstreamTotalMs += bodyReadDuration.Seconds() * 1000
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=upstream_body task=%s request_id=%s provider=gemini channel=%d body_bytes=%d body_read_ms=%.3f read_error=%t",
-		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(bodyBytes), time.Since(bodyReadStartedAt).Seconds()*1000, err != nil,
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(bodyBytes), bodyReadDuration.Seconds()*1000, err != nil,
 	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("读取响应失败: %v", err))
@@ -1161,11 +1199,14 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
+	parseDuration := time.Since(parseStartedAt)
+	audit.ResponseParseMs += parseDuration.Seconds() * 1000
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=response_parse task=%s request_id=%s provider=gemini channel=%d images=%d parse_ms=%.3f",
-		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), time.Since(parseStartedAt).Seconds()*1000,
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), parseDuration.Seconds()*1000,
 	))
 	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	outputTiming.applyToAudit(audit)
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=output_storage task=%s request_id=%s provider=gemini channel=%d strategy=%s images=%d source_base64=%d source_url=%d download_ms=%.3f upload_ms=%.3f upload_mbps=%.3f upload_transport_attempts=%d upload_connection_wait_ms=%.3f upload_request_write_ms=%.3f upload_server_wait_ms=%.3f upload_conn_reused=%t total_ms=%.3f output_bytes=%d storage_error=%t",
 		task.TaskID, task.PrivateData.RequestID, task.ChannelId, relayInfo.ChannelOtherSettings.ImageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
@@ -1363,9 +1404,18 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 	}
 	bodyReadStartedAt := time.Now()
 	bodyBytes, err := io.ReadAll(httpResp.Body)
+	bodyReadDuration := time.Since(bodyReadStartedAt)
+	audit := task.PrivateData.GenerateImageTiming
+	if audit == nil {
+		audit = &model.GenerateImageTimingAudit{}
+		task.PrivateData.GenerateImageTiming = audit
+	}
+	audit.UpstreamResponseBytes += int64(len(bodyBytes))
+	audit.UpstreamResponseReadMs += bodyReadDuration.Seconds() * 1000
+	audit.UpstreamTotalMs += bodyReadDuration.Seconds() * 1000
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=upstream_body task=%s request_id=%s provider=openai channel=%d body_bytes=%d body_read_ms=%.3f read_error=%t",
-		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(bodyBytes), time.Since(bodyReadStartedAt).Seconds()*1000, err != nil,
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(bodyBytes), bodyReadDuration.Seconds()*1000, err != nil,
 	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("读取响应失败: %v", err))
@@ -1397,11 +1447,14 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
+	parseDuration := time.Since(parseStartedAt)
+	audit.ResponseParseMs += parseDuration.Seconds() * 1000
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=response_parse task=%s request_id=%s provider=openai channel=%d images=%d parse_ms=%.3f",
-		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), time.Since(parseStartedAt).Seconds()*1000,
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), parseDuration.Seconds()*1000,
 	))
 	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	outputTiming.applyToAudit(audit)
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=output_storage task=%s request_id=%s provider=openai channel=%d strategy=%s images=%d source_base64=%d source_url=%d download_ms=%.3f upload_ms=%.3f upload_mbps=%.3f upload_transport_attempts=%d upload_connection_wait_ms=%.3f upload_request_write_ms=%.3f upload_server_wait_ms=%.3f upload_conn_reused=%t total_ms=%.3f output_bytes=%d storage_error=%t",
 		task.TaskID, task.PrivateData.RequestID, task.ChannelId, relayInfo.ChannelOtherSettings.ImageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
@@ -1427,6 +1480,16 @@ type generateImageOutputTiming struct {
 	UploadRequestWriteMilliseconds   float64
 	UploadServerWaitMilliseconds     float64
 	UploadConnectionReused           bool
+}
+
+func (timing generateImageOutputTiming) applyToAudit(audit *model.GenerateImageTimingAudit) {
+	if audit == nil {
+		return
+	}
+	audit.OutputBytes += timing.OutputBytes
+	audit.OutputDownloadMs += timing.Download.Seconds() * 1000
+	audit.OutputUploadMs += timing.Upload.Seconds() * 1000
+	audit.OutputTotalMs += timing.Total.Seconds() * 1000
 }
 
 func (timing generateImageOutputTiming) UploadMegabitsPerSecond() float64 {

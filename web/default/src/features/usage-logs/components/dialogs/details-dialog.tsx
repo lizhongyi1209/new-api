@@ -57,6 +57,14 @@ import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Label } from '@/components/ui/label'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
@@ -75,13 +83,21 @@ import {
   getFirstResponseTimeColor,
   getResponseTimeColor,
   renderAuditContent,
+  formatByteSize,
+  formatDurationMilliseconds,
+  formatTransferSpeed,
 } from '../../lib/format'
 import {
   getLogTypeConfig,
   isPerCallBilling,
   isTimingLogType,
 } from '../../lib/utils'
-import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
+import {
+  USAGE_BILLING_PATH,
+  type GenerateImageTimingAudit,
+  type LogOtherData,
+  type ResponsesTimingAudit,
+} from '../../types'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -161,6 +177,253 @@ function DetailSection(props: {
         {props.children}
       </div>
     </div>
+  )
+}
+
+type TimingBreakdownRow = {
+  label: string
+  bytes?: number
+  milliseconds?: number
+  showSpeed: boolean
+}
+
+function TimingBreakdownTable(props: { rows: TimingBreakdownRow[] }) {
+  const { t } = useTranslation()
+  return (
+    <Table className='min-w-[32rem] text-xs [&_td]:text-xs [&_th]:text-xs'>
+      <TableHeader>
+        <TableRow className='hover:bg-transparent'>
+          <TableHead className='h-8 px-2'>{t('Stage')}</TableHead>
+          <TableHead className='h-8 px-2 text-right'>
+            {t('Data Size')}
+          </TableHead>
+          <TableHead className='h-8 px-2 text-right'>{t('Duration')}</TableHead>
+          <TableHead className='h-8 px-2 text-right'>{t('Speed')}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody className='[&>tr]:h-8'>
+        {props.rows.map((row) => (
+          <TableRow key={row.label}>
+            <TableCell className='px-2 py-1.5'>{row.label}</TableCell>
+            <TableCell className='px-2 py-1.5 text-right font-mono'>
+              {formatByteSize(row.bytes)}
+            </TableCell>
+            <TableCell className='px-2 py-1.5 text-right font-mono'>
+              {formatDurationMilliseconds(row.milliseconds)}
+            </TableCell>
+            <TableCell className='px-2 py-1.5 text-right font-mono'>
+              {row.showSpeed
+                ? formatTransferSpeed(row.bytes, row.milliseconds)
+                : '—'}
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
+function GenerateImageTimingBreakdown(props: {
+  log: UsageLog
+  timing: GenerateImageTimingAudit
+}) {
+  const { t } = useTranslation()
+  let upstreamSendMilliseconds: number | undefined
+  if (
+    props.timing.upstream_connection_ms != null ||
+    props.timing.upstream_request_write_ms != null
+  ) {
+    upstreamSendMilliseconds =
+      (props.timing.upstream_connection_ms ?? 0) +
+      (props.timing.upstream_request_write_ms ?? 0)
+  }
+  const rows: TimingBreakdownRow[] = [
+    {
+      label: t('Client upload to server'),
+      bytes: props.timing.client_request_bytes,
+      milliseconds: props.timing.client_body_receive_ms,
+      showSpeed: true,
+    },
+    {
+      label: t('Local request processing'),
+      bytes: props.timing.client_request_bytes,
+      milliseconds: props.timing.local_request_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Convert input image'),
+      bytes: props.timing.input_bytes,
+      milliseconds: props.timing.input_prepare_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Send request upstream'),
+      bytes: props.timing.upstream_request_bytes,
+      milliseconds: upstreamSendMilliseconds,
+      showSpeed: true,
+    },
+    {
+      label: t('Upstream generation wait'),
+      milliseconds: props.timing.upstream_wait_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Read upstream response'),
+      bytes: props.timing.upstream_response_bytes,
+      milliseconds: props.timing.upstream_response_read_ms,
+      showSpeed: true,
+    },
+    {
+      label: t('Download upstream image'),
+      bytes: props.timing.output_bytes,
+      milliseconds: props.timing.output_download_ms,
+      showSpeed: true,
+    },
+    {
+      label: t('Upload image to object storage'),
+      bytes: props.timing.output_bytes,
+      milliseconds: props.timing.output_upload_ms,
+      showSpeed: true,
+    },
+  ]
+
+  return (
+    <DetailSection label={t('Timing Details')}>
+      <TimingBreakdownTable rows={rows} />
+
+      <div className='space-y-1.5 border-t pt-2'>
+        <DetailRow
+          label={t('Task Total Time')}
+          value={formatUseTime(props.log.use_time)}
+          mono
+        />
+        <DetailRow
+          label={t('Upstream Total Time')}
+          value={formatDurationMilliseconds(props.timing.upstream_total_ms)}
+          mono
+        />
+        <DetailRow
+          label={t('Upstream Attempts')}
+          value={props.timing.upstream_attempts ?? '—'}
+          mono
+        />
+        <DetailRow
+          label={t('Upstream Status')}
+          value={
+            props.timing.upstream_status
+              ? `HTTP ${props.timing.upstream_status}`
+              : '—'
+          }
+          mono
+        />
+      </div>
+
+      <p className='text-muted-foreground border-t pt-2 text-[11px]'>
+        {t('Client download from CDN/R2 is not observable')}
+      </p>
+    </DetailSection>
+  )
+}
+
+function ResponsesTimingBreakdown(props: {
+  log: UsageLog
+  timing: ResponsesTimingAudit
+}) {
+  const { t } = useTranslation()
+  const rows: TimingBreakdownRow[] = [
+    {
+      label: t('Client upload to server'),
+      bytes: props.timing.client_request_bytes,
+      milliseconds: props.timing.client_body_receive_ms,
+      showSpeed: true,
+    },
+    {
+      label: t('Local request processing'),
+      milliseconds: props.timing.local_request_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Establish upstream connection'),
+      milliseconds: props.timing.upstream_connection_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Send request upstream'),
+      bytes: props.timing.upstream_request_bytes,
+      milliseconds: props.timing.upstream_request_write_ms,
+      showSpeed: true,
+    },
+    {
+      label: t('Wait for upstream first byte'),
+      milliseconds: props.timing.upstream_wait_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Read upstream response headers'),
+      milliseconds: props.timing.upstream_response_header_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Upstream headers to first SSE'),
+      milliseconds: props.timing.upstream_first_event_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Read upstream response'),
+      bytes: props.timing.upstream_response_bytes,
+      milliseconds: props.timing.upstream_response_read_ms,
+      showSpeed: true,
+    },
+    {
+      label: t('Local response processing'),
+      milliseconds: props.timing.local_response_ms,
+      showSpeed: false,
+    },
+    {
+      label: t('Send response to client'),
+      bytes: props.timing.downstream_response_bytes,
+      milliseconds: props.timing.downstream_write_ms,
+      showSpeed: true,
+    },
+  ]
+
+  return (
+    <DetailSection label={t('Timing Details')}>
+      <TimingBreakdownTable rows={rows} />
+
+      <div className='space-y-1.5 border-t pt-2'>
+        <DetailRow
+          label={t('Request Total Time')}
+          value={formatUseTime(props.log.use_time)}
+          mono
+        />
+        <DetailRow
+          label={t('Upstream Total Time')}
+          value={formatDurationMilliseconds(props.timing.upstream_total_ms)}
+          mono
+        />
+        <DetailRow
+          label={t('Upstream Attempts')}
+          value={props.timing.upstream_attempts ?? '—'}
+          mono
+        />
+        <DetailRow
+          label={t('Upstream Status')}
+          value={
+            props.timing.upstream_status
+              ? `HTTP ${props.timing.upstream_status}`
+              : '—'
+          }
+          mono
+        />
+      </div>
+
+      <p className='text-muted-foreground border-t pt-2 text-[11px]'>
+        {t(
+          'Server write time does not include proxy buffering or final client delivery'
+        )}
+      </p>
+    </DetailSection>
   )
 }
 
@@ -1277,6 +1540,24 @@ export function DetailsDialog(props: DetailsDialogProps) {
             isAdmin={props.isAdmin}
           />
         )}
+
+        {props.isAdmin &&
+          other?.request_path === '/async/v1/generateImage' &&
+          other.admin_info?.generate_image_timing && (
+            <GenerateImageTimingBreakdown
+              log={props.log}
+              timing={other.admin_info.generate_image_timing}
+            />
+          )}
+
+        {props.isAdmin &&
+          other?.request_path === '/v1/responses' &&
+          other.admin_info?.responses_timing && (
+            <ResponsesTimingBreakdown
+              log={props.log}
+              timing={other.admin_info.responses_timing}
+            />
+          )}
 
         {/* Tiered pricing breakdown (when billing_mode is tiered_expr) */}
         {isTieredBilling && other?.expr_b64 && (
