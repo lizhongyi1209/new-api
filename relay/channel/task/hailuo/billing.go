@@ -14,19 +14,27 @@ import (
 const (
 	miniMaxH3Rate768PRMB        = 0.50
 	miniMaxH3Rate2KRMB          = 0.80
+	miniMaxH3MaxRate480PRMB     = 0.33
+	miniMaxH3MaxRate768PRMB     = 0.50
 	miniMaxH3FreeImageCount     = 5
 	miniMaxH3ExtraImageRMB      = 0.20
 	miniMaxH3FallbackUSDRMBRate = 7.3
 )
 
-func miniMaxH3RateRMB(resolution string) float64 {
+func miniMaxH3RateRMB(modelName, resolution string) float64 {
+	if isMiniMaxH3MaxModel(modelName) {
+		if strings.EqualFold(strings.TrimSpace(resolution), Resolution480P) {
+			return miniMaxH3MaxRate480PRMB
+		}
+		return miniMaxH3MaxRate768PRMB
+	}
 	if strings.EqualFold(strings.TrimSpace(resolution), Resolution2K) {
 		return miniMaxH3Rate2KRMB
 	}
 	return miniMaxH3Rate768PRMB
 }
 
-func miniMaxH3CostRMB(outputSeconds, inputVideoSeconds, inputImageCount int, resolution string) float64 {
+func miniMaxH3CostRMB(modelName string, outputSeconds, inputVideoSeconds, inputImageCount int, resolution string) float64 {
 	if outputSeconds < 0 {
 		outputSeconds = 0
 	}
@@ -36,15 +44,19 @@ func miniMaxH3CostRMB(outputSeconds, inputVideoSeconds, inputImageCount int, res
 	if inputImageCount < 0 {
 		inputImageCount = 0
 	}
-	rate := miniMaxH3RateRMB(resolution)
-	cost := float64(outputSeconds+inputVideoSeconds) * rate
-	if inputImageCount > miniMaxH3FreeImageCount {
+	rate := miniMaxH3RateRMB(modelName, resolution)
+	isMaxModel := isMiniMaxH3MaxModel(modelName)
+	cost := float64(outputSeconds) * rate
+	if !isMaxModel {
+		cost += float64(inputVideoSeconds) * rate
+	}
+	if !isMaxModel && inputImageCount > miniMaxH3FreeImageCount {
 		cost += float64(inputImageCount-miniMaxH3FreeImageCount) * miniMaxH3ExtraImageRMB
 	}
 	return cost
 }
 
-func miniMaxH3BillingDetails(outputSeconds, inputVideoSeconds, inputImageCount int, resolution string, groupRatio float64) *relaycommon.VideoBillingDetails {
+func miniMaxH3BillingDetails(modelName string, outputSeconds, inputVideoSeconds, inputImageCount int, resolution string, groupRatio float64) *relaycommon.VideoBillingDetails {
 	if outputSeconds < 0 {
 		outputSeconds = 0
 	}
@@ -57,14 +69,21 @@ func miniMaxH3BillingDetails(outputSeconds, inputVideoSeconds, inputImageCount i
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	rate := miniMaxH3RateRMB(resolution)
-	billedImageCount := inputImageCount - miniMaxH3FreeImageCount
-	if billedImageCount < 0 {
+	rate := miniMaxH3RateRMB(modelName, resolution)
+	freeImageCount := miniMaxH3FreeImageCount
+	billedImageCount := inputImageCount - freeImageCount
+	imageUnitRate := miniMaxH3ExtraImageRMB
+	if isMiniMaxH3MaxModel(modelName) {
+		inputVideoSeconds = 0
+		freeImageCount = inputImageCount
+		billedImageCount = 0
+		imageUnitRate = 0
+	} else if billedImageCount < 0 {
 		billedImageCount = 0
 	}
 	outputCost := float64(outputSeconds) * rate
 	referenceVideoCost := float64(inputVideoSeconds) * rate
-	imageSurcharge := float64(billedImageCount) * miniMaxH3ExtraImageRMB
+	imageSurcharge := float64(billedImageCount) * imageUnitRate
 	providerCost := outputCost + referenceVideoCost + imageSurcharge
 	return &relaycommon.VideoBillingDetails{
 		BillingMode:                "video_per_second",
@@ -76,9 +95,9 @@ func miniMaxH3BillingDetails(outputSeconds, inputVideoSeconds, inputImageCount i
 		ReferenceVideoInputSeconds: inputVideoSeconds,
 		ReferenceVideoCost:         referenceVideoCost,
 		ImageCount:                 inputImageCount,
-		FreeImageCount:             miniMaxH3FreeImageCount,
+		FreeImageCount:             freeImageCount,
 		BilledImageCount:           billedImageCount,
-		ImageUnitRate:              miniMaxH3ExtraImageRMB,
+		ImageUnitRate:              imageUnitRate,
 		ImageSurcharge:             imageSurcharge,
 		ProviderCost:               providerCost,
 		GroupRatio:                 groupRatio,
@@ -94,9 +113,9 @@ func miniMaxH3USDRMBRate() float64 {
 	return rate
 }
 
-// EstimateBilling reserves the known output and image cost. Reference-video
-// seconds are reported by MiniMax only after completion and are reconciled in
-// AdjustBillingOnComplete.
+// EstimateBilling reserves H3's known output and image cost, or H3 Max's
+// output-only cost. H3 reference-video seconds are reported only after
+// completion and are reconciled in AdjustBillingOnComplete.
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	if !isMiniMaxH3Info(info) {
 		return nil
@@ -105,7 +124,11 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if err != nil {
 		return nil
 	}
-	costRMB := miniMaxH3CostRMB(request.Duration, 0, request.ImageCount, request.EffectiveResolution)
+	modelName := info.UpstreamModelName
+	if !isMiniMaxH3Model(modelName) {
+		modelName = info.OriginModelName
+	}
+	costRMB := miniMaxH3CostRMB(modelName, request.Duration, 0, request.ImageCount, request.EffectiveResolution)
 	if costRMB <= 0 || info.PriceData.ModelRatio <= 0 {
 		return nil
 	}
@@ -117,6 +140,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 		return nil
 	}
 	info.VideoBilling = miniMaxH3BillingDetails(
+		modelName,
 		request.Duration,
 		0,
 		request.ImageCount,
@@ -129,9 +153,9 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	}
 }
 
-// AdjustBillingOnComplete settles against the usage returned by MiniMax:
-// output seconds + reference-video input seconds at the output-resolution
-// rate, plus image inputs beyond the first five.
+// AdjustBillingOnComplete settles against the usage returned by MiniMax. H3
+// charges output seconds, reference-video seconds, and images beyond the first
+// five; H3 Max charges output seconds only.
 func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
 	if task == nil || (!isMiniMaxH3Model(task.Properties.OriginModelName) && !isMiniMaxH3Model(task.Properties.UpstreamModelName)) {
 		return 0
@@ -142,6 +166,13 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		return task.Quota
 	}
 	h3Task := response.Task
+	modelName := task.Properties.UpstreamModelName
+	if !isMiniMaxH3Model(modelName) {
+		modelName = task.Properties.OriginModelName
+	}
+	if isMiniMaxH3Model(h3Task.Model) {
+		modelName = h3Task.Model
+	}
 	outputSeconds := h3Task.Duration
 	inputVideoSeconds := 0
 	inputImageCount := 0
@@ -181,7 +212,7 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		inputImageCount = miniMaxH3MaxImageCount
 	}
 
-	costRMB := miniMaxH3CostRMB(outputSeconds, inputVideoSeconds, inputImageCount, resolution)
+	costRMB := miniMaxH3CostRMB(modelName, outputSeconds, inputVideoSeconds, inputImageCount, resolution)
 	if costRMB <= 0 {
 		return task.Quota
 	}
@@ -201,7 +232,7 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 	if quota <= 0 {
 		return task.Quota
 	}
-	details := miniMaxH3BillingDetails(outputSeconds, inputVideoSeconds, inputImageCount, resolution, groupRatio)
+	details := miniMaxH3BillingDetails(modelName, outputSeconds, inputVideoSeconds, inputImageCount, resolution, groupRatio)
 	details.AspectRatio = h3Task.Ratio
 	if details.AspectRatio == "" {
 		if snapshot := task.PrivateData.RequestSnapshot; snapshot != nil {

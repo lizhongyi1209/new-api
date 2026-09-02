@@ -133,6 +133,22 @@ Important boundaries:
 - Upload management lists and deletes local upload inventory; it is not the object-upload entry point.
 - Storage provider routing, size/type validation, authentication, HMAC/origin checks, and public URL behavior are separate contracts. Trace the complete route → controller → service chain before changing one of them.
 
+## MiniMax H3 video generation
+
+Aliases: MiniMax H3, H3 Max, MiniMax-H3, MiniMax-H3-Max, 海螺 H3, 尾帧视频, 多模态参考视频.
+
+- Downstream submission uses `POST /v1/video/generations`; task lookup uses `GET /v1/videos/:task_id`.
+- `MiniMax-H3` supports 768P/2K, 4-15 second T2V, first-frame/last-frame I2V, and multimodal reference generation. Reference inputs allow up to 9 images, 3 videos, and 3 audios, with at most 12 mixed media files in total.
+- `MiniMax-H3-Max` supports 480P/768P, 5-15 second T2V and first-frame/last-frame I2V only. It does not accept multimodal reference image, video, or audio inputs.
+- Both models use MiniMax V2 create/query endpoints. Query usage preserves output seconds, reference-video seconds, input-audio seconds, image count, and token fields.
+- H3 billing uses the official CNY output/input rates and settles from returned usage. H3 Max charges output only; its input images are free.
+- Provider model lists and endpoints: `relay/channel/task/hailuo/constants.go`, `relay/channel/minimax/constants.go`.
+- Request validation, V2 response parsing, and public response conversion: `relay/channel/task/hailuo/v2.go`, `relay/channel/task/hailuo/adaptor.go`.
+- Submit estimation and completion settlement: `relay/channel/task/hailuo/billing.go`; base ratio enablement: `setting/ratio_setting/model_ratio.go`.
+- TokenMart/type-60 transport keeps the same downstream MiniMax request contract while mapping model IDs to `minimax-h3` / `minimax-h3-max`, submitting and polling through `/v1/video/*`, bypassing Seedance asset conversion, and settling from TokenMart's USD per-second/image usage: `relay/channel/task/serviceinference/adaptor.go`, `relay/channel/task/serviceinference/minimax_h3.go`.
+- Public downstream reference: `docs/api-doc.html#minimax-h3`.
+- Regression coverage: `relay/channel/task/hailuo/v2_test.go`, `relay/channel/task/serviceinference/adaptor_test.go`.
+
 ## Seedance video generation
 
 Aliases: Seedance 视频, Seedance task, 查询视频任务, `/v1/video/generations`, TokenMartSeedance, ServiceInference video, Seedance MAX, `/v2/video/generate`.

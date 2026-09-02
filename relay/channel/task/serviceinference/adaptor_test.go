@@ -980,3 +980,192 @@ func TestEstimateBillingUsesMappedSeedance25UpstreamModel(t *testing.T) {
 	require.Nil(t, taskErr)
 	assert.Equal(t, map[string]float64{"video_input": 42.0 / 70.0}, adaptor.EstimateBilling(context, info))
 }
+
+func TestMiniMaxH3ClientRequestMapsAndPreservesOfficialPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	requestBody := `{
+		"model":"MiniMax-H3",
+		"content":[
+			{"type":"text","text":"A paper boat crosses a rain puddle"},
+			{"type":"image_url","image_url":{"url":"https://cdn.example.com/reference.png"},"role":"reference_image"},
+			{"type":"video_url","video_url":{"url":"https://cdn.example.com/camera.mp4"},"role":"reference_video"},
+			{"type":"audio_url","audio_url":{"url":"https://cdn.example.com/voice.mp3"},"role":"reference_audio"}
+		],
+		"resolution":"2K",
+		"duration":5,
+		"ratio":"adaptive",
+		"callback_url":"https://client.example.com/callback",
+		"aigc_watermark":false
+	}`
+	context := newTaskContextForPath("/v1/video/generations", requestBody)
+	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	info.OriginModelName = "MiniMax-H3"
+
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+	info.UpstreamModelName = "minimax-h3"
+	info.IsModelMapped = true
+
+	reader, err := adaptor.BuildRequestBody(context, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"model":"minimax-h3",
+		"content":[
+			{"type":"text","text":"A paper boat crosses a rain puddle"},
+			{"type":"image_url","image_url":{"url":"https://cdn.example.com/reference.png"},"role":"reference_image"},
+			{"type":"video_url","video_url":{"url":"https://cdn.example.com/camera.mp4"},"role":"reference_video"},
+			{"type":"audio_url","audio_url":{"url":"https://cdn.example.com/voice.mp3"},"role":"reference_audio"}
+		],
+		"resolution":"2K",
+		"duration":5,
+		"ratio":"adaptive",
+		"callback_url":"https://client.example.com/callback",
+		"aigc_watermark":false
+	}`, string(data))
+	assert.NotContains(t, string(data), "asset://")
+
+	taskRequest, err := relaycommon.GetTaskRequest(context)
+	require.NoError(t, err)
+	assert.Equal(t, 1, taskRequest.ImageCount)
+	assert.Equal(t, 1, taskRequest.ReferenceImageCount)
+	assert.Equal(t, 1, taskRequest.ReferenceAudioCount)
+	assert.True(t, taskRequest.HasVideo)
+}
+
+func TestMiniMaxH3MaxClientRequestMapsAndPrechargesAtCurrentUpstreamRate(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context := newTaskContextForPath("/v1/video/generations", `{
+		"model":"MiniMax-H3-MAX",
+		"content":[
+			{"type":"text","text":"A neon sign flickers in fog"},
+			{"type":"image_url","image_url":{"url":"https://cdn.example.com/last.png"},"role":"last_frame"}
+		],
+		"resolution":"480P",
+		"duration":5,
+		"ratio":"adaptive"
+	}`)
+	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	info.OriginModelName = "MiniMax-H3-MAX"
+
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+	info.UpstreamModelName = "minimax-h3-max"
+	info.IsModelMapped = true
+	info.PriceData.ModelRatio = 1
+
+	ratios := adaptor.EstimateBilling(context, info)
+	assert.InDelta(t, 0.195/0.5, ratios["tokenmart_minimax_h3_cost"], 1e-12)
+	require.NotNil(t, info.VideoBilling)
+	assert.Equal(t, "USD", info.VideoBilling.Currency)
+	assert.Equal(t, 0.039, info.VideoBilling.OutputUnitRate)
+	assert.InDelta(t, 0.195, info.VideoBilling.ProviderCost, 1e-12)
+
+	reader, err := adaptor.BuildRequestBody(context, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var payload requestPayload
+	require.NoError(t, common.Unmarshal(data, &payload))
+	assert.Equal(t, "minimax-h3-max", payload.Model)
+	assert.Equal(t, "480P", payload.Resolution)
+	assert.Equal(t, "last_frame", payload.Content[1].Role)
+}
+
+func TestMiniMaxH3BillingUsesCurrentTokenMartModelPrices(t *testing.T) {
+	assert.InDelta(t, 0.507, miniMaxH3CostUSD("minimax-h3", 5, 0, 0, "2K"), 1e-12)
+	assert.InDelta(t, 0.741, miniMaxH3CostUSD("minimax-h3", 5, 2, 6, "2K"), 1e-12)
+	assert.InDelta(t, 0.195, miniMaxH3CostUSD("minimax-h3-max", 5, 10, 9, "480P"), 1e-12)
+}
+
+func TestMiniMaxH3CompletionResponsePreservesUsageAndSettlesBilling(t *testing.T) {
+	responseBody := []byte(`{
+		"task":{
+			"id":"mvt-upstream",
+			"status":"completed",
+			"model":"minimax-h3",
+			"duration_seconds":5,
+			"outputs":[],
+			"error":null,
+			"metadata":{
+				"resolution":"2K",
+				"duration":5,
+				"ratio":"16:9",
+				"task_type":"generation",
+				"content":{"url":"https://cdn.example.com/output.mp4"},
+				"usage":{
+					"total_seconds":7,
+					"input_seconds":2,
+					"input_audio_seconds":3,
+					"output_seconds":5,
+					"input_image_count":6,
+					"prompt_tokens":20,
+					"completion_tokens":50,
+					"total_tokens":70
+				}
+			}
+		}
+	}`)
+	adaptor := &TaskAdaptor{}
+	result, err := adaptor.ParseTaskResult(responseBody)
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusSuccess, result.Status)
+	assert.Equal(t, "https://cdn.example.com/output.mp4", result.Url)
+	assert.Equal(t, 20, result.PromptTokens)
+	assert.Equal(t, 50, result.CompletionTokens)
+	assert.Equal(t, 70, result.TotalTokens)
+	usage, ok := result.Metadata["usage"].(*taskUsage)
+	require.True(t, ok)
+	assert.Equal(t, 3, usage.InputAudioSeconds)
+
+	preConsumed := common.QuotaRound(0.507 * common.QuotaPerUnit)
+	task := &model.Task{
+		TaskID: "task-public",
+		Quota:  preConsumed,
+		Status: model.TaskStatusSuccess,
+		Properties: model.Properties{
+			OriginModelName:   "MiniMax-H3",
+			UpstreamModelName: "minimax-h3",
+		},
+		PrivateData: model.TaskPrivateData{
+			RequestSnapshot: &model.TaskRequestSnapshot{Duration: 5, ResolutionEffective: "2K", ImageCount: 6},
+			BillingContext:  &model.TaskBillingContext{GroupRatio: 1},
+		},
+		Data: responseBody,
+	}
+	wantQuota := common.QuotaRound(0.741 * common.QuotaPerUnit)
+	assert.Equal(t, wantQuota, adaptor.AdjustBillingOnComplete(task, result))
+	require.NotNil(t, result.VideoBilling)
+	assert.Equal(t, "USD", result.VideoBilling.Currency)
+	assert.InDelta(t, 0.741, result.VideoBilling.ProviderCost, 1e-12)
+	assert.Equal(t, 2, result.VideoBilling.ReferenceVideoInputSeconds)
+	assert.Equal(t, 1, result.VideoBilling.BilledImageCount)
+
+	publicTask := *task
+	publicTask.Data = responseBody
+	data, err := adaptor.ConvertToOpenAIVideo(&publicTask)
+	require.NoError(t, err)
+	var publicResponse map[string]any
+	require.NoError(t, common.Unmarshal(data, &publicResponse))
+	assert.Equal(t, "https://cdn.example.com/output.mp4", publicResponse["result_url"])
+	metadata, ok := publicResponse["metadata"].(map[string]any)
+	require.True(t, ok)
+	publicUsage, ok := metadata["usage"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(3), publicUsage["input_audio_seconds"])
+}
+
+func TestMiniMaxH3EmptyStatusAndErrorTransitions(t *testing.T) {
+	adaptor := &TaskAdaptor{}
+	transition, err := adaptor.ParseTaskResult([]byte(`{"task":{"id":"mvt-transition","model":"minimax-h3","status":"","error":null}}`))
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusInProgress, transition.Status)
+
+	failed, err := adaptor.ParseTaskResult([]byte(`{"task":{"id":"mvt-failed","model":"minimax-h3","status":"","error":{"message":"generation failed"}}}`))
+	require.NoError(t, err)
+	assert.Equal(t, model.TaskStatusFailure, failed.Status)
+	assert.Equal(t, "generation failed", failed.Reason)
+}

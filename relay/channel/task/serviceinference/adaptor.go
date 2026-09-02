@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,8 @@ type requestPayload struct {
 	Duration        *int          `json:"duration,omitempty"`
 	Resolution      string        `json:"resolution,omitempty"`
 	Ratio           string        `json:"ratio,omitempty"`
+	CallbackURL     string        `json:"callback_url,omitempty"`
+	AIGCWatermark   *bool         `json:"aigc_watermark,omitempty"`
 	GenerateAudio   *bool         `json:"generate_audio,omitempty"`
 	Watermark       *bool         `json:"watermark,omitempty"`
 	ReturnLastFrame *bool         `json:"return_last_frame,omitempty"`
@@ -44,32 +47,51 @@ type taskResponse struct {
 }
 
 type videoTask struct {
-	ID              string         `json:"id"`
-	Status          string         `json:"status"`
-	Model           string         `json:"model"`
-	DurationSeconds int            `json:"duration_seconds"`
-	Outputs         []string       `json:"outputs"`
-	Error           any            `json:"error"`
-	CreatedAt       string         `json:"created_at"`
-	CompletedAt     string         `json:"completed_at"`
-	Usage           *taskUsage     `json:"usage,omitempty"`
-	Metadata        *taskMetadata  `json:"metadata,omitempty"`
-	LastFrameURL    string         `json:"last_frame_url,omitempty"`
-	Prep            map[string]any `json:"prep,omitempty"`
+	ID              string           `json:"id"`
+	Status          string           `json:"status"`
+	Model           string           `json:"model"`
+	DurationSeconds int              `json:"duration_seconds"`
+	Outputs         []string         `json:"outputs"`
+	Error           any              `json:"error"`
+	CreatedAt       string           `json:"created_at"`
+	CompletedAt     string           `json:"completed_at"`
+	Usage           *taskUsage       `json:"usage,omitempty"`
+	Metadata        *taskMetadata    `json:"metadata,omitempty"`
+	LastFrameURL    string           `json:"last_frame_url,omitempty"`
+	Prep            map[string]any   `json:"prep,omitempty"`
+	Resolution      string           `json:"resolution,omitempty"`
+	Ratio           string           `json:"ratio,omitempty"`
+	TaskType        string           `json:"task_type,omitempty"`
+	Content         *metadataContent `json:"content,omitempty"`
 }
 
 type taskUsage struct {
-	CompletionTokens int   `json:"completion_tokens,omitempty"`
-	TotalTokens      int   `json:"total_tokens,omitempty"`
-	CostInUSDTicks   int64 `json:"cost_in_usd_ticks,omitempty"`
+	PromptTokens      int   `json:"prompt_tokens,omitempty"`
+	CompletionTokens  int   `json:"completion_tokens,omitempty"`
+	TotalTokens       int   `json:"total_tokens,omitempty"`
+	CostInUSDTicks    int64 `json:"cost_in_usd_ticks,omitempty"`
+	TotalSeconds      int   `json:"total_seconds,omitempty"`
+	InputSeconds      int   `json:"input_seconds,omitempty"`
+	InputAudioSeconds int   `json:"input_audio_seconds,omitempty"`
+	OutputSeconds     int   `json:"output_seconds,omitempty"`
+	InputImageCount   int   `json:"input_image_count,omitempty"`
 }
 
 type taskMetadata struct {
-	Status   string         `json:"status,omitempty"`
-	Model    string         `json:"model,omitempty"`
-	Progress int            `json:"progress,omitempty"`
-	Video    *metadataVideo `json:"video,omitempty"`
-	Usage    *taskUsage     `json:"usage,omitempty"`
+	Status     string           `json:"status,omitempty"`
+	Model      string           `json:"model,omitempty"`
+	Progress   int              `json:"progress,omitempty"`
+	Video      *metadataVideo   `json:"video,omitempty"`
+	Usage      *taskUsage       `json:"usage,omitempty"`
+	Resolution string           `json:"resolution,omitempty"`
+	Duration   int              `json:"duration,omitempty"`
+	Ratio      string           `json:"ratio,omitempty"`
+	TaskType   string           `json:"task_type,omitempty"`
+	Content    *metadataContent `json:"content,omitempty"`
+}
+
+type metadataContent struct {
+	URL string `json:"url,omitempty"`
 }
 
 type metadataVideo struct {
@@ -187,6 +209,43 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.TrimSpace(nativeReq.Model) == "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("model field is required"), "missing_model", http.StatusBadRequest)
 	}
+	if isMiniMaxH3Model(nativeReq.Model) {
+		if c.Request.ContentLength > tokenMartH3MaxBodyBytes {
+			return service.TaskErrorWrapperLocal(fmt.Errorf("request body must not exceed 64 MB"), "invalid_request", http.StatusBadRequest)
+		}
+		summary, err := validateMiniMaxH3Payload(&nativeReq)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		metadata := make(map[string]interface{})
+		metadataBytes, err := common.Marshal(nativeReq)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if err := common.Unmarshal(metadataBytes, &metadata); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		request := relaycommon.TaskSubmitReq{
+			Prompt:              taskcommon.FirstTextContent(nativeReq.Content),
+			Model:               nativeReq.Model,
+			Size:                nativeReq.Resolution,
+			Duration:            *nativeReq.Duration,
+			AspectRatio:         nativeReq.Ratio,
+			Resolution:          nativeReq.Resolution,
+			EffectiveResolution: nativeReq.Resolution,
+			ImageCount:          summary.ImageCount,
+			ReferenceImageCount: summary.ReferenceImageCount,
+			ReferenceAudioCount: summary.ReferenceAudioCount,
+			HasVideo:            summary.HasVideo,
+			Metadata:            metadata,
+		}
+		if info.TaskRelayInfo == nil {
+			info.TaskRelayInfo = &relaycommon.TaskRelayInfo{}
+		}
+		info.Action = constant.TaskActionGenerate
+		c.Set("task_request", request)
+		return nil
+	}
 	prompt := taskcommon.FirstTextContent(nativeReq.Content)
 	if strings.TrimSpace(prompt) == "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("content text is required"), "invalid_request", http.StatusBadRequest)
@@ -259,9 +318,14 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	} else {
 		info.UpstreamModelName = body.Model
 	}
+	if isMiniMaxH3Model(body.Model) {
+		if _, err := validateMiniMaxH3Payload(body); err != nil {
+			return nil, err
+		}
+	}
 	// Seedance MAX v2 accepts public media URLs directly and performs its own
 	// preparation. Existing v1 models keep the legacy asset conversion flow.
-	if !isSeedanceMaxModel(body.Model) {
+	if !isMiniMaxH3Model(body.Model) && !isSeedanceMaxModel(body.Model) {
 		if err := a.prepareImageAssets(c.Request.Context(), body); err != nil {
 			return nil, err
 		}
@@ -387,6 +451,16 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		Code:   0,
 		TaskID: resTask.ID,
 	}
+	effectiveModel := resTask.Model
+	if effectiveModel == "" && resTask.Metadata != nil {
+		effectiveModel = resTask.Metadata.Model
+	}
+	if reason := formatUpstreamError(resTask.Error); isMiniMaxH3Model(effectiveModel) && reason != "" {
+		taskResult.Status = model.TaskStatusFailure
+		taskResult.Progress = taskcommon.ProgressComplete
+		taskResult.Reason = reason
+		return &taskResult, nil
+	}
 	switch strings.ToLower(strings.TrimSpace(resTask.Status)) {
 	case "pending", "queued", "submitted":
 		taskResult.Status = model.TaskStatusQueued
@@ -409,23 +483,56 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		if len(resTask.Outputs) > 0 {
 			taskResult.Url = resTask.Outputs[0]
 		}
-		if resTask.Usage != nil {
-			taskResult.CompletionTokens = resTask.Usage.CompletionTokens
-			taskResult.TotalTokens = resTask.Usage.TotalTokens
+		if taskResult.Url == "" && resTask.Content != nil {
+			taskResult.Url = resTask.Content.URL
+		}
+		usage := effectiveTaskUsage(resTask)
+		if usage != nil {
+			taskResult.PromptTokens = usage.PromptTokens
+			taskResult.CompletionTokens = usage.CompletionTokens
+			taskResult.TotalTokens = usage.TotalTokens
+		}
+		taskResult.Metadata = map[string]interface{}{}
+		if resTask.DurationSeconds > 0 {
+			taskResult.Metadata["duration"] = resTask.DurationSeconds
+		}
+		if resTask.Resolution != "" {
+			taskResult.Metadata["resolution"] = resTask.Resolution
+		}
+		if resTask.Ratio != "" {
+			taskResult.Metadata["ratio"] = resTask.Ratio
+		}
+		if resTask.TaskType != "" {
+			taskResult.Metadata["task_type"] = resTask.TaskType
+		}
+		if usage != nil {
+			taskResult.Metadata["usage"] = usage
+			if usage.CostInUSDTicks > 0 {
+				taskResult.Metadata["cost_in_usd_ticks"] = usage.CostInUSDTicks
+			}
 		}
 		if resTask.Metadata != nil {
 			if taskResult.Url == "" && resTask.Metadata.Video != nil {
 				taskResult.Url = resTask.Metadata.Video.URL
 			}
-			taskResult.Metadata = map[string]interface{}{
-				"duration": resTask.DurationSeconds,
-				"progress": resTask.Metadata.Progress,
+			if taskResult.Url == "" && resTask.Metadata.Content != nil {
+				taskResult.Url = resTask.Metadata.Content.URL
 			}
+			taskResult.Metadata["progress"] = resTask.Metadata.Progress
 			if resTask.Metadata.Video != nil && resTask.Metadata.Video.Duration > 0 {
 				taskResult.Metadata["duration"] = resTask.Metadata.Video.Duration
 			}
-			if resTask.Metadata.Usage != nil && resTask.Metadata.Usage.CostInUSDTicks > 0 {
-				taskResult.Metadata["cost_in_usd_ticks"] = resTask.Metadata.Usage.CostInUSDTicks
+			if resTask.Metadata.Duration > 0 {
+				taskResult.Metadata["duration"] = resTask.Metadata.Duration
+			}
+			if resTask.Metadata.Resolution != "" {
+				taskResult.Metadata["resolution"] = resTask.Metadata.Resolution
+			}
+			if resTask.Metadata.Ratio != "" {
+				taskResult.Metadata["ratio"] = resTask.Metadata.Ratio
+			}
+			if resTask.Metadata.TaskType != "" {
+				taskResult.Metadata["task_type"] = resTask.Metadata.TaskType
 			}
 		}
 	case "failed", "failure", "error", "cancelled", "canceled":
@@ -481,11 +588,47 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		openAIVideo.SetMetadata("url", resTask.Outputs[0])
 		openAIVideo.SetMetadata("outputs", resTask.Outputs)
 	}
+	if openAIVideo.ResultURL == "" && resTask.Metadata != nil && resTask.Metadata.Content != nil {
+		openAIVideo.ResultURL = resTask.Metadata.Content.URL
+		openAIVideo.SetMetadata("url", resTask.Metadata.Content.URL)
+	}
+	if openAIVideo.ResultURL == "" && resTask.Content != nil {
+		openAIVideo.ResultURL = resTask.Content.URL
+		openAIVideo.SetMetadata("url", resTask.Content.URL)
+	}
 	if resTask.LastFrameURL != "" {
 		openAIVideo.SetMetadata("last_frame_url", resTask.LastFrameURL)
 	}
-	if resTask.Usage != nil {
-		openAIVideo.SetMetadata("usage", resTask.Usage)
+	if usage := effectiveTaskUsage(resTask); usage != nil {
+		openAIVideo.SetMetadata("usage", usage)
+	}
+	if resTask.DurationSeconds > 0 {
+		openAIVideo.Seconds = strconv.Itoa(resTask.DurationSeconds)
+	}
+	if resTask.Resolution != "" {
+		openAIVideo.Size = resTask.Resolution
+		openAIVideo.SetMetadata("resolution", resTask.Resolution)
+	}
+	if resTask.Ratio != "" {
+		openAIVideo.SetMetadata("ratio", resTask.Ratio)
+	}
+	if resTask.TaskType != "" {
+		openAIVideo.SetMetadata("task_type", resTask.TaskType)
+	}
+	if resTask.Metadata != nil {
+		if resTask.Metadata.Duration > 0 {
+			openAIVideo.Seconds = strconv.Itoa(resTask.Metadata.Duration)
+		}
+		if resTask.Metadata.Resolution != "" {
+			openAIVideo.Size = resTask.Metadata.Resolution
+			openAIVideo.SetMetadata("resolution", resTask.Metadata.Resolution)
+		}
+		if resTask.Metadata.Ratio != "" {
+			openAIVideo.SetMetadata("ratio", resTask.Metadata.Ratio)
+		}
+		if resTask.Metadata.TaskType != "" {
+			openAIVideo.SetMetadata("task_type", resTask.Metadata.TaskType)
+		}
 	}
 	applyTaskPreparationMetadata(openAIVideo, resTask)
 	if originTask.Status == model.TaskStatusFailure {
@@ -895,6 +1038,9 @@ func formatUpstreamError(value any) string {
 func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInfo) map[string]float64 {
 	if request, ok := grokvideo.GetRequest(c); ok {
 		return grokvideo.EstimateBilling(request, info.Action)
+	}
+	if isMiniMaxH3Model(info.UpstreamModelName) || isMiniMaxH3Model(info.OriginModelName) {
+		return a.estimateMiniMaxH3Billing(c, info)
 	}
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {

@@ -11,12 +11,27 @@ const ChannelName = "TokenMartSeedance"
 const seedance25VideoInputPriceRatio = 42.0 / 70.0
 
 var ModelList = []string{
+	"minimax-h3",
+	"minimax-h3-max",
 	"dreamina-seedance-2-0-260128",
 	"dreamina-seedance-2-0-260128-df",
 	"dreamina-seedance-2-0-fast-260128-df",
 	"dreamina-seedance-2-0-mini-260615-df",
 	"dreamina-seedance-2-5-260628-df",
 	"grok-imagine-video-1.5",
+}
+
+func isMiniMaxH3Model(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "minimax-h3", "minimax-h3-max":
+		return true
+	default:
+		return false
+	}
+}
+
+func isMiniMaxH3MaxModel(model string) bool {
+	return strings.EqualFold(strings.TrimSpace(model), "minimax-h3-max")
 }
 
 const (

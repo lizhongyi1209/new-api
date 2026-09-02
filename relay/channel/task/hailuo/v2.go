@@ -17,12 +17,15 @@ import (
 )
 
 const (
-	miniMaxH3Model          = "MiniMax-H3"
-	miniMaxH3MinDuration    = 4
-	miniMaxH3MaxDuration    = 15
-	miniMaxH3MaxPromptRunes = 7000
-	miniMaxH3MaxImageCount  = 9
-	miniMaxH3MaxBodyBytes   = 64 << 20
+	miniMaxH3Model              = "MiniMax-H3"
+	miniMaxH3MaxModel           = "MiniMax-H3-Max"
+	miniMaxH3MinDuration        = 4
+	miniMaxH3MaxMinDuration     = 5
+	miniMaxH3MaxDuration        = 15
+	miniMaxH3MaxPromptRunes     = 7000
+	miniMaxH3MaxImageCount      = 9
+	miniMaxH3MaxMixedMediaCount = 12
+	miniMaxH3MaxBodyBytes       = 64 << 20
 )
 
 type miniMaxH3Request struct {
@@ -69,13 +72,14 @@ type miniMaxH3TaskContent struct {
 }
 
 type miniMaxH3TaskUsage struct {
-	TotalSeconds     int `json:"total_seconds,omitempty"`
-	InputSeconds     int `json:"input_seconds,omitempty"`
-	OutputSeconds    int `json:"output_seconds,omitempty"`
-	InputImageCount  int `json:"input_image_count,omitempty"`
-	TotalTokens      int `json:"total_tokens,omitempty"`
-	PromptTokens     int `json:"prompt_tokens,omitempty"`
-	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalSeconds      int `json:"total_seconds,omitempty"`
+	InputSeconds      int `json:"input_seconds,omitempty"`
+	InputAudioSeconds int `json:"input_audio_seconds,omitempty"`
+	OutputSeconds     int `json:"output_seconds,omitempty"`
+	InputImageCount   int `json:"input_image_count,omitempty"`
+	TotalTokens       int `json:"total_tokens,omitempty"`
+	PromptTokens      int `json:"prompt_tokens,omitempty"`
+	CompletionTokens  int `json:"completion_tokens,omitempty"`
 }
 
 type miniMaxV2ErrorResponse struct {
@@ -96,7 +100,12 @@ type miniMaxH3InputSummary struct {
 }
 
 func isMiniMaxH3Model(modelName string) bool {
-	return strings.EqualFold(strings.TrimSpace(modelName), miniMaxH3Model)
+	modelName = strings.TrimSpace(modelName)
+	return strings.EqualFold(modelName, miniMaxH3Model) || strings.EqualFold(modelName, miniMaxH3MaxModel)
+}
+
+func isMiniMaxH3MaxModel(modelName string) bool {
+	return strings.EqualFold(strings.TrimSpace(modelName), miniMaxH3MaxModel)
 }
 
 func isMiniMaxH3Info(info *relaycommon.RelayInfo) bool {
@@ -124,10 +133,19 @@ func validateMiniMaxH3Request(request *miniMaxH3Request) (*miniMaxH3InputSummary
 	if len(request.Content) == 0 {
 		return nil, fmt.Errorf("content field is required")
 	}
-	if request.Duration == nil || *request.Duration < miniMaxH3MinDuration || *request.Duration > miniMaxH3MaxDuration {
-		return nil, fmt.Errorf("duration must be between %d and %d", miniMaxH3MinDuration, miniMaxH3MaxDuration)
+	isMaxModel := isMiniMaxH3MaxModel(request.Model)
+	minDuration := miniMaxH3MinDuration
+	if isMaxModel {
+		minDuration = miniMaxH3MaxMinDuration
 	}
-	if request.Resolution != Resolution768P && request.Resolution != Resolution2K {
+	if request.Duration == nil || *request.Duration < minDuration || *request.Duration > miniMaxH3MaxDuration {
+		return nil, fmt.Errorf("duration must be between %d and %d", minDuration, miniMaxH3MaxDuration)
+	}
+	if isMaxModel {
+		if request.Resolution != Resolution480P && request.Resolution != Resolution768P {
+			return nil, fmt.Errorf("resolution must be %s or %s for %s", Resolution480P, Resolution768P, miniMaxH3MaxModel)
+		}
+	} else if request.Resolution != Resolution768P && request.Resolution != Resolution2K {
 		return nil, fmt.Errorf("resolution must be %s or %s", Resolution768P, Resolution2K)
 	}
 	validRatios := map[string]bool{
@@ -179,12 +197,18 @@ func validateMiniMaxH3Request(request *miniMaxH3Request) (*miniMaxH3InputSummary
 				lastFrameCount++
 				frameMode = true
 			case "reference_image":
+				if isMaxModel {
+					return nil, fmt.Errorf("%s does not support multimodal reference inputs", miniMaxH3MaxModel)
+				}
 				summary.ReferenceImageCount++
 				referenceMode = true
 			default:
 				return nil, fmt.Errorf("content[%d].role is invalid for image_url", i)
 			}
 		case "video_url":
+			if isMaxModel {
+				return nil, fmt.Errorf("%s does not support video inputs", miniMaxH3MaxModel)
+			}
 			if item.VideoURL == nil || !validMiniMaxMediaURL(item.VideoURL.URL, "video") {
 				return nil, fmt.Errorf("content[%d].video_url.url is invalid", i)
 			}
@@ -195,6 +219,9 @@ func validateMiniMaxH3Request(request *miniMaxH3Request) (*miniMaxH3InputSummary
 			summary.HasVideo = true
 			referenceMode = true
 		case "audio_url":
+			if isMaxModel {
+				return nil, fmt.Errorf("%s does not support audio inputs", miniMaxH3MaxModel)
+			}
 			if item.AudioURL == nil || !validMiniMaxMediaURL(item.AudioURL.URL, "audio") {
 				return nil, fmt.Errorf("content[%d].audio_url.url is invalid", i)
 			}
@@ -211,7 +238,7 @@ func validateMiniMaxH3Request(request *miniMaxH3Request) (*miniMaxH3InputSummary
 	if textCount == 0 {
 		return nil, fmt.Errorf("content must include a non-empty text item")
 	}
-	if firstFrameCount > 1 || lastFrameCount > 1 || (lastFrameCount == 1 && firstFrameCount == 0) {
+	if firstFrameCount > 1 || lastFrameCount > 1 {
 		return nil, fmt.Errorf("first_frame and last_frame inputs are invalid")
 	}
 	if summary.ReferenceImageCount > miniMaxH3MaxImageCount {
@@ -222,6 +249,9 @@ func validateMiniMaxH3Request(request *miniMaxH3Request) (*miniMaxH3InputSummary
 	}
 	if summary.ReferenceAudioCount > 3 {
 		return nil, fmt.Errorf("a maximum of 3 reference audios is supported")
+	}
+	if summary.ImageCount+referenceVideoCount+summary.ReferenceAudioCount > miniMaxH3MaxMixedMediaCount {
+		return nil, fmt.Errorf("a maximum of %d mixed media files is supported", miniMaxH3MaxMixedMediaCount)
 	}
 	if frameMode && referenceMode {
 		return nil, fmt.Errorf("frame inputs and reference inputs are mutually exclusive")

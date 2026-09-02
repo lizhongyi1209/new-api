@@ -4,6 +4,7 @@ package minimax
 
 var ModelList = []string{
 	"MiniMax-H3",
+	"MiniMax-H3-Max",
 	"abab6.5-chat",
 	"abab6.5s-chat",
 	"abab6-chat",

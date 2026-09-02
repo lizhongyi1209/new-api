@@ -85,6 +85,12 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		if body.Model == "" {
 			body.Model = miniMaxH3Model
 		}
+		// Model mapping runs after the initial request validation. Validate the
+		// effective model as well so aliases mapped to H3 Max cannot bypass its
+		// narrower duration, resolution, and input constraints.
+		if _, err := validateMiniMaxH3Request(&body); err != nil {
+			return nil, err
+		}
 		data, err := common.Marshal(body)
 		if err != nil {
 			return nil, err
