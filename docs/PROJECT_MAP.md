@@ -169,7 +169,7 @@ Aliases: MiniMax H3, H3 Max, MiniMax-H3, MiniMax-H3-Max, 海螺 H3, 尾帧视频
 - Provider model lists and endpoints: `relay/channel/task/hailuo/constants.go`, `relay/channel/minimax/constants.go`.
 - Request validation, V2 response parsing, and public response conversion: `relay/channel/task/hailuo/v2.go`, `relay/channel/task/hailuo/adaptor.go`.
 - Submit estimation and completion settlement: `relay/channel/task/hailuo/billing.go`; base ratio enablement: `setting/ratio_setting/model_ratio.go`.
-- TokenMart/type-60 transport keeps the same downstream MiniMax request contract while mapping model IDs to `minimax-h3` / `minimax-h3-max`, submitting and polling through `/v1/video/*`, bypassing Seedance asset conversion, and settling from TokenMart's USD per-second/image usage: `relay/channel/task/serviceinference/adaptor.go`, `relay/channel/task/serviceinference/minimax_h3.go`.
+- TokenMart/type-60 transport keeps the same downstream MiniMax request contract while mapping model IDs to `minimax-h3` / `minimax-h3-max`, submitting and polling through `/v1/video/*`, bypassing Seedance asset conversion, and settling from MiniMax's official RMB per-second/image prices through the configured USD/RMB conversion: `relay/channel/task/serviceinference/adaptor.go`, `relay/channel/task/serviceinference/minimax_h3.go`.
 - Public downstream reference: `docs/api-doc.html#minimax-h3`.
 - Regression coverage: `relay/channel/task/hailuo/v2_test.go`, `relay/channel/task/serviceinference/adaptor_test.go`.
 

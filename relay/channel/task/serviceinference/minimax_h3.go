@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,14 +20,15 @@ const (
 	tokenMartH3MaxImageCount      = 9
 	tokenMartH3MaxMixedMediaCount = 12
 	tokenMartH3MaxBodyBytes       = 64 << 20
-	// Current USD rates returned by TokenMart's authenticated /v1/models
-	// endpoint. Completion settlement uses the provider's returned usage.
-	tokenMartH3Rate768PUSD    = 0.0624
-	tokenMartH3Rate2KUSD      = 0.1014
-	tokenMartH3MaxRate480PUSD = 0.039
-	tokenMartH3MaxRate768PUSD = 0.0624
-	tokenMartH3FreeImageCount = 5
-	tokenMartH3ExtraImageUSD  = 0.0312
+	// MiniMax official pay-as-you-go prices are denominated in RMB.
+	// Completion settlement uses the provider's returned usage.
+	tokenMartH3Rate768PRMB        = 0.50
+	tokenMartH3Rate2KRMB          = 0.80
+	tokenMartH3MaxRate480PRMB     = 0.33
+	tokenMartH3MaxRate768PRMB     = 0.50
+	tokenMartH3FreeImageCount     = 5
+	tokenMartH3ExtraImageRMB      = 0.20
+	tokenMartH3FallbackUSDRMBRate = 7.3
 )
 
 type miniMaxH3InputSummary struct {
@@ -197,29 +199,29 @@ func validMiniMaxH3MediaURL(rawURL string, mediaType string) bool {
 	return false
 }
 
-func miniMaxH3RateUSD(modelName, resolution string) (float64, bool) {
+func miniMaxH3RateRMB(modelName, resolution string) (float64, bool) {
 	if isMiniMaxH3MaxModel(modelName) {
 		switch strings.ToUpper(strings.TrimSpace(resolution)) {
 		case "480P":
-			return tokenMartH3MaxRate480PUSD, true
+			return tokenMartH3MaxRate480PRMB, true
 		case "768P":
-			return tokenMartH3MaxRate768PUSD, true
+			return tokenMartH3MaxRate768PRMB, true
 		default:
 			return 0, false
 		}
 	}
 	switch strings.ToUpper(strings.TrimSpace(resolution)) {
 	case "768P":
-		return tokenMartH3Rate768PUSD, true
+		return tokenMartH3Rate768PRMB, true
 	case "2K":
-		return tokenMartH3Rate2KUSD, true
+		return tokenMartH3Rate2KRMB, true
 	default:
 		return 0, false
 	}
 }
 
-func miniMaxH3CostUSD(modelName string, outputSeconds, inputVideoSeconds, inputImageCount int, resolution string) float64 {
-	rate, ok := miniMaxH3RateUSD(modelName, resolution)
+func miniMaxH3CostRMB(modelName string, outputSeconds, inputVideoSeconds, inputImageCount int, resolution string) float64 {
+	rate, ok := miniMaxH3RateRMB(modelName, resolution)
 	if !ok {
 		return 0
 	}
@@ -238,19 +240,27 @@ func miniMaxH3CostUSD(modelName string, outputSeconds, inputVideoSeconds, inputI
 	}
 	cost += float64(inputVideoSeconds) * rate
 	if inputImageCount > tokenMartH3FreeImageCount {
-		cost += float64(inputImageCount-tokenMartH3FreeImageCount) * tokenMartH3ExtraImageUSD
+		cost += float64(inputImageCount-tokenMartH3FreeImageCount) * tokenMartH3ExtraImageRMB
 	}
 	return cost
+}
+
+func miniMaxH3USDRMBRate() float64 {
+	rate := operation_setting.USDExchangeRate
+	if rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
+		return tokenMartH3FallbackUSDRMBRate
+	}
+	return rate
 }
 
 func miniMaxH3BillingDetails(modelName string, outputSeconds, inputVideoSeconds, inputImageCount int, resolution string, groupRatio float64) *relaycommon.VideoBillingDetails {
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	rate, _ := miniMaxH3RateUSD(modelName, resolution)
+	rate, _ := miniMaxH3RateRMB(modelName, resolution)
 	freeImageCount := tokenMartH3FreeImageCount
 	billedImageCount := inputImageCount - freeImageCount
-	imageUnitRate := tokenMartH3ExtraImageUSD
+	imageUnitRate := tokenMartH3ExtraImageRMB
 	if billedImageCount < 0 {
 		billedImageCount = 0
 	}
@@ -266,7 +276,7 @@ func miniMaxH3BillingDetails(modelName string, outputSeconds, inputVideoSeconds,
 	providerCost := outputCost + referenceVideoCost + imageSurcharge
 	return &relaycommon.VideoBillingDetails{
 		BillingMode:                "video_per_second",
-		Currency:                   "USD",
+		Currency:                   "CNY",
 		Resolution:                 resolution,
 		OutputUnitRate:             rate,
 		OutputSeconds:              outputSeconds,
@@ -300,12 +310,12 @@ func (a *TaskAdaptor) estimateMiniMaxH3Billing(c *gin.Context, info *relaycommon
 	if !isMiniMaxH3Model(modelName) {
 		modelName = info.OriginModelName
 	}
-	costUSD := miniMaxH3CostUSD(modelName, request.Duration, 0, request.ImageCount, request.EffectiveResolution)
-	if costUSD <= 0 {
+	costRMB := miniMaxH3CostRMB(modelName, request.Duration, 0, request.ImageCount, request.EffectiveResolution)
+	if costRMB <= 0 {
 		return nil
 	}
 	baseCostUSD := info.PriceData.ModelRatio / 2
-	ratio := costUSD / baseCostUSD
+	ratio := costRMB / miniMaxH3USDRMBRate() / baseCostUSD
 	if ratio <= 0 || math.IsNaN(ratio) || math.IsInf(ratio, 1) {
 		return nil
 	}
@@ -390,8 +400,8 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		inputImageCount = tokenMartH3MaxImageCount
 	}
 
-	costUSD := miniMaxH3CostUSD(modelName, outputSeconds, inputVideoSeconds, inputImageCount, resolution)
-	if costUSD <= 0 {
+	costRMB := miniMaxH3CostRMB(modelName, outputSeconds, inputVideoSeconds, inputImageCount, resolution)
+	if costRMB <= 0 {
 		return task.Quota
 	}
 	groupRatio := 1.0
@@ -403,7 +413,7 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 			groupRatio = billing.GroupRatio
 		}
 	}
-	quota, clamp := common.QuotaRoundChecked(costUSD * common.QuotaPerUnit * groupRatio)
+	quota, clamp := common.QuotaRoundChecked(costRMB / miniMaxH3USDRMBRate() * common.QuotaPerUnit * groupRatio)
 	if taskResult != nil && clamp != nil {
 		taskResult.QuotaClamp = clamp
 	}

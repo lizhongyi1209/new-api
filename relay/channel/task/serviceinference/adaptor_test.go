@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -1035,7 +1036,7 @@ func TestMiniMaxH3ClientRequestMapsAndPreservesOfficialPayload(t *testing.T) {
 	assert.True(t, taskRequest.HasVideo)
 }
 
-func TestMiniMaxH3MaxClientRequestMapsAndPrechargesAtCurrentUpstreamRate(t *testing.T) {
+func TestMiniMaxH3MaxClientRequestMapsAndPrechargesAtOfficialRate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context := newTaskContextForPath("/v1/video/generations", `{
 		"model":"MiniMax-H3-MAX",
@@ -1058,11 +1059,11 @@ func TestMiniMaxH3MaxClientRequestMapsAndPrechargesAtCurrentUpstreamRate(t *test
 	info.PriceData.ModelRatio = 1
 
 	ratios := adaptor.EstimateBilling(context, info)
-	assert.InDelta(t, 0.195/0.5, ratios["tokenmart_minimax_h3_cost"], 1e-12)
+	assert.InDelta(t, 1.65/miniMaxH3USDRMBRate()/0.5, ratios["tokenmart_minimax_h3_cost"], 1e-12)
 	require.NotNil(t, info.VideoBilling)
-	assert.Equal(t, "USD", info.VideoBilling.Currency)
-	assert.Equal(t, 0.039, info.VideoBilling.OutputUnitRate)
-	assert.InDelta(t, 0.195, info.VideoBilling.ProviderCost, 1e-12)
+	assert.Equal(t, "CNY", info.VideoBilling.Currency)
+	assert.Equal(t, 0.33, info.VideoBilling.OutputUnitRate)
+	assert.InDelta(t, 1.65, info.VideoBilling.ProviderCost, 1e-12)
 
 	reader, err := adaptor.BuildRequestBody(context, info)
 	require.NoError(t, err)
@@ -1075,10 +1076,39 @@ func TestMiniMaxH3MaxClientRequestMapsAndPrechargesAtCurrentUpstreamRate(t *test
 	assert.Equal(t, "last_frame", payload.Content[1].Role)
 }
 
-func TestMiniMaxH3BillingUsesCurrentTokenMartModelPrices(t *testing.T) {
-	assert.InDelta(t, 0.507, miniMaxH3CostUSD("minimax-h3", 5, 0, 0, "2K"), 1e-12)
-	assert.InDelta(t, 0.741, miniMaxH3CostUSD("minimax-h3", 5, 2, 6, "2K"), 1e-12)
-	assert.InDelta(t, 0.195, miniMaxH3CostUSD("minimax-h3-max", 5, 10, 9, "480P"), 1e-12)
+func TestMiniMaxH3BillingUsesOfficialMiniMaxPrices(t *testing.T) {
+	assert.InDelta(t, 4.0, miniMaxH3CostRMB("minimax-h3", 5, 0, 0, "2K"), 1e-12)
+	assert.InDelta(t, 5.8, miniMaxH3CostRMB("minimax-h3", 5, 2, 6, "2K"), 1e-12)
+	assert.InDelta(t, 1.65, miniMaxH3CostRMB("minimax-h3-max", 5, 10, 9, "480P"), 1e-12)
+	assert.InDelta(t, 2.5, miniMaxH3CostRMB("minimax-h3-max", 5, 10, 9, "768P"), 1e-12)
+}
+
+func TestMiniMaxH3MaxCompletionUsesOfficialRMBRateAndGroupRatio(t *testing.T) {
+	originalExchangeRate := operation_setting.USDExchangeRate
+	operation_setting.USDExchangeRate = 1
+	t.Cleanup(func() {
+		operation_setting.USDExchangeRate = originalExchangeRate
+	})
+
+	task := &model.Task{
+		Quota:      1,
+		Properties: model.Properties{OriginModelName: "MiniMax-H3-MAX", UpstreamModelName: "minimax-h3-max"},
+		PrivateData: model.TaskPrivateData{
+			BillingContext: &model.TaskBillingContext{GroupRatio: 1.1},
+		},
+		Data: []byte(`{"task":{"model":"minimax-h3-max","status":"completed","resolution":"768P","duration_seconds":5,"usage":{"output_seconds":5,"input_image_count":1}}}`),
+	}
+	taskResult := &relaycommon.TaskInfo{}
+	wantQuota := common.QuotaRound(2.5 * common.QuotaPerUnit * 1.1)
+
+	assert.Equal(t, wantQuota, (&TaskAdaptor{}).AdjustBillingOnComplete(task, taskResult))
+	require.NotNil(t, taskResult.VideoBilling)
+	assert.Equal(t, "CNY", taskResult.VideoBilling.Currency)
+	assert.Equal(t, 0.50, taskResult.VideoBilling.OutputUnitRate)
+	assert.Equal(t, 5, taskResult.VideoBilling.OutputSeconds)
+	assert.InDelta(t, 2.5, taskResult.VideoBilling.ProviderCost, 1e-12)
+	assert.InDelta(t, 2.75, taskResult.VideoBilling.FinalCost, 1e-12)
+	assert.Equal(t, 0, taskResult.VideoBilling.BilledImageCount)
 }
 
 func TestMiniMaxH3CompletionResponsePreservesUsageAndSettlesBilling(t *testing.T) {
@@ -1121,7 +1151,7 @@ func TestMiniMaxH3CompletionResponsePreservesUsageAndSettlesBilling(t *testing.T
 	require.True(t, ok)
 	assert.Equal(t, 3, usage.InputAudioSeconds)
 
-	preConsumed := common.QuotaRound(0.507 * common.QuotaPerUnit)
+	preConsumed := common.QuotaRound(4.2 / miniMaxH3USDRMBRate() * common.QuotaPerUnit)
 	task := &model.Task{
 		TaskID: "task-public",
 		Quota:  preConsumed,
@@ -1136,11 +1166,11 @@ func TestMiniMaxH3CompletionResponsePreservesUsageAndSettlesBilling(t *testing.T
 		},
 		Data: responseBody,
 	}
-	wantQuota := common.QuotaRound(0.741 * common.QuotaPerUnit)
+	wantQuota := common.QuotaRound(5.8 / miniMaxH3USDRMBRate() * common.QuotaPerUnit)
 	assert.Equal(t, wantQuota, adaptor.AdjustBillingOnComplete(task, result))
 	require.NotNil(t, result.VideoBilling)
-	assert.Equal(t, "USD", result.VideoBilling.Currency)
-	assert.InDelta(t, 0.741, result.VideoBilling.ProviderCost, 1e-12)
+	assert.Equal(t, "CNY", result.VideoBilling.Currency)
+	assert.InDelta(t, 5.8, result.VideoBilling.ProviderCost, 1e-12)
 	assert.Equal(t, 2, result.VideoBilling.ReferenceVideoInputSeconds)
 	assert.Equal(t, 1, result.VideoBilling.BilledImageCount)
 
