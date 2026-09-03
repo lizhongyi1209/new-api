@@ -142,6 +142,25 @@ export function usePricingColumns(
             )
           }
 
+          if (dynamicSummary.requestPriceEntry) {
+            return (
+              <div className='max-w-full min-w-0'>
+                <span className='font-mono text-sm tabular-nums'>
+                  {stripTrailingZeros(
+                    dynamicSummary.requestPriceEntry.formatted
+                  )}
+                </span>
+                <div className='text-muted-foreground/50 text-[10px]'>
+                  / {t('request')}
+                  {dynamicSummary.tierCount > 1 &&
+                    ` · ${t('{{count}} tiers', {
+                      count: dynamicSummary.tierCount,
+                    })}`}
+                </div>
+              </div>
+            )
+          }
+
           const primaryEntries = dynamicSummary.primaryEntries.slice(0, 2)
           if (primaryEntries.length === 0) {
             return (

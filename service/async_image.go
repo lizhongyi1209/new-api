@@ -97,12 +97,32 @@ func newAsyncOpenAIImageRequest(asyncReq *dto.AsyncImageRequest, resolvedImage, 
 		Moderation:     stringPtrToRawMessage(asyncReq.Moderation),
 		ResponseFormat: asyncReq.ResponseFormat,
 		OutputFormat:   stringPtrToRawMessage(asyncReq.OutputFormat),
+		Watermark:      asyncReq.Watermark,
 		Style:          asyncReq.Style,
 		User:           asyncReq.User,
 		Image:          resolvedImage,
 		Images:         resolvedImages,
 		Mask:           imageReferenceToRawMessage(asyncReq.Mask),
 	}
+}
+
+func newAsyncSeedreamImageRequest(asyncReq *dto.AsyncImageRequest) (*dto.ImageRequest, error) {
+	imageReq := newAsyncOpenAIImageRequest(asyncReq, nil, nil)
+	if imageReq == nil {
+		return nil, nil
+	}
+	if len(asyncReq.Images) > 0 {
+		image, err := common.Marshal(asyncReq.Images)
+		if err != nil {
+			return nil, err
+		}
+		imageReq.Image = image
+	} else {
+		imageReq.Image = asyncReq.Image
+	}
+	imageReq.Images = nil
+	imageReq.Mask = nil
+	return imageReq, nil
 }
 
 func asyncImageRequestUsesEdits(imageReq *dto.ImageRequest) bool {

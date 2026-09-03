@@ -132,6 +132,7 @@
       <select class="copy-scope" id="copy-scope" title="选择复制范围">
         <option value="all">全文</option>
         <option value="temporary-upload">临时素材上传</option>
+        <option value="seedream">Seedream 5.0 Pro</option>
         <option value="image-generation">图片生成</option>
         <option value="seedance">Seedance</option>
         <option value="minimax-h3">MiniMax H3 / H3 Max</option>
@@ -150,6 +151,7 @@
     <p class="sidebar-title">目录</p>
     <nav>
       <a href="#temporary-upload" data-section="temporary-upload" aria-current="true">素材上传</a>
+      <a href="#seedream" data-section="seedream">Seedream 5.0 Pro</a>
       <a href="#image-generation" data-section="image-generation">图片生成</a>
       <a href="#seedance" data-section="seedance">Seedance</a>
       <a href="#minimax-h3" data-section="minimax-h3">MiniMax H3 / H3 Max</a>
@@ -298,8 +300,153 @@ const upload = await response.json();</code></pre>
       </aside>
     </section>
 
+    <div class="section-heading" id="seedream">
+      <div><h2>Seedream 5.0 Pro</h2><p>通过同步图片接口完成文生图、图生图、图片编辑和多图融合。</p></div>
+    </div>
+
+    <section class="endpoint-doc" id="seedream-5-pro-generation" aria-labelledby="seedream-5-pro-title">
+      <article class="reference-panel">
+        <h2 id="seedream-5-pro-title">Seedream 5.0 Pro 同步图片生成</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/images/generations</span></div>
+        <p>请求会保持连接直到图片生成完成。纯文生图不传 <code>image</code>；图生图、图片编辑和多图融合通过同一个接口传入 <code>image</code>。</p>
+
+        <h3>模型名称</h3>
+        <table>
+          <tr><th>使用位置</th><th>模型 ID</th></tr>
+          <tr><td>O1Key 请求</td><td><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
+          <tr><td>对应官方版本</td><td><code>dola-seedream-5-0-pro-260628</code></td></tr>
+        </table>
+        <div class="callout info"><b>调用时</b>：请始终填写带 <code>-ep</code> 的 O1Key 模型名称；上游模型映射由服务端处理。</div>
+
+        <h3>模型能力</h3>
+        <table>
+          <tr><th>能力</th><th>支持情况</th><th>说明</th></tr>
+          <tr><td>文生图</td><td>支持</td><td>文本输入，单图输出</td></tr>
+          <tr><td>单图 / 多图生图</td><td>支持</td><td>最多输入 10 张参考图，单图输出</td></tr>
+          <tr><td>交互式编辑</td><td>支持</td><td>可在参考图中使用坐标、框选、箭头或涂鸦标记编辑区域</td></tr>
+          <tr><td>多图输出</td><td>不支持</td><td>不要传入 <code>n</code> 或组图生成参数</td></tr>
+          <tr><td>流式输出</td><td>不支持</td><td>不要传入 <code>stream: true</code></td></tr>
+        </table>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>固定使用 <code>dola-seedream-5-0-pro-260628-ep</code>。</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>生成或编辑指令。建议用连贯自然语言说明主体、动作、环境、风格、构图和需要保持不变的内容。</td></tr>
+          <tr><td><code>image</code></td><td class="opt">否</td><td>string | string[]</td><td>图生图参考图片的 URL；单图可传字符串，多图传数组，最多 10 张。纯文生图省略。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>推荐并应显式使用 <code>1K</code> 或 <code>2K</code>；也可传小写 <code>x</code> 分隔的具体像素尺寸，例如 <code>2048x2048</code>。官方基线的省略默认值为 <code>1024x1024</code>，但渠道默认值可能不同，生产调用不要依赖省略行为。</td></tr>
+          <tr><td><code>response_format</code></td><td class="opt">否</td><td>string</td><td><code>url</code> 返回临时下载地址；<code>b64_json</code> 在 JSON 中返回 Base64 图片数据。建议显式填写。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>输出文件格式，可选 <code>png</code> 或 <code>jpeg</code>。</td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td><code>true</code> 在右下角添加“AI 生成”水印；<code>false</code> 不添加。建议显式填写。</td></tr>
+        </table>
+
+        <h3>计费说明</h3>
+        <p>基础价格与 BytePlus ModelArk 官方 <code>dola-seedream-5-0-pro-260628</code> 对齐：输出不超过 236 万像素时为 <code>$0.045 / 张</code>，超过 236 万像素时为 <code>$0.09 / 张</code>；首张输入参考图免费，从第 2 张起每张增加 <code>$0.003</code>。最终用户价格还会乘以所选分组倍率，并以实际成功输出和消费记录为准。</p>
+        <div class="callout info"><b>建议</b>：显式传入 <code>size</code>。系统会在请求阶段按安全上限预扣，响应后依据实际输出档位结算并退补差额。</div>
+
+        <h3>输出尺寸</h3>
+        <p>使用 <code>1K</code> 或 <code>2K</code> 时，在 <code>prompt</code> 中说明宽高比、版式或用途，模型会决定最终尺寸。常见宽高比对应的参考像素如下，实际支持范围不限于这些比例。</p>
+        <table>
+          <tr><th>宽高比</th><th><code>1K</code></th><th><code>2K</code></th></tr>
+          <tr><td><code>1:1</code></td><td><code>1024x1024</code></td><td><code>2048x2048</code></td></tr>
+          <tr><td><code>4:3</code></td><td><code>1152x864</code></td><td><code>2368x1776</code></td></tr>
+          <tr><td><code>3:4</code></td><td><code>864x1152</code></td><td><code>1776x2368</code></td></tr>
+          <tr><td><code>16:9</code></td><td><code>1424x800</code></td><td><code>2816x1584</code></td></tr>
+          <tr><td><code>9:16</code></td><td><code>800x1424</code></td><td><code>1584x2816</code></td></tr>
+          <tr><td><code>3:2</code></td><td><code>1248x832</code></td><td><code>2496x1664</code></td></tr>
+          <tr><td><code>2:3</code></td><td><code>832x1248</code></td><td><code>1664x2496</code></td></tr>
+          <tr><td><code>21:9</code></td><td><code>1568x672</code></td><td><code>3136x1344</code></td></tr>
+        </table>
+        <div class="callout warn"><b>自定义像素尺寸</b>：总像素必须在 921,600 至 4,624,220 之间，宽高比必须在 <code>1:16</code> 至 <code>16:1</code> 之间。尺寸中的乘号只接受小写 <code>x</code>，不要使用 <code>×</code>。</div>
+
+        <h3>参考图限制</h3>
+        <table>
+          <tr><th>项目</th><th>限制</th></tr>
+          <tr><td>数量</td><td>最多 10 张</td></tr>
+          <tr><td>格式</td><td>JPEG、PNG、WebP、BMP、TIFF、GIF、HEIC、HEIF</td></tr>
+          <tr><td>文件大小</td><td>每张不超过 30MB</td></tr>
+          <tr><td>尺寸</td><td>宽和高均大于 14px；单张总像素不超过 36,000,000</td></tr>
+          <tr><td>宽高比</td><td><code>1:16</code> 至 <code>16:1</code></td></tr>
+        </table>
+        <p>本接口的 <code>image</code> 使用可公开读取的 HTTPS URL。本地图片可先通过“临时素材上传”接口取得 URL，再用于当前请求。</p>
+        <div class="callout info"><b>提示词建议</b>：多图输入时明确使用“图一”“图二”等称呼，并分别写清需要替换、组合或参考的对象；编辑任务同时说明哪些内容必须保持不变。</div>
+
+        <h3>响应字段</h3>
+        <table>
+          <tr><th>字段</th><th>说明</th></tr>
+          <tr><td><code>created</code></td><td>响应创建时间，Unix 秒级时间戳。</td></tr>
+          <tr><td><code>data[].url</code></td><td><code>response_format: "url"</code> 时返回的临时图片地址。</td></tr>
+          <tr><td><code>data[].b64_json</code></td><td><code>response_format: "b64_json"</code> 时返回的 Base64 图片数据。</td></tr>
+          <tr><td><code>data[].size</code></td><td>实际输出图片尺寸；是否返回取决于上游响应。</td></tr>
+          <tr><td><code>usage</code></td><td>上游返回的实际用量信息；具体字段可能随模型版本调整。</td></tr>
+        </table>
+        <div class="callout warn"><b>结果保存</b>：上游生成的图片 URL 仅保留 24 小时，请在成功后及时下载或转存。使用 <code>b64_json</code> 会显著增大响应体。</div>
+      </article>
+
+      <aside class="example-panel" aria-label="Seedream 5.0 Pro 请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedream 5.0 Pro 请求场景">
+            <button type="button" class="example-tab" id="seedream-text-tab" role="tab" aria-selected="true" aria-controls="seedream-text">文生图</button>
+            <button type="button" class="example-tab" id="seedream-image-tab" role="tab" aria-selected="false" aria-controls="seedream-image">多图融合</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="seedream-text" role="tabpanel" aria-labelledby="seedream-text-tab" aria-hidden="false">
+              <pre><code>curl --fail-with-body \
+  -X POST https://api.o1key.cn/v1/images/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "生成一张 16:9 横版科技产品海报：深蓝背景，一台透明玻璃质感的智能音箱位于画面中央，边缘轮廓光，简洁高级，标题文字为‘未来已来’",
+    "size": "1K",
+    "response_format": "url",
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedream-image" role="tabpanel" aria-labelledby="seedream-image-tab" aria-hidden="true">
+              <p class="compact-note"><code>image</code> 数组顺序与提示词中的“图一”“图二”“图三”一一对应。</p>
+              <pre><code>curl --fail-with-body \
+  -X POST https://api.o1key.cn/v1/images/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "保留图一人物的姿势和面部特征，将服装替换为图二的套装，将帽子替换为图三的帽子，其余画面保持不变",
+    "image": [
+      "https://upload.o1key.com/uploads/subject.png",
+      "https://upload.o1key.com/uploads/outfit.png",
+      "https://upload.o1key.com/uploads/hat.png"
+    ],
+    "size": "2K",
+    "response_format": "url",
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>成功响应</h3>
+        <pre><code>{
+  "created": 1788364800,
+  "data": [
+    {
+      "url": "https://cdn.example.com/seedream-result.png",
+      "size": "2048x2048"
+    }
+  ],
+  "usage": {
+    "generated_images": 1
+  }
+}</code></pre>
+        <div class="callout info"><code>response_format</code> 改为 <code>b64_json</code> 后，从 <code>data[0].b64_json</code> 读取结果，不再读取 <code>data[0].url</code>。</div>
+      </aside>
+    </section>
+
     <div class="section-heading" id="image-generation">
-      <div><h2>异步图片生成</h2></div>
+      <div><h2>异步图片生成</h2><p>Gemini、GPT Image 与 Seedream 的统一异步任务接口。</p></div>
     </div>
 
     <section class="endpoint-doc" id="/async/v1/generateImage" aria-labelledby="generate-image-title">
@@ -313,7 +460,9 @@ const upload = await response.json();</code></pre>
           <tr><td>Gemini 3 Pro Image</td><td><code>gemini-3-pro-image-c-sp</code></td><td><code>gemini-3-pro-image-c-sd</code></td><td><code>gemini-3-pro-image</code></td></tr>
           <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
           <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
+          <tr><td>Seedream 5.0 Pro</td><td colspan="3"><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
         </table>
+        <div class="callout info"><b>Seedream 执行方式</b>：网关立即返回本地任务 ID，后台调用上游同步 <code>/v1/images/generations</code>，生成完成后将同步响应保存为统一任务结果。文生图和图生图都走同一上游接口。</div>
         <h3>Gemini 宽高比参数</h3>
         <p><code>aspect_ratio</code> 传下表值，输出分辨率通过 <code>size</code> 单独指定。</p>
         <table>
@@ -368,13 +517,14 @@ const upload = await response.json();</code></pre>
           <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>图片模型名称，填写上方模型表中的完整值。</td></tr>
           <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
           <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。建议显式使用 <code>fileData</code> 或 <code>inlineData</code>；也兼容 URL、Data URI 和原始 Base64 字符串。单张参考图仍放入数组，不要使用 <code>image</code> 字段。</td></tr>
-          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>GPT Image 的生成数量；Gemini 模型无需传入。</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>Gemini 3 Pro / 3.1 Flash 可选 <code>1K</code>、<code>2K</code>、<code>4K</code>，必须使用大写 <code>K</code>，默认 <code>1K</code>；GPT Image 2 可选 <code>auto</code> 或上方尺寸表中的具体像素值。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>GPT Image 的生成数量；Gemini 模型无需传入；Seedream 仅支持单图输出，省略或传 <code>1</code>。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>Gemini 3 Pro / 3.1 Flash 可选 <code>1K</code>、<code>2K</code>、<code>4K</code>；GPT Image 2 可选 <code>auto</code> 或上方尺寸表中的具体像素值；Seedream 推荐显式传 <code>1K</code>、<code>2K</code> 或合法的 <code>WIDTHxHEIGHT</code>。</td></tr>
           <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>Gemini 模型的输出宽高比，取值见上方兼容表。GPT Image 2 的宽高比由 <code>size</code> 决定，无需传入。</td></tr>
           <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的生成质量，可选 <code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>。</td></tr>
           <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的背景模式，仅适用于名称以 <code>gpt-image</code> 开头的模型。可选 <code>auto</code>（自动选择背景）或 <code>transparent</code>（透明背景）；使用透明背景时，<code>output_format</code> 必须为 <code>png</code> 或 <code>webp</code>。Banana/Gemini 模型不要传入此字段。</td></tr>
           <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的内容审核强度，仅适用于名称以 <code>gpt-image</code> 开头的模型。可选 <code>auto</code>（标准过滤，默认）或 <code>low</code>（限制较少的过滤）。Banana/Gemini 模型不要传入此字段。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的输出图片格式，可选 <code>png</code>、<code>jpeg</code>、<code>webp</code>。透明背景仅支持 <code>png</code> 或 <code>webp</code>；Banana/Gemini 模型无需传入。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>GPT Image 可选 <code>png</code>、<code>jpeg</code>、<code>webp</code>；Seedream 可选 <code>png</code>、<code>jpeg</code>。透明背景仅支持 <code>png</code> 或 <code>webp</code>；Banana/Gemini 模型无需传入。</td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>Seedream 是否添加“AI 生成”水印；显式传 <code>false</code> 时会原样发送给上游。</td></tr>
           <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>Gemini 3.1 Flash 的思考级别，可选小写 <code>minimal</code> 或 <code>high</code>；Gemini 3 Pro 不要传入。</td></tr>
           <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td>Gemini 模型的响应模态。<code>["IMAGE"]</code> 仅生成图片；<code>["TEXT","IMAGE"]</code> 同时生成文字和图片，默认为此值。不要单独传入 <code>["TEXT"]</code>；任务查询结果仅返回图片。</td></tr>
         </table>
@@ -395,6 +545,7 @@ const upload = await response.json();</code></pre>
             <button type="button" class="example-tab" id="image-request-file-tab" role="tab" aria-selected="true" aria-controls="image-request-file">fileData · URL</button>
             <button type="button" class="example-tab" id="image-request-inline-tab" role="tab" aria-selected="false" aria-controls="image-request-inline">inlineData · Base64</button>
             <button type="button" class="example-tab" id="image-request-gpt-tab" role="tab" aria-selected="false" aria-controls="image-request-gpt">GPT Image</button>
+            <button type="button" class="example-tab" id="image-request-seedream-tab" role="tab" aria-selected="false" aria-controls="image-request-seedream">Seedream</button>
           </div>
           <div class="example-panels">
             <div class="example-tab-panel is-active" id="image-request-file" role="tabpanel" aria-labelledby="image-request-file-tab" aria-hidden="false">
@@ -456,6 +607,23 @@ const upload = await response.json();</code></pre>
     "background": "transparent",
     "output_format": "png",
     "moderation": "low"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="image-request-seedream" role="tabpanel" aria-labelledby="image-request-seedream-tab" aria-hidden="true">
+              <p class="compact-note">统一异步接口始终使用 <code>images</code>；网关会在后台转换为 Seedream 上游的 <code>image</code> 数组。</p>
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "保留图一人物的姿势，将服装替换为图二的套装",
+    "images": [
+      "https://upload.o1key.com/uploads/subject.png",
+      "https://upload.o1key.com/uploads/outfit.png"
+    ],
+    "size": "2K",
+    "output_format": "png",
+    "watermark": false
   }'</code></pre>
             </div>
           </div>

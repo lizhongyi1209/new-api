@@ -654,33 +654,44 @@ function PriceSection(props: {
       )
     }
 
+    let basePriceContent = (
+      <p className='text-muted-foreground text-sm'>{t('Dynamic Pricing')}</p>
+    )
+    if (dynamicSummary.requestPriceEntry) {
+      basePriceContent = (
+        <div className='flex items-baseline justify-between'>
+          <span className='text-muted-foreground text-sm'>
+            {t('Per request')}
+          </span>
+          <span className='text-foreground font-mono text-sm font-semibold tabular-nums'>
+            {dynamicSummary.requestPriceEntry.formatted}
+          </span>
+        </div>
+      )
+    } else if (dynamicSummary.primaryEntries.length > 0) {
+      basePriceContent = (
+        <div className='grid grid-cols-2 gap-2'>
+          {dynamicSummary.primaryEntries.map((entry) => (
+            <div key={entry.key} className='bg-muted/20 rounded-lg border p-3'>
+              <div className='text-muted-foreground text-xs'>
+                {t(entry.shortLabel)}
+              </div>
+              <div className='text-foreground mt-1 font-mono text-base font-semibold tabular-nums'>
+                {entry.formatted}
+                <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
+                  / {tokenUnitLabel}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )
+    }
+
     return (
       <section>
         <SectionTitle>{t('Base Price')}</SectionTitle>
-        {dynamicSummary.primaryEntries.length > 0 ? (
-          <div className='grid grid-cols-2 gap-2'>
-            {dynamicSummary.primaryEntries.map((entry) => (
-              <div
-                key={entry.key}
-                className='bg-muted/20 rounded-lg border p-3'
-              >
-                <div className='text-muted-foreground text-xs'>
-                  {t(entry.shortLabel)}
-                </div>
-                <div className='text-foreground mt-1 font-mono text-base font-semibold tabular-nums'>
-                  {entry.formatted}
-                  <span className='text-muted-foreground/40 ml-1 text-xs font-normal'>
-                    / {tokenUnitLabel}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className='text-muted-foreground text-sm'>
-            {t('Dynamic Pricing')}
-          </p>
-        )}
+        {basePriceContent}
         {dynamicSummary.secondaryEntries.length > 0 && (
           <div className='bg-muted/20 mt-3 rounded-lg border px-3 py-2.5'>
             <div className='space-y-1.5'>

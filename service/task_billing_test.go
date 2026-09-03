@@ -725,6 +725,48 @@ func TestRecalculate_Tiered_UpdatesOriginalSubmitLogOnly(t *testing.T) {
 	assert.Equal(t, "tiered_expr重算：p=1548, c=3568, img=1530, tier=base", other["settlement_reason"])
 }
 
+func TestSettleAsyncImageTaskBillingUsesFrozenRequestParameters(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 17, 17, 17
+	const preConsumed = 36000
+	seedUser(t, userID, 1_000_000)
+	seedToken(t, tokenID, userID, "sk-seedream-tiered", 1_000_000)
+	seedChannel(t, channelID)
+	seedChargedAccounting(t, userID, channelID, tokenID, preConsumed, 1)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Properties.OriginModelName = "dola-seedream-5-0-pro-260628-ep"
+	task.PrivateData.SubmitLogID = seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+
+	expr := `(param("size") == "1K" || (img_o > 0 && img_o <= 9218)) ? tier("standard", 45000 + (param("image.#") - 1) * 3000) : tier("high_resolution", 90000 + (param("image.#") - 1) * 3000)`
+	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
+		BillingMode:   "tiered_expr",
+		ModelName:     task.Properties.OriginModelName,
+		ExprString:    expr,
+		ExprHash:      billingexpr.ExprHashString(expr),
+		GroupRatio:    0.8,
+		EstimatedTier: "high_resolution",
+		QuotaPerUnit:  common.QuotaPerUnit,
+	})
+	require.NoError(t, err)
+	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
+	task.PrivateData.BillingContext.TieredRequestBody = json.RawMessage(`{"size":"2K","image":[{},{}],"images":[{},{}]}`)
+
+	SettleAsyncImageTaskBilling(ctx, task, 0, 16428, map[string]interface{}{
+		"image_output_tokens": 16428,
+	})
+
+	assert.Equal(t, 37200, task.Quota)
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, task.PrivateData.SubmitLogID).Error)
+	assert.Equal(t, 37200, log.Quota)
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "high_resolution", other["matched_tier"])
+}
+
 func TestRecalculate_NegativeDelta(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()

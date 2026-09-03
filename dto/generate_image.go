@@ -38,6 +38,7 @@ type GenerateImageRequest struct {
 	IncludeThoughts *bool `json:"include_thoughts,omitempty"`
 
 	OutputFormat *string         `json:"output_format,omitempty"` // "png" / "jpeg" / "webp"
+	Watermark    *bool           `json:"watermark,omitempty"`
 	Mask         *ImageReference `json:"mask,omitempty"`
 
 	// 参考图（img2img），统一使用 images；单张图也传单元素数组。

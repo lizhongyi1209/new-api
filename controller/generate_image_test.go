@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -136,6 +137,42 @@ func TestGenerateImageToAsyncRequestPreservesGPTImageOutputOptions(t *testing.T)
 	assert.Equal(t, "low", *asyncReq.Moderation)
 	require.NotNil(t, asyncReq.OutputFormat)
 	assert.Equal(t, "webp", *asyncReq.OutputFormat)
+}
+
+func TestGenerateImageToAsyncRequestPreservesSeedreamWatermark(t *testing.T) {
+	watermark := false
+	asyncReq := generateImageToAsyncRequest(&dto.GenerateImageRequest{
+		Model:     "dola-seedream-5-0-pro-260628-ep",
+		Prompt:    "draw",
+		Watermark: &watermark,
+	})
+
+	require.NotNil(t, asyncReq.Watermark)
+	assert.False(t, *asyncReq.Watermark)
+}
+
+func TestBuildGenerateImageBillingRequestInputPreservesCountsWithoutPayloads(t *testing.T) {
+	first := "https://example.com/secret-first.png"
+	second := "data:image/png;base64,SECRET_BASE64"
+	input, err := buildGenerateImageBillingRequestInput(&dto.GenerateImageRequest{
+		Model:  "dola-seedream-5-0-pro-260628-ep",
+		Prompt: "private prompt",
+		Size:   "2K",
+		Images: []dto.GenerateImageInput{{Value: &first}, {Value: &second}},
+	})
+	require.NoError(t, err)
+	assert.NotContains(t, string(input.Body), "private prompt")
+	assert.NotContains(t, string(input.Body), "secret-first")
+	assert.NotContains(t, string(input.Body), "SECRET_BASE64")
+
+	cost, trace, err := billingexpr.RunExprWithRequest(
+		`param("size") == "1K" ? tier("standard", 45000 + (param("image.#") - 1) * 3000) : tier("high_resolution", 90000 + (param("image.#") - 1) * 3000)`,
+		billingexpr.TokenParams{},
+		input,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 93000.0, cost)
+	assert.Equal(t, "high_resolution", trace.MatchedTier)
 }
 
 func TestGenerateImageToAsyncRequestNormalizesExplicitImageInputs(t *testing.T) {

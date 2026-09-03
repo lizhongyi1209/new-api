@@ -714,7 +714,8 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 		}
 	}
 
-	tr, err := billingexpr.ComputeTieredQuota(&snap, params)
+	requestInput := billingexpr.RequestInput{Body: bc.TieredRequestBody}
+	tr, err := billingexpr.ComputeTieredQuotaWithRequest(&snap, params, requestInput)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("任务 %s tiered 结算失败：表达式计算错误 %v", task.TaskID, err))
 		return

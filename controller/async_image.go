@@ -294,7 +294,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 // GenerateImageSubmit）。漏写不会报错：提交日志仍显示 billing_mode=tiered_expr
 // （日志读的是本处快照），但完成侧结算读的是任务里的快照，读不到就静默跳过
 // 表达式重算，扣费永远停在预扣值。
-func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int, tokenId int, modelName string) (*relaycommon.RelayInfo, types.PriceData, *types.NewAPIError) {
+func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int, tokenId int, modelName string, requestInput ...billingexpr.RequestInput) (*relaycommon.RelayInfo, types.PriceData, *types.NewAPIError) {
 	channel, err := model.CacheGetChannel(channelId)
 	if err != nil {
 		return nil, types.PriceData{}, types.NewError(
@@ -356,11 +356,15 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 		if common.PreConsumedQuota > 0 {
 			estimatedPrompt = common.PreConsumedQuota
 		}
-		rawCost, trace, err := billingexpr.RunExpr(exprStr, billingexpr.TokenParams{
+		billingInput := billingexpr.RequestInput{}
+		if len(requestInput) > 0 {
+			billingInput = requestInput[0]
+		}
+		rawCost, trace, err := billingexpr.RunExprWithRequest(exprStr, billingexpr.TokenParams{
 			P:   float64(estimatedPrompt),
 			C:   0,
 			Len: float64(estimatedPrompt),
-		})
+		}, billingInput)
 		if err != nil {
 			return nil, types.PriceData{}, types.NewError(
 				fmt.Errorf("tiered_expr 计算失败: %v", err),

@@ -105,6 +105,18 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 - `controller/generate_image_test.go`
 - `dto/channel_settings_test.go`
 
+## Seedream unified asynchronous image generation
+
+Aliases: Seedream 5.0 Pro, `dola-seedream-5-0-pro-260628-ep`, `/async/v1/generateImage`, Seedream 图生图, TokenMart image.
+
+- The public endpoint is the existing unified asynchronous task API. The gateway creates a local task, calls the upstream synchronous image endpoint in its worker, and returns the result through `/async/v1/tasks/:id`.
+- Both text-to-image and image-to-image use upstream `POST /v1/images/generations` with JSON. Public `images` is mapped to the upstream singular `image` array without downloading URL references or switching to OpenAI multipart edits.
+- Seedream request validation, model routing, worker dispatch, and result settlement: `service/generate_image.go`, `service/async_image.go`.
+- Public DTO conversion and request-aware billing projection: `dto/generate_image.go`, `dto/async_image.go`, `controller/generate_image.go`.
+- Async tiered settlement preserves the compact request body in `model.TaskBillingContext` and evaluates it in `service/task_billing.go`; image payloads and URLs are never stored in the billing snapshot.
+- Public examples and parameter reference: `docs/api-doc.html#seedream-5-pro-generation`, `docs/api-doc.html#/async/v1/generateImage`.
+- Regression coverage: `service/generate_image_test.go`, `controller/generate_image_test.go`, `service/task_billing_test.go`.
+
 ## OpenAI Responses timing observability
 
 Aliases: Responses 耗时, 首字耗时, 上游耗时, SSE 耗时, `/v1/responses`, responses timing.

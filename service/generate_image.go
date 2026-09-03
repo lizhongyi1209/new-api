@@ -87,6 +87,7 @@ type imageRoute struct {
 // imageRoutes 是统一生图端点的分发注册表，按顺序匹配，第一条命中即生效。
 var imageRoutes = []imageRoute{
 	{match: isGeminiImageModelName, provider: imageProviderGeminiNative, action: "generateContent"},
+	{match: isSeedream5ProModelName, provider: imageProviderOpenAIImage, action: "seedreamGenerate"},
 }
 
 // isGeminiImageModelName 判定模型是否走 Gemini 原生生图路径。
@@ -107,6 +108,11 @@ func isGeminiImageModelName(modelName string) bool {
 
 func isNanoBananaModelName(modelName string) bool {
 	return strings.HasPrefix(modelName, "nano-banana")
+}
+
+func isSeedream5ProModelName(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.HasPrefix(normalizedModelName, "dola-seedream-5-0-pro-260628")
 }
 
 // resolveImageRoute 根据模型名 + 渠道类型选出处理路径。
@@ -167,6 +173,9 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	}
 	if strings.TrimSpace(req.Prompt) == "" {
 		return fmt.Errorf("prompt is required")
+	}
+	if req.N != nil && (*req.N == 0 || *req.N > dto.MaxImageN) {
+		return fmt.Errorf("n must be an integer between 1 and %d", dto.MaxImageN)
 	}
 
 	req.Size = strings.TrimSpace(req.Size)
@@ -233,6 +242,25 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 		*req.ThinkingLevel = thinkingLevel
 	}
 
+	if isSeedream5ProModelName(req.Model) {
+		if req.N != nil && *req.N != 1 {
+			return fmt.Errorf("n must be 1 for Seedream 5.0 Pro")
+		}
+		if len(req.Images) > 10 {
+			return fmt.Errorf("images must contain at most 10 items for Seedream 5.0 Pro")
+		}
+		if req.OutputFormat != nil && *req.OutputFormat == "webp" {
+			return fmt.Errorf("output_format must be png or jpeg for Seedream 5.0 Pro")
+		}
+		if err := validateSeedream5ProSize(req.Size); err != nil {
+			return err
+		}
+		if req.Quality != "" || req.AspectRatio != "" || req.Mask != nil || len(req.ResponseModalities) > 0 ||
+			req.MediaResolution != "" || req.GoogleSearch != nil || req.ThinkingLevel != nil || req.IncludeThoughts != nil {
+			return fmt.Errorf("Seedream 5.0 Pro only supports prompt, images, n, size, output_format, and watermark on the unified endpoint")
+		}
+	}
+
 	if err := validateGenerateImageMask(req.Mask); err != nil {
 		return err
 	}
@@ -240,6 +268,30 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 		if err := validateGenerateImageInput(&req.Images[i]); err != nil {
 			return fmt.Errorf("images[%d]: %w", i, err)
 		}
+	}
+	return nil
+}
+
+func validateSeedream5ProSize(size string) error {
+	if size == "" || size == "1K" || size == "2K" {
+		return nil
+	}
+	parts := strings.Split(size, "x")
+	if len(parts) != 2 {
+		return fmt.Errorf("size must be 1K, 2K, or WIDTHxHEIGHT for Seedream 5.0 Pro")
+	}
+	width, widthErr := strconv.Atoi(parts[0])
+	height, heightErr := strconv.Atoi(parts[1])
+	if widthErr != nil || heightErr != nil || width <= 0 || height <= 0 {
+		return fmt.Errorf("size must be 1K, 2K, or WIDTHxHEIGHT for Seedream 5.0 Pro")
+	}
+	pixels := int64(width) * int64(height)
+	if pixels < 921600 || pixels > 4624220 {
+		return fmt.Errorf("Seedream 5.0 Pro size must contain between 921600 and 4624220 pixels")
+	}
+	ratio := float64(width) / float64(height)
+	if ratio < 1.0/16.0 || ratio > 16.0 {
+		return fmt.Errorf("Seedream 5.0 Pro size aspect ratio must be between 1:16 and 16:1")
 	}
 	return nil
 }
@@ -1335,16 +1387,31 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		return
 	}
 
-	// 参考图：URL → base64 data-uri（供上游使用）
-	resolvedImage, resolvedImages, err := resolveReferenceImagesForUpstream(asyncReq.Image, asyncReq.Images)
+	var imageReq *dto.ImageRequest
+	var err error
+	seedreamRequest := task.Action == "seedreamGenerate" || isSeedream5ProModelName(task.Properties.OriginModelName)
+	if seedreamRequest {
+		// Seedream accepts text-to-image and image-to-image on the same JSON
+		// generations endpoint. Keep public URLs intact and map images -> image.
+		imageReq, err = newAsyncSeedreamImageRequest(&asyncReq)
+	} else {
+		// OpenAI edits requires uploaded image bytes, so URL references are
+		// resolved to data URIs before the multipart body is built.
+		var resolvedImage, resolvedImages json.RawMessage
+		resolvedImage, resolvedImages, err = resolveReferenceImagesForUpstream(asyncReq.Image, asyncReq.Images)
+		if err == nil {
+			imageReq = newAsyncOpenAIImageRequest(&asyncReq, resolvedImage, resolvedImages)
+		}
+	}
 	if err != nil {
-		failGenerateImageTask(task, fmt.Sprintf("下载参考图片失败: %v", err))
+		failGenerateImageTask(task, fmt.Sprintf("准备参考图片失败: %v", err))
 		return
 	}
 
-	imageReq := newAsyncOpenAIImageRequest(&asyncReq, resolvedImage, resolvedImages)
-
 	relayMode := asyncOpenAIImageRelayMode(imageReq)
+	if seedreamRequest {
+		relayMode = relayconstant.RelayModeImagesGenerations
+	}
 	relayInfo, err := buildGenerateImageRelayInfo(c, task, relayMode)
 	if err != nil {
 		failGenerateImageTask(task, err.Error())

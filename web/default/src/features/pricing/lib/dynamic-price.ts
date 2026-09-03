@@ -48,6 +48,11 @@ export type DynamicPriceEntry = {
   variable: BillingVar
 }
 
+export type DynamicRequestPriceEntry = {
+  value: number
+  formatted: string
+}
+
 export type DynamicPricingSummary = {
   tiers: ParsedTier[]
   tier: ParsedTier | null
@@ -58,6 +63,7 @@ export type DynamicPricingSummary = {
   entries: DynamicPriceEntry[]
   primaryEntries: DynamicPriceEntry[]
   secondaryEntries: DynamicPriceEntry[]
+  requestPriceEntry: DynamicRequestPriceEntry | null
 }
 
 const PRIMARY_DYNAMIC_FIELDS = new Set(['inputPrice', 'outputPrice'])
@@ -93,6 +99,28 @@ export function formatDynamicUnitPrice(
   const priceUSD =
     (valuePerMillionTokens * groupRatio) /
     TOKEN_UNIT_DIVISORS[options.tokenUnit]
+  const displayPrice = applyRechargeRate(
+    priceUSD,
+    options.showRechargePrice ?? false,
+    priceRate,
+    usdExchangeRate
+  )
+
+  return formatBillingCurrencyFromUSD(displayPrice, {
+    digitsLarge: 4,
+    digitsSmall: 6,
+    abbreviate: false,
+  })
+}
+
+export function formatDynamicRequestPrice(
+  valueUSDPerRequest: number,
+  options: DynamicPriceOptions
+): string {
+  const groupRatio = options.groupRatioMultiplier ?? 1
+  const priceRate = options.priceRate ?? 1
+  const usdExchangeRate = options.usdExchangeRate ?? 1
+  const priceUSD = valueUSDPerRequest * groupRatio
   const displayPrice = applyRechargeRate(
     priceUSD,
     options.showRechargePrice ?? false,
@@ -162,6 +190,7 @@ export function getDynamicPricingSummary(
   const tiers = getDynamicPricingTiers(model)
   const tier = tiers[0] || null
   const entries = getDynamicPriceEntries(tier, options)
+  const requestPrice = Number(tier?.requestPrice || 0)
   const rawExpression = model.billing_expr || ''
 
   return {
@@ -178,5 +207,12 @@ export function getDynamicPricingSummary(
     secondaryEntries: entries.filter(
       (entry) => !PRIMARY_DYNAMIC_FIELDS.has(entry.field)
     ),
+    requestPriceEntry:
+      requestPrice > 0
+        ? {
+            value: requestPrice,
+            formatted: formatDynamicRequestPrice(requestPrice, options),
+          }
+        : null,
   }
 }

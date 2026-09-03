@@ -201,6 +201,7 @@ type TaskBillingContext struct {
 	OriginModelName      string                           `json:"origin_model_name,omitempty"`
 	PerCallBilling       bool                             `json:"per_call_billing,omitempty"`
 	TieredSnapshot       json.RawMessage                  `json:"tiered_snapshot,omitempty"`
+	TieredRequestBody    json.RawMessage                  `json:"tiered_request_body,omitempty"`
 	VideoBilling         *commonRelay.VideoBillingDetails `json:"video_billing,omitempty"`
 }
 

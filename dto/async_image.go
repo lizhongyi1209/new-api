@@ -12,6 +12,7 @@ type AsyncImageRequest struct {
 	Moderation         *string         `json:"moderation,omitempty"`
 	ResponseFormat     string          `json:"response_format,omitempty"`
 	OutputFormat       *string         `json:"output_format,omitempty"`
+	Watermark          *bool           `json:"watermark,omitempty"`
 	Style              json.RawMessage `json:"style,omitempty"`
 	User               json.RawMessage `json:"user,omitempty"`
 	AspectRatio        string          `json:"aspect_ratio,omitempty"`

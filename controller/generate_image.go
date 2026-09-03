@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-gonic/gin"
@@ -56,7 +57,12 @@ func GenerateImageSubmit(c *gin.Context) {
 	tokenId := c.GetInt("token_id")
 
 	billingStartedAt := time.Now()
-	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, req.Model)
+	billingRequestInput, err := buildGenerateImageBillingRequestInput(&req)
+	if err != nil {
+		generateImageError(c, http.StatusInternalServerError, "internal_error", fmt.Sprintf("构造计费参数失败: %v", err))
+		return
+	}
+	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, req.Model, billingRequestInput)
 	if billingErr != nil {
 		generateImageError(c, billingErr.StatusCode, "billing_error", billingErr.Error())
 		return
@@ -127,6 +133,7 @@ func GenerateImageSubmit(c *gin.Context) {
 		if snapBytes, ok := c.Get("tiered_snapshot_bytes"); ok {
 			if b, ok := snapBytes.([]byte); ok {
 				bc.TieredSnapshot = b
+				bc.TieredRequestBody = append([]byte(nil), billingRequestInput.Body...)
 			}
 		}
 		task.PrivateData.BillingContext = bc
@@ -266,6 +273,7 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		Moderation:         req.Moderation,
 		AspectRatio:        req.AspectRatio,
 		OutputFormat:       req.OutputFormat,
+		Watermark:          req.Watermark,
 		ResponseModalities: req.ResponseModalities,
 		MediaResolution:    req.MediaResolution,
 		ThinkingLevel:      req.ThinkingLevel,
@@ -273,6 +281,43 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		Images:             images,
 		Mask:               req.Mask,
 	}
+}
+
+// buildGenerateImageBillingRequestInput freezes only price-relevant scalar fields
+// and reference counts. It deliberately omits prompt, URLs, and Base64 payloads.
+// image mirrors the synchronous Seedream field so one expression can price both
+// /v1/images/generations and /async/v1/generateImage.
+func buildGenerateImageBillingRequestInput(req *dto.GenerateImageRequest) (billingexpr.RequestInput, error) {
+	imagePlaceholders := make([]struct{}, len(req.Images))
+	body, err := common.Marshal(struct {
+		Model        string     `json:"model"`
+		N            *uint      `json:"n,omitempty"`
+		Size         string     `json:"size,omitempty"`
+		AspectRatio  string     `json:"aspect_ratio,omitempty"`
+		Quality      string     `json:"quality,omitempty"`
+		Background   *string    `json:"background,omitempty"`
+		Moderation   *string    `json:"moderation,omitempty"`
+		OutputFormat *string    `json:"output_format,omitempty"`
+		Watermark    *bool      `json:"watermark,omitempty"`
+		Image        []struct{} `json:"image,omitempty"`
+		Images       []struct{} `json:"images,omitempty"`
+	}{
+		Model:        req.Model,
+		N:            req.N,
+		Size:         req.Size,
+		AspectRatio:  req.AspectRatio,
+		Quality:      req.Quality,
+		Background:   req.Background,
+		Moderation:   req.Moderation,
+		OutputFormat: req.OutputFormat,
+		Watermark:    req.Watermark,
+		Image:        imagePlaceholders,
+		Images:       imagePlaceholders,
+	})
+	if err != nil {
+		return billingexpr.RequestInput{}, err
+	}
+	return billingexpr.RequestInput{Body: body}, nil
 }
 
 func applyGenerateImageGoogleSearchTool(nativeReq map[string]interface{}, googleSearch *bool) {

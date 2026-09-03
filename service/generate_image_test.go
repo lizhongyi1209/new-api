@@ -247,6 +247,72 @@ func TestValidateGenerateImageRequestNormalizesGPTImageParameters(t *testing.T) 
 	assert.Equal(t, "low", *req.Moderation)
 }
 
+func TestValidateGenerateImageRequestEnforcesSeedreamContract(t *testing.T) {
+	two := uint(2)
+	valid := &dto.GenerateImageRequest{
+		Model:        "dola-seedream-5-0-pro-260628-ep",
+		Prompt:       "draw",
+		Size:         "2048x2048",
+		OutputFormat: testStringPtr("PNG"),
+		Images: []dto.GenerateImageInput{
+			{Value: testStringPtr("https://example.com/one.png")},
+			{Value: testStringPtr("https://example.com/two.png")},
+		},
+	}
+	require.NoError(t, ValidateGenerateImageRequest(valid))
+	assert.Equal(t, "png", *valid.OutputFormat)
+
+	tests := []struct {
+		name    string
+		request *dto.GenerateImageRequest
+		message string
+	}{
+		{
+			name: "multiple outputs",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "draw", N: &two,
+			},
+			message: "n must be 1",
+		},
+		{
+			name: "too many references",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "draw", Images: make([]dto.GenerateImageInput, 11),
+			},
+			message: "at most 10",
+		},
+		{
+			name: "unsupported output format",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "draw", OutputFormat: testStringPtr("webp"),
+			},
+			message: "png or jpeg",
+		},
+		{
+			name: "too few pixels",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "draw", Size: "100x100",
+			},
+			message: "between 921600 and 4624220 pixels",
+		},
+		{
+			name: "provider-specific parameter",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "draw", Quality: "high",
+			},
+			message: "only supports prompt, images, n, size, output_format, and watermark",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateGenerateImageRequest(test.request)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), test.message)
+		})
+	}
+}
+
 func TestValidateGenerateImageRequestRejectsInvalidEnums(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -492,6 +558,43 @@ func TestNewAsyncOpenAIImageRequestPreservesGPTImageParameters(t *testing.T) {
 	var gotOutputFormat string
 	require.NoError(t, common.Unmarshal(imageReq.OutputFormat, &gotOutputFormat))
 	assert.Equal(t, "png", gotOutputFormat)
+}
+
+func TestSeedreamRouteUsesSynchronousGenerationsWorker(t *testing.T) {
+	action, isGeminiNative := ResolveImageRoute("dola-seedream-5-0-pro-260628-ep", 1)
+	assert.Equal(t, "seedreamGenerate", action)
+	assert.False(t, isGeminiNative)
+}
+
+func TestNewAsyncSeedreamImageRequestUsesImageArrayAndPreservesURLs(t *testing.T) {
+	watermark := false
+	imageReq, err := newAsyncSeedreamImageRequest(&dto.AsyncImageRequest{
+		Model:        "dola-seedream-5-0-pro-260628-ep",
+		Prompt:       "combine",
+		Images:       []string{"https://example.com/one.png", "https://example.com/two.png"},
+		Watermark:    &watermark,
+		OutputFormat: testStringPtr("png"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, imageReq)
+	assert.Empty(t, imageReq.Images)
+	assert.False(t, *imageReq.Watermark)
+
+	var images []string
+	require.NoError(t, common.Unmarshal(imageReq.Image, &images))
+	assert.Equal(t, []string{"https://example.com/one.png", "https://example.com/two.png"}, images)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/async/v1/generateImage", nil)
+	c.Request.Header.Set("Content-Type", "application/json")
+	relayInfo := &relaycommon.RelayInfo{RelayMode: relayconstant.RelayModeImagesGenerations}
+	body, _, err := buildAsyncOpenAIImageRequestBody(c, passthroughImageAdaptor{}, relayInfo, imageReq)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"image":["https://example.com/one.png","https://example.com/two.png"]`)
+	assert.NotContains(t, string(encoded), `"images"`)
+	assert.Contains(t, string(encoded), `"watermark":false`)
 }
 
 func TestAsyncOpenAIImageRelayMode(t *testing.T) {

@@ -104,6 +104,15 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           </code>
         </span>
       )
+    } else if (dynamicSummary.requestPriceEntry) {
+      priceSummary = (
+        <span className='text-muted-foreground whitespace-nowrap'>
+          {t('Per request')}{' '}
+          <span className='text-foreground font-mono font-semibold'>
+            {dynamicSummary.requestPriceEntry.formatted}
+          </span>
+        </span>
+      )
     } else if (dynamicSummary.primaryEntries.length > 0) {
       priceSummary = (
         <>
