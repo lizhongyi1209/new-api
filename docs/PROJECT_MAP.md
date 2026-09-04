@@ -114,7 +114,7 @@ Aliases: Seedream 5.0 Pro, `dola-seedream-5-0-pro-260628-ep`, `/async/v1/generat
 - Seedream request validation, model routing, worker dispatch, and result settlement: `service/generate_image.go`, `service/async_image.go`.
 - Public DTO conversion and request-aware billing projection: `dto/generate_image.go`, `dto/async_image.go`, `controller/generate_image.go`.
 - Async tiered settlement preserves the compact request body in `model.TaskBillingContext` and evaluates it in `service/task_billing.go`; image payloads and URLs are never stored in the billing snapshot.
-- Public examples and parameter reference: `docs/api-doc.html#seedream-5-pro-generation`, `docs/api-doc.html#/async/v1/generateImage`.
+- Public examples and parameter reference: `docs/api-doc.html#image-seedream`.
 - Regression coverage: `service/generate_image_test.go`, `controller/generate_image_test.go`, `service/task_billing_test.go`.
 
 ## OpenAI Responses timing observability
