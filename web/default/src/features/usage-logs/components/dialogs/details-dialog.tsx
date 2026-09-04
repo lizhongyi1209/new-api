@@ -677,6 +677,12 @@ function BillingBreakdown(props: {
           value: tieredSummary.tier.label,
         })
       }
+      if (tieredSummary.requestPrice != null) {
+        rows.push({
+          label: t('Per-request'),
+          value: fmtPrice(tieredSummary.requestPrice),
+        })
+      }
       for (const entry of tieredSummary.priceEntries) {
         rows.push({
           label: t(entry.shortLabel),

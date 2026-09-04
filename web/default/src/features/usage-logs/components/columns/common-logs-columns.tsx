@@ -154,13 +154,23 @@ function buildDetailSegments(
   const tieredSummary = getTieredBillingSummary(other)
   if (isTieredExpr || isLegacyTieredRecalc) {
     if (tieredSummary) {
+      const primaryEntries: string[] = []
+      if (tieredSummary.requestPrice != null) {
+        primaryEntries.push(
+          `${t('Per-request')} ${formatPriceCompact(tieredSummary.requestPrice)}`
+        )
+      }
+
       const baseEntries = tieredSummary.priceEntries
         .filter((entry) => ['inputPrice', 'outputPrice'].includes(entry.field))
         .map((entry) => formatPriceCompact(entry.price))
       if (baseEntries.length > 0) {
+        primaryEntries.push(formatPriceList(baseEntries, true))
+      }
+      if (primaryEntries.length > 0) {
         const tierLabel = tieredSummary.tier.label || t('Default')
         segments.push({
-          text: `${tierLabel} · ${formatPriceList(baseEntries, true)}`,
+          text: `${tierLabel} · ${primaryEntries.join(' · ')}`,
         })
       }
 

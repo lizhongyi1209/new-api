@@ -735,8 +735,8 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 		parts = append(parts, fmt.Sprintf("图像输出%.0f tokens", params.ImgO))
 	}
 	breakdown := strings.Join(parts, " + ")
-	finalCost := float64(tr.ActualQuotaAfterGroup) / snap.QuotaPerUnit
+	finalAmount := float64(tr.ActualQuotaAfterGroup) / snap.QuotaPerUnit
 	RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
-		fmt.Sprintf("tiered_expr重算 [%s档]：%s → $%.3f (%d额度)",
-			tr.MatchedTier, breakdown, finalCost, tr.ActualQuotaAfterGroup))
+		fmt.Sprintf("tiered_expr重算 [%s档]：%s → %.3f计费单位 (%d额度)",
+			tr.MatchedTier, breakdown, finalAmount, tr.ActualQuotaAfterGroup))
 }

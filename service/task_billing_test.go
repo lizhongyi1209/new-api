@@ -730,7 +730,7 @@ func TestSettleAsyncImageTaskBillingUsesFrozenRequestParameters(t *testing.T) {
 	ctx := context.Background()
 
 	const userID, tokenID, channelID = 17, 17, 17
-	const preConsumed = 36000
+	const preConsumed = 240000
 	seedUser(t, userID, 1_000_000)
 	seedToken(t, tokenID, userID, "sk-seedream-tiered", 1_000_000)
 	seedChannel(t, channelID)
@@ -740,7 +740,7 @@ func TestSettleAsyncImageTaskBillingUsesFrozenRequestParameters(t *testing.T) {
 	task.Properties.OriginModelName = "dola-seedream-5-0-pro-260628-ep"
 	task.PrivateData.SubmitLogID = seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
 
-	expr := `(param("size") == "1K" || (img_o > 0 && img_o <= 9218)) ? tier("standard", 45000 + (param("image.#") - 1) * 3000) : tier("high_resolution", 90000 + (param("image.#") - 1) * 3000)`
+	expr := `(param("size") == "1K" || (img_o > 0 && img_o * 256 <= 2610000)) ? tier("standard", 300000 + (param("image.#") == nil || param("image.#") <= 1 ? 0 : (param("image.#") - 1) * 20000)) : tier("high_resolution", 600000 + (param("image.#") == nil || param("image.#") <= 1 ? 0 : (param("image.#") - 1) * 20000))`
 	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
 		BillingMode:   "tiered_expr",
 		ModelName:     task.Properties.OriginModelName,
@@ -758,10 +758,10 @@ func TestSettleAsyncImageTaskBillingUsesFrozenRequestParameters(t *testing.T) {
 		"image_output_tokens": 16428,
 	})
 
-	assert.Equal(t, 37200, task.Quota)
+	assert.Equal(t, 248000, task.Quota)
 	var log model.Log
 	require.NoError(t, model.LOG_DB.First(&log, task.PrivateData.SubmitLogID).Error)
-	assert.Equal(t, 37200, log.Quota)
+	assert.Equal(t, 248000, log.Quota)
 	other, err := common.StrToMap(log.Other)
 	require.NoError(t, err)
 	assert.Equal(t, "high_resolution", other["matched_tier"])

@@ -24,11 +24,11 @@ import { formatDynamicRequestPrice } from './dynamic-price'
 describe('parseTiersFromExpr', () => {
   it('exposes fixed request prices from parameterized tier expressions', () => {
     const expression =
-      '(param("size") == "1K" || (img_o > 0 && img_o <= 9218)) ? tier("standard", 45000.0 + (param("image.#") == nil || param("image.#") <= 1 ? 0.0 : (param("image.#") - 1) * 3000.0)) : tier("high_resolution", 90000.0 + (param("image.#") == nil || param("image.#") <= 1 ? 0.0 : (param("image.#") - 1) * 3000.0))'
+      '(param("size") == "1K" || (img_o > 0 && img_o * 256 <= 2610000)) ? tier("standard", 300000.0 + (param("image.#") == nil || param("image.#") <= 1 ? 0.0 : (param("image.#") - 1) * 20000.0)) : tier("high_resolution", 600000.0 + (param("image.#") == nil || param("image.#") <= 1 ? 0.0 : (param("image.#") - 1) * 20000.0))'
 
     expect(parseTiersFromExpr(expression)).toMatchObject([
-      { label: 'standard', requestPrice: 0.045 },
-      { label: 'high_resolution', requestPrice: 0.09 },
+      { label: 'standard', requestPrice: 0.3 },
+      { label: 'high_resolution', requestPrice: 0.6 },
     ])
   })
 
@@ -40,10 +40,10 @@ describe('parseTiersFromExpr', () => {
 
   it('applies the selected group multiplier to request prices', () => {
     expect(
-      formatDynamicRequestPrice(0.045, {
+      formatDynamicRequestPrice(0.6, {
         tokenUnit: 'M',
         groupRatioMultiplier: 0.8,
       })
-    ).toContain('0.036')
+    ).toContain('0.48')
   })
 })

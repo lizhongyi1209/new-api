@@ -359,6 +359,7 @@ export function resolveMatchedTier(
 export interface TieredBillingSummary {
   tiers: ParsedTier[]
   tier: ParsedTier
+  requestPrice: number | null
   priceEntries: Array<{ field: string; shortLabel: string; price: number }>
 }
 
@@ -390,6 +391,11 @@ export function getTieredBillingSummary(
   if (!tier) return null
 
   const cacheTokensPresent = hasAnyCacheTokens(other)
+  const rawRequestPrice = Number(tier.requestPrice)
+  const requestPrice =
+    Number.isFinite(rawRequestPrice) && rawRequestPrice > 0
+      ? rawRequestPrice
+      : null
 
   const priceEntries: TieredBillingSummary['priceEntries'] = []
   for (const v of BILLING_PRICING_VARS) {
@@ -405,7 +411,7 @@ export function getTieredBillingSummary(
       })
     }
   }
-  return { tiers, tier, priceEntries }
+  return { tiers, tier, requestPrice, priceEntries }
 }
 
 /**
