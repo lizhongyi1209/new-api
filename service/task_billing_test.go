@@ -789,7 +789,7 @@ func TestSettleAsyncImageTaskBillingAddsMeasuredOutputCounts(t *testing.T) {
 		ExprString:    expr,
 		ExprHash:      billingexpr.ExprHashString(expr),
 		GroupRatio:    0.8,
-		EstimatedTier: "layer_decomposition",
+		EstimatedTier: "layer_decomposition_estimate",
 		QuotaPerUnit:  common.QuotaPerUnit,
 	})
 	require.NoError(t, err)

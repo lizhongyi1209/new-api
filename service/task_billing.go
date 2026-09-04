@@ -524,6 +524,16 @@ func RefundZeroUsageTaskQuota(ctx context.Context, task *model.Task, promptToken
 // reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。
 // clamps 可选：若计算 actualQuota 时发生额度饱和，将其记入日志 admin_info（仅管理员可见）。
 func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason string, clamps ...*common.QuotaClamp) {
+	recalculateTaskQuota(ctx, task, actualQuota, reason, "", clamps...)
+}
+
+// RecalculateTaskQuotaWithTier records the tier matched with actual usage.
+// The estimated tier remains in the immutable billing snapshot for auditing.
+func RecalculateTaskQuotaWithTier(ctx context.Context, task *model.Task, actualQuota int, reason, matchedTier string, clamps ...*common.QuotaClamp) {
+	recalculateTaskQuota(ctx, task, actualQuota, reason, matchedTier, clamps...)
+}
+
+func recalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason, matchedTier string, clamps ...*common.QuotaClamp) {
 	if actualQuota <= 0 {
 		return
 	}
@@ -542,6 +552,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 				"pre_consumed_quota": preConsumedQuota,
 				"actual_quota":       actualQuota,
 				"settlement_reason":  reason,
+			}
+			if matchedTier != "" {
+				otherUpdates["matched_tier"] = matchedTier
 			}
 			if useTimeSeconds > 0 {
 				otherUpdates["use_time_seconds"] = useTimeSeconds
@@ -602,7 +615,11 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 			if err := common.Unmarshal(bc.TieredSnapshot, &snap); err == nil {
 				otherUpdates["billing_mode"] = "tiered_expr"
 				otherUpdates["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
-				otherUpdates["matched_tier"] = snap.EstimatedTier
+				if matchedTier != "" {
+					otherUpdates["matched_tier"] = matchedTier
+				} else {
+					otherUpdates["matched_tier"] = snap.EstimatedTier
+				}
 			}
 		}
 
@@ -750,7 +767,7 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 	}
 	breakdown := strings.Join(parts, " + ")
 	finalAmount := float64(tr.ActualQuotaAfterGroup) / snap.QuotaPerUnit
-	RecalculateTaskQuota(ctx, task, tr.ActualQuotaAfterGroup,
+	RecalculateTaskQuotaWithTier(ctx, task, tr.ActualQuotaAfterGroup,
 		fmt.Sprintf("tiered_expr重算 [%s档]：%s → %.3f计费单位 (%d额度)",
-			tr.MatchedTier, breakdown, finalAmount, tr.ActualQuotaAfterGroup))
+			tr.MatchedTier, breakdown, finalAmount, tr.ActualQuotaAfterGroup), tr.MatchedTier)
 }
