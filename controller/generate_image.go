@@ -274,6 +274,7 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		AspectRatio:        req.AspectRatio,
 		OutputFormat:       req.OutputFormat,
 		Watermark:          req.Watermark,
+		LayerDecomposition: req.LayerDecomposition,
 		ResponseModalities: req.ResponseModalities,
 		MediaResolution:    req.MediaResolution,
 		ThinkingLevel:      req.ThinkingLevel,
@@ -290,29 +291,31 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 func buildGenerateImageBillingRequestInput(req *dto.GenerateImageRequest) (billingexpr.RequestInput, error) {
 	imagePlaceholders := make([]struct{}, len(req.Images))
 	body, err := common.Marshal(struct {
-		Model        string     `json:"model"`
-		N            *uint      `json:"n,omitempty"`
-		Size         string     `json:"size,omitempty"`
-		AspectRatio  string     `json:"aspect_ratio,omitempty"`
-		Quality      string     `json:"quality,omitempty"`
-		Background   *string    `json:"background,omitempty"`
-		Moderation   *string    `json:"moderation,omitempty"`
-		OutputFormat *string    `json:"output_format,omitempty"`
-		Watermark    *bool      `json:"watermark,omitempty"`
-		Image        []struct{} `json:"image,omitempty"`
-		Images       []struct{} `json:"images,omitempty"`
+		Model              string     `json:"model"`
+		N                  *uint      `json:"n,omitempty"`
+		Size               string     `json:"size,omitempty"`
+		AspectRatio        string     `json:"aspect_ratio,omitempty"`
+		Quality            string     `json:"quality,omitempty"`
+		Background         *string    `json:"background,omitempty"`
+		Moderation         *string    `json:"moderation,omitempty"`
+		OutputFormat       *string    `json:"output_format,omitempty"`
+		Watermark          *bool      `json:"watermark,omitempty"`
+		LayerDecomposition *bool      `json:"layer_decomposition,omitempty"`
+		Image              []struct{} `json:"image,omitempty"`
+		Images             []struct{} `json:"images,omitempty"`
 	}{
-		Model:        req.Model,
-		N:            req.N,
-		Size:         req.Size,
-		AspectRatio:  req.AspectRatio,
-		Quality:      req.Quality,
-		Background:   req.Background,
-		Moderation:   req.Moderation,
-		OutputFormat: req.OutputFormat,
-		Watermark:    req.Watermark,
-		Image:        imagePlaceholders,
-		Images:       imagePlaceholders,
+		Model:              req.Model,
+		N:                  req.N,
+		Size:               req.Size,
+		AspectRatio:        req.AspectRatio,
+		Quality:            req.Quality,
+		Background:         req.Background,
+		Moderation:         req.Moderation,
+		OutputFormat:       req.OutputFormat,
+		Watermark:          req.Watermark,
+		LayerDecomposition: req.LayerDecomposition,
+		Image:              imagePlaceholders,
+		Images:             imagePlaceholders,
 	})
 	if err != nil {
 		return billingexpr.RequestInput{}, err

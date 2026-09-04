@@ -15,27 +15,31 @@ import (
 // wrapped-negative n overflows quota calculation into a negative charge.
 const MaxImageN = 128
 
+// MaxSeedreamLayerOutputs is one base image plus at most 16 editable layers.
+const MaxSeedreamLayerOutputs = 17
+
 type ImageRequest struct {
-	Model             string          `json:"model"`
-	Prompt            string          `json:"prompt" binding:"required"`
-	N                 *uint           `json:"n,omitempty"`
-	Size              string          `json:"size,omitempty"`
-	AspectRatio       string          `json:"aspect_ratio,omitempty"`
-	Quality           string          `json:"quality,omitempty"`
-	ResponseFormat    string          `json:"response_format,omitempty"`
-	Style             json.RawMessage `json:"style,omitempty"`
-	User              json.RawMessage `json:"user,omitempty"`
-	ExtraFields       json.RawMessage `json:"extra_fields,omitempty"`
-	Background        json.RawMessage `json:"background,omitempty"`
-	Moderation        json.RawMessage `json:"moderation,omitempty"`
-	OutputFormat      json.RawMessage `json:"output_format,omitempty"`
-	OutputCompression json.RawMessage `json:"output_compression,omitempty"`
-	PartialImages     json.RawMessage `json:"partial_images,omitempty"`
-	Stream            *bool           `json:"stream,omitempty"`
-	Images            json.RawMessage `json:"images,omitempty"`
-	Mask              json.RawMessage `json:"mask,omitempty"`
-	InputFidelity     json.RawMessage `json:"input_fidelity,omitempty"`
-	Watermark         *bool           `json:"watermark,omitempty"`
+	Model              string          `json:"model"`
+	Prompt             string          `json:"prompt" binding:"required"`
+	N                  *uint           `json:"n,omitempty"`
+	Size               string          `json:"size,omitempty"`
+	AspectRatio        string          `json:"aspect_ratio,omitempty"`
+	Quality            string          `json:"quality,omitempty"`
+	ResponseFormat     string          `json:"response_format,omitempty"`
+	Style              json.RawMessage `json:"style,omitempty"`
+	User               json.RawMessage `json:"user,omitempty"`
+	ExtraFields        json.RawMessage `json:"extra_fields,omitempty"`
+	Background         json.RawMessage `json:"background,omitempty"`
+	Moderation         json.RawMessage `json:"moderation,omitempty"`
+	OutputFormat       json.RawMessage `json:"output_format,omitempty"`
+	OutputCompression  json.RawMessage `json:"output_compression,omitempty"`
+	PartialImages      json.RawMessage `json:"partial_images,omitempty"`
+	Stream             *bool           `json:"stream,omitempty"`
+	Images             json.RawMessage `json:"images,omitempty"`
+	Mask               json.RawMessage `json:"mask,omitempty"`
+	InputFidelity      json.RawMessage `json:"input_fidelity,omitempty"`
+	Watermark          *bool           `json:"watermark,omitempty"`
+	LayerDecomposition *bool           `json:"layer_decomposition,omitempty"`
 	// zhipu 4v
 	WatermarkEnabled json.RawMessage `json:"watermark_enabled,omitempty"`
 	UserId           json.RawMessage `json:"user_id,omitempty"`
@@ -188,7 +192,19 @@ type ImageResponse struct {
 	Metadata json.RawMessage `json:"metadata,omitempty"`
 }
 type ImageData struct {
-	Url           string `json:"url"`
-	B64Json       string `json:"b64_json"`
-	RevisedPrompt string `json:"revised_prompt"`
+	Url           string            `json:"url"`
+	B64Json       string            `json:"b64_json"`
+	RevisedPrompt string            `json:"revised_prompt"`
+	Size          string            `json:"size,omitempty"`
+	OutputFormat  string            `json:"output_format,omitempty"`
+	ZIndex        *int              `json:"z_index,omitempty"`
+	BoundingBox   *ImageBoundingBox `json:"bounding_box,omitempty"`
+	Name          string            `json:"name,omitempty"`
+	Description   string            `json:"description,omitempty"`
+	Error         json.RawMessage   `json:"error,omitempty"`
+}
+
+type ImageBoundingBox struct {
+	Absolute   []int `json:"absolute,omitempty"`
+	Normalized []int `json:"normalized,omitempty"`
 }

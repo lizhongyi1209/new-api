@@ -249,6 +249,7 @@ func TestValidateGenerateImageRequestNormalizesGPTImageParameters(t *testing.T) 
 
 func TestValidateGenerateImageRequestEnforcesSeedreamContract(t *testing.T) {
 	two := uint(2)
+	enabled := true
 	valid := &dto.GenerateImageRequest{
 		Model:        "dola-seedream-5-0-pro-260628-ep",
 		Prompt:       "draw",
@@ -261,6 +262,15 @@ func TestValidateGenerateImageRequestEnforcesSeedreamContract(t *testing.T) {
 	}
 	require.NoError(t, ValidateGenerateImageRequest(valid))
 	assert.Equal(t, "png", *valid.OutputFormat)
+	layerRequest := &dto.GenerateImageRequest{
+		Model:              "dola-seedream-5-0-pro-260628-ep",
+		Size:               "1.5K",
+		LayerDecomposition: &enabled,
+		Images: []dto.GenerateImageInput{
+			{Value: testStringPtr("https://example.com/input.png")},
+		},
+	}
+	require.NoError(t, ValidateGenerateImageRequest(layerRequest))
 
 	tests := []struct {
 		name    string
@@ -296,11 +306,44 @@ func TestValidateGenerateImageRequestEnforcesSeedreamContract(t *testing.T) {
 			message: "between 921600 and 4624220 pixels",
 		},
 		{
+			name: "layer decomposition without an image",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "split", LayerDecomposition: &enabled,
+			},
+			message: "exactly 1 item",
+		},
+		{
+			name: "layer decomposition with multiple images",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "split", LayerDecomposition: &enabled,
+				Images: []dto.GenerateImageInput{
+					{Value: testStringPtr("https://example.com/one.png")},
+					{Value: testStringPtr("https://example.com/two.png")},
+				},
+			},
+			message: "exactly 1 item",
+		},
+		{
+			name: "layer decomposition with explicit pixel size",
+			request: &dto.GenerateImageRequest{
+				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "split", Size: "1024x1024", LayerDecomposition: &enabled,
+				Images: []dto.GenerateImageInput{{Value: testStringPtr("https://example.com/input.png")}},
+			},
+			message: "size must be auto, 1K, 1.5K, or 2K",
+		},
+		{
+			name: "layer decomposition on another model",
+			request: &dto.GenerateImageRequest{
+				Model: "gpt-image-1", Prompt: "split", LayerDecomposition: &enabled,
+			},
+			message: "only supported by Seedream 5.0 Pro",
+		},
+		{
 			name: "provider-specific parameter",
 			request: &dto.GenerateImageRequest{
 				Model: "dola-seedream-5-0-pro-260628-ep", Prompt: "draw", Quality: "high",
 			},
-			message: "only supports prompt, images, n, size, output_format, and watermark",
+			message: "only supports prompt, images, n, size, output_format, watermark, and layer_decomposition",
 		},
 	}
 
@@ -568,12 +611,14 @@ func TestSeedreamRouteUsesSynchronousGenerationsWorker(t *testing.T) {
 
 func TestNewAsyncSeedreamImageRequestUsesImageArrayAndPreservesURLs(t *testing.T) {
 	watermark := false
+	layerDecomposition := true
 	imageReq, err := newAsyncSeedreamImageRequest(&dto.AsyncImageRequest{
-		Model:        "dola-seedream-5-0-pro-260628-ep",
-		Prompt:       "combine",
-		Images:       []string{"https://example.com/one.png", "https://example.com/two.png"},
-		Watermark:    &watermark,
-		OutputFormat: testStringPtr("png"),
+		Model:              "dola-seedream-5-0-pro-260628-ep",
+		Prompt:             "combine",
+		Images:             []string{"https://example.com/one.png", "https://example.com/two.png"},
+		Watermark:          &watermark,
+		LayerDecomposition: &layerDecomposition,
+		OutputFormat:       testStringPtr("png"),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, imageReq)
@@ -595,6 +640,7 @@ func TestNewAsyncSeedreamImageRequestUsesImageArrayAndPreservesURLs(t *testing.T
 	assert.Contains(t, string(encoded), `"image":["https://example.com/one.png","https://example.com/two.png"]`)
 	assert.NotContains(t, string(encoded), `"images"`)
 	assert.Contains(t, string(encoded), `"watermark":false`)
+	assert.Contains(t, string(encoded), `"layer_decomposition":true`)
 }
 
 func TestAsyncOpenAIImageRelayMode(t *testing.T) {
@@ -848,17 +894,26 @@ func readMultipartForm(t *testing.T, body *bytes.Buffer, boundary string) *multi
 }
 
 func TestPrepareGenerateImageResultsPreservesUpstreamShapeWithoutStorageStrategy(t *testing.T) {
+	zIndex := 1
+	box := &dto.ImageBoundingBox{Absolute: []int{10, 20, 110, 220}, Normalized: []int{10, 20, 110, 220}}
 	for _, strategy := range []string{"", dto.ImageOutputStrategyPassthrough} {
 		t.Run(strategy, func(t *testing.T) {
 			images, err := prepareGenerateImageResultsWithStrategy([]dto.GenerateImageData{
-				{B64Json: "AQID", MimeType: "image/png"},
+				{B64Json: "AQID", MimeType: "image/png", Size: "1024x1024", OutputFormat: "png", ZIndex: &zIndex, BoundingBox: box, Name: "subject", Description: "foreground subject"},
 				{Url: "https://upstream.example/image.png"},
 			}, "api.o1key.cn", strategy)
 			require.NoError(t, err)
 			require.Len(t, images, 2)
 			assert.Equal(t, "AQID", images[0].B64Json)
 			assert.Equal(t, "image/png", images[0].MimeType)
+			assert.Equal(t, "1024x1024", images[0].Size)
+			assert.Equal(t, "png", images[0].OutputFormat)
 			assert.Empty(t, images[0].Url)
+			require.NotNil(t, images[0].ZIndex)
+			assert.Equal(t, 1, *images[0].ZIndex)
+			assert.Equal(t, box, images[0].BoundingBox)
+			assert.Equal(t, "subject", images[0].Name)
+			assert.Equal(t, "foreground subject", images[0].Description)
 			assert.Equal(t, "https://upstream.example/image.png", images[1].Url)
 			assert.Empty(t, images[1].B64Json)
 		})

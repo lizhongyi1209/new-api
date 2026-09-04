@@ -141,29 +141,36 @@ func TestGenerateImageToAsyncRequestPreservesGPTImageOutputOptions(t *testing.T)
 
 func TestGenerateImageToAsyncRequestPreservesSeedreamWatermark(t *testing.T) {
 	watermark := false
+	layerDecomposition := true
 	asyncReq := generateImageToAsyncRequest(&dto.GenerateImageRequest{
-		Model:     "dola-seedream-5-0-pro-260628-ep",
-		Prompt:    "draw",
-		Watermark: &watermark,
+		Model:              "dola-seedream-5-0-pro-260628-ep",
+		Prompt:             "draw",
+		Watermark:          &watermark,
+		LayerDecomposition: &layerDecomposition,
 	})
 
 	require.NotNil(t, asyncReq.Watermark)
 	assert.False(t, *asyncReq.Watermark)
+	require.NotNil(t, asyncReq.LayerDecomposition)
+	assert.True(t, *asyncReq.LayerDecomposition)
 }
 
 func TestBuildGenerateImageBillingRequestInputPreservesCountsWithoutPayloads(t *testing.T) {
 	first := "https://example.com/secret-first.png"
 	second := "data:image/png;base64,SECRET_BASE64"
+	layerDecomposition := true
 	input, err := buildGenerateImageBillingRequestInput(&dto.GenerateImageRequest{
-		Model:  "dola-seedream-5-0-pro-260628-ep",
-		Prompt: "private prompt",
-		Size:   "2K",
-		Images: []dto.GenerateImageInput{{Value: &first}, {Value: &second}},
+		Model:              "dola-seedream-5-0-pro-260628-ep",
+		Prompt:             "private prompt",
+		Size:               "2K",
+		Images:             []dto.GenerateImageInput{{Value: &first}, {Value: &second}},
+		LayerDecomposition: &layerDecomposition,
 	})
 	require.NoError(t, err)
 	assert.NotContains(t, string(input.Body), "private prompt")
 	assert.NotContains(t, string(input.Body), "secret-first")
 	assert.NotContains(t, string(input.Body), "SECRET_BASE64")
+	assert.Contains(t, string(input.Body), `"layer_decomposition":true`)
 
 	cost, trace, err := billingexpr.RunExprWithRequest(
 		`param("size") == "1K" ? tier("standard", 45000 + (param("image.#") - 1) * 3000) : tier("high_resolution", 90000 + (param("image.#") - 1) * 3000)`,

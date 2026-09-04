@@ -767,6 +767,50 @@ func TestSettleAsyncImageTaskBillingUsesFrozenRequestParameters(t *testing.T) {
 	assert.Equal(t, "high_resolution", other["matched_tier"])
 }
 
+func TestSettleAsyncImageTaskBillingAddsMeasuredOutputCounts(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 18, 18, 18
+	const preConsumed = 2_040_000
+	seedUser(t, userID, 5_000_000)
+	seedToken(t, tokenID, userID, "sk-seedream-layers", 5_000_000)
+	seedChannel(t, channelID)
+	seedChargedAccounting(t, userID, channelID, tokenID, preConsumed, 1)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Properties.OriginModelName = "dola-seedream-5-0-pro-260628-ep"
+	task.PrivateData.SubmitLogID = seedConsumeLog(t, task, preConsumed, map[string]interface{}{"async_task_id": task.TaskID})
+
+	expr := `param("layer_decomposition") == true ? tier("layer_decomposition", param("_generated_image_standard_count") * 150000 + param("_generated_image_high_resolution_count") * 300000) : tier("standard", 300000)`
+	snapBytes, err := common.Marshal(billingexpr.BillingSnapshot{
+		BillingMode:   "tiered_expr",
+		ModelName:     task.Properties.OriginModelName,
+		ExprString:    expr,
+		ExprHash:      billingexpr.ExprHashString(expr),
+		GroupRatio:    0.8,
+		EstimatedTier: "layer_decomposition",
+		QuotaPerUnit:  common.QuotaPerUnit,
+	})
+	require.NoError(t, err)
+	task.PrivateData.BillingContext.TieredSnapshot = snapBytes
+	task.PrivateData.BillingContext.TieredRequestBody = json.RawMessage(`{"size":"auto","layer_decomposition":true,"image":[{}]}`)
+
+	SettleAsyncImageTaskBilling(ctx, task, 0, 0, map[string]interface{}{
+		"generated_image_count":                 3,
+		"generated_image_standard_count":        2,
+		"generated_image_high_resolution_count": 1,
+	})
+
+	assert.Equal(t, 240000, task.Quota)
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, task.PrivateData.SubmitLogID).Error)
+	assert.Equal(t, 240000, log.Quota)
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "layer_decomposition", other["matched_tier"])
+}
+
 func TestRecalculate_NegativeDelta(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()

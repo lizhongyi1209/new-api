@@ -171,7 +171,7 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	if strings.TrimSpace(req.Model) == "" {
 		return fmt.Errorf("model is required")
 	}
-	if strings.TrimSpace(req.Prompt) == "" {
+	if strings.TrimSpace(req.Prompt) == "" && !(isSeedream5ProModelName(req.Model) && req.LayerDecomposition != nil && *req.LayerDecomposition) {
 		return fmt.Errorf("prompt is required")
 	}
 	if req.N != nil && (*req.N == 0 || *req.N > dto.MaxImageN) {
@@ -249,16 +249,27 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 		if len(req.Images) > 10 {
 			return fmt.Errorf("images must contain at most 10 items for Seedream 5.0 Pro")
 		}
+		if req.LayerDecomposition != nil && *req.LayerDecomposition && len(req.Images) != 1 {
+			return fmt.Errorf("images must contain exactly 1 item when layer_decomposition is true")
+		}
 		if req.OutputFormat != nil && *req.OutputFormat == "webp" {
 			return fmt.Errorf("output_format must be png or jpeg for Seedream 5.0 Pro")
 		}
-		if err := validateSeedream5ProSize(req.Size); err != nil {
-			return err
+		if req.LayerDecomposition != nil && *req.LayerDecomposition {
+			if req.Size != "" && req.Size != "auto" && req.Size != "1K" && req.Size != "1.5K" && req.Size != "2K" {
+				return fmt.Errorf("size must be auto, 1K, 1.5K, or 2K when layer_decomposition is true")
+			}
+		} else {
+			if err := validateSeedream5ProSize(req.Size); err != nil {
+				return err
+			}
 		}
 		if req.Quality != "" || req.AspectRatio != "" || req.Mask != nil || len(req.ResponseModalities) > 0 ||
 			req.MediaResolution != "" || req.GoogleSearch != nil || req.ThinkingLevel != nil || req.IncludeThoughts != nil {
-			return fmt.Errorf("Seedream 5.0 Pro only supports prompt, images, n, size, output_format, and watermark on the unified endpoint")
+			return fmt.Errorf("Seedream 5.0 Pro only supports prompt, images, n, size, output_format, watermark, and layer_decomposition on the unified endpoint")
 		}
+	} else if req.LayerDecomposition != nil {
+		return fmt.Errorf("layer_decomposition is only supported by Seedream 5.0 Pro")
 	}
 
 	if err := validateGenerateImageMask(req.Mask); err != nil {
@@ -1501,13 +1512,35 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		failGenerateImageTaskWithDetail(task, "上游未返回图片数据", imageUpstreamUsageDetail(promptTokens, completionTokens))
 		return
 	}
+	if len(imageResp.Data) > dto.MaxImageN || (asyncReq.LayerDecomposition != nil && *asyncReq.LayerDecomposition && len(imageResp.Data) > dto.MaxSeedreamLayerOutputs) {
+		failGenerateImageTaskWithDetail(task, "上游返回图片数量超过限制", imageUpstreamUsageDetail(promptTokens, completionTokens))
+		return
+	}
 
 	images := make([]dto.GenerateImageData, 0, len(imageResp.Data))
 	for _, d := range imageResp.Data {
+		if asyncReq.LayerDecomposition != nil && *asyncReq.LayerDecomposition && len(bytes.TrimSpace(d.Error)) > 0 && string(bytes.TrimSpace(d.Error)) != "null" {
+			failGenerateImageTaskWithDetail(task, "上游图层拆分结果包含失败图层", imageUpstreamUsageDetail(promptTokens, completionTokens))
+			return
+		}
+		image := dto.GenerateImageData{
+			Size:         d.Size,
+			OutputFormat: d.OutputFormat,
+			ZIndex:       d.ZIndex,
+			BoundingBox:  d.BoundingBox,
+			Name:         d.Name,
+			Description:  d.Description,
+		}
 		if d.B64Json != "" {
-			images = append(images, dto.GenerateImageData{B64Json: d.B64Json, MimeType: detectImageMimeType(d.B64Json)})
+			image.B64Json = d.B64Json
+			image.MimeType = detectImageMimeType(d.B64Json)
+			images = append(images, image)
 		} else if d.Url != "" {
-			images = append(images, dto.GenerateImageData{Url: d.Url})
+			image.Url = d.Url
+			images = append(images, image)
+		} else if asyncReq.LayerDecomposition != nil && *asyncReq.LayerDecomposition {
+			failGenerateImageTaskWithDetail(task, "上游图层拆分结果不完整", imageUpstreamUsageDetail(promptTokens, completionTokens))
+			return
 		}
 	}
 	if len(images) == 0 {
@@ -1634,13 +1667,14 @@ func prepareGenerateImageResultsWithStrategyTiming(ctx context.Context, images [
 					timing.Total = time.Since(startedAt)
 					return nil, timing, err
 				}
-				out = append(out, dto.GenerateImageData{Url: url, MimeType: mimeType})
+				image.Url = url
+				image.B64Json = ""
+				image.MimeType = mimeType
+				out = append(out, image)
 				continue
 			}
-			out = append(out, dto.GenerateImageData{
-				Url:      image.Url,
-				MimeType: image.MimeType,
-			})
+			image.B64Json = ""
+			out = append(out, image)
 			continue
 		}
 		if image.B64Json == "" {
@@ -1653,10 +1687,8 @@ func prepareGenerateImageResultsWithStrategyTiming(ctx context.Context, images [
 			mimeType = detectImageMimeType(image.B64Json)
 		}
 		if strategy == "" || strategy == dto.ImageOutputStrategyPassthrough {
-			out = append(out, dto.GenerateImageData{
-				B64Json:  image.B64Json,
-				MimeType: mimeType,
-			})
+			image.MimeType = mimeType
+			out = append(out, image)
 			continue
 		}
 		url, err := timing.upload(ctx, mimeType, image.B64Json, strategy, requestHost)
@@ -1664,10 +1696,10 @@ func prepareGenerateImageResultsWithStrategyTiming(ctx context.Context, images [
 			timing.Total = time.Since(startedAt)
 			return nil, timing, err
 		}
-		out = append(out, dto.GenerateImageData{
-			Url:      url,
-			MimeType: mimeType,
-		})
+		image.Url = url
+		image.B64Json = ""
+		image.MimeType = mimeType
+		out = append(out, image)
 	}
 	if len(out) == 0 {
 		timing.Total = time.Since(startedAt)
@@ -1701,6 +1733,12 @@ func extractOpenAIImageUsage(bodyBytes []byte) (promptTokens, completionTokens i
 
 	if resp.TotalTokens > 0 {
 		details["total_tokens"] = resp.TotalTokens
+	}
+	if resp.GeneratedImages > 0 {
+		details["generated_image_count"] = resp.GeneratedImages
+	}
+	if resp.InputImages > 0 {
+		details["input_image_count"] = resp.InputImages
 	}
 	if resp.InputTokensDetails != nil && resp.InputTokensDetails.ImageTokens > 0 {
 		details["image_tokens"] = resp.InputTokensDetails.ImageTokens
@@ -1817,6 +1855,32 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	resultUpdateDuration := time.Since(resultUpdateStartedAt)
 
 	// 完成后用真实用量重新结算差额（tiered_expr 或按 token 模型）
+	if tokenDetails == nil {
+		tokenDetails = make(map[string]interface{})
+	}
+	tokenDetails["generated_image_count"] = len(images)
+	standardCount := 0
+	highResolutionCount := 0
+	for _, image := range images {
+		parts := strings.Split(image.Size, "x")
+		if len(parts) != 2 {
+			continue
+		}
+		width, widthErr := strconv.Atoi(parts[0])
+		height, heightErr := strconv.Atoi(parts[1])
+		if widthErr != nil || heightErr != nil || width <= 0 || height <= 0 {
+			continue
+		}
+		if int64(width)*int64(height) <= 2_610_000 {
+			standardCount++
+		} else {
+			highResolutionCount++
+		}
+	}
+	if standardCount+highResolutionCount == len(images) {
+		tokenDetails["generated_image_standard_count"] = standardCount
+		tokenDetails["generated_image_high_resolution_count"] = highResolutionCount
+	}
 	billingStartedAt := time.Now()
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 	billingDuration := time.Since(billingStartedAt)

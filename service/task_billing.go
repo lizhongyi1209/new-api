@@ -11,6 +11,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -715,6 +716,19 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 	}
 
 	requestInput := billingexpr.RequestInput{Body: bc.TieredRequestBody}
+	requestBody := make(map[string]interface{})
+	if err := common.Unmarshal(bc.TieredRequestBody, &requestBody); err == nil {
+		for _, key := range []string{"generated_image_count", "generated_image_standard_count", "generated_image_high_resolution_count"} {
+			value, ok := tokenDetails[key].(int)
+			if !ok || value < 0 || value > dto.MaxImageN {
+				continue
+			}
+			requestBody["_"+key] = value
+		}
+		if enrichedBody, err := common.Marshal(requestBody); err == nil {
+			requestInput.Body = enrichedBody
+		}
+	}
 	tr, err := billingexpr.ComputeTieredQuotaWithRequest(&snap, params, requestInput)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("任务 %s tiered 结算失败：表达式计算错误 %v", task.TaskID, err))

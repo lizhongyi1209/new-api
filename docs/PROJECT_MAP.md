@@ -111,6 +111,7 @@ Aliases: Seedream 5.0 Pro, `dola-seedream-5-0-pro-260628-ep`, `/async/v1/generat
 
 - The public endpoint is the existing unified asynchronous task API. The gateway creates a local task, calls the upstream synchronous image endpoint in its worker, and returns the result through `/async/v1/tasks/:id`.
 - Both text-to-image and image-to-image use upstream `POST /v1/images/generations` with JSON. Public `images` is mapped to the upstream singular `image` array without downloading URL references or switching to OpenAI multipart edits.
+- `layer_decomposition: true` requires exactly one input image, is forwarded as a top-level upstream field, and preserves layer metadata (`z_index`, `bounding_box`, `name`, `description`) in asynchronous task results.
 - Seedream request validation, model routing, worker dispatch, and result settlement: `service/generate_image.go`, `service/async_image.go`.
 - Public DTO conversion and request-aware billing projection: `dto/generate_image.go`, `dto/async_image.go`, `controller/generate_image.go`.
 - Async tiered settlement preserves the compact request body in `model.TaskBillingContext` and evaluates it in `service/task_billing.go`; image payloads and URLs are never stored in the billing snapshot.

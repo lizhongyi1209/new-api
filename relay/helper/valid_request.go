@@ -230,6 +230,26 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			return nil, errors.New("model is required")
 		}
 
+		if imageRequest.LayerDecomposition != nil && *imageRequest.LayerDecomposition {
+			var imageValue any
+			if len(imageRequest.Image) == 0 || common.Unmarshal(imageRequest.Image, &imageValue) != nil {
+				return nil, errors.New("image must contain exactly 1 item when layer_decomposition is true")
+			}
+			validSingleImage := false
+			switch value := imageValue.(type) {
+			case string:
+				validSingleImage = strings.TrimSpace(value) != ""
+			case []any:
+				validSingleImage = len(value) == 1
+			}
+			if !validSingleImage {
+				return nil, errors.New("image must contain exactly 1 item when layer_decomposition is true")
+			}
+			if imageRequest.Size != "" && imageRequest.Size != "auto" && imageRequest.Size != "1K" && imageRequest.Size != "1.5K" && imageRequest.Size != "2K" {
+				return nil, errors.New("size must be auto, 1K, 1.5K, or 2K when layer_decomposition is true")
+			}
+		}
+
 		if strings.Contains(imageRequest.Size, "×") {
 			return nil, errors.New("size an unexpected error occurred in the parameter, please use 'x' instead of the multiplication sign '×'")
 		}

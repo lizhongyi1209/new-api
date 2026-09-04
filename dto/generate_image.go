@@ -37,9 +37,11 @@ type GenerateImageRequest struct {
 	// Gemini 原生：thinkingConfig.includeThoughts。
 	IncludeThoughts *bool `json:"include_thoughts,omitempty"`
 
-	OutputFormat *string         `json:"output_format,omitempty"` // "png" / "jpeg" / "webp"
-	Watermark    *bool           `json:"watermark,omitempty"`
-	Mask         *ImageReference `json:"mask,omitempty"`
+	OutputFormat *string `json:"output_format,omitempty"` // "png" / "jpeg" / "webp"
+	Watermark    *bool   `json:"watermark,omitempty"`
+	// Seedream 5.0 Pro：将单张输入图拆解为底图和最多 16 个透明图层。
+	LayerDecomposition *bool           `json:"layer_decomposition,omitempty"`
+	Mask               *ImageReference `json:"mask,omitempty"`
 
 	// 参考图（img2img），统一使用 images；单张图也传单元素数组。
 	// 兼容历史字符串以及 Gemini inlineData/fileData 显式对象。
@@ -142,9 +144,15 @@ type ImageReference struct {
 // GenerateImageData 是单张生成结果。上游给 url 时原样填 Url；
 // 上游给 base64 时处理阶段会上传对象存储后填 Url。
 type GenerateImageData struct {
-	B64Json  string `json:"b64_json,omitempty"`
-	Url      string `json:"url,omitempty"`
-	MimeType string `json:"mime_type,omitempty"`
+	B64Json      string            `json:"b64_json,omitempty"`
+	Url          string            `json:"url,omitempty"`
+	MimeType     string            `json:"mime_type,omitempty"`
+	Size         string            `json:"size,omitempty"`
+	OutputFormat string            `json:"output_format,omitempty"`
+	ZIndex       *int              `json:"z_index,omitempty"`
+	BoundingBox  *ImageBoundingBox `json:"bounding_box,omitempty"`
+	Name         string            `json:"name,omitempty"`
+	Description  string            `json:"description,omitempty"`
 }
 
 // GenerateImageResult 是任务成功后存入 task.Data、并由 fetch 端点原样返回的统一结构。

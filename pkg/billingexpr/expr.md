@@ -161,6 +161,8 @@ When a request arrives and the model uses `tiered_expr` billing:
 4. Converts output to quota: `rawCost / 1,000,000 * QuotaPerUnit`
 5. Creates `BillingSnapshot` and stores it on `RelayInfo`. Expression and request state stay frozen for settlement. An auto-group retry refreshes group-dependent fields from the selected group before the next upstream attempt. If a free initial group skipped pre-consume and the retry selects a paid group, the billing session is created before that attempt. If an existing session moves to a more expensive group, its reservation is raised to that group's estimate before sending; cheaper groups are refunded only after actual usage is settled.
 
+For unified asynchronous image tasks, settlement may add trusted, response-derived fields to the frozen request body before re-evaluating the expression: `_generated_image_count`, `_generated_image_standard_count`, and `_generated_image_high_resolution_count`. These names are reserved for gateway-generated values and must not be copied from client input. Expressions that use them must provide a conservative pre-consume fallback because the fields do not exist until the upstream response is complete.
+
 ### 4. Settlement (Actual Billing)
 
 **Files**: `service/tiered_settle.go`, `pkg/billingexpr/settle.go`

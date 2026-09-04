@@ -159,6 +159,39 @@ func TestGetAndValidOpenAIImageRequestNBounds(t *testing.T) {
 	})
 }
 
+func TestGetAndValidOpenAIImageRequestValidatesLayerDecompositionInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		image   string
+		size    string
+		wantErr string
+	}{
+		{name: "single image array", image: `["https://example.com/input.png"]`},
+		{name: "single image string", image: `"https://example.com/input.png"`},
+		{name: "missing image", image: `null`, wantErr: "exactly 1 item"},
+		{name: "multiple images", image: `["https://example.com/one.png","https://example.com/two.png"]`, wantErr: "exactly 1 item"},
+		{name: "pixel size", image: `["https://example.com/input.png"]`, size: `,"size":"1024x1024"`, wantErr: "size must be auto"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"model":"dola-seedream-5-0-pro-260628-ep","prompt":"split","image":%s,"layer_decomposition":true%s}`, test.image, test.size)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewBufferString(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+
+			req, err := GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesGenerations)
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, req.LayerDecomposition)
+			require.True(t, *req.LayerDecomposition)
+		})
+	}
+}
+
 func TestGetAndValidOpenAIImageRequestModeration(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
