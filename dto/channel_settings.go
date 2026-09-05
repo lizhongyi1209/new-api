@@ -62,6 +62,8 @@ const (
 )
 
 type ChannelOtherSettings struct {
+	// ImageOutputStrategy is the legacy JSON field name for generated media
+	// output. It applies to images and completed video tasks.
 	ImageOutputStrategy                   string                `json:"image_output_strategy,omitempty"`
 	GeminiFileDataEnabled                 bool                  `json:"gemini_file_data_enabled,omitempty"`
 	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`

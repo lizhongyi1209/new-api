@@ -136,14 +136,14 @@ func GeminiTextGenerationStreamHandler(c *gin.Context, info *relaycommon.RelayIn
 	helper.SetEventStreamHeaders(c)
 
 	return geminiStreamHandler(c, info, resp, func(data string, geminiResponse *dto.GeminiChatResponse) bool {
-		if dto.IsImageOutputTemporaryStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
+		if dto.IsImageOutputStorageStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
 			if err := replaceInlineDataWithStorageURLs(c, geminiResponse, info.ChannelOtherSettings.ImageOutputStrategy); err != nil {
-				logger.LogError(c, "temporary image storage upload failed: "+err.Error())
+				logger.LogError(c, "image storage upload failed: "+err.Error())
 				return false
 			}
 			rewritten, err := common.Marshal(geminiResponse)
 			if err != nil {
-				logger.LogError(c, "failed to marshal temporary image stream response: "+err.Error())
+				logger.LogError(c, "failed to marshal image stream response: "+err.Error())
 				return false
 			}
 			data = string(rewritten)

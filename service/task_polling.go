@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -497,15 +498,109 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	}
 
-	if ch.Type == constant.ChannelTypeXai && taskResult.Status == model.TaskStatusSuccess && taskResult.Url != "" {
-		cachedURL, cacheErr := CacheRemoteVideoToR2(ctx, taskResult.Url)
-		if cacheErr != nil {
-			logger.LogWarn(ctx, fmt.Sprintf("Failed to cache xAI video for task %s: %v", task.TaskID, cacheErr))
-		} else {
-			taskResult.Url = cachedURL
-		}
+	if err := ApplyVideoOutputStrategy(ctx, ch, task, taskResult); err != nil {
+		return fmt.Errorf("apply video output strategy for task %s: %w", task.TaskID, err)
 	}
 	return ApplyVideoTaskPollingResult(ctx, adaptor, task, taskResult, responseBody)
+}
+
+// ApplyVideoOutputStrategy moves a completed video into the durable object
+// storage selected on its channel. Empty and passthrough strategies preserve
+// the upstream result URL.
+func ApplyVideoOutputStrategy(ctx context.Context, ch *model.Channel, task *model.Task, taskResult *relaycommon.TaskInfo) error {
+	if ch == nil || task == nil || taskResult == nil {
+		return fmt.Errorf("channel, task and task result are required")
+	}
+	if taskResult.Status != model.TaskStatusSuccess {
+		return nil
+	}
+
+	strategy := ch.GetOtherSettings().ImageOutputStrategy
+	if strategy == "" || strategy == dto.ImageOutputStrategyPassthrough {
+		return nil
+	}
+	if strategy != dto.ImageOutputStrategyOSS && strategy != dto.ImageOutputStrategyR2 {
+		return nil
+	}
+
+	source := strings.TrimSpace(taskResult.Url)
+	usedRemoteURL := false
+	if source == "" {
+		source = strings.TrimSpace(taskResult.RemoteUrl)
+		usedRemoteURL = source != ""
+	}
+
+	downloadHeaders := make(http.Header)
+	if source == "" && (ch.Type == constant.ChannelTypeOpenAI || ch.Type == constant.ChannelTypeSora) {
+		baseURL := strings.TrimRight(ch.GetBaseURL(), "/")
+		if baseURL == "" {
+			baseURL = strings.TrimRight(constant.ChannelBaseURLs[ch.Type], "/")
+		}
+		upstreamTaskID := strings.TrimSpace(task.GetUpstreamTaskID())
+		if baseURL == "" || upstreamTaskID == "" {
+			return fmt.Errorf("completed video has no downloadable output")
+		}
+		source = fmt.Sprintf("%s/v1/videos/%s/content", baseURL, url.PathEscape(upstreamTaskID))
+		apiKey := strings.TrimSpace(task.PrivateData.Key)
+		if apiKey == "" {
+			apiKey = strings.TrimSpace(ch.Key)
+		}
+		if apiKey == "" {
+			return fmt.Errorf("video download key is unavailable")
+		}
+		downloadHeaders.Set("Authorization", "Bearer "+apiKey)
+	}
+	if source == "" {
+		return fmt.Errorf("completed video has no downloadable output")
+	}
+
+	// Gemini operation responses expose a download URI in RemoteUrl that needs
+	// the task's upstream API key. Omni responses populate Url directly and must
+	// not receive this query parameter because they may use a third-party host.
+	if usedRemoteURL && ch.Type == constant.ChannelTypeGemini {
+		apiKey := strings.TrimSpace(task.PrivateData.Key)
+		if apiKey == "" {
+			apiKey = strings.TrimSpace(ch.Key)
+		}
+		if apiKey == "" {
+			return fmt.Errorf("Gemini video download key is unavailable")
+		}
+		parsedSource, err := url.Parse(source)
+		if err != nil {
+			return fmt.Errorf("parse Gemini video download URL: %w", err)
+		}
+		query := parsedSource.Query()
+		if query.Get("key") == "" {
+			query.Set("key", apiKey)
+			parsedSource.RawQuery = query.Encode()
+			source = parsedSource.String()
+		}
+	}
+
+	downloadClient := GetSSRFProtectedHTTPClient()
+	if proxy := strings.TrimSpace(ch.GetSetting().Proxy); proxy != "" {
+		proxyClient, err := GetHttpClientWithProxy(proxy)
+		if err != nil {
+			return fmt.Errorf("create video output proxy client: %w", err)
+		}
+		downloadClient = proxyClient
+	}
+
+	var (
+		storedURL string
+		err       error
+	)
+	if strategy == dto.ImageOutputStrategyOSS {
+		storedURL, err = cacheVideoOutputToOSS(ctx, source, downloadClient, downloadHeaders)
+	} else {
+		storedURL, err = cacheVideoOutputToR2(ctx, source, downloadClient, downloadHeaders)
+	}
+	if err != nil {
+		return err
+	}
+	taskResult.Url = storedURL
+	taskResult.RemoteUrl = ""
+	return nil
 }
 
 // ApplyVideoTaskPollingResult atomically persists a parsed video-task poll,

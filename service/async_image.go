@@ -890,29 +890,12 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	// Process response based on response_format
-	responseFormat := imageReq.ResponseFormat
-	if responseFormat == "" {
-		responseFormat = "url" // default
-	}
-
 	var uploadedURLs []string
 	var resultData map[string]interface{}
 
 	strategy := relayInfo.ChannelOtherSettings.ImageOutputStrategy
-	if strategy == dto.ImageOutputStrategyPassthrough {
+	if strategy == "" || strategy == dto.ImageOutputStrategyPassthrough {
 		resultData = map[string]interface{}{"data": imageResp.Data}
-	} else if responseFormat == "b64_json" && strategy == "" {
-		// Return base64 directly
-		b64List := []string{}
-		for _, imgData := range imageResp.Data {
-			if imgData.B64Json != "" {
-				b64List = append(b64List, imgData.B64Json)
-			}
-		}
-		resultData = map[string]interface{}{
-			"data": b64List,
-		}
 	} else {
 		// Apply the channel strategy and return URLs from the selected storage.
 		for _, imgData := range imageResp.Data {
@@ -1319,7 +1302,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 							}
 							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
 								if base64Data, ok := inlineData["data"].(string); ok {
-									if strategy == dto.ImageOutputStrategyPassthrough {
+									if strategy == "" || strategy == dto.ImageOutputStrategyPassthrough {
 										imageCount++
 										filteredParts = append(filteredParts, part)
 										continue
@@ -1367,7 +1350,7 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	resultData := map[string]interface{}{
 		"urls": uploadedURLs,
 	}
-	if strategy == dto.ImageOutputStrategyPassthrough {
+	if strategy == "" || strategy == dto.ImageOutputStrategyPassthrough {
 		resultData = geminiResp
 	}
 	task.SetData(resultData)
@@ -2129,7 +2112,7 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 							// Upload the final image to the selected storage.
 							if inlineData, ok := partMap["inlineData"].(map[string]interface{}); ok {
 								if base64Data, ok := inlineData["data"].(string); ok {
-									if strategy == dto.ImageOutputStrategyPassthrough {
+									if strategy == "" || strategy == dto.ImageOutputStrategyPassthrough {
 										imageCount++
 										filteredParts = append(filteredParts, part)
 										continue

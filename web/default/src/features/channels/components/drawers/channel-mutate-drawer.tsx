@@ -1033,7 +1033,9 @@ export function ChannelMutateDrawer({
     (currentHttp2ConnectionShards != null && currentHttp2ConnectionShards > 1)
   )
   const imageOutputConfigured = Boolean(
-    currentImageOutputStrategy || currentGeminiFileDataEnabled
+    (currentImageOutputStrategy &&
+      currentImageOutputStrategy !== 'passthrough') ||
+    currentGeminiFileDataEnabled
   )
   let fieldPassthroughConfigured = false
   if (OPENAI_FIELD_PASSTHROUGH_TYPES.has(currentType)) {
@@ -1093,7 +1095,7 @@ export function ChannelMutateDrawer({
   ]
   advancedNavChildren.push({
     id: ADVANCED_SETTINGS_SECTION_IDS.imageOutput,
-    title: t('Image output strategy'),
+    title: t('Output strategy'),
     configured: imageOutputConfigured,
   })
   if (FIELD_PASSTHROUGH_TYPES.has(currentType)) {
@@ -4392,7 +4394,7 @@ export function ChannelMutateDrawer({
                           )}
                         >
                           <CardHeading
-                            title={t('Image output strategy')}
+                            title={t('Output strategy')}
                             icon={<Sparkles className='h-4 w-4' />}
                             iconTone='chart-3'
                           />
@@ -4406,7 +4408,7 @@ export function ChannelMutateDrawer({
                               render={({ field }) => (
                                 <FormItem>
                                   <FormLabel>
-                                    {t('Generated image output')}
+                                    {t('Generated media output')}
                                   </FormLabel>
                                   <Select
                                     items={[
@@ -4435,7 +4437,7 @@ export function ChannelMutateDrawer({
                                         label: t('Upstream passthrough'),
                                       },
                                     ]}
-                                    value={field.value ?? null}
+                                    value={field.value ?? 'passthrough'}
                                     onValueChange={field.onChange}
                                   >
                                     <FormControl>
@@ -4473,7 +4475,7 @@ export function ChannelMutateDrawer({
                                   </Select>
                                   <FormDescription>
                                     {t(
-                                      'Only explicitly configured channels change behavior; existing channels remain unchanged.'
+                                      'Generated images and videos use upstream passthrough by default. Aliyun OSS stores durable output under output/. Cloudflare R2 also supports durable media output; local temporary options apply to images only.'
                                     )}
                                   </FormDescription>
                                   <FormMessage />

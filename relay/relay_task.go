@@ -514,6 +514,9 @@ func tryRealtimeFetch(ctx context.Context, task *model.Task, isOpenAIVideoAPI bo
 		return nil
 	}
 
+	if err := service.ApplyVideoOutputStrategy(ctx, channelModel, task, ti); err != nil {
+		return nil
+	}
 	if err := service.ApplyVideoTaskPollingResult(ctx, adaptor, task, ti, body); err != nil {
 		return nil
 	}

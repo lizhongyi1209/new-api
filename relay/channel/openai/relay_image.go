@@ -177,10 +177,10 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 			}
 			if chunk.Type == "image_generation.completed" || chunk.Type == "image_edit.completed" {
 				completedImages++
-				if dto.IsImageOutputTemporaryStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
+				if dto.IsImageOutputStorageStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
 					rewritten, err := uploadOpenAIStreamImageToStorage(c, raw, info.ChannelOtherSettings.ImageOutputStrategy)
 					if err != nil {
-						sr.Stop(fmt.Errorf("temporary image storage upload: %w", err))
+						sr.Stop(fmt.Errorf("image storage upload: %w", err))
 						return
 					}
 					raw = rewritten
@@ -295,7 +295,7 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
-	if dto.IsImageOutputTemporaryStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
+	if dto.IsImageOutputStorageStrategy(info.ChannelOtherSettings.ImageOutputStrategy) {
 		responseBody, err = uploadOpenAIImagesToStorage(c, responseBody, info.ChannelOtherSettings.ImageOutputStrategy)
 		if err != nil {
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)

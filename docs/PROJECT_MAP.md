@@ -24,16 +24,17 @@ This file is the first-stop navigation index for existing features. It records s
 
 ## Image output strategy
 
-Aliases: 图片输出策略, image output strategy, 图片落盘, 本机临时图片, temporary image, CF 图片, Cloudflare 图片, ESA 图片, `/tmp/output`, `/async/v1/generateImage`.
+Aliases: 图片输出策略, 媒体输出策略, 视频输出策略, image output strategy, media output strategy, 图片落盘, 视频存储, 本机临时图片, temporary image, CF 图片, Cloudflare 图片, ESA 图片, `/tmp/output`, `/async/v1/generateImage`.
 
 ### Behavior contract
 
-- Channel setting key: `other.image_output_strategy`.
+- Channel setting key: `other.image_output_strategy` (legacy name; applies to generated images and completed videos).
 - Accepted values are `oss`, `r2`, legacy `local_temp`, `local_temp_cf`, `local_temp_esa`, and `passthrough`.
+- The channel editor defaults to `passthrough`. Explicit `oss` stores durable image/video outputs under the OSS bucket's `output/` prefix. Explicit `r2` also applies to both media types while preserving its provider-specific object prefixes; local temporary strategies remain image-only.
 - `local_temp_cf` stores the response image locally and returns `https://cf-api.o1key.com/tmp/output/<uuid>.<ext>`.
 - `local_temp_esa` stores the same way and returns `https://api.o1key.cn/tmp/output/<uuid>.<ext>`.
 - Legacy `local_temp` remains valid for compatibility. It uses `TEMP_STORAGE_PUBLIC_BASE_URL`, then `LOCAL_PUBLIC_BASE_URL`, then the Cloudflare domain. The default frontend maps this legacy value to `local_temp_cf` when editing a channel.
-- An unset strategy does not enable local temporary storage; existing host-based/default response behavior is preserved.
+- An unset strategy and explicit `passthrough` both preserve upstream image/video output. The explicit synchronous image query `?image_format=url` retains its compatibility R2 rewrite.
 - Explicit CF/ESA strategies select their fixed public domain independently of the configurable legacy base URL.
 - Files live under `${TEMP_STORAGE_DIR:-tmp}/output`; production Compose defaults the root to `/data/tmp`. Each file is available for 24 hours, expired reads return not found, and the cleanup task removes expired files.
 - The strategy applies to OpenAI-compatible image JSON/stream responses, Gemini inline-image responses, and the unified asynchronous `POST /async/v1/generateImage` result path.
@@ -44,6 +45,9 @@ Aliases: 图片输出策略, image output strategy, 图片落盘, 本机临时�
 | --- | --- |
 | Strategy constants, validation, temporary/storage classification | `dto/channel_settings.go` |
 | Provider selection, object-storage upload, and CF/ESA domain dispatch | `service/storage.go` |
+| Completed video output-strategy application in background polling | `service/task_polling.go` |
+| Completed Gemini/Vertex video output-strategy application during real-time lookup | `relay/relay_task.go` |
+| Stored video output URL preference for the public content proxy | `controller/video_proxy.go`, `controller/video_proxy_gemini.go` |
 | Local file validation, atomic write, URL construction, 24-hour expiry and deletion | `service/temporary_image.go` |
 | Periodic expiry cleanup | `service/temporary_image_cleanup_task.go` |
 | Public `GET`/`HEAD /tmp/output/:filename` route | `router/main.go` |
@@ -62,6 +66,7 @@ Aliases: 图片输出策略, image output strategy, 图片落盘, 本机临时�
 
 - `dto/channel_settings_test.go`
 - `service/temporary_image_test.go`
+- `service/storage_video_test.go`
 - `controller/temporary_image_test.go`
 - `relay/channel/openai/relay_image_temporary_storage_test.go`
 - `relay/channel/gemini/relay_gemini_temporary_storage_test.go`

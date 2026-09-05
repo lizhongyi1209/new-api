@@ -432,7 +432,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   vertex_key_type: 'json',
   aws_key_type: 'ak_sk',
   azure_responses_version: '',
-  image_output_strategy: undefined,
+  image_output_strategy: 'passthrough',
   gemini_file_data_enabled: false,
   // Field passthrough controls
   allow_service_tier: false,
@@ -524,8 +524,7 @@ export function transformChannelToFormDefaults(
     | 'local_temp'
     | 'local_temp_cf'
     | 'local_temp_esa'
-    | 'passthrough'
-    | undefined
+    | 'passthrough' = 'passthrough'
 
   if (channel.settings) {
     try {
@@ -545,7 +544,7 @@ export function transformChannelToFormDefaults(
       imageOutputStrategy =
         parsed.image_output_strategy === 'local_temp'
           ? 'local_temp_cf'
-          : parsed.image_output_strategy
+          : parsed.image_output_strategy || 'passthrough'
       geminiFileDataEnabled = parsed.gemini_file_data_enabled === true
       upstreamModelUpdateCheckEnabled =
         parsed.upstream_model_update_check_enabled === true

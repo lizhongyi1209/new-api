@@ -31,3 +31,20 @@ func TestGeminiOmniVideoURLDoesNotExposeAPIKey(t *testing.T) {
 	assert.Equal(t, "https://download-vod.aig-ai.com/result.mp4", videoURL)
 	assert.NotContains(t, videoURL, "secret-upstream-key")
 }
+
+func TestGeminiVideoURLPrefersStoredOutput(t *testing.T) {
+	task := &model.Task{
+		TaskID: "task-stored-output",
+		Data:   json.RawMessage(`{"response":{"video":"https://upstream.example.com/result.mp4"}}`),
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "https://media.example.com/output/stored.mp4",
+		},
+	}
+	channel := &model.Channel{Type: constant.ChannelTypeGemini}
+
+	videoURL, err := getGeminiVideoURL(channel, task, "secret-upstream-key")
+
+	require.NoError(t, err)
+	assert.Equal(t, "https://media.example.com/output/stored.mp4", videoURL)
+	assert.NotContains(t, videoURL, "secret-upstream-key")
+}

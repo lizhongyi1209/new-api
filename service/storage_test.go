@@ -95,12 +95,12 @@ func TestUploadImageBytesToOSSPreservesFormatAndSetsImmutableCache(t *testing.T)
 
 	require.NoError(t, err)
 	require.NoError(t, requestBodyErr)
-	assert.True(t, strings.HasPrefix(requestPath, "/test-bucket/uploads/oss/"), requestPath)
+	assert.True(t, strings.HasPrefix(requestPath, "/test-bucket/output/"), requestPath)
 	assert.True(t, strings.HasSuffix(requestPath, ".png"), requestPath)
 	assert.Equal(t, "image/png", requestContentType)
 	assert.Equal(t, generatedImageCacheControl, requestCacheControl)
 	assert.Equal(t, pngBytes, requestBody)
-	assert.True(t, strings.HasPrefix(publicURL, "https://images.example.com/uploads/oss/"), publicURL)
+	assert.True(t, strings.HasPrefix(publicURL, "https://images.example.com/output/"), publicURL)
 	assert.True(t, strings.HasSuffix(publicURL, ".png"), publicURL)
 }
 

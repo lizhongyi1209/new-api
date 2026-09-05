@@ -10,6 +10,7 @@ import (
 	_ "image/jpeg" // register JPEG decoder
 	_ "image/png"  // register PNG decoder
 	"io"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -35,11 +36,11 @@ var r2PresignClient *s3.PresignClient
 var ossClient *s3.Client
 var ossPresignClient *s3.PresignClient
 
-const maxR2VideoUploadBytes int64 = 512 * 1024 * 1024
+const maxVideoOutputBytes int64 = 512 * 1024 * 1024
 
 const generatedImageCacheControl = "public, max-age=31536000, immutable"
 
-type r2ObjectUploader interface {
+type objectUploader interface {
 	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 }
 
@@ -416,7 +417,7 @@ func UploadImageBytesToOSSContext(ctx context.Context, uploadBytes []byte) (stri
 		return "", err
 	}
 
-	key := fmt.Sprintf("uploads/oss/%s.%s", uuid.New().String(), ext)
+	key := fmt.Sprintf("output/%s.%s", uuid.New().String(), ext)
 	_, err = client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:       aws.String(bucket),
 		Key:          aws.String(key),
@@ -661,79 +662,174 @@ func UploadBase64ImageToR2(mimeType, base64Data string) (string, error) {
 	return fmt.Sprintf("%s/%s", baseURL, key), nil
 }
 
-// CacheRemoteVideoToR2 downloads a completed provider video once and stores it
-// under output/ in the configured R2 bucket. The returned URL is suitable for
-// client-facing task responses.
-func CacheRemoteVideoToR2(ctx context.Context, sourceURL string) (string, error) {
+func cacheVideoOutputToR2(ctx context.Context, sourceURL string, httpClient *http.Client, headers http.Header) (string, error) {
 	client, _ := getR2Client()
-	return cacheRemoteVideoToR2(ctx, sourceURL, GetSSRFProtectedHTTPClient(), client)
-}
-
-func cacheRemoteVideoToR2(ctx context.Context, sourceURL string, httpClient *http.Client, uploader r2ObjectUploader) (string, error) {
-	sourceURL = strings.TrimSpace(sourceURL)
-	parsedURL, err := url.Parse(sourceURL)
-	if err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" {
-		return "", fmt.Errorf("invalid remote video URL")
-	}
-
 	bucket := strings.TrimSpace(os.Getenv("R2_BUCKET"))
-	publicBase := strings.TrimRight(strings.TrimSpace(os.Getenv("R2_PUBLIC_BASE_URL")), "/")
+	publicBase := normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
 	if bucket == "" || publicBase == "" {
 		return "", fmt.Errorf("missing R2_BUCKET or R2_PUBLIC_BASE_URL")
 	}
-	if strings.HasPrefix(sourceURL, publicBase+"/output/") {
-		return sourceURL, nil
+	return cacheVideoOutput(ctx, sourceURL, httpClient, headers, client, bucket, publicBase, "R2")
+}
+
+func cacheVideoOutputToOSS(ctx context.Context, source string, httpClient *http.Client, headers http.Header) (string, error) {
+	client, _, err := getAliyunOSSClient()
+	if err != nil {
+		return "", err
+	}
+	bucket := strings.TrimSpace(firstNonEmptyEnv("ALIYUN_OSS_BUCKET", "OSS_BUCKET"))
+	publicBase := normalizeHTTPBaseURL(firstNonEmptyEnv("ALIYUN_OSS_PUBLIC_BASE_URL", "OSS_PUBLIC_BASE_URL"))
+	if bucket == "" || publicBase == "" {
+		return "", fmt.Errorf("missing Aliyun OSS config: require ALIYUN_OSS_BUCKET and ALIYUN_OSS_PUBLIC_BASE_URL")
+	}
+	return cacheVideoOutput(ctx, source, httpClient, headers, client, bucket, publicBase, "Aliyun OSS")
+}
+
+func cacheVideoOutput(ctx context.Context, source string, httpClient *http.Client, headers http.Header, uploader objectUploader, bucket, publicBase, provider string) (string, error) {
+	source = strings.TrimSpace(source)
+	if strings.HasPrefix(source, publicBase+"/output/") {
+		return source, nil
 	}
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
-	if err != nil {
-		return "", fmt.Errorf("create remote video request: %w", err)
+	var sourceBody io.ReadCloser
+	contentType := ""
+	contentLength := int64(-1)
+	sourcePath := ""
+
+	if strings.HasPrefix(source, "data:") {
+		comma := strings.IndexByte(source, ',')
+		if comma < 0 {
+			return "", fmt.Errorf("invalid video data URL")
+		}
+		metadata := source[len("data:"):comma]
+		parts := strings.Split(metadata, ";")
+		if len(parts) < 2 || !strings.EqualFold(parts[len(parts)-1], "base64") {
+			return "", fmt.Errorf("video data URL must use base64 encoding")
+		}
+		contentType = parts[0]
+		encoded := source[comma+1:]
+		if int64(base64.StdEncoding.DecodedLen(len(encoded))) > maxVideoOutputBytes {
+			return "", fmt.Errorf("video output exceeds %d bytes", maxVideoOutputBytes)
+		}
+		sourceBody = io.NopCloser(base64.NewDecoder(base64.StdEncoding, strings.NewReader(encoded)))
+	} else {
+		parsedURL, err := url.Parse(source)
+		if err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" {
+			return "", fmt.Errorf("invalid remote video URL")
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+		if err != nil {
+			return "", fmt.Errorf("create remote video request: %w", err)
+		}
+		for name, values := range headers {
+			for _, value := range values {
+				request.Header.Add(name, value)
+			}
+		}
+		response, err := httpClient.Do(request)
+		if err != nil {
+			return "", fmt.Errorf("download remote video: %w", err)
+		}
+		if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+			response.Body.Close()
+			return "", fmt.Errorf("download remote video returned status %d", response.StatusCode)
+		}
+		sourceBody = response.Body
+		contentType = response.Header.Get("Content-Type")
+		contentLength = response.ContentLength
+		sourcePath = parsedURL.Path
 	}
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return "", fmt.Errorf("download remote video: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("download remote video returned status %d", response.StatusCode)
-	}
-	if response.ContentLength > maxR2VideoUploadBytes {
-		return "", fmt.Errorf("remote video exceeds %d bytes", maxR2VideoUploadBytes)
+	defer sourceBody.Close()
+
+	if contentLength > maxVideoOutputBytes {
+		return "", fmt.Errorf("video output exceeds %d bytes", maxVideoOutputBytes)
 	}
 
-	tempFile, err := os.CreateTemp("", "grok-video-*.mp4")
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	ext := ""
+	switch strings.ToLower(mediaType) {
+	case "video/mp4":
+		ext = "mp4"
+		contentType = "video/mp4"
+	case "video/webm":
+		ext = "webm"
+		contentType = "video/webm"
+	case "video/quicktime":
+		ext = "mov"
+		contentType = "video/quicktime"
+	case "video/mpeg":
+		ext = "mpeg"
+		contentType = "video/mpeg"
+	case "video/x-msvideo":
+		ext = "avi"
+		contentType = "video/x-msvideo"
+	case "video/x-matroska":
+		ext = "mkv"
+		contentType = "video/x-matroska"
+	}
+	if ext == "" {
+		switch strings.ToLower(path.Ext(sourcePath)) {
+		case ".mp4":
+			ext = "mp4"
+			contentType = "video/mp4"
+		case ".webm":
+			ext = "webm"
+			contentType = "video/webm"
+		case ".mov":
+			ext = "mov"
+			contentType = "video/quicktime"
+		case ".mpeg", ".mpg":
+			ext = "mpeg"
+			contentType = "video/mpeg"
+		case ".avi":
+			ext = "avi"
+			contentType = "video/x-msvideo"
+		case ".mkv":
+			ext = "mkv"
+			contentType = "video/x-matroska"
+		}
+	}
+	if ext == "" && (mediaType == "" || strings.EqualFold(mediaType, "application/octet-stream")) {
+		ext = "mp4"
+		contentType = "video/mp4"
+	}
+	if ext == "" {
+		return "", fmt.Errorf("unsupported video content type: %s", contentType)
+	}
+
+	tempFile, err := os.CreateTemp("", "video-output-*")
 	if err != nil {
-		return "", fmt.Errorf("create remote video temp file: %w", err)
+		return "", fmt.Errorf("create video output temp file: %w", err)
 	}
 	tempPath := tempFile.Name()
 	defer os.Remove(tempPath)
 	defer tempFile.Close()
 
-	written, err := io.Copy(tempFile, io.LimitReader(response.Body, maxR2VideoUploadBytes+1))
+	written, err := io.Copy(tempFile, io.LimitReader(sourceBody, maxVideoOutputBytes+1))
 	if err != nil {
-		return "", fmt.Errorf("download remote video body: %w", err)
+		return "", fmt.Errorf("read video output: %w", err)
 	}
-	if written > maxR2VideoUploadBytes {
-		return "", fmt.Errorf("remote video exceeds %d bytes", maxR2VideoUploadBytes)
+	if written > maxVideoOutputBytes {
+		return "", fmt.Errorf("video output exceeds %d bytes", maxVideoOutputBytes)
 	}
 	if written == 0 {
-		return "", fmt.Errorf("remote video is empty")
+		return "", fmt.Errorf("video output is empty")
 	}
 	if _, err := tempFile.Seek(0, io.SeekStart); err != nil {
-		return "", fmt.Errorf("rewind remote video: %w", err)
+		return "", fmt.Errorf("rewind video output: %w", err)
 	}
 
-	objectKey := "output/" + uuid.New().String() + ".mp4"
+	objectKey := fmt.Sprintf("output/%s.%s", uuid.New().String(), ext)
 	_, err = uploader.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(bucket),
 		Key:           aws.String(objectKey),
 		Body:          tempFile,
 		ContentLength: aws.Int64(written),
-		ContentType:   aws.String("video/mp4"),
+		ContentType:   aws.String(contentType),
 		CacheControl:  aws.String("public, max-age=31536000, immutable"),
 	})
 	if err != nil {
-		return "", fmt.Errorf("upload remote video to R2: %w", err)
+		return "", fmt.Errorf("upload video output to %s: %w", provider, err)
 	}
 	return publicBase + "/" + objectKey, nil
 }
