@@ -426,25 +426,31 @@ func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) (
 
 	for i := range items {
 		var mimeType, b64 string
+		var imageBytes []byte
 		switch {
 		case items[i].B64Json != "":
-			// output_format defaults to png for gpt-image; the "origin" upload
-			// path re-detects the real format from the decoded bytes anyway, so
-			// this mime is only a content-type hint/fallback.
+			// output_format defaults to png for gpt-image. The storage path detects
+			// the real format from the decoded bytes, so this value is only a hint.
 			mimeType = "image/png"
 			b64 = items[i].B64Json
 		case items[i].Url != "":
-			mt, data, err := service.GetImageFromUrl(items[i].Url)
+			mt, data, err := service.GetImageBytesFromUrl(items[i].Url)
 			if err != nil {
 				return nil, fmt.Errorf("download upstream image url: %w", err)
 			}
 			mimeType = mt
-			b64 = data
+			imageBytes = data
 		default:
 			continue // nothing to upload for this entry
 		}
 
-		url, err := service.UploadBase64ImageWithOutputStrategy(mimeType, b64, strategy, c.Request.Host)
+		var url string
+		var err error
+		if imageBytes != nil {
+			url, err = service.UploadImageBytesWithOutputStrategy(c.Request.Context(), mimeType, imageBytes, strategy, c.Request.Host)
+		} else {
+			url, err = service.UploadBase64ImageWithOutputStrategy(mimeType, b64, strategy, c.Request.Host)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("image storage upload: %w", err)
 		}
@@ -467,19 +473,26 @@ func uploadOpenAIImagesToStorage(c *gin.Context, body []byte, strategy string) (
 func uploadOpenAIStreamImageToStorage(c *gin.Context, body []byte, strategy string) ([]byte, error) {
 	b64 := gjson.GetBytes(body, "b64_json").String()
 	mimeType := "image/png"
+	var imageBytes []byte
 	if b64 == "" {
 		upstreamURL := gjson.GetBytes(body, "url").String()
 		if upstreamURL == "" {
 			return nil, fmt.Errorf("completed image event has no b64_json or url")
 		}
 		var err error
-		mimeType, b64, err = service.GetImageFromUrl(upstreamURL)
+		mimeType, imageBytes, err = service.GetImageBytesFromUrl(upstreamURL)
 		if err != nil {
 			return nil, fmt.Errorf("download completed image: %w", err)
 		}
 	}
 
-	url, err := service.UploadBase64ImageWithOutputStrategy(mimeType, b64, strategy, c.Request.Host)
+	var url string
+	var err error
+	if imageBytes != nil {
+		url, err = service.UploadImageBytesWithOutputStrategy(c.Request.Context(), mimeType, imageBytes, strategy, c.Request.Host)
+	} else {
+		url, err = service.UploadBase64ImageWithOutputStrategy(mimeType, b64, strategy, c.Request.Host)
+	}
 	if err != nil {
 		return nil, err
 	}

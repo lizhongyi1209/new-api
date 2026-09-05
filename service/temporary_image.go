@@ -38,7 +38,7 @@ func UploadBase64ImageToTemporaryOutput(mimeType, base64Data, publicBaseURL stri
 	}
 	uploadBytes, ext, _, err := prepareImageUpload(mimeType, base64Data)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("temporary output is not a supported image: %w", err)
 	}
 	if len(uploadBytes) == 0 || len(uploadBytes) > maxTemporaryOutputImageBytes {
 		return "", fmt.Errorf("temporary output image size must be between 1 and %d bytes", maxTemporaryOutputImageBytes)

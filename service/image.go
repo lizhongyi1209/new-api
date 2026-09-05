@@ -73,20 +73,35 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 // GetImageFromUrlWithLimit 获取图片的类型和base64编码的数据，支持自定义大小限制
 // maxSizeMB: 最大文件大小（MB），0 表示使用默认限制
 func GetImageFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data string, err error) {
+	mimeType, imageBytes, err := GetImageBytesFromUrlWithLimit(url, maxSizeMB)
+	if err != nil {
+		return "", "", err
+	}
+	return mimeType, base64.StdEncoding.EncodeToString(imageBytes), nil
+}
+
+// GetImageBytesFromUrl downloads an image and returns its original bytes.
+func GetImageBytesFromUrl(url string) (mimeType string, data []byte, err error) {
+	return GetImageBytesFromUrlWithLimit(url, 0)
+}
+
+// GetImageBytesFromUrlWithLimit downloads an image once without Base64-encoding
+// it, allowing object-storage upload paths to preserve the original byte stream.
+func GetImageBytesFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data []byte, err error) {
 	resp, err := DoDownloadRequest(url)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to download image: %w", err)
+		return "", nil, fmt.Errorf("failed to download image: %w", err)
 	}
 	defer resp.Body.Close()
 
 	// Check HTTP status code
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("failed to download image: HTTP %d", resp.StatusCode)
+		return "", nil, fmt.Errorf("failed to download image: HTTP %d", resp.StatusCode)
 	}
 
 	contentType := resp.Header.Get("Content-Type")
 	if contentType != "application/octet-stream" && !strings.HasPrefix(contentType, "image/") {
-		return "", "", fmt.Errorf("invalid content type: %s, required image/*", contentType)
+		return "", nil, fmt.Errorf("invalid content type: %s, required image/*", contentType)
 	}
 
 	// Use custom limit or default
@@ -99,7 +114,7 @@ func GetImageFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data 
 
 	// Check Content-Length if available
 	if resp.ContentLength > maxImageSize {
-		return "", "", fmt.Errorf("image size %d exceeds maximum allowed size of %d bytes", resp.ContentLength, maxImageSize)
+		return "", nil, fmt.Errorf("image size %d exceeds maximum allowed size of %d bytes", resp.ContentLength, maxImageSize)
 	}
 
 	// Read one byte beyond the limit so an image exactly at the limit remains valid.
@@ -108,22 +123,22 @@ func GetImageFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data 
 
 	written, err := io.Copy(buffer, limitReader)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read image data: %w", err)
+		return "", nil, fmt.Errorf("failed to read image data: %w", err)
 	}
 	if written > maxImageSize {
-		return "", "", fmt.Errorf("image size exceeds maximum allowed size of %d bytes", maxImageSize)
+		return "", nil, fmt.Errorf("image size exceeds maximum allowed size of %d bytes", maxImageSize)
 	}
 
-	data = base64.StdEncoding.EncodeToString(buffer.Bytes())
+	data = buffer.Bytes()
 	mimeType = contentType
 
 	// Handle application/octet-stream type
 	if mimeType == "application/octet-stream" {
-		_, format, _, err := DecodeBase64ImageData(data)
+		_, detectedContentType, err := detectImageUploadFormat(data)
 		if err != nil {
-			return "", "", err
+			return "", nil, err
 		}
-		mimeType = "image/" + format
+		mimeType = detectedContentType
 	}
 
 	return mimeType, data, nil

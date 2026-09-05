@@ -933,7 +933,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 			} else if imgData.Url != "" {
 				// Download from the upstream URL and re-upload to selected storage.
 				// Note: This downloads the generated image from upstream, not user input, so we use default limit
-				mimeType, b64Data, err := GetImageFromUrl(imgData.Url)
+				mimeType, imageBytes, err := GetImageBytesFromUrl(imgData.Url)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: download upstream image failed: %v", err))
 					task.Status = model.TaskStatusFailure
@@ -943,7 +943,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 					_ = task.Update()
 					return
 				}
-				publicURL, err := UploadBase64ImageWithOutputStrategy(mimeType, b64Data, strategy, task.Properties.RequestHost)
+				publicURL, err := UploadImageBytesWithOutputStrategy(ctx, mimeType, imageBytes, strategy, task.Properties.RequestHost)
 				if err != nil {
 					logger.LogError(ctx, fmt.Sprintf("async_image: storage upload failed: %v", err))
 					task.Status = model.TaskStatusFailure

@@ -1641,6 +1641,30 @@ func (timing *generateImageOutputTiming) upload(ctx context.Context, mimeType, b
 	return url, err
 }
 
+func (timing *generateImageOutputTiming) uploadBytes(ctx context.Context, mimeType string, imageBytes []byte, strategy, requestHost string) (string, error) {
+	startedAt := time.Now()
+	if strategy != dto.ImageOutputStrategyOSS {
+		url, err := UploadImageBytesWithOutputStrategy(ctx, mimeType, imageBytes, strategy, requestHost)
+		timing.Upload += time.Since(startedAt)
+		return url, err
+	}
+
+	httpTiming, trace := newGenerateImageUpstreamTrace(startedAt)
+	uploadContext := httptrace.WithClientTrace(ctx, trace)
+	url, err := UploadImageBytesToOSSContext(uploadContext, imageBytes)
+	finishedAt := time.Now()
+	timing.Upload += finishedAt.Sub(startedAt)
+
+	httpTiming.mu.Lock()
+	timing.UploadTransportAttempts += httpTiming.requestWrites
+	timing.UploadConnectionWaitMilliseconds += generateImageDurationMilliseconds(httpTiming.startedAt, httpTiming.gotConnAt)
+	timing.UploadRequestWriteMilliseconds += generateImageDurationMilliseconds(httpTiming.gotConnAt, httpTiming.wroteRequestAt)
+	timing.UploadServerWaitMilliseconds += generateImageDurationMilliseconds(httpTiming.wroteRequestAt, httpTiming.firstResponseAt)
+	timing.UploadConnectionReused = httpTiming.connectionReused
+	httpTiming.mu.Unlock()
+	return url, err
+}
+
 func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, requestHost, strategy string) ([]dto.GenerateImageData, error) {
 	out, _, err := prepareGenerateImageResultsWithStrategyTiming(context.Background(), images, requestHost, strategy)
 	return out, err
@@ -1655,14 +1679,14 @@ func prepareGenerateImageResultsWithStrategyTiming(ctx context.Context, images [
 			timing.SourceURL++
 			if dto.IsImageOutputStorageStrategy(strategy) {
 				downloadStartedAt := time.Now()
-				mimeType, base64Data, err := GetImageFromUrl(image.Url)
+				mimeType, imageBytes, err := GetImageBytesFromUrl(image.Url)
 				timing.Download += time.Since(downloadStartedAt)
 				if err != nil {
 					timing.Total = time.Since(startedAt)
 					return nil, timing, err
 				}
-				timing.OutputBytes += generateImageBase64DecodedSize(base64Data)
-				url, err := timing.upload(ctx, mimeType, base64Data, strategy, requestHost)
+				timing.OutputBytes += int64(len(imageBytes))
+				url, err := timing.uploadBytes(ctx, mimeType, imageBytes, strategy, requestHost)
 				if err != nil {
 					timing.Total = time.Since(startedAt)
 					return nil, timing, err

@@ -2,10 +2,15 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"image"
 	"image/color"
 	"image/jpeg"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,6 +45,63 @@ func TestPrepareImageUploadPreservesJPEGBytesAndFormat(t *testing.T) {
 	assert.Equal(t, wantBytes, uploadBytes)
 	assert.Equal(t, "jpg", ext)
 	assert.Equal(t, "image/jpeg", contentType)
+}
+
+func TestPrepareImageUploadRejectsInvalidImageInsteadOfUsingMIMEFallback(t *testing.T) {
+	invalidBase64 := base64.StdEncoding.EncodeToString([]byte("not an image"))
+
+	_, _, _, err := prepareImageUpload("image/png", invalidBase64)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported or invalid image data")
+}
+
+func TestUploadImageBytesToOSSPreservesFormatAndSetsImmutableCache(t *testing.T) {
+	const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+	pngBytes, err := base64.StdEncoding.DecodeString(pngBase64)
+	require.NoError(t, err)
+
+	var requestPath string
+	var requestContentType string
+	var requestCacheControl string
+	var requestBody []byte
+	var requestBodyErr error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath = r.URL.Path
+		requestContentType = r.Header.Get("Content-Type")
+		requestCacheControl = r.Header.Get("Cache-Control")
+		requestBody, requestBodyErr = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	previousClient := ossClient
+	previousPresignClient := ossPresignClient
+	ossClient = nil
+	ossPresignClient = nil
+	t.Cleanup(func() {
+		ossClient = previousClient
+		ossPresignClient = previousPresignClient
+	})
+	t.Setenv("ALIYUN_OSS_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("ALIYUN_OSS_ACCESS_KEY_SECRET", "test-secret-key")
+	t.Setenv("ALIYUN_OSS_REGION", "test-region")
+	t.Setenv("ALIYUN_OSS_ENDPOINT", server.URL)
+	t.Setenv("ALIYUN_OSS_FORCE_PATH_STYLE", "true")
+	t.Setenv("ALIYUN_OSS_BUCKET", "test-bucket")
+	t.Setenv("ALIYUN_OSS_PUBLIC_BASE_URL", "https://images.example.com")
+
+	publicURL, err := UploadImageBytesToOSSContext(context.Background(), pngBytes)
+
+	require.NoError(t, err)
+	require.NoError(t, requestBodyErr)
+	assert.True(t, strings.HasPrefix(requestPath, "/test-bucket/uploads/oss/"), requestPath)
+	assert.True(t, strings.HasSuffix(requestPath, ".png"), requestPath)
+	assert.Equal(t, "image/png", requestContentType)
+	assert.Equal(t, generatedImageCacheControl, requestCacheControl)
+	assert.Equal(t, pngBytes, requestBody)
+	assert.True(t, strings.HasPrefix(publicURL, "https://images.example.com/uploads/oss/"), publicURL)
+	assert.True(t, strings.HasSuffix(publicURL, ".png"), publicURL)
 }
 
 func TestSelectImageStorageProviderDefaultHosts(t *testing.T) {

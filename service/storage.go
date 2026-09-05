@@ -6,8 +6,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image"
-	_ "image/gif" // register GIF decoder
-	_ "image/png" // register PNG decoder
+	_ "image/gif"  // register GIF decoder
+	_ "image/jpeg" // register JPEG decoder
+	_ "image/png"  // register PNG decoder
 	"io"
 	"net"
 	"net/http"
@@ -35,6 +36,8 @@ var ossClient *s3.Client
 var ossPresignClient *s3.PresignClient
 
 const maxR2VideoUploadBytes int64 = 512 * 1024 * 1024
+
+const generatedImageCacheControl = "public, max-age=31536000, immutable"
 
 type r2ObjectUploader interface {
 	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
@@ -162,6 +165,24 @@ func UploadBase64ImageWithOutputStrategy(mimeType, base64Data, strategy, request
 	default:
 		return UploadBase64ImageToHostStorage(mimeType, base64Data, requestHost)
 	}
+}
+
+// UploadImageBytesWithOutputStrategy uploads already-decoded image bytes without
+// routing OSS-bound remote images through an unnecessary Base64 encode/decode cycle.
+func UploadImageBytesWithOutputStrategy(ctx context.Context, mimeType string, imageBytes []byte, strategy, requestHost string) (string, error) {
+	provider := ""
+	if strategy == "" {
+		provider = SelectImageStorageProvider(requestHost)
+	}
+	if strategy == dto.ImageOutputStrategyOSS || provider == ImageStorageProviderAliyunOSS {
+		return UploadImageBytesToOSSContext(ctx, imageBytes)
+	}
+	return UploadBase64ImageWithOutputStrategy(
+		mimeType,
+		base64.StdEncoding.EncodeToString(imageBytes),
+		strategy,
+		requestHost,
+	)
 }
 
 func normalizeRequestHost(requestHost string) string {
@@ -368,7 +389,17 @@ func UploadBase64ImageToOSS(mimeType, base64Data string) (string, error) {
 }
 
 // UploadBase64ImageToOSSContext is the context-aware variant used by request-level tracing.
-func UploadBase64ImageToOSSContext(ctx context.Context, mimeType, base64Data string) (string, error) {
+func UploadBase64ImageToOSSContext(ctx context.Context, _ string, base64Data string) (string, error) {
+	uploadBytes, err := base64.StdEncoding.DecodeString(base64Data)
+	if err != nil {
+		return "", fmt.Errorf("decode image base64: %w", err)
+	}
+	return UploadImageBytesToOSSContext(ctx, uploadBytes)
+}
+
+// UploadImageBytesToOSSContext uploads validated image bytes to Aliyun OSS.
+// The detected byte format determines the object extension and Content-Type.
+func UploadImageBytesToOSSContext(ctx context.Context, uploadBytes []byte) (string, error) {
 	client, _, err := getAliyunOSSClient()
 	if err != nil {
 		return "", err
@@ -380,17 +411,18 @@ func UploadBase64ImageToOSSContext(ctx context.Context, mimeType, base64Data str
 		return "", fmt.Errorf("missing Aliyun OSS config: require ALIYUN_OSS_BUCKET and ALIYUN_OSS_PUBLIC_BASE_URL")
 	}
 
-	uploadBytes, ext, contentType, err := prepareImageUpload(mimeType, base64Data)
+	ext, contentType, err := detectImageUploadFormat(uploadBytes)
 	if err != nil {
 		return "", err
 	}
 
 	key := fmt.Sprintf("uploads/oss/%s.%s", uuid.New().String(), ext)
 	_, err = client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		Body:        bytes.NewReader(uploadBytes),
-		ContentType: aws.String(contentType),
+		Bucket:       aws.String(bucket),
+		Key:          aws.String(key),
+		Body:         bytes.NewReader(uploadBytes),
+		ContentType:  aws.String(contentType),
+		CacheControl: aws.String(generatedImageCacheControl),
 	})
 	if err != nil {
 		return "", fmt.Errorf("aliyun oss upload failed: %w", err)
@@ -547,49 +579,51 @@ func sanitizeUploadFilename(filename string) string {
 	}, name)
 }
 
-func prepareImageUpload(mimeType, base64Data string) ([]byte, string, string, error) {
+func prepareImageUpload(_ string, base64Data string) ([]byte, string, string, error) {
 	imgBytes, err := base64.StdEncoding.DecodeString(base64Data)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("base64 decode failed: %w", err)
 	}
 
-	ext, contentType := detectImageUploadFormat(imgBytes, mimeType)
+	ext, contentType, err := detectImageUploadFormat(imgBytes)
+	if err != nil {
+		return nil, "", "", err
+	}
 	return imgBytes, ext, contentType, nil
 }
 
-func detectImageUploadFormat(imgBytes []byte, mimeType string) (string, string) {
-	_, format, _ := image.DecodeConfig(bytes.NewReader(imgBytes))
+func detectImageUploadFormat(imgBytes []byte) (string, string, error) {
+	if len(imgBytes) == 0 {
+		return "", "", fmt.Errorf("image data is empty")
+	}
+
+	_, format, imageErr := image.DecodeConfig(bytes.NewReader(imgBytes))
 	if format == "" {
 		if _, err := webp.DecodeConfig(bytes.NewReader(imgBytes)); err == nil {
 			format = "webp"
 		}
 	}
 	if format == "" {
-		switch strings.ToLower(strings.TrimSpace(mimeType)) {
-		case "image/jpeg", "image/jpg":
-			format = "jpg"
-		case "image/webp":
-			format = "webp"
-		case "image/gif":
-			format = "gif"
-		default:
-			format = "png"
-		}
+		return "", "", fmt.Errorf("unsupported or invalid image data: %w", imageErr)
 	}
 	if format == "jpeg" {
 		format = "jpg"
 	}
 
-	contentType := "image/png"
+	contentType := ""
 	switch format {
+	case "png":
+		contentType = "image/png"
 	case "jpg":
 		contentType = "image/jpeg"
 	case "webp":
 		contentType = "image/webp"
 	case "gif":
 		contentType = "image/gif"
+	default:
+		return "", "", fmt.Errorf("unsupported image format: %s", format)
 	}
-	return format, contentType
+	return format, contentType, nil
 }
 
 func firstNonEmptyString(values ...string) string {
