@@ -33,4 +33,6 @@ func TestVideoRouterRegistersSpecializedVideoRoutes(t *testing.T) {
 	assert.True(t, routes["GET /v1/sd-5/assets/:asset_id"])
 	assert.True(t, routes["POST /v1/seedance/assets"])
 	assert.True(t, routes["GET /v1/seedance/assets/:asset_id"])
+	assert.True(t, routes["POST /v2/db-sd-max/assets"])
+	assert.True(t, routes["GET /v2/db-sd-max/assets/:asset_id"])
 }

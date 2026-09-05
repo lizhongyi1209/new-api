@@ -21,12 +21,14 @@ type UnifiedSeedanceAssetRequest struct {
 	URL       string `json:"url"`
 	Name      string `json:"name,omitempty"`
 	AssetType string `json:"asset_type,omitempty"`
+	Model     string `json:"model,omitempty"`
 }
 
 type serviceInferenceAssetRequest struct {
 	URL       string `json:"URL"`
 	Name      string `json:"Name,omitempty"`
 	AssetType string `json:"AssetType"`
+	Model     string `json:"Model,omitempty"`
 }
 
 func seedanceAssetBasePath(assetWorkflow string) (string, bool) {
@@ -35,6 +37,8 @@ func seedanceAssetBasePath(assetWorkflow string) (string, bool) {
 		return "/v1/sd/assets", true
 	case "df":
 		return "/v1/sd-5/assets", true
+	case "doubao":
+		return "/v2/db-sd-max/assets", true
 	default:
 		return "", false
 	}
@@ -83,12 +87,20 @@ func seedanceAssetInvalidRequest(c *gin.Context, message string) {
 func buildUnifiedSeedanceAssetRequest(request UnifiedSeedanceAssetRequest) (string, []byte, error) {
 	upstreamPath, ok := seedanceAssetBasePath(request.Type)
 	if !ok {
-		return "", nil, fmt.Errorf("unsupported type %q; currently supported: hc, df", request.Type)
+		return "", nil, fmt.Errorf("unsupported type %q; currently supported: hc, df, doubao", request.Type)
 	}
 
+	assetWorkflow := strings.ToLower(strings.TrimSpace(request.Type))
 	sourceURL := strings.TrimSpace(request.URL)
 	parsedURL, err := url.ParseRequestURI(sourceURL)
-	if err != nil || parsedURL.Scheme != "https" || parsedURL.Host == "" {
+	validScheme := parsedURL != nil && parsedURL.Scheme == "https"
+	if assetWorkflow == "doubao" {
+		validScheme = parsedURL != nil && (parsedURL.Scheme == "http" || parsedURL.Scheme == "https")
+	}
+	if err != nil || !validScheme || parsedURL.Host == "" {
+		if assetWorkflow == "doubao" {
+			return "", nil, fmt.Errorf("url must be a public HTTP(S) URL")
+		}
 		return "", nil, fmt.Errorf("url must be a public HTTPS URL")
 	}
 
@@ -104,10 +116,15 @@ func buildUnifiedSeedanceAssetRequest(request UnifiedSeedanceAssetRequest) (stri
 		return "", nil, fmt.Errorf("asset_type must be image, video, or audio")
 	}
 
+	assetModel := ""
+	if assetWorkflow == "doubao" {
+		assetModel = strings.TrimSpace(request.Model)
+	}
 	body, err := common.Marshal(serviceInferenceAssetRequest{
 		URL:       sourceURL,
 		Name:      strings.TrimSpace(request.Name),
 		AssetType: assetType,
+		Model:     assetModel,
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("marshal seedance asset request: %w", err)
@@ -118,7 +135,7 @@ func buildUnifiedSeedanceAssetRequest(request UnifiedSeedanceAssetRequest) (stri
 func buildUnifiedSeedanceAssetQuery(assetWorkflow string, assetID string) (string, error) {
 	upstreamPath, ok := seedanceAssetBasePath(assetWorkflow)
 	if !ok {
-		return "", fmt.Errorf("unsupported type %q; currently supported: hc, df", assetWorkflow)
+		return "", fmt.Errorf("unsupported type %q; currently supported: hc, df, doubao", assetWorkflow)
 	}
 
 	assetID = strings.TrimSpace(assetID)
@@ -129,7 +146,8 @@ func buildUnifiedSeedanceAssetQuery(assetWorkflow string, assetID string) (strin
 }
 
 // ProxySeedanceAssetAPI transparently forwards ServiceInference asset-management
-// calls (/v1/asset-groups*, /v1/assets*, /v1/sd/assets*, /v1/sd-5/assets*) to the upstream provider
+// calls (/v1/asset-groups*, /v1/assets*, /v1/sd/assets*, /v1/sd-5/assets*,
+// /v2/db-sd-max/assets*) to the upstream provider
 // using this instance's type-60 channel credentials. Sub-stations point their
 // type-60 channel at this gateway with a gateway token, so the real upstream key
 // never leaves the main site.
@@ -175,6 +193,12 @@ func proxySeedanceAssetAPI(c *gin.Context, upstreamPath string, rawQuery string,
 	c.Status(resp.StatusCode)
 	if contentType := resp.Header.Get("Content-Type"); contentType != "" {
 		c.Header("Content-Type", contentType)
+	}
+	if requestID := resp.Header.Get("x-request-id"); requestID != "" {
+		c.Header("x-request-id", requestID)
+	}
+	if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+		c.Header("Retry-After", retryAfter)
 	}
 	_, _ = io.Copy(c.Writer, resp.Body)
 }

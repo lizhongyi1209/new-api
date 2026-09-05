@@ -77,6 +77,16 @@ func SetVideoRouter(router *gin.Engine) {
 		seedanceAssetProxyRouter.GET("/seedance/assets/:asset_id", controller.GetUnifiedSeedanceAsset)
 	}
 
+	// Doubao Seedance MAX v2 asset contract. This remains on the same type-60
+	// channel while keeping the existing HC and DF v1 asset routes unchanged.
+	doubaoSeedanceAssetRouter := router.Group("/v2/db-sd-max")
+	doubaoSeedanceAssetRouter.Use(middleware.RouteTag("relay"))
+	doubaoSeedanceAssetRouter.Use(middleware.TokenAuth())
+	{
+		doubaoSeedanceAssetRouter.POST("/assets", controller.ProxySeedanceAssetAPI)
+		doubaoSeedanceAssetRouter.GET("/assets/:asset_id", controller.ProxySeedanceAssetAPI)
+	}
+
 	klingV1Router := router.Group("/kling/v1")
 	klingV1Router.Use(middleware.RouteTag("relay"))
 	klingV1Router.Use(middleware.KlingRequestConvert(), middleware.TokenAuth(), middleware.Distribute())

@@ -13,6 +13,10 @@ const seedance25VideoInputPriceRatio = 42.0 / 70.0
 var ModelList = []string{
 	"minimax-h3",
 	"minimax-h3-max",
+	"doubao-seedance-2-0-260128-max",
+	"doubao-seedance-2-0-fast-260128-max",
+	"doubao-seedance-2-0-mini-260615-max",
+	"doubao-seedance-2-5-260628-max",
 	"dreamina-seedance-2-0-260128",
 	"dreamina-seedance-2-0-260128-df",
 	"dreamina-seedance-2-0-fast-260128-df",
@@ -67,7 +71,7 @@ func isSeedanceDFModel(model string) bool {
 	}
 }
 
-func isSeedanceMaxModel(model string) bool {
+func isDreaminaSeedanceMaxModel(model string) bool {
 	switch strings.ToLower(strings.TrimSpace(model)) {
 	case "dreamina-seedance-2-0-260128-max",
 		"dreamina-seedance-2-0-fast-260128-max",
@@ -77,6 +81,22 @@ func isSeedanceMaxModel(model string) bool {
 	default:
 		return false
 	}
+}
+
+func isDoubaoSeedanceMaxModel(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "doubao-seedance-2-0-260128-max",
+		"doubao-seedance-2-0-fast-260128-max",
+		"doubao-seedance-2-0-mini-260615-max",
+		"doubao-seedance-2-5-260628-max":
+		return true
+	default:
+		return false
+	}
+}
+
+func usesSeedanceV2(model string) bool {
+	return isDreaminaSeedanceMaxModel(model) || isDoubaoSeedanceMaxModel(model)
 }
 
 func seedanceDirectAssetWorkflow(model string) (string, string, bool) {

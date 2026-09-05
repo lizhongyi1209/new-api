@@ -23,14 +23,14 @@ const (
 	ErrorCodeParamMissingRequired   = "PARAM_MISSING_REQUIRED"
 
 	// Resource errors
-	ErrorCodeAssetExpired   = "ASSET_EXPIRED"
-	ErrorCodeAssetNotFound  = "ASSET_NOT_FOUND"
+	ErrorCodeAssetExpired     = "ASSET_EXPIRED"
+	ErrorCodeAssetNotFound    = "ASSET_NOT_FOUND"
 	ErrorCodeImageUnsupported = "IMAGE_FORMAT_UNSUPPORTED"
 
 	// Model/Channel errors
-	ErrorCodeModelNotAvailable      = "MODEL_NOT_AVAILABLE"
+	ErrorCodeModelNotAvailable       = "MODEL_NOT_AVAILABLE"
 	ErrorCodeModelPriceNotConfigured = "MODEL_PRICE_NOT_CONFIGURED"
-	ErrorCodeChannelUnavailable     = "CHANNEL_UNAVAILABLE"
+	ErrorCodeChannelUnavailable      = "CHANNEL_UNAVAILABLE"
 
 	// Generic errors
 	ErrorCodeUpstreamError = "UPSTREAM_ERROR"
@@ -56,6 +56,7 @@ type ServiceInferenceError struct {
 	Message    string       `json:"message"`
 	Type       string       `json:"type"`
 	Details    ErrorDetails `json:"details,omitempty"`
+	RequestID  string       `json:"request_id,omitempty"`
 	StatusCode int          `json:"-"`
 	// LocalError marks deterministic client-side errors (bad parameters, missing
 	// fields, expired/invalid asset references, insufficient local balance) that
@@ -73,9 +74,10 @@ type upstreamErrorResponse struct {
 		Param   string `json:"param"`
 		Type    string `json:"type"`
 	} `json:"error"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Data    interface{} `json:"data"`
+	Code      string      `json:"code"`
+	Message   string      `json:"message"`
+	Data      interface{} `json:"data"`
+	RequestID string      `json:"request_id"`
 }
 
 // WrapError converts various error formats into ServiceInferenceError
@@ -85,6 +87,14 @@ func WrapError(err error, statusCode int) *dto.TaskError {
 	}
 
 	siErr := classifyError(err, statusCode)
+	if siErr.RequestID == "" {
+		var upstreamRef struct {
+			RequestID string `json:"request_id"`
+		}
+		if unmarshalErr := common.Unmarshal([]byte(err.Error()), &upstreamRef); unmarshalErr == nil {
+			siErr.RequestID = upstreamRef.RequestID
+		}
+	}
 
 	// Build the final error response
 	errorResponse := map[string]interface{}{
@@ -105,6 +115,7 @@ func WrapError(err error, statusCode int) *dto.TaskError {
 	return &dto.TaskError{
 		Code:       siErr.Code,
 		Message:    string(jsonBytes),
+		RequestID:  siErr.RequestID,
 		StatusCode: siErr.StatusCode,
 		Error:      err,
 		LocalError: siErr.LocalError,
@@ -120,6 +131,7 @@ func classifyError(err error, statusCode int) *ServiceInferenceError {
 	var upstreamErr upstreamErrorResponse
 	if jsonErr := common.Unmarshal([]byte(errText), &upstreamErr); jsonErr == nil {
 		if parsed := parseUpstreamError(&upstreamErr, statusCode); parsed != nil {
+			parsed.RequestID = upstreamErr.RequestID
 			return parsed
 		}
 	}
@@ -283,15 +295,15 @@ func parseInvalidParameterError(message string, statusCode int) *ServiceInferenc
 		mode := extractModeFromMessage(message)
 
 		return &ServiceInferenceError{
-			Code:    ErrorCodeParamDurationInvalid,
-			Message: fmt.Sprintf("时长参数不合法，模型 %s 在当前模式下不支持该时长值。请参考文档了解支持的时长范围", model),
-			Type:    ErrorTypeInvalidParameter,
+			Code:       ErrorCodeParamDurationInvalid,
+			Message:    fmt.Sprintf("时长参数不合法，模型 %s 在当前模式下不支持该时长值。请参考文档了解支持的时长范围", model),
+			Type:       ErrorTypeInvalidParameter,
 			StatusCode: http.StatusBadRequest,
 			LocalError: true,
 			Details: ErrorDetails{
-				"parameter": "duration",
-				"model":     model,
-				"mode":      mode,
+				"parameter":  "duration",
+				"model":      model,
+				"mode":       mode,
 				"suggestion": "不同模型支持的时长范围不同，请查阅API文档",
 			},
 		}
@@ -303,15 +315,15 @@ func parseInvalidParameterError(message string, statusCode int) *ServiceInferenc
 		mode := extractModeFromMessage(message)
 
 		return &ServiceInferenceError{
-			Code:    ErrorCodeParamResolutionInvalid,
-			Message: fmt.Sprintf("分辨率参数不合法，模型 %s 不支持该分辨率", model),
-			Type:    ErrorTypeInvalidParameter,
+			Code:       ErrorCodeParamResolutionInvalid,
+			Message:    fmt.Sprintf("分辨率参数不合法，模型 %s 不支持该分辨率", model),
+			Type:       ErrorTypeInvalidParameter,
 			StatusCode: http.StatusBadRequest,
 			LocalError: true,
 			Details: ErrorDetails{
-				"parameter": "resolution",
-				"model":     model,
-				"mode":      mode,
+				"parameter":  "resolution",
+				"model":      model,
+				"mode":       mode,
 				"suggestion": "请使用 720p、1080p 等支持的分辨率",
 			},
 		}
@@ -321,13 +333,13 @@ func parseInvalidParameterError(message string, statusCode int) *ServiceInferenc
 	if strings.Contains(messageLower, "asset") && strings.Contains(messageLower, "not found") {
 		assetID := extractAssetIDFromMessage(message)
 		return &ServiceInferenceError{
-			Code:    ErrorCodeAssetNotFound,
-			Message: "引用的图片资源不存在，请重新上传图片",
-			Type:    ErrorTypeResourceNotFound,
+			Code:       ErrorCodeAssetNotFound,
+			Message:    "引用的图片资源不存在，请重新上传图片",
+			Type:       ErrorTypeResourceNotFound,
 			StatusCode: http.StatusNotFound,
 			LocalError: true,
 			Details: ErrorDetails{
-				"asset_id": assetID,
+				"asset_id":   assetID,
 				"suggestion": "请确认资源ID是否正确，或重新上传图片",
 			},
 		}
@@ -377,9 +389,9 @@ func parseInvalidAssetsError(errText string) *ServiceInferenceError {
 	assetID := extractAssetIDFromMessage(errText)
 
 	return &ServiceInferenceError{
-		Code:    ErrorCodeAssetExpired,
-		Message: "引用的图片资源已过期或不存在，请重新上传图片",
-		Type:    ErrorTypeResourceNotFound,
+		Code:       ErrorCodeAssetExpired,
+		Message:    "引用的图片资源已过期或不存在，请重新上传图片",
+		Type:       ErrorTypeResourceNotFound,
 		StatusCode: http.StatusNotFound,
 		LocalError: true,
 		Details: ErrorDetails{
@@ -406,9 +418,9 @@ func parseLocalBalanceError(errText string) *ServiceInferenceError {
 	}
 
 	return &ServiceInferenceError{
-		Code:    ErrorCodeBalanceLocalInsufficient,
-		Message: fmt.Sprintf("您的账户余额不足，当前余额 ¥%s，本次请求需要 ¥%s", remain, need),
-		Type:    ErrorTypeInsufficientBalance,
+		Code:       ErrorCodeBalanceLocalInsufficient,
+		Message:    fmt.Sprintf("您的账户余额不足，当前余额 ¥%s，本次请求需要 ¥%s", remain, need),
+		Type:       ErrorTypeInsufficientBalance,
 		StatusCode: http.StatusPaymentRequired,
 		LocalError: true,
 	}
@@ -430,9 +442,9 @@ func parseTokenQuotaError(errText string) *ServiceInferenceError {
 	}
 
 	return &ServiceInferenceError{
-		Code:    ErrorCodeBalanceLocalInsufficient,
-		Message: fmt.Sprintf("您的账户余额不足，当前余额 ¥%s，本次请求需要 ¥%s", remain, need),
-		Type:    ErrorTypeInsufficientBalance,
+		Code:       ErrorCodeBalanceLocalInsufficient,
+		Message:    fmt.Sprintf("您的账户余额不足，当前余额 ¥%s，本次请求需要 ¥%s", remain, need),
+		Type:       ErrorTypeInsufficientBalance,
 		StatusCode: http.StatusPaymentRequired,
 		LocalError: true,
 	}
@@ -448,9 +460,9 @@ func parseModelPriceError(errText string) *ServiceInferenceError {
 	}
 
 	return &ServiceInferenceError{
-		Code:    ErrorCodeModelPriceNotConfigured,
-		Message: "模型价格未配置，请联系管理员",
-		Type:    ErrorTypeUpstreamService,
+		Code:       ErrorCodeModelPriceNotConfigured,
+		Message:    "模型价格未配置，请联系管理员",
+		Type:       ErrorTypeUpstreamService,
 		StatusCode: http.StatusInternalServerError,
 		LocalError: true,
 		Details: ErrorDetails{
@@ -469,9 +481,9 @@ func parseMissingFieldError(errText string) *ServiceInferenceError {
 	}
 
 	return &ServiceInferenceError{
-		Code:    ErrorCodeParamMissingRequired,
-		Message: fmt.Sprintf("缺少必填参数：%s", field),
-		Type:    ErrorTypeInvalidParameter,
+		Code:       ErrorCodeParamMissingRequired,
+		Message:    fmt.Sprintf("缺少必填参数：%s", field),
+		Type:       ErrorTypeInvalidParameter,
 		StatusCode: http.StatusBadRequest,
 		LocalError: true,
 		Details: ErrorDetails{
@@ -496,9 +508,9 @@ func parseChannelUnavailableError(errText string) *ServiceInferenceError {
 	}
 
 	return &ServiceInferenceError{
-		Code:    ErrorCodeChannelUnavailable,
-		Message: "当前没有可用的服务渠道，所有渠道均不可用或已达到限流上限",
-		Type:    ErrorTypeUpstreamService,
+		Code:       ErrorCodeChannelUnavailable,
+		Message:    "当前没有可用的服务渠道，所有渠道均不可用或已达到限流上限",
+		Type:       ErrorTypeUpstreamService,
 		StatusCode: http.StatusServiceUnavailable,
 		Details: ErrorDetails{
 			"model":      model,
@@ -527,7 +539,7 @@ func extractModeFromMessage(message string) string {
 }
 
 func extractAssetIDFromMessage(message string) string {
-	re := regexp.MustCompile(`asset-[\w-]+`)
+	re := regexp.MustCompile(`(?:asset|mva)-[\w-]+`)
 	if match := re.FindString(message); match != "" {
 		return match
 	}
@@ -537,9 +549,9 @@ func extractAssetIDFromMessage(message string) string {
 // ParseModelNotAvailableError handles "Model not available" error
 func ParseModelNotAvailableError(model string) *dto.TaskError {
 	siErr := &ServiceInferenceError{
-		Code:    ErrorCodeModelNotAvailable,
-		Message: "该模型暂不可用，可能是上游账号权限不足或模型已下线",
-		Type:    ErrorTypePermissionDenied,
+		Code:       ErrorCodeModelNotAvailable,
+		Message:    "该模型暂不可用，可能是上游账号权限不足或模型已下线",
+		Type:       ErrorTypePermissionDenied,
 		StatusCode: http.StatusForbidden,
 		Details: ErrorDetails{
 			"model":      model,

@@ -42,6 +42,25 @@ func TestBuildUnifiedSeedanceAssetRequestDF(t *testing.T) {
 	}`, string(body))
 }
 
+func TestBuildUnifiedSeedanceAssetRequestDoubao(t *testing.T) {
+	path, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
+		Type:      " doubao ",
+		URL:       " http://cdn.example.com/reference.mp4 ",
+		Name:      " camera-reference ",
+		AssetType: "video",
+		Model:     " doubao-seedance-2-0-260128-max ",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v2/db-sd-max/assets", path)
+	assert.JSONEq(t, `{
+		"URL": "http://cdn.example.com/reference.mp4",
+		"Name": "camera-reference",
+		"AssetType": "Video",
+		"Model": "doubao-seedance-2-0-260128-max"
+	}`, string(body))
+}
+
 func TestBuildUnifiedSeedanceAssetRequestDefaultsToImage(t *testing.T) {
 	_, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
 		Type: "HC",
@@ -125,6 +144,13 @@ func TestBuildUnifiedSeedanceAssetQueryDF(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "/v1/sd-5/assets/asset-123", path)
+}
+
+func TestBuildUnifiedSeedanceAssetQueryDoubao(t *testing.T) {
+	path, err := buildUnifiedSeedanceAssetQuery("doubao", "mva-e144dfc364a647f1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v2/db-sd-max/assets/mva-e144dfc364a647f1", path)
 }
 
 func TestBuildUnifiedSeedanceAssetQueryRejectsInvalidInput(t *testing.T) {

@@ -1118,14 +1118,16 @@ const upload = await response.json();</code></pre>
       <article class="reference-panel">
         <h2 id="asset-create-title">创建 Seedance 素材</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/seedance/assets</span></div>
-        <p>面向下游站点的稳定统一入口，当前支持 <code>type: "hc"</code>。</p>
+        <p>面向下游站点的稳定统一入口。<code>hc</code> 与 <code>df</code> 保留原素材流程；<code>doubao</code> 转接 Seedance MAX v2 素材库。</p>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td>当前支持 <code>hc</code></td></tr>
-          <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开 HTTPS 素材地址</td></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code></td></tr>
+          <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开素材地址；HC/DF 要求 HTTPS，Doubao 接受 HTTP(S)</td></tr>
           <tr><td><code>name</code></td><td class="opt">否</td><td>string</td><td>素材名称</td></tr>
           <tr><td><code>asset_type</code></td><td class="opt">否</td><td>string</td><td><code>image</code>、<code>video</code> 或 <code>audio</code>；默认 <code>image</code></td></tr>
+          <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>仅 <code>type: "doubao"</code> 使用；可限定素材适用的 Doubao MAX 模型</td></tr>
         </table>
+        <p>Doubao 客户端也可直接使用等价代理路径 <code>POST /v2/db-sd-max/assets</code> 和 <code>GET /v2/db-sd-max/assets/{Id}</code>，请求与响应字段保持上游格式。</p>
       </article>
       <aside class="example-panel">
         <h3>请求示例</h3>
@@ -1164,7 +1166,7 @@ const upload = await response.json();</code></pre>
         <table>
           <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
           <tr><td><code>asset_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>data.Id</code></td></tr>
-          <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td>当前支持 <code>hc</code></td></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>，须与创建时一致</td></tr>
         </table>
         <p><code>Active</code> 后可生成视频；处理中为 <code>Processing</code>，失败为 <code>Failed</code>。</p>
       </article>
@@ -1198,19 +1200,19 @@ const upload = await response.json();</code></pre>
       <article class="reference-panel">
         <h2 id="video-create-title">Seedance 多模态视频生成</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
-        <div class="callout info"><b>支持模型</b>：<code>dreamina-seedance-2-0-hc</code>、<code>dreamina-seedance-2-0-fast-hc</code>、<code>dreamina-seedance-2-0-mini-hc</code>、<code>dreamina-seedance-2-5-hc</code></div>
+        <div class="callout info"><b>支持模型</b>：现有 <code>dreamina-seedance-*-hc</code> 名称继续映射到 Dreamina MAX；也可直接调用 <code>doubao-seedance-2-0-260128-max</code>、<code>doubao-seedance-2-0-fast-260128-max</code>、<code>doubao-seedance-2-0-mini-260615-max</code>、<code>doubao-seedance-2-5-260628-max</code>。两者使用同一接口和渠道。</div>
 
         <h3>顶层参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>支持值与说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>选择上方列出的 HC 模型</td></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>选择上方列出的 HC 或 Doubao MAX 模型；切换模型无需修改接口路径</td></tr>
           <tr><td><code>content</code></td><td class="req">是</td><td>array</td><td>有序多模态内容数组；本站当前要求至少包含一项有效的 <code>text</code></td></tr>
           <tr><td><code>duration</code></td><td class="opt">否</td><td>integer</td><td>单位秒，默认 <code>5</code>；2.0 建议 <code>4-15</code>，2.5 支持 <code>4-30</code></td></tr>
           <tr><td><code>resolution</code></td><td class="opt">否</td><td>string</td><td>默认 <code>720p</code>；具体范围见下方模型表</td></tr>
-          <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code></td></tr>
+          <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code>；Doubao MAX 也接受别名 <code>aspect_ratio</code></td></tr>
           <tr><td><code>generate_audio</code></td><td class="opt">否</td><td>boolean</td><td>是否生成同步音频；传参考音频时建议设为 <code>true</code></td></tr>
-          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>是否添加可见水印</td></tr>
-          <tr><td><code>return_last_frame</code></td><td class="opt">否</td><td>boolean</td><td>是否在任务结果中返回末帧地址，适合续生成</td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>HC / Dreamina 扩展：是否添加可见水印；切换到 Doubao MAX 时不向上游发送</td></tr>
+          <tr><td><code>return_last_frame</code></td><td class="opt">否</td><td>boolean</td><td>HC / Dreamina 扩展：是否请求末帧地址；切换到 Doubao MAX 时不向上游发送</td></tr>
         </table>
 
         <h3>模型与分辨率</h3>
@@ -1220,6 +1222,10 @@ const upload = await response.json();</code></pre>
           <tr><td><code>dreamina-seedance-2-0-fast-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
           <tr><td><code>dreamina-seedance-2-0-mini-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
           <tr><td><code>dreamina-seedance-2-5-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
+          <tr><td><code>doubao-seedance-2-0-260128-max</code></td><td>以上游当前支持范围为准</td></tr>
+          <tr><td><code>doubao-seedance-2-0-fast-260128-max</code></td><td>以上游当前支持范围为准</td></tr>
+          <tr><td><code>doubao-seedance-2-0-mini-260615-max</code></td><td>以上游当前支持范围为准</td></tr>
+          <tr><td><code>doubao-seedance-2-5-260628-max</code></td><td>以上游当前支持范围为准</td></tr>
         </table>
 
         <h3><code>content</code> 多模态项目</h3>

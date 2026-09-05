@@ -535,6 +535,75 @@ func TestBuildRequestBodyMaxPreservesPublicMediaURLs(t *testing.T) {
 	assert.Equal(t, "reference_video", payload.Content[2].Role)
 }
 
+func TestBuildRequestBodyDoubaoUsesDocumentedContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	info.OriginModelName = "doubao-seedance-2-0-260128-max"
+	info.UpstreamModelName = "doubao-seedance-2-0-260128-max"
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	c := newTaskContext(`{
+		"model": "doubao-seedance-2-0-260128-max",
+		"content": [
+			{"type": "text", "text": "use @Image1 and @Video1"},
+			{"type": "image_url", "image_url": {"url": "https://cdn.example.com/ref.png"}, "role": "reference_image"},
+			{"type": "video_url", "video_url": {"url": "asset://mva-video"}, "role": "reference_video"}
+		],
+		"duration": 0,
+		"resolution": "720p",
+		"aspect_ratio": "16:9",
+		"generate_audio": false,
+		"watermark": true,
+		"return_last_frame": true,
+		"callback_url": "https://example.com/callback"
+	}`)
+
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+	reader, err := adaptor.BuildRequestBody(c, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	var payload map[string]any
+	require.NoError(t, common.Unmarshal(data, &payload))
+	assert.Equal(t, "doubao-seedance-2-0-260128-max", payload["model"])
+	assert.Equal(t, float64(0), payload["duration"])
+	assert.Equal(t, "16:9", payload["ratio"])
+	assert.Equal(t, false, payload["generate_audio"])
+	assert.NotContains(t, payload, "aspect_ratio")
+	assert.NotContains(t, payload, "watermark")
+	assert.NotContains(t, payload, "return_last_frame")
+	assert.NotContains(t, payload, "callback_url")
+
+	content, ok := payload["content"].([]any)
+	require.True(t, ok)
+	require.Len(t, content, 3)
+	video, ok := content[2].(map[string]any)
+	require.True(t, ok)
+	videoURL, ok := video["video_url"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "asset://mva-video", videoURL["url"])
+}
+
+func TestValidateSeedanceDurationRejectsBillingOverflowInput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	c := newTaskContext(`{
+		"model": "doubao-seedance-2-0-260128-max",
+		"content": [{"type": "text", "text": "test"}],
+		"duration": 3601
+	}`)
+
+	taskErr := adaptor.ValidateRequestAndSetAction(c, info)
+	require.NotNil(t, taskErr)
+	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+	assert.Equal(t, "invalid_duration", taskErr.Code)
+}
+
 func TestSeedanceDFModelClassification(t *testing.T) {
 	for _, modelName := range []string{
 		"dreamina-seedance-2-0-260128-df",
@@ -566,18 +635,34 @@ func TestSeedanceHCModelClassification(t *testing.T) {
 	assert.False(t, isSeedanceHCModel("dreamina-seedance-2-0-260128"))
 }
 
-func TestSeedanceMaxModelClassification(t *testing.T) {
+func TestDreaminaSeedanceMaxModelClassification(t *testing.T) {
 	for _, modelName := range []string{
 		"dreamina-seedance-2-0-260128-max",
 		"dreamina-seedance-2-0-fast-260128-max",
 		"dreamina-seedance-2-0-mini-260615-max",
 		"dreamina-seedance-2-5-260628-max",
 	} {
-		assert.True(t, isSeedanceMaxModel(modelName), modelName)
+		assert.True(t, isDreaminaSeedanceMaxModel(modelName), modelName)
+		assert.True(t, usesSeedanceV2(modelName), modelName)
 	}
-	assert.True(t, isSeedanceMaxModel(" DREAMINA-SEEDANCE-2-5-260628-MAX "))
-	assert.False(t, isSeedanceMaxModel("dreamina-seedance-2-0-hc"))
-	assert.False(t, isSeedanceMaxModel("dreamina-seedance-2-0-260128-df"))
+	assert.True(t, isDreaminaSeedanceMaxModel(" DREAMINA-SEEDANCE-2-5-260628-MAX "))
+	assert.False(t, isDreaminaSeedanceMaxModel("dreamina-seedance-2-0-hc"))
+	assert.False(t, isDreaminaSeedanceMaxModel("dreamina-seedance-2-0-260128-df"))
+}
+
+func TestDoubaoSeedanceMaxModelClassification(t *testing.T) {
+	for _, modelName := range []string{
+		"doubao-seedance-2-0-260128-max",
+		"doubao-seedance-2-0-fast-260128-max",
+		"doubao-seedance-2-0-mini-260615-max",
+		"doubao-seedance-2-5-260628-max",
+	} {
+		assert.True(t, isDoubaoSeedanceMaxModel(modelName), modelName)
+		assert.True(t, usesSeedanceV2(modelName), modelName)
+		assert.Contains(t, ModelList, modelName)
+	}
+	assert.True(t, isDoubaoSeedanceMaxModel(" DOUBAO-SEEDANCE-2-5-260628-MAX "))
+	assert.False(t, isDoubaoSeedanceMaxModel("dreamina-seedance-2-5-260628-max"))
 }
 
 func TestBuildRequestURLSelectsVersionByUpstreamModel(t *testing.T) {
@@ -599,6 +684,14 @@ func TestBuildRequestURLSelectsVersionByUpstreamModel(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "https://model.service-inference.ai/v2/video/generate", v2URL)
+
+	doubaoV2URL, err := adaptor.BuildRequestURL(&relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "doubao-seedance-2-0-260128-max",
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://model.service-inference.ai/v2/video/generate", doubaoV2URL)
 }
 
 func TestBuildRequestBodyRecreatesMissingConfiguredAssetGroup(t *testing.T) {
@@ -748,6 +841,11 @@ func TestFetchTaskUsesTaskEndpointAndBearer(t *testing.T) {
 			upstreamModel: "dreamina-seedance-2-0-260128-max",
 			expectedPath:  "/v2/video/tasks/mvt-1",
 		},
+		{
+			name:          "v2 Doubao MAX model",
+			upstreamModel: "doubao-seedance-2-0-260128-max",
+			expectedPath:  "/v2/video/tasks/mvt-1",
+		},
 	}
 
 	for _, test := range tests {
@@ -786,6 +884,10 @@ func TestDoResponsePreservesPreparingAndPrep(t *testing.T) {
 	context.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
 	response := &http.Response{
 		StatusCode: http.StatusOK,
+		Header: http.Header{
+			"X-Request-Id": []string{"req-upstream"},
+			"Retry-After":  []string{"5"},
+		},
 		Body: io.NopCloser(strings.NewReader(`{
 			"task": {
 				"id": "mvt-upstream",
@@ -803,6 +905,8 @@ func TestDoResponsePreservesPreparingAndPrep(t *testing.T) {
 	upstreamID, _, taskErr := (&TaskAdaptor{}).DoResponse(context, response, info)
 	require.Nil(t, taskErr)
 	assert.Equal(t, "mvt-upstream", upstreamID)
+	assert.Equal(t, "req-upstream", recorder.Header().Get("x-request-id"))
+	assert.Equal(t, "5", recorder.Header().Get("Retry-After"))
 
 	var video dto.OpenAIVideo
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &video))
@@ -815,6 +919,33 @@ func TestDoResponsePreservesPreparingAndPrep(t *testing.T) {
 		"failed":  float64(0),
 		"attempt": float64(1),
 	}, video.Metadata["prep"])
+}
+
+func TestDoResponseClassifiesAccountModelUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", nil)
+	response := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Header:     make(http.Header),
+		Body: io.NopCloser(strings.NewReader(`{
+			"error": {
+				"message": "Model 'doubao-seedance-2-0-mini-260615-max' is not available to your account",
+				"type": "proxy_error"
+			},
+			"request_id": "req-model-unavailable"
+		}`)),
+	}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "doubao-seedance-2-0-mini-260615-max",
+	}
+
+	_, _, taskErr := (&TaskAdaptor{}).DoResponse(context, response, info)
+	require.NotNil(t, taskErr)
+	assert.Equal(t, ErrorCodeModelNotAvailable, taskErr.Code)
+	assert.Equal(t, http.StatusForbidden, taskErr.StatusCode)
+	assert.Equal(t, "req-model-unavailable", taskErr.RequestID)
 }
 
 func TestConvertToOpenAIVideoQueuedTaskWithoutData(t *testing.T) {

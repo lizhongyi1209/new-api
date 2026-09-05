@@ -79,3 +79,26 @@ func TestWrapErrorFailToFetchTaskWrappingInvalidResolution(t *testing.T) {
 	assert.True(t, taskErr.LocalError)
 	assert.Equal(t, ErrorCodeParamResolutionInvalid, taskErr.Code)
 }
+
+func TestWrapErrorDoubaoAssetNotFoundPreservesMVAHandle(t *testing.T) {
+	upstreamBody := `{"error":{"code":"InvalidParameter","message":"The specified asset mva-e144dfc364a647f1 is not found"},"request_id":"req-doubao"}`
+
+	taskErr := WrapError(fmt.Errorf("%s", upstreamBody), http.StatusBadRequest)
+	require.NotNil(t, taskErr)
+
+	assert.Equal(t, ErrorCodeAssetNotFound, taskErr.Code)
+	assert.Equal(t, http.StatusNotFound, taskErr.StatusCode)
+	assert.True(t, taskErr.LocalError)
+	assert.Equal(t, "req-doubao", taskErr.RequestID)
+	assert.Contains(t, taskErr.Message, "mva-e144dfc364a647f1")
+}
+
+func TestWrapErrorDoubaoProxyErrorPreservesRequestID(t *testing.T) {
+	upstreamBody := `{"error":{"message":"temporarily unavailable","type":"proxy_error"},"request_id":"req-proxy"}`
+
+	taskErr := WrapError(fmt.Errorf("%s", upstreamBody), http.StatusServiceUnavailable)
+	require.NotNil(t, taskErr)
+
+	assert.Equal(t, ErrorCodeUpstreamError, taskErr.Code)
+	assert.Equal(t, "req-proxy", taskErr.RequestID)
+}

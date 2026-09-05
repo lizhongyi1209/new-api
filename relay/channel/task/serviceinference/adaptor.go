@@ -42,6 +42,17 @@ type requestPayload struct {
 	ReturnLastFrame *bool         `json:"return_last_frame,omitempty"`
 }
 
+// doubaoSeedanceRequestPayload mirrors the documented Doubao Seedance MAX
+// contract. Dreamina MAX keeps requestPayload and its existing extensions.
+type doubaoSeedanceRequestPayload struct {
+	Model         string        `json:"model"`
+	Content       []ContentItem `json:"content,omitempty"`
+	Duration      *int          `json:"duration,omitempty"`
+	Resolution    string        `json:"resolution,omitempty"`
+	Ratio         string        `json:"ratio,omitempty"`
+	GenerateAudio *bool         `json:"generate_audio,omitempty"`
+}
+
 type taskResponse struct {
 	Task videoTask `json:"task"`
 }
@@ -209,6 +220,22 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.TrimSpace(nativeReq.Model) == "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("model field is required"), "missing_model", http.StatusBadRequest)
 	}
+	if isDoubaoSeedanceMaxModel(nativeReq.Model) && strings.TrimSpace(nativeReq.Ratio) == "" {
+		var aliases struct {
+			AspectRatio string `json:"aspect_ratio"`
+		}
+		if err := common.UnmarshalBodyReusable(c, &aliases); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		nativeReq.Ratio = strings.TrimSpace(aliases.AspectRatio)
+	}
+	if nativeReq.Duration != nil && (*nativeReq.Duration < 0 || *nativeReq.Duration > relaycommon.MaxTaskDurationSeconds) {
+		return service.TaskErrorWrapperLocal(
+			fmt.Errorf("duration must be between 0 and %d", relaycommon.MaxTaskDurationSeconds),
+			"invalid_duration",
+			http.StatusBadRequest,
+		)
+	}
 	if isMiniMaxH3Model(nativeReq.Model) {
 		if c.Request.ContentLength > tokenMartH3MaxBodyBytes {
 			return service.TaskErrorWrapperLocal(fmt.Errorf("request body must not exceed 64 MB"), "invalid_request", http.StatusBadRequest)
@@ -277,7 +304,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	if isSeedanceMaxModel(info.UpstreamModelName) {
+	if usesSeedanceV2(info.UpstreamModelName) {
 		return a.baseURL + "/v2/video/generate", nil
 	}
 	return a.baseURL + "/v1/video/generate", nil
@@ -325,10 +352,25 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	}
 	// Seedance MAX v2 accepts public media URLs directly and performs its own
 	// preparation. Existing v1 models keep the legacy asset conversion flow.
-	if !isMiniMaxH3Model(body.Model) && !isSeedanceMaxModel(body.Model) {
+	if !isMiniMaxH3Model(body.Model) && !usesSeedanceV2(body.Model) {
 		if err := a.prepareImageAssets(c.Request.Context(), body); err != nil {
 			return nil, err
 		}
+	}
+	if isDoubaoSeedanceMaxModel(body.Model) {
+		doubaoRequest := doubaoSeedanceRequestPayload{
+			Model:         body.Model,
+			Content:       body.Content,
+			Duration:      body.Duration,
+			Resolution:    body.Resolution,
+			Ratio:         body.Ratio,
+			GenerateAudio: body.GenerateAudio,
+		}
+		data, err := common.Marshal(doubaoRequest)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(data), nil
 	}
 	data, err := common.Marshal(body)
 	if err != nil {
@@ -342,6 +384,18 @@ func (a *TaskAdaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, req
 }
 
 func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (taskID string, taskData []byte, taskErr *dto.TaskError) {
+	requestID := strings.TrimSpace(resp.Header.Get("x-request-id"))
+	if requestID != "" {
+		c.Header("x-request-id", requestID)
+	}
+	defer func() {
+		if taskErr != nil && taskErr.RequestID == "" {
+			taskErr.RequestID = requestID
+		}
+	}()
+	if retryAfter := strings.TrimSpace(resp.Header.Get("Retry-After")); retryAfter != "" {
+		c.Header("Retry-After", retryAfter)
+	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		taskErr = WrapError(err, http.StatusInternalServerError)
@@ -353,13 +407,20 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		// Parse upstream error response
 		bodyText := string(responseBody)
+		bodyTextLower := strings.ToLower(bodyText)
 
 		// Handle specific upstream errors
-		if strings.Contains(bodyText, "Model not available") {
+		if strings.Contains(bodyTextLower, "model") && strings.Contains(bodyTextLower, "not available") {
 			taskErr = ParseModelNotAvailableError(info.OriginModelName)
+			var upstreamRef struct {
+				RequestID string `json:"request_id"`
+			}
+			if unmarshalErr := common.Unmarshal(responseBody, &upstreamRef); unmarshalErr == nil {
+				taskErr.RequestID = upstreamRef.RequestID
+			}
 			return
 		}
-		if strings.Contains(bodyText, "billing suspended") || strings.Contains(bodyText, "insufficient balance") {
+		if strings.Contains(bodyTextLower, "billing suspended") || strings.Contains(bodyTextLower, "insufficient balance") {
 			taskErr = ParseOrganizationBillingSuspendedError()
 			return
 		}
@@ -412,7 +473,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		upstreamModel, _ = body["model"].(string)
 	}
 	apiVersion := "v1"
-	if isSeedanceMaxModel(upstreamModel) {
+	if usesSeedanceV2(upstreamModel) {
 		apiVersion = "v2"
 	}
 	uri := strings.TrimRight(baseUrl, "/") + "/" + apiVersion + "/video/tasks/" + url.PathEscape(taskID)

@@ -49,6 +49,18 @@ export const SEEDANCE_HC_MODELS = [
   'dreamina-seedance-2-5-hc',
 ] as const
 
+export const DOUBAO_SEEDANCE_MAX_MODELS = [
+  'doubao-seedance-2-0-260128-max',
+  'doubao-seedance-2-0-fast-260128-max',
+  'doubao-seedance-2-0-mini-260615-max',
+  'doubao-seedance-2-5-260628-max',
+] as const
+
+export const SERVICE_INFERENCE_SEEDANCE_MODELS = [
+  ...SEEDANCE_HC_MODELS,
+  ...DOUBAO_SEEDANCE_MAX_MODELS,
+] as const
+
 export const SEEDANCE_HC_TO_MAX_MODEL_MAPPING = {
   'dreamina-seedance-2-0-hc': 'dreamina-seedance-2-0-260128-max',
   'dreamina-seedance-2-0-fast-hc': 'dreamina-seedance-2-0-fast-260128-max',
@@ -75,7 +87,7 @@ export function resolveSeedanceMaxChannelModelDefaults(
   }
 
   return {
-    models: models?.trim() || SEEDANCE_HC_MODELS.join(','),
+    models: models?.trim() || SERVICE_INFERENCE_SEEDANCE_MODELS.join(','),
     modelMapping: modelMapping?.trim() || SEEDANCE_HC_TO_MAX_MODEL_MAPPING_JSON,
   }
 }
@@ -187,11 +199,11 @@ export const CHANNEL_TYPE_CONFIGS: Record<number, ChannelTypeConfig> = {
     name: CHANNEL_TYPES[60],
     icon: 'openai',
     defaultBaseUrl: 'https://model.service-inference.ai',
-    supportedModels: [...SEEDANCE_HC_MODELS],
+    supportedModels: [...SERVICE_INFERENCE_SEEDANCE_MODELS],
     hints: {
       baseUrl: 'Default: https://model.service-inference.ai',
       key: 'Bearer token',
-      models: SEEDANCE_HC_MODELS.join(','),
+      models: SERVICE_INFERENCE_SEEDANCE_MODELS.join(','),
       other:
         'Optional settings: service_inference_asset_group_id, service_inference_asset_group_name',
     },

@@ -178,7 +178,7 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 
 ### 5.1 MAX v2 自动素材准备
 
-当 HC 公共模型通过渠道模型映射指向对应的 MAX 上游模型时，本站内部使用 v2 视频接口：
+当 HC 公共模型通过渠道模型映射指向对应的 Dreamina MAX 上游模型时，本站内部使用 v2 视频接口。既有映射保持不变：
 
 | 本站公开模型 | MAX 上游模型 |
 | --- | --- |
@@ -186,6 +186,15 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 | `dreamina-seedance-2-0-fast-hc` | `dreamina-seedance-2-0-fast-260128-max` |
 | `dreamina-seedance-2-0-mini-hc` | `dreamina-seedance-2-0-mini-260615-max` |
 | `dreamina-seedance-2-5-hc` | `dreamina-seedance-2-5-260628-max` |
+
+同一个 `TokenMartSeedance` 渠道还支持直接使用以下 Doubao MAX 模型，不需要模型映射：
+
+- `doubao-seedance-2-0-260128-max`
+- `doubao-seedance-2-0-fast-260128-max`
+- `doubao-seedance-2-0-mini-260615-max`
+- `doubao-seedance-2-5-260628-max`
+
+下游创建和查询路径仍然是 `/v1/video/generations` 与 `/v1/video/generations/{task_id}`。从 HC 切换到 Doubao 时只需修改请求中的 `model`。本站根据映射后的上游模型前缀分别应用 Dreamina 或 Doubao 请求适配，两者当前均提交到上游 `/v2/video/generate` 并通过 `/v2/video/tasks/{id}` 查询。
 
 MAX v2 请求中的公网图片和视频 URL 会原样转发，由上游视频任务自动完成素材准备；本站不会再调用旧素材接口或把图片改写为 `asset://`。上游 `preparing` 状态对外归一化为 `in_progress`，同时保留在响应元数据中：
 
@@ -205,6 +214,8 @@ MAX v2 请求中的公网图片和视频 URL 会原样转发，由上游视频�
 ```
 
 下游仍然调用本站的 `/v1/video/generations`，并继续使用 HC 模型名和公开 `task_...` ID，不需要感知 MAX 模型名或上游 v2 路径。
+
+Doubao MAX 的可复用素材使用 `/v2/db-sd-max/assets`。本站既提供同路径代理，也允许通过统一素材接口传 `type: "doubao"`；现有 `type: "hc"` 仍走 `/v1/sd/assets`，两套素材流程互不替换。
 
 ### 5.2 v1 素材创建流程
 
