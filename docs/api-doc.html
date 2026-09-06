@@ -1057,7 +1057,7 @@ const upload = await response.json();</code></pre>
     </section>
 
     <div class="section-heading" id="seedance">
-      <div><h2>Seedance 素材与视频</h2><p>申请上传地址 → 上传文件 → 创建素材 → 查询素材 → 生成视频。</p></div>
+      <div><h2>Seedance 素材与视频</h2><p>创建可复用素材，并通过统一异步接口生成视频。</p></div>
     </div>
 
     <section class="endpoint-doc" id="/v1/storage/presign" aria-labelledby="presign-title">
@@ -1118,20 +1118,28 @@ const upload = await response.json();</code></pre>
       <article class="reference-panel">
         <h2 id="asset-create-title">创建 Seedance 素材</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/seedance/assets</span></div>
-        <p>面向下游站点的稳定统一入口。<code>hc</code> 与 <code>df</code> 保留原素材流程；<code>doubao</code> 转接 Seedance MAX v2 素材库。</p>
+        <p>通过公开 URL 创建可复用素材。素材只使用一次时，可直接在视频生成请求中传入公开 URL，无需调用本接口。</p>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code></td></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td>HC 模型使用 <code>hc</code>，DF 模型使用 <code>df</code>，Doubao MAX 模型使用 <code>doubao</code></td></tr>
           <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开素材地址；HC/DF 要求 HTTPS，Doubao 接受 HTTP(S)</td></tr>
           <tr><td><code>name</code></td><td class="opt">否</td><td>string</td><td>素材名称</td></tr>
           <tr><td><code>asset_type</code></td><td class="opt">否</td><td>string</td><td><code>image</code>、<code>video</code> 或 <code>audio</code>；默认 <code>image</code></td></tr>
           <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>仅 <code>type: "doubao"</code> 使用；可限定素材适用的 Doubao MAX 模型</td></tr>
         </table>
-        <p>Doubao 客户端也可直接使用等价代理路径 <code>POST /v2/db-sd-max/assets</code> 和 <code>GET /v2/db-sd-max/assets/{Id}</code>，请求与响应字段保持上游格式。</p>
+        <p>Doubao 素材句柄有效期为 7 天。保存响应中的 <code>Ref</code>（格式为 <code>asset://mva-...</code>），待素材状态变为 <code>Active</code> 后用于视频生成。</p>
+        <p>同时支持兼容接口 <code>POST /v2/db-sd-max/assets</code> 和 <code>GET /v2/db-sd-max/assets/{Id}</code>。</p>
       </article>
       <aside class="example-panel">
         <h3>请求示例</h3>
-        <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedance 素材创建方式">
+            <button type="button" class="example-tab" id="asset-create-hc-tab" role="tab" aria-selected="true" aria-controls="asset-create-hc">HC</button>
+            <button type="button" class="example-tab" id="asset-create-doubao-tab" role="tab" aria-selected="false" aria-controls="asset-create-doubao">Doubao MAX</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="asset-create-hc" role="tabpanel" aria-labelledby="asset-create-hc-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1140,15 +1148,53 @@ const upload = await response.json();</code></pre>
     "name": "avatar_front",
     "asset_type": "image"
   }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="asset-create-doubao" role="tabpanel" aria-labelledby="asset-create-doubao-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "doubao",
+    "url": "https://upload.o1key.com/uploads/reference.png",
+    "name": "人物参考图",
+    "asset_type": "image",
+    "model": "doubao-seedance-2-0-mini-260615-max"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
         <h3>响应示例</h3>
-        <h4>创建成功 <span class="pill success">200</span></h4>
-        <pre><code>{
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedance 素材创建响应">
+            <button type="button" class="example-tab" id="asset-response-hc-tab" role="tab" aria-selected="true" aria-controls="asset-response-hc">HC · 200</button>
+            <button type="button" class="example-tab" id="asset-response-doubao-tab" role="tab" aria-selected="false" aria-controls="asset-response-doubao">Doubao MAX · 200</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="asset-response-hc" role="tabpanel" aria-labelledby="asset-response-hc-tab" aria-hidden="false">
+              <pre><code>{
   "success": true,
   "data": {
     "Id": "asset-20260810224425-w752c",
     "base_resp": {"status_code": 0, "status_msg": "success"}
   }
 }</code></pre>
+            </div>
+            <div class="example-tab-panel" id="asset-response-doubao" role="tabpanel" aria-labelledby="asset-response-doubao-tab" aria-hidden="true">
+              <pre><code>{
+  "success": true,
+  "data": {
+    "Id": "mva-e144dfc364a647f1",
+    "Ref": "asset://mva-e144dfc364a647f1",
+    "Status": "Processing",
+    "AssetType": "Image",
+    "Name": "人物参考图",
+    "Model": "doubao-seedance-2-0-mini-260615-max",
+    "Error": null
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
         <h4>参数失败 <span class="pill danger">400</span></h4>
         <pre><code>{
   "error": {
@@ -1162,34 +1208,36 @@ const upload = await response.json();</code></pre>
     <section class="endpoint-doc" id="/v1/seedance/assets/{asset_id}?type=hc" aria-labelledby="asset-query-title">
       <article class="reference-panel">
         <h2 id="asset-query-title">查询 Seedance 素材状态</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/seedance/assets/{asset_id}?type=hc</span></div>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/seedance/assets/{asset_id}?type={type}</span></div>
         <table>
           <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
           <tr><td><code>asset_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>data.Id</code></td></tr>
           <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>，须与创建时一致</td></tr>
         </table>
-        <p><code>Active</code> 后可生成视频；处理中为 <code>Processing</code>，失败为 <code>Failed</code>。</p>
+        <p><code>Active</code> 后可生成视频；处理中为 <code>Processing</code>，失败为 <code>Failed</code>。Doubao 图片素材通常几秒内就绪，建议每 1-2 秒查询一次。</p>
       </article>
       <aside class="example-panel">
-        <h3>请求示例</h3>
-        <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/asset-20260810224425-w752c?type=hc" \
+        <h3>Doubao 查询示例</h3>
+        <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-e144dfc364a647f1?type=doubao" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>响应示例</h3>
         <h4>查询成功 <span class="pill success">200</span></h4>
         <pre><code>{
   "success": true,
   "data": {
-    "Id": "asset-20260810224425-w752c",
+    "Id": "mva-e144dfc364a647f1",
+    "Ref": "asset://mva-e144dfc364a647f1",
     "Status": "Active",
     "AssetType": "Image",
-    "Name": "avatar_front",
-    "URL": "&lt;上游素材地址&gt;"
+    "Name": "人物参考图",
+    "Model": "doubao-seedance-2-0-mini-260615-max",
+    "Error": null
   }
 }</code></pre>
         <h4>查询失败 <span class="pill danger">400</span></h4>
         <pre><code>{
   "error": {
-    "message": "unsupported type \"\"; currently supported: hc",
+    "message": "unsupported type \"\"; currently supported: hc, df, doubao",
     "type": "invalid_request_error"
   }
 }</code></pre>
@@ -1200,19 +1248,19 @@ const upload = await response.json();</code></pre>
       <article class="reference-panel">
         <h2 id="video-create-title">Seedance 多模态视频生成</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
-        <div class="callout info"><b>支持模型</b>：现有 <code>dreamina-seedance-*-hc</code> 名称继续映射到 Dreamina MAX；也可直接调用 <code>doubao-seedance-2-0-260128-max</code>、<code>doubao-seedance-2-0-fast-260128-max</code>、<code>doubao-seedance-2-0-mini-260615-max</code>、<code>doubao-seedance-2-5-260628-max</code>。两者使用同一接口和渠道。</div>
+        <div class="callout info"><b>调用方式</b>：所有模型统一使用本接口；切换模型时只需修改 <code>model</code>。支持的模型及分辨率见下表。</div>
 
         <h3>顶层参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>支持值与说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>选择上方列出的 HC 或 Doubao MAX 模型；切换模型无需修改接口路径</td></tr>
-          <tr><td><code>content</code></td><td class="req">是</td><td>array</td><td>有序多模态内容数组；本站当前要求至少包含一项有效的 <code>text</code></td></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>模型名称，取值见下方模型表</td></tr>
+          <tr><td><code>content</code></td><td class="req">是</td><td>array</td><td>有序多模态内容数组，至少包含一项非空 <code>text</code></td></tr>
           <tr><td><code>duration</code></td><td class="opt">否</td><td>integer</td><td>单位秒，默认 <code>5</code>；2.0 建议 <code>4-15</code>，2.5 支持 <code>4-30</code></td></tr>
           <tr><td><code>resolution</code></td><td class="opt">否</td><td>string</td><td>默认 <code>720p</code>；具体范围见下方模型表</td></tr>
           <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code>；Doubao MAX 也接受别名 <code>aspect_ratio</code></td></tr>
           <tr><td><code>generate_audio</code></td><td class="opt">否</td><td>boolean</td><td>是否生成同步音频；传参考音频时建议设为 <code>true</code></td></tr>
-          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>HC / Dreamina 扩展：是否添加可见水印；切换到 Doubao MAX 时不向上游发送</td></tr>
-          <tr><td><code>return_last_frame</code></td><td class="opt">否</td><td>boolean</td><td>HC / Dreamina 扩展：是否请求末帧地址；切换到 Doubao MAX 时不向上游发送</td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>仅 HC 模型使用；是否添加可见水印</td></tr>
+          <tr><td><code>return_last_frame</code></td><td class="opt">否</td><td>boolean</td><td>仅 HC 模型使用；是否返回末帧地址</td></tr>
         </table>
 
         <h3>模型与分辨率</h3>
@@ -1222,10 +1270,10 @@ const upload = await response.json();</code></pre>
           <tr><td><code>dreamina-seedance-2-0-fast-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
           <tr><td><code>dreamina-seedance-2-0-mini-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
           <tr><td><code>dreamina-seedance-2-5-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
-          <tr><td><code>doubao-seedance-2-0-260128-max</code></td><td>以上游当前支持范围为准</td></tr>
-          <tr><td><code>doubao-seedance-2-0-fast-260128-max</code></td><td>以上游当前支持范围为准</td></tr>
-          <tr><td><code>doubao-seedance-2-0-mini-260615-max</code></td><td>以上游当前支持范围为准</td></tr>
-          <tr><td><code>doubao-seedance-2-5-260628-max</code></td><td>以上游当前支持范围为准</td></tr>
+          <tr><td><code>doubao-seedance-2-0-260128-max</code></td><td>以模型实际支持范围为准</td></tr>
+          <tr><td><code>doubao-seedance-2-0-fast-260128-max</code></td><td>以模型实际支持范围为准</td></tr>
+          <tr><td><code>doubao-seedance-2-0-mini-260615-max</code></td><td><code>480p</code>、<code>720p</code></td></tr>
+          <tr><td><code>doubao-seedance-2-5-260628-max</code></td><td>以模型实际支持范围为准</td></tr>
         </table>
 
         <h3><code>content</code> 多模态项目</h3>
@@ -1234,19 +1282,13 @@ const upload = await response.json();</code></pre>
           <tr><td>提示词</td><td><code>text</code></td><td>不适用</td><td><code>{"type":"text","text":"..."}</code></td></tr>
           <tr><td>首帧图</td><td><code>image_url.url</code></td><td><code>first_frame</code></td><td>首帧生视频时使用；单张图片时也可省略 <code>role</code></td></tr>
           <tr><td>尾帧图</td><td><code>image_url.url</code></td><td><code>last_frame</code></td><td>首尾帧生视频时使用，必须同时提供 <code>first_frame</code></td></tr>
-          <tr><td>参考图</td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>支持 <code>asset://&lt;素材ID&gt;</code> 或公开 HTTPS URL</td></tr>
+          <tr><td>参考图</td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>支持创建接口返回的 <code>Ref</code>（<code>asset://...</code>）或公开 URL</td></tr>
           <tr><td>参考视频</td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>支持素材 ID 或公开直链</td></tr>
           <tr><td>参考音频</td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>不能作为唯一参考，需同时传图片或视频</td></tr>
         </table>
         <div class="callout warn"><b>通用限制</b>：最多 9 张参考图、3 个参考视频和 3 段参考音频；2.0 的参考视频 / 音频单段建议 2-15 秒、各自总时长不超过 15 秒。</div>
         <div class="callout info"><b>四种生成方式</b>：多模态参考、首帧、首尾帧和文生视频。首帧、首尾帧和多模态参考互斥，不要在同一个请求中混用 <code>first_frame</code>、<code>last_frame</code> 和 <code>reference_*</code>。</div>
 
-        <h3>参考图的两种传法</h3>
-        <table>
-          <tr><th>方式</th><th>适用场景</th><th>步骤</th></tr>
-          <tr><td><code>asset://素材ID</code></td><td>真人、数字人、身份一致性；推荐</td><td><a href="#/v1/storage/presign">申请上传地址</a> → <a href="#upload_url">上传文件</a> → <a href="#/v1/seedance/assets">创建素材</a> → 等待 <code>Active</code> → 在 <code>content</code> 中引用</td></tr>
-          <tr><td>公开 HTTPS URL</td><td>普通公网参考图，调用步骤更少</td><td>直接填写可匿名下载、无 Cookie 和防盗链限制的图片直链；服务器会为参考图准备上游素材</td></tr>
-        </table>
       </article>
       <aside class="example-panel" aria-label="Seedance 视频请求和响应示例">
         <h3>请求示例</h3>
@@ -1256,6 +1298,7 @@ const upload = await response.json();</code></pre>
             <button type="button" class="example-tab" id="video-request-first-frame-tab" role="tab" aria-selected="false" aria-controls="video-request-first-frame">首帧</button>
             <button type="button" class="example-tab" id="video-request-first-last-tab" role="tab" aria-selected="false" aria-controls="video-request-first-last">首尾帧</button>
             <button type="button" class="example-tab" id="video-request-text-tab" role="tab" aria-selected="false" aria-controls="video-request-text">文生视频</button>
+            <button type="button" class="example-tab" id="video-request-doubao-mini-tab" role="tab" aria-selected="false" aria-controls="video-request-doubao-mini">Doubao Mini</button>
           </div>
           <div class="example-panels">
             <div class="example-tab-panel is-active" id="video-request-multimodal" role="tabpanel" aria-labelledby="video-request-multimodal-tab" aria-hidden="false">
@@ -1372,6 +1415,32 @@ const upload = await response.json();</code></pre>
     "return_last_frame": false
   }'</code></pre>
             </div>
+            <div class="example-tab-panel" id="video-request-doubao-mini" role="tabpanel" aria-labelledby="video-request-doubao-mini-tab" aria-hidden="true">
+              <p class="compact-note">使用已就绪素材的 <code>Ref</code> 调用 Doubao Mini。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "doubao-seedance-2-0-mini-260615-max",
+    "content": [
+      {
+        "type": "text",
+        "text": "@Image1 中的人物缓慢转身看向镜头，柔和光线，镜头保持稳定"
+      },
+      {
+        "type": "image_url",
+        "image_url": {
+          "url": "asset://mva-e144dfc364a647f1"
+        },
+        "role": "reference_image"
+      }
+    ],
+    "duration": 5,
+    "resolution": "480p",
+    "ratio": "16:9",
+    "generate_audio": false
+  }'</code></pre>
+            </div>
           </div>
         </div>
 
@@ -1414,7 +1483,7 @@ const upload = await response.json();</code></pre>
         <p>使用视频创建接口返回的任务 ID 查询进度和最终视频地址。</p>
         <table>
           <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
-          <tr><td><code>task_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的公开 <code>task_...</code>；不要使用上游任务 ID</td></tr>
+          <tr><td><code>task_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>task_...</code></td></tr>
         </table>
         <p>建议每 2-5 秒查询一次，直到 <code>status</code> 变为 <code>completed</code> 或 <code>failed</code>。可能的状态为 <code>queued</code>、<code>in_progress</code>、<code>completed</code> 和 <code>failed</code>。</p>
       </article>
