@@ -1060,97 +1060,24 @@ const upload = await response.json();</code></pre>
       <div><h2>Seedance 素材与视频</h2><p>创建可复用素材，并通过统一异步接口生成视频。</p></div>
     </div>
 
-    <section class="endpoint-doc" id="/v1/storage/presign" aria-labelledby="presign-title">
-      <article class="reference-panel">
-        <h2 id="presign-title">申请预签名上传地址</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/storage/presign</span></div>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>filename</code></td><td class="req">是</td><td>string</td><td>文件名</td></tr>
-          <tr><td><code>content_type</code></td><td class="req">是</td><td>string</td><td><code>image/*</code>、<code>video/*</code> 或 <code>audio/*</code></td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>integer</td><td>文件字节数</td></tr>
-        </table>
-        <p>使用响应中的 <code>upload_url</code> 上传文件，使用 <code>public_url</code> 创建素材。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
-        <pre><code>curl -X POST https://cf-api.o1key.com/v1/storage/presign \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"filename":"reference.png","content_type":"image/png","size":204800}'</code></pre>
-        <h3>响应示例</h3>
-        <h4>成功 <span class="pill success">200</span></h4>
-        <pre><code>{
-  "upload_url": "https://&lt;临时上传地址&gt;",
-  "public_url": "https://upload.o1key.com/uploads/reference.png",
-  "expires_at": 1751600000
-}</code></pre>
-        <h4>失败 <span class="pill danger">400</span></h4>
-        <pre><code>{
-  "error": "unsupported content type"
-}</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="upload_url" aria-labelledby="upload-title">
-      <article class="reference-panel">
-        <h2 id="upload-title">直传文件到 R2</h2>
-        <div class="endpoint"><span class="method put">PUT</span><span class="path">&lt;上一步返回的 upload_url&gt;</span></div>
-        <div class="callout warn"><b>注意</b>：发送文件二进制；<code>Content-Type</code> 必须与申请时完全一致，HTTP 200 表示上传成功。</div>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
-        <pre><code>curl -X PUT "&lt;upload_url&gt;" \
-  -H "Content-Type: image/png" \
-  --data-binary @reference.png</code></pre>
-        <h3>响应示例</h3>
-        <h4>成功 <span class="pill success">200 · 空响应体</span></h4>
-        <pre><code>HTTP/2 200</code></pre>
-        <h4>签名过期 <span class="pill danger">403</span></h4>
-        <pre><code>&lt;Error&gt;
-  &lt;Code&gt;AccessDenied&lt;/Code&gt;
-  &lt;Message&gt;Request has expired&lt;/Message&gt;
-&lt;/Error&gt;</code></pre>
-      </aside>
-    </section>
-
     <section class="endpoint-doc" id="/v1/seedance/assets" aria-labelledby="asset-create-title">
       <article class="reference-panel">
-        <h2 id="asset-create-title">创建 Seedance 素材</h2>
+        <h2 id="asset-create-title">创建素材</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/seedance/assets</span></div>
-        <p>通过公开 URL 创建可复用素材。素材只使用一次时，可直接在视频生成请求中传入公开 URL，无需调用本接口。</p>
+        <p>通过公开 URL 创建可复用素材。仅使用一次的素材可直接在视频请求中传入 URL。</p>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td>HC 模型使用 <code>hc</code>，DF 模型使用 <code>df</code>，Doubao MAX 模型使用 <code>doubao</code></td></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>；须与视频模型对应</td></tr>
           <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开素材地址；HC/DF 要求 HTTPS，Doubao 接受 HTTP(S)</td></tr>
           <tr><td><code>name</code></td><td class="opt">否</td><td>string</td><td>素材名称</td></tr>
           <tr><td><code>asset_type</code></td><td class="opt">否</td><td>string</td><td><code>image</code>、<code>video</code> 或 <code>audio</code>；默认 <code>image</code></td></tr>
-          <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>仅 <code>type: "doubao"</code> 使用；可限定素材适用的 Doubao MAX 模型</td></tr>
+          <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>Doubao MAX 模型名称</td></tr>
         </table>
-        <p>Doubao 素材句柄有效期为 7 天。保存响应中的 <code>Ref</code>（格式为 <code>asset://mva-...</code>），待素材状态变为 <code>Active</code> 后用于视频生成。</p>
-        <p>同时支持兼容接口 <code>POST /v2/db-sd-max/assets</code> 和 <code>GET /v2/db-sd-max/assets/{Id}</code>。</p>
+        <p>Doubao 素材有效期为 7 天。状态变为 <code>Active</code> 后，使用响应中的 <code>Ref</code> 生成视频。</p>
       </article>
       <aside class="example-panel">
         <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Seedance 素材创建方式">
-            <button type="button" class="example-tab" id="asset-create-hc-tab" role="tab" aria-selected="true" aria-controls="asset-create-hc">HC</button>
-            <button type="button" class="example-tab" id="asset-create-doubao-tab" role="tab" aria-selected="false" aria-controls="asset-create-doubao">Doubao MAX</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="asset-create-hc" role="tabpanel" aria-labelledby="asset-create-hc-tab" aria-hidden="false">
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "type": "hc",
-    "url": "https://upload.o1key.com/uploads/reference.png",
-    "name": "avatar_front",
-    "asset_type": "image"
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="asset-create-doubao" role="tabpanel" aria-labelledby="asset-create-doubao-tab" aria-hidden="true">
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
+        <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1160,64 +1087,39 @@ const upload = await response.json();</code></pre>
     "asset_type": "image",
     "model": "doubao-seedance-2-0-mini-260615-max"
   }'</code></pre>
-            </div>
-          </div>
-        </div>
         <h3>响应示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Seedance 素材创建响应">
-            <button type="button" class="example-tab" id="asset-response-hc-tab" role="tab" aria-selected="true" aria-controls="asset-response-hc">HC · 200</button>
-            <button type="button" class="example-tab" id="asset-response-doubao-tab" role="tab" aria-selected="false" aria-controls="asset-response-doubao">Doubao MAX · 200</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="asset-response-hc" role="tabpanel" aria-labelledby="asset-response-hc-tab" aria-hidden="false">
-              <pre><code>{
-  "success": true,
-  "data": {
-    "Id": "asset-20260810224425-w752c",
-    "base_resp": {"status_code": 0, "status_msg": "success"}
-  }
-}</code></pre>
-            </div>
-            <div class="example-tab-panel" id="asset-response-doubao" role="tabpanel" aria-labelledby="asset-response-doubao-tab" aria-hidden="true">
-              <pre><code>{
+        <pre><code>{
   "success": true,
   "data": {
     "Id": "mva-e144dfc364a647f1",
     "Ref": "asset://mva-e144dfc364a647f1",
     "Status": "Processing",
     "AssetType": "Image",
-    "Name": "人物参考图",
-    "Model": "doubao-seedance-2-0-mini-260615-max",
     "Error": null
-  }
-}</code></pre>
-            </div>
-          </div>
-        </div>
-        <h4>参数失败 <span class="pill danger">400</span></h4>
-        <pre><code>{
-  "error": {
-    "message": "url must be a public HTTPS URL",
-    "type": "invalid_request_error"
   }
 }</code></pre>
       </aside>
     </section>
 
-    <section class="endpoint-doc" id="/v1/seedance/assets/{asset_id}?type=hc" aria-labelledby="asset-query-title">
+    <section class="endpoint-doc" id="/v1/seedance/assets/{asset_id}" aria-labelledby="asset-query-title">
       <article class="reference-panel">
-        <h2 id="asset-query-title">查询 Seedance 素材状态</h2>
+        <h2 id="asset-query-title">查询素材</h2>
         <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/seedance/assets/{asset_id}?type={type}</span></div>
         <table>
           <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
           <tr><td><code>asset_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>data.Id</code></td></tr>
           <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>，须与创建时一致</td></tr>
         </table>
-        <p><code>Active</code> 后可生成视频；处理中为 <code>Processing</code>，失败为 <code>Failed</code>。Doubao 图片素材通常几秒内就绪，建议每 1-2 秒查询一次。</p>
+        <table>
+          <tr><th>状态</th><th>说明</th></tr>
+          <tr><td><code>Processing</code></td><td>处理中</td></tr>
+          <tr><td><code>Active</code></td><td>可用于视频生成</td></tr>
+          <tr><td><code>Failed</code></td><td>处理失败，原因见 <code>Error</code></td></tr>
+        </table>
+        <p>建议每 1-2 秒查询一次，直到状态变为 <code>Active</code> 或 <code>Failed</code>。</p>
       </article>
       <aside class="example-panel">
-        <h3>Doubao 查询示例</h3>
+        <h3>请求示例</h3>
         <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-e144dfc364a647f1?type=doubao" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>响应示例</h3>
@@ -1229,16 +1131,7 @@ const upload = await response.json();</code></pre>
     "Ref": "asset://mva-e144dfc364a647f1",
     "Status": "Active",
     "AssetType": "Image",
-    "Name": "人物参考图",
-    "Model": "doubao-seedance-2-0-mini-260615-max",
     "Error": null
-  }
-}</code></pre>
-        <h4>查询失败 <span class="pill danger">400</span></h4>
-        <pre><code>{
-  "error": {
-    "message": "unsupported type \"\"; currently supported: hc, df, doubao",
-    "type": "invalid_request_error"
   }
 }</code></pre>
       </aside>
@@ -1292,132 +1185,7 @@ const upload = await response.json();</code></pre>
       </article>
       <aside class="example-panel" aria-label="Seedance 视频请求和响应示例">
         <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Seedance 视频生成方式">
-            <button type="button" class="example-tab" id="video-request-multimodal-tab" role="tab" aria-selected="true" aria-controls="video-request-multimodal">多模态参考</button>
-            <button type="button" class="example-tab" id="video-request-first-frame-tab" role="tab" aria-selected="false" aria-controls="video-request-first-frame">首帧</button>
-            <button type="button" class="example-tab" id="video-request-first-last-tab" role="tab" aria-selected="false" aria-controls="video-request-first-last">首尾帧</button>
-            <button type="button" class="example-tab" id="video-request-text-tab" role="tab" aria-selected="false" aria-controls="video-request-text">文生视频</button>
-            <button type="button" class="example-tab" id="video-request-doubao-mini-tab" role="tab" aria-selected="false" aria-controls="video-request-doubao-mini">Doubao Mini</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="video-request-multimodal" role="tabpanel" aria-labelledby="video-request-multimodal-tab" aria-hidden="false">
-              <p class="compact-note">参考图片、视频和音频分别使用 <code>reference_image</code>、<code>reference_video</code> 和 <code>reference_audio</code>；音频不能单独作为参考。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dreamina-seedance-2-0-hc",
-    "content": [
-      {
-        "type": "text",
-        "text": "以图片1中的人物为主体，参考视频1的运镜和动作节奏，并使用音频1作为背景音乐，生成电影感街头短片"
-      },
-      {
-        "type": "image_url",
-        "image_url": {"url": "https://cdn.example.com/character.jpg"},
-        "role": "reference_image"
-      },
-      {
-        "type": "video_url",
-        "video_url": {"url": "https://cdn.example.com/camera-motion.mp4"},
-        "role": "reference_video"
-      },
-      {
-        "type": "audio_url",
-        "audio_url": {"url": "https://cdn.example.com/background-music.mp3"},
-        "role": "reference_audio"
-      }
-    ],
-    "duration": 8,
-    "resolution": "720p",
-    "ratio": "16:9",
-    "generate_audio": true,
-    "watermark": false,
-    "return_last_frame": true
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="video-request-first-frame" role="tabpanel" aria-labelledby="video-request-first-frame-tab" aria-hidden="true">
-              <p class="compact-note">使用一张图片作为视频首帧。单图场景可以省略 <code>role</code>，但建议明确传入 <code>first_frame</code>。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dreamina-seedance-2-0-hc",
-    "content": [
-      {
-        "type": "text",
-        "text": "人物缓慢转身看向镜头，微风吹动头发，镜头平滑向前推进"
-      },
-      {
-        "type": "image_url",
-        "image_url": {"url": "https://cdn.example.com/first-frame.jpg"},
-        "role": "first_frame"
-      }
-    ],
-    "duration": 5,
-    "resolution": "720p",
-    "ratio": "16:9",
-    "generate_audio": true,
-    "watermark": false,
-    "return_last_frame": true
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="video-request-first-last" role="tabpanel" aria-labelledby="video-request-first-last-tab" aria-hidden="true">
-              <p class="compact-note">第一张图片必须标记为 <code>first_frame</code>，第二张图片必须标记为 <code>last_frame</code>。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dreamina-seedance-2-0-hc",
-    "content": [
-      {
-        "type": "text",
-        "text": "从雨夜街头平滑过渡到清晨海边，人物动作和镜头运动保持自然连续"
-      },
-      {
-        "type": "image_url",
-        "image_url": {"url": "https://cdn.example.com/first-frame.jpg"},
-        "role": "first_frame"
-      },
-      {
-        "type": "image_url",
-        "image_url": {"url": "https://cdn.example.com/last-frame.jpg"},
-        "role": "last_frame"
-      }
-    ],
-    "duration": 8,
-    "resolution": "720p",
-    "ratio": "16:9",
-    "generate_audio": true,
-    "watermark": false,
-    "return_last_frame": true
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="video-request-text" role="tabpanel" aria-labelledby="video-request-text-tab" aria-hidden="true">
-              <p class="compact-note">只传文本提示词，不传图片、视频、音频及 <code>role</code>。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dreamina-seedance-2-0-hc",
-    "content": [
-      {
-        "type": "text",
-        "text": "电影感航拍镜头掠过日出时的未来海滨城市，云层流动，暖色阳光映照玻璃建筑"
-      }
-    ],
-    "duration": 8,
-    "resolution": "720p",
-    "ratio": "16:9",
-    "generate_audio": true,
-    "watermark": false,
-    "return_last_frame": false
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="video-request-doubao-mini" role="tabpanel" aria-labelledby="video-request-doubao-mini-tab" aria-hidden="true">
-              <p class="compact-note">使用已就绪素材的 <code>Ref</code> 调用 Doubao Mini。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+        <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -1440,39 +1208,16 @@ const upload = await response.json();</code></pre>
     "ratio": "16:9",
     "generate_audio": false
   }'</code></pre>
-            </div>
-          </div>
-        </div>
-
         <h3>响应示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Seedance 视频创建响应状态">
-            <button type="button" class="example-tab" id="video-response-success-tab" role="tab" aria-selected="true" aria-controls="video-response-success">成功 · 200</button>
-            <button type="button" class="example-tab" id="video-response-error-tab" role="tab" aria-selected="false" aria-controls="video-response-error">失败 · 400</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="video-response-success" role="tabpanel" aria-labelledby="video-response-success-tab" aria-hidden="false">
-              <pre><code>{
+        <pre><code>{
   "id": "task_xxxxxxxxxxxxxxxx",
   "task_id": "task_xxxxxxxxxxxxxxxx",
   "object": "video",
-  "model": "dreamina-seedance-2-0-hc",
+  "model": "doubao-seedance-2-0-mini-260615-max",
   "status": "queued",
   "progress": 0,
   "created_at": 1786350000
 }</code></pre>
-            </div>
-            <div class="example-tab-panel" id="video-response-error" role="tabpanel" aria-labelledby="video-response-error-tab" aria-hidden="true">
-              <pre><code>{
-  "error": {
-    "message": "content text is required",
-    "type": "invalid_request_error",
-    "code": "invalid_request"
-  }
-}</code></pre>
-            </div>
-          </div>
-        </div>
       </aside>
     </section>
 
@@ -1485,37 +1230,25 @@ const upload = await response.json();</code></pre>
           <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
           <tr><td><code>task_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>task_...</code></td></tr>
         </table>
-        <p>建议每 2-5 秒查询一次，直到 <code>status</code> 变为 <code>completed</code> 或 <code>failed</code>。可能的状态为 <code>queued</code>、<code>in_progress</code>、<code>completed</code> 和 <code>failed</code>。</p>
+        <table>
+          <tr><th>状态</th><th>说明</th></tr>
+          <tr><td><code>queued</code></td><td>等待处理</td></tr>
+          <tr><td><code>in_progress</code></td><td>生成中</td></tr>
+          <tr><td><code>completed</code></td><td>生成完成</td></tr>
+          <tr><td><code>failed</code></td><td>生成失败</td></tr>
+        </table>
+        <p>建议每 5-10 秒查询一次，直到状态变为 <code>completed</code> 或 <code>failed</code>。</p>
       </article>
       <aside class="example-panel">
         <h3>请求示例</h3>
         <pre><code>curl https://cf-api.o1key.com/v1/video/generations/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>响应示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Seedance 视频查询响应状态">
-            <button type="button" class="example-tab" id="video-query-processing-tab" role="tab" aria-selected="true" aria-controls="video-query-processing">处理中 · 200</button>
-            <button type="button" class="example-tab" id="video-query-success-tab" role="tab" aria-selected="false" aria-controls="video-query-success">查询成功 · 200</button>
-            <button type="button" class="example-tab" id="video-query-failed-tab" role="tab" aria-selected="false" aria-controls="video-query-failed">任务失败 · 200</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="video-query-processing" role="tabpanel" aria-labelledby="video-query-processing-tab" aria-hidden="false">
-              <pre><code>{
+        <pre><code>{
   "id": "task_xxxxxxxxxxxxxxxx",
   "task_id": "task_xxxxxxxxxxxxxxxx",
   "object": "video",
-  "model": "dreamina-seedance-2-0-hc",
-  "status": "in_progress",
-  "progress": 50,
-  "created_at": 1786350000
-}</code></pre>
-            </div>
-            <div class="example-tab-panel" id="video-query-success" role="tabpanel" aria-labelledby="video-query-success-tab" aria-hidden="true">
-              <pre><code>{
-  "id": "task_xxxxxxxxxxxxxxxx",
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "object": "video",
-  "model": "dreamina-seedance-2-0-hc",
+  "model": "doubao-seedance-2-0-mini-260615-max",
   "status": "completed",
   "progress": 100,
   "created_at": 1786350000,
@@ -1527,30 +1260,11 @@ const upload = await response.json();</code></pre>
       "https://cdn.example.com/result.mp4"
     ],
     "usage": {
-      "completion_tokens": 648900,
-      "total_tokens": 648900
+      "completion_tokens": 50638,
+      "total_tokens": 50638
     }
   }
 }</code></pre>
-            </div>
-            <div class="example-tab-panel" id="video-query-failed" role="tabpanel" aria-labelledby="video-query-failed-tab" aria-hidden="true">
-              <pre><code>{
-  "id": "task_xxxxxxxxxxxxxxxx",
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "object": "video",
-  "model": "dreamina-seedance-2-0-hc",
-  "status": "failed",
-  "progress": 100,
-  "created_at": 1786350000,
-  "completed_at": 1786350068,
-  "error": {
-    "message": "upstream task failed",
-    "code": "upstream_error"
-  }
-}</code></pre>
-            </div>
-          </div>
-        </div>
       </aside>
     </section>
 
