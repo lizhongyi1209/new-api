@@ -22,6 +22,48 @@ This file is the first-stop navigation index for existing features. It records s
 | Default frontend | `web/default/src/` |
 | Production configuration and release | `docker-compose.yml`, `scripts/deploy-production.sh` |
 
+## Account security, verification, and audit logs
+
+Aliases: 安全与访问, 登录会话, 统一验证, Passkey 验证, 2FA 验证, 访问令牌, 操作审计, Telegram OAuth, `/api/verify`, `/api/audit`.
+
+- Security routes and authorization: `router/api-router.go`, `middleware/auth.go`, `middleware/audit.go`, `service/authz/`.
+- Unified sensitive-operation proof flow: `controller/secure_verification.go`, `middleware/secure_verification.go`, `service/security_verification.go`, `service/auth_token.go`.
+- Login verification and session lifecycle: `controller/login_verification.go`, `controller/auth_session.go`, `service/auth_session.go`, `model/user_session.go`.
+- Access-token lifecycle and audits: `controller/access_token.go`, `controller/audit.go`, `middleware/audit.go`, `model/audit_log.go`, `model/user.go`.
+- Account password policy/hash, email/binding operations, and Telegram OAuth: `common/account_password.go`, `controller/user.go`, `controller/email_binding.go`, `controller/custom_oauth.go`, `model/account_security.go`, `oauth/telegram.go`.
+- Frontend entry points: `web/default/src/features/security/`, `web/default/src/features/auth/secure-verification/`, `web/default/src/features/usage-logs/audit/`.
+
+## Model, vendor, and conflict-aware pricing management
+
+Aliases: 模型管理, 厂商管理, 模型可见性, 元数据同步, 定价冲突, pricing sync, vendor merge, `/api/models`, `/api/vendors`, `/api/option/model_pricing`.
+
+- Routes and controllers: `router/api-router.go`, `controller/model_meta.go`, `controller/model_sync.go`, `controller/model_pricing_config.go`, `controller/vendor_meta.go`, `controller/ratio_sync.go`.
+- Storage, optimistic versions, and cross-database mutations: `model/model_meta.go`, `model/model_metadata_sync.go`, `model/model_pricing_config.go`, `model/vendor_management.go`.
+- Frontend model/vendor workflows: `web/default/src/features/models/`, `web/default/src/features/model-pricing/`, `web/default/src/features/system-settings/models/upstream-ratio-sync.tsx`.
+
+## Advanced-custom route splitting and management routes
+
+Aliases: 高级自定义渠道, 路由分流, client model matching, 模型列表路由, 余额查询路由, `/v1/models`, `/v1/dashboard/billing/credit_grants`.
+
+- Route schema, model/regex matching, fallback ordering, and validation: `dto/channel_settings.go`.
+- Relay route selection and management request construction: `relay/channel/advancedcustom/adaptor.go`.
+- Upstream model discovery and balance queries: `controller/channel_upstream_update.go`, `controller/channel-billing.go`.
+- Visual editor: `web/default/src/features/channels/components/dialogs/advanced-custom-editor-dialog.tsx`, `web/default/src/features/channels/lib/advanced-custom.ts`.
+
+## Redemption-code bulk operations
+
+Aliases: 批量删除兑换码, 导出兑换码, redemption export.
+
+- API and persistence: `router/api-router.go`, `controller/redemption.go`, `model/redemption.go`.
+- Frontend selection, deletion, and export: `web/default/src/features/redemption-codes/components/data-table-bulk-actions.tsx`, `web/default/src/features/redemption-codes/components/redemptions-export-dialog.tsx`.
+
+## Shared status query and usage-log group filtering
+
+Aliases: 状态请求去重, status dedup, 日志分组筛选, log group filter.
+
+- Shared cached status query and consumers: `web/default/src/lib/status-query.ts`, `web/default/src/hooks/use-status.ts`, `web/default/src/hooks/use-system-config.ts`.
+- Group-aware log query and filter UI: `model/log.go`, `controller/log.go`, `web/default/src/features/usage-logs/components/common-logs-filter-bar.tsx`.
+
 ## Image output strategy
 
 Aliases: 图片输出策略, 媒体输出策略, 视频输出策略, image output strategy, media output strategy, 图片落盘, 视频存储, 本机临时图片, temporary image, CF 图片, Cloudflare 图片, ESA 图片, `/tmp/output`, `/async/v1/generateImage`.

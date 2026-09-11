@@ -12,8 +12,9 @@ import (
 // integers in the database, so an oversized product must clamp to the int32
 // range instead of wrapping around and turning a charge into a credit.
 const (
-	MaxQuota = math.MaxInt32
-	MinQuota = math.MinInt32
+	MaxQuota       = math.MaxInt32
+	MinQuota       = math.MinInt32
+	MaxWalletQuota = 1<<53 - 1
 )
 
 // QuotaClampKind identifies why a quota conversion had to be saturated.
@@ -151,4 +152,14 @@ func QuotaFromDecimalChecked(d decimal.Decimal) (int, *QuotaClamp) {
 // value that would otherwise be saturated at the database's int32 boundary.
 func QuotaFromDecimalStrict(d decimal.Decimal) (int, error) {
 	return strictQuota(QuotaFromDecimalChecked(d))
+}
+
+// WalletQuotaFromDecimalStrict converts wallet and top-up values while
+// keeping them within JavaScript's exact integer range.
+func WalletQuotaFromDecimalStrict(d decimal.Decimal) (int, error) {
+	f, _ := d.Round(0).Float64()
+	if math.IsNaN(f) || math.IsInf(f, 0) || f > MaxWalletQuota || f < -MaxWalletQuota {
+		return 0, fmt.Errorf("wallet quota exceeds %d", MaxWalletQuota)
+	}
+	return int(f), nil
 }

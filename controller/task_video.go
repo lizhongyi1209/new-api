@@ -212,7 +212,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
 										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(quotaDelta))
 									if clamp != nil {
-										model.RecordLogWithAdminInfo(task.UserId, model.LogTypeSystem, logContent,
+										model.RecordLogWithAdminFields(task.UserId, model.LogTypeSystem, logContent,
 											map[string]interface{}{"quota_saturation": clamp.AuditMap()})
 									} else {
 										model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
@@ -238,7 +238,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 										modelRatio, finalGroupRatio, taskResult.TotalTokens,
 										logger.LogQuota(preConsumedQuota), logger.LogQuota(actualQuota), logger.LogQuota(refundQuota))
 									if clamp != nil {
-										model.RecordLogWithAdminInfo(task.UserId, model.LogTypeSystem, logContent,
+										model.RecordLogWithAdminFields(task.UserId, model.LogTypeSystem, logContent,
 											map[string]interface{}{"quota_saturation": clamp.AuditMap()})
 									} else {
 										model.RecordLog(task.UserId, model.LogTypeSystem, logContent)

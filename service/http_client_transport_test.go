@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -23,14 +24,33 @@ func withRelayHTTPTransportSettings(t *testing.T) {
 	prevMaxIdle := common.RelayMaxIdleConns
 	prevPerHost := common.RelayMaxIdleConnsPerHost
 	prevTimeout := common.RelayIdleConnTimeout
+	prevResponseHeaderTimeout := common.RelayResponseHeaderTimeout
 	common.RelayMaxIdleConns = 500
 	common.RelayMaxIdleConnsPerHost = 100
 	common.RelayIdleConnTimeout = 90
+	common.RelayResponseHeaderTimeout = 1800
 	t.Cleanup(func() {
 		common.RelayMaxIdleConns = prevMaxIdle
 		common.RelayMaxIdleConnsPerHost = prevPerHost
 		common.RelayIdleConnTimeout = prevTimeout
+		common.RelayResponseHeaderTimeout = prevResponseHeaderTimeout
 	})
+}
+
+func TestRelayTransportResponseHeaderTimeout(t *testing.T) {
+	withRelayHTTPTransportSettings(t)
+
+	common.RelayResponseHeaderTimeout = 123
+	transport := newRelayHTTPTransport()
+	assert.Equal(t, 123*time.Second, transport.ResponseHeaderTimeout)
+
+	common.RelayResponseHeaderTimeout = 0
+	transport = newRelayHTTPTransport()
+	assert.Zero(t, transport.ResponseHeaderTimeout)
+
+	common.RelayResponseHeaderTimeout = int(^uint(0) >> 1)
+	transport = newRelayHTTPTransport()
+	assert.Equal(t, time.Duration(maxResponseHeaderTimeoutSeconds)*time.Second, transport.ResponseHeaderTimeout)
 }
 
 func initDefaultHTTPClientFixture(t *testing.T) *http.Client {

@@ -98,6 +98,7 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 	assert.True(t, Can(42, common.RoleAdminUser, ChannelSensitiveWrite))
 	assert.False(t, Can(42, common.RoleAdminUser, ChannelWrite))
 	assert.Equal(t, PermissionsMap{
+		ResourceAudit: {ActionRead: false},
 		ResourceChannel: {
 			ActionRead:           true,
 			ActionOperate:        true,
@@ -126,6 +127,7 @@ func TestSetUserPermissionsStoresOnlyOverrides(t *testing.T) {
 	}}))
 	assert.False(t, Can(42, common.RoleAdminUser, ChannelSensitiveWrite))
 	assert.Equal(t, PermissionsMap{
+		ResourceAudit: {ActionRead: false},
 		ResourceChannel: {
 			ActionRead:           true,
 			ActionOperate:        true,

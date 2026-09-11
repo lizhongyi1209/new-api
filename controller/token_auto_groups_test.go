@@ -187,18 +187,19 @@ func TestUpdateTokenAutoGroupsTriStateAndNonAutoCleanup(t *testing.T) {
 
 func TestAddTokenRejectsInvalidAutoGroups(t *testing.T) {
 	// Rejections follow the project-wide envelope: HTTP 200 with success=false
-	// and the i18n key that identifies which validation fired. i18n.Init runs
-	// only from main, so TranslateMessage returns the untranslated key here.
+	// and the localized message that identifies which validation fired.
+	require.NoError(t, i18n.Init())
 	tests := []struct {
 		name            string
 		maxCount        string
 		groups          []string
-		expectedMessage string
+		messageKey      string
+		messageArgs     map[string]any
 	}{
-		{name: "over limit", maxCount: "1", groups: []string{"default", "vip"}, expectedMessage: i18n.MsgTokenAutoGroupsTooMany},
-		{name: "duplicate", maxCount: "5", groups: []string{"default", "default"}, expectedMessage: i18n.MsgTokenAutoGroupsDuplicate},
-		{name: "auto pseudo group", maxCount: "5", groups: []string{"auto"}, expectedMessage: i18n.MsgTokenAutoGroupsInvalid},
-		{name: "unavailable", maxCount: "5", groups: []string{"missing"}, expectedMessage: i18n.MsgTokenAutoGroupsInvalid},
+		{name: "over limit", maxCount: "1", groups: []string{"default", "vip"}, messageKey: i18n.MsgTokenAutoGroupsTooMany, messageArgs: map[string]any{"Max": 1}},
+		{name: "duplicate", maxCount: "5", groups: []string{"default", "default"}, messageKey: i18n.MsgTokenAutoGroupsDuplicate, messageArgs: map[string]any{"Group": "default"}},
+		{name: "auto pseudo group", maxCount: "5", groups: []string{"auto"}, messageKey: i18n.MsgTokenAutoGroupsInvalid, messageArgs: map[string]any{"Group": "auto"}},
+		{name: "unavailable", maxCount: "5", groups: []string{"missing"}, messageKey: i18n.MsgTokenAutoGroupsInvalid, messageArgs: map[string]any{"Group": "missing"}},
 	}
 
 	for _, test := range tests {
@@ -214,7 +215,7 @@ func TestAddTokenRejectsInvalidAutoGroups(t *testing.T) {
 			assert.Equal(t, http.StatusOK, recorder.Code)
 			response := decodeAPIResponse(t, recorder)
 			assert.False(t, response.Success)
-			assert.Equal(t, test.expectedMessage, response.Message)
+			assert.Equal(t, i18n.Translate(i18n.LangEn, test.messageKey, test.messageArgs), response.Message)
 			var count int64
 			require.NoError(t, model.DB.Model(&model.Token{}).Count(&count).Error)
 			assert.Zero(t, count)

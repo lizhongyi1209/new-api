@@ -17,32 +17,32 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
-import type { Cell, ColumnDef } from '@tanstack/react-table'
-import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import type { Cell, ColumnDef } from "@tanstack/react-table";
+import { GitBranch, Sparkles, KeyRound } from "lucide-react";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { GroupBadge } from '@/components/group-badge'
-import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { GroupBadge } from "@/components/group-badge";
+import { StatusBadge, type StatusBadgeProps } from "@/components/status-badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from '@/components/ui/popover'
+} from "@/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
-import { cn } from '@/lib/utils'
+} from "@/components/ui/tooltip";
+import { getUserAvatarFallback, getUserAvatarStyle } from "@/lib/avatar";
+import { formatBillingCurrencyFromUSD } from "@/lib/currency";
+import { formatLogQuota, formatTimestampToDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
-import { LOG_TYPE_ALL_VALUE } from '../../constants'
-import type { UsageLog } from '../../data/schema'
+import { LOG_TYPE_ALL_VALUE } from "../../constants";
+import type { UsageLog } from "../../data/schema";
 import {
   formatModelName,
   getTieredBillingSummary,
@@ -53,193 +53,197 @@ import {
   isLegacyTieredRecalcContent,
   getLegacyTieredRecalcTier,
   formatDurationMilliseconds,
-} from '../../lib/format'
+} from "../../lib/format";
 import {
   isDisplayableLogType,
   isTimingLogType,
   getLogTypeConfig,
   isPerCallBilling,
-} from '../../lib/utils'
-import type { LogOtherData } from '../../types'
-import { DetailsDialog } from '../dialogs/details-dialog'
-import { LogCostDisplay } from '../log-cost-display'
-import { ModelBadge } from '../model-badge'
-import { TimingMetricsCell, StreamTpsCell } from '../timing-metrics-cell'
-import { useUsageLogsContext } from '../usage-logs-provider'
+} from "../../lib/utils";
+import type { LogOtherData } from "../../types";
+import { DetailsDialog } from "../dialogs/details-dialog";
+import { LogCostDisplay } from "../log-cost-display";
+import { ModelBadge } from "../model-badge";
+import { TimingMetricsCell, StreamTpsCell } from "../timing-metrics-cell";
+import { useUsageLogsContext } from "../usage-logs-provider";
 
 interface DetailSegment {
-  text: string
-  muted?: boolean
-  danger?: boolean
+  text: string;
+  muted?: boolean;
+  danger?: boolean;
 }
 
-type TranslateFn = (key: string, opts?: Record<string, unknown>) => string
+type TranslateFn = (key: string, opts?: Record<string, unknown>) => string;
 
 function formatRatioCompact(ratio: number | undefined): string {
-  if (ratio == null || !Number.isFinite(ratio)) return '-'
+  if (ratio == null || !Number.isFinite(ratio)) return "-";
   return ratio % 1 === 0
     ? String(ratio)
-    : ratio.toFixed(4).replace(/\.?0+$/, '')
+    : ratio.toFixed(4).replace(/\.?0+$/, "");
 }
 
 function getGroupRatio(other: LogOtherData | null): number | null {
-  const userGroupRatio = other?.user_group_ratio
+  const userGroupRatio = other?.user_group_ratio;
   if (
     userGroupRatio != null &&
     userGroupRatio !== -1 &&
     Number.isFinite(userGroupRatio)
   ) {
-    return userGroupRatio
+    return userGroupRatio;
   }
 
-  const groupRatio = other?.group_ratio
+  const groupRatio = other?.group_ratio;
   if (groupRatio != null && groupRatio !== 1 && Number.isFinite(groupRatio)) {
-    return groupRatio
+    return groupRatio;
   }
 
-  return null
+  return null;
 }
 
 function buildDetailSegments(
   log: UsageLog,
   other: LogOtherData | null,
-  t: TranslateFn
+  t: TranslateFn,
 ): DetailSegment[] {
   // Audit (type=3) and login (type=7) logs: render localized content from the
   // structured op descriptor instead of the raw (English-fallback) content.
-  if (log.type === 3 || log.type === 7) {
-    const text = renderAuditContent(other, t)
-    return text ? [{ text }] : []
+  if (
+    log.type === 3 ||
+    log.type === 7 ||
+    other?.op?.action?.startsWith("user.quota_")
+  ) {
+    const text = renderAuditContent(other, t);
+    return text ? [{ text }] : [];
   }
 
   if (log.type === 6) {
-    return [{ text: t('Async task refund') }]
+    return [{ text: t("Async task refund") }];
   }
 
-  if (log.type !== 2) return []
+  if (log.type !== 2) return [];
 
-  const isViolation = isViolationFeeLog(other)
+  const isViolation = isViolationFeeLog(other);
   if (isViolation) {
-    const segments: DetailSegment[] = []
-    segments.push({ text: t('Violation Fee'), danger: true })
+    const segments: DetailSegment[] = [];
+    segments.push({ text: t("Violation Fee"), danger: true });
     if (other?.violation_fee_code) {
       segments.push({
         text: other.violation_fee_code,
         muted: true,
-      })
+      });
     }
     segments.push({
-      text: `${t('Fee')}: ${formatLogQuota(other?.fee_quota ?? log.quota)}`,
+      text: `${t("Fee")}: ${formatLogQuota(other?.fee_quota ?? log.quota)}`,
       muted: true,
-    })
-    return segments
+    });
+    return segments;
   }
 
-  if (!other) return []
+  if (!other) return [];
 
-  const segments: DetailSegment[] = []
+  const segments: DetailSegment[] = [];
 
-  const priceOpts = { digitsLarge: 4, digitsSmall: 6, abbreviate: false }
+  const priceOpts = { digitsLarge: 4, digitsSmall: 6, abbreviate: false };
   const formatPrice = (price: number) =>
-    `${formatBillingCurrencyFromUSD(price, priceOpts)}/M`
+    `${formatBillingCurrencyFromUSD(price, priceOpts)}/M`;
   const formatPriceCompact = (price: number) =>
-    formatBillingCurrencyFromUSD(price, priceOpts)
+    formatBillingCurrencyFromUSD(price, priceOpts);
   const formatPriceList = (prices: string[], showUnit: boolean) => {
-    const text = prices.join(' / ')
-    return showUnit ? `${text}/M` : text
-  }
-  const isTieredExpr = other.billing_mode === 'tiered_expr'
-  const isLegacyTieredRecalc = isLegacyTieredRecalcContent(log.content, other)
-  const legacyTier = getLegacyTieredRecalcTier(log.content)
-  const tieredSummary = getTieredBillingSummary(other)
+    const text = prices.join(" / ");
+    return showUnit ? `${text}/M` : text;
+  };
+  const isTieredExpr = other.billing_mode === "tiered_expr";
+  const isLegacyTieredRecalc = isLegacyTieredRecalcContent(log.content, other);
+  const legacyTier = getLegacyTieredRecalcTier(log.content);
+  const tieredSummary = getTieredBillingSummary(other);
   if (isTieredExpr || isLegacyTieredRecalc) {
     if (tieredSummary) {
-      const primaryEntries: string[] = []
+      const primaryEntries: string[] = [];
       if (tieredSummary.requestPrice != null) {
         primaryEntries.push(
-          `${t('Per-request')} ${formatPriceCompact(tieredSummary.requestPrice)}`
-        )
+          `${t("Per-request")} ${formatPriceCompact(tieredSummary.requestPrice)}`,
+        );
       }
 
       const baseEntries = tieredSummary.priceEntries
-        .filter((entry) => ['inputPrice', 'outputPrice'].includes(entry.field))
-        .map((entry) => formatPriceCompact(entry.price))
+        .filter((entry) => ["inputPrice", "outputPrice"].includes(entry.field))
+        .map((entry) => formatPriceCompact(entry.price));
       if (baseEntries.length > 0) {
-        primaryEntries.push(formatPriceList(baseEntries, true))
+        primaryEntries.push(formatPriceList(baseEntries, true));
       }
       if (primaryEntries.length > 0) {
-        const tierLabel = tieredSummary.tier.label || t('Default')
+        const tierLabel = tieredSummary.tier.label || t("Default");
         segments.push({
-          text: `${tierLabel} · ${primaryEntries.join(' · ')}`,
-        })
+          text: `${tierLabel} · ${primaryEntries.join(" · ")}`,
+        });
       }
 
       const cacheEntries = tieredSummary.priceEntries
         .filter((entry) =>
-          ['cacheReadPrice', 'cacheCreatePrice', 'cacheCreate1hPrice'].includes(
-            entry.field
-          )
+          ["cacheReadPrice", "cacheCreatePrice", "cacheCreate1hPrice"].includes(
+            entry.field,
+          ),
         )
         .map((entry) => {
-          return formatPriceCompact(entry.price)
-        })
+          return formatPriceCompact(entry.price);
+        });
       if (cacheEntries.length > 0) {
         segments.push({
-          text: `${t('Cache')} ${formatPriceList(cacheEntries, false)}`,
+          text: `${t("Cache")} ${formatPriceList(cacheEntries, false)}`,
           muted: true,
-        })
+        });
       }
 
       const otherEntries = tieredSummary.priceEntries
         .filter(
           (entry) =>
             ![
-              'inputPrice',
-              'outputPrice',
-              'cacheReadPrice',
-              'cacheCreatePrice',
-              'cacheCreate1hPrice',
-            ].includes(entry.field)
+              "inputPrice",
+              "outputPrice",
+              "cacheReadPrice",
+              "cacheCreatePrice",
+              "cacheCreate1hPrice",
+            ].includes(entry.field),
         )
-        .map((entry) => `${t(entry.shortLabel)} ${formatPrice(entry.price)}`)
+        .map((entry) => `${t(entry.shortLabel)} ${formatPrice(entry.price)}`);
       if (otherEntries.length > 0) {
         segments.push({
-          text: otherEntries.join(' · '),
+          text: otherEntries.join(" · "),
           muted: true,
-        })
+        });
       }
     } else {
       segments.push({
         text: legacyTier
-          ? `${t('Dynamic Pricing')} · ${legacyTier}`
-          : `${t('Dynamic Pricing')} · ${t('No matching results')}`,
+          ? `${t("Dynamic Pricing")} · ${legacyTier}`
+          : `${t("Dynamic Pricing")} · ${t("No matching results")}`,
         muted: true,
-      })
+      });
     }
   } else {
     const isPerCall = isPerCallBilling(
       other.model_price,
-      other.per_call_billing
-    )
+      other.per_call_billing,
+    );
     if (isPerCall) {
       if (other.model_price != null && other.model_price > 0) {
         segments.push({
-          text: `${t('Per-call')} · ${formatBillingCurrencyFromUSD(other.model_price, priceOpts)}`,
-        })
+          text: `${t("Per-call")} · ${formatBillingCurrencyFromUSD(other.model_price, priceOpts)}`,
+        });
       } else {
-        segments.push({ text: t('Per-call') })
+        segments.push({ text: t("Per-call") });
       }
     } else if (other.model_ratio != null) {
-      const inputPriceUSD = other.model_ratio * 2.0
-      const baseEntries = [formatPriceCompact(inputPriceUSD)]
+      const inputPriceUSD = other.model_ratio * 2.0;
+      const baseEntries = [formatPriceCompact(inputPriceUSD)];
       if (other.completion_ratio != null) {
         baseEntries.push(
-          formatPriceCompact(inputPriceUSD * other.completion_ratio)
-        )
+          formatPriceCompact(inputPriceUSD * other.completion_ratio),
+        );
       }
       segments.push({
-        text: `${t('Standard')} · ${formatPriceList(baseEntries, true)}`,
-      })
+        text: `${t("Standard")} · ${formatPriceList(baseEntries, true)}`,
+      });
 
       if (hasAnyCacheTokens(other)) {
         const cacheEntries = [
@@ -253,101 +257,101 @@ function buildDetailSegments(
           other.cache_creation_ratio_1h !== 0
             ? formatPriceCompact(inputPriceUSD * other.cache_creation_ratio_1h)
             : null,
-        ].filter(Boolean) as string[]
+        ].filter(Boolean) as string[];
 
         if (cacheEntries.length > 0) {
           segments.push({
-            text: `${t('Cache')} ${formatPriceList(cacheEntries, false)}`,
+            text: `${t("Cache")} ${formatPriceList(cacheEntries, false)}`,
             muted: true,
-          })
+          });
         }
       }
     } else {
-      const userGroupRatio = other.user_group_ratio
-      const groupRatio = other.group_ratio
+      const userGroupRatio = other.user_group_ratio;
+      const groupRatio = other.group_ratio;
       const isUserGroup =
         userGroupRatio != null &&
         Number.isFinite(userGroupRatio) &&
-        userGroupRatio !== -1
-      const effectiveRatio = isUserGroup ? userGroupRatio : groupRatio
+        userGroupRatio !== -1;
+      const effectiveRatio = isUserGroup ? userGroupRatio : groupRatio;
       const ratioLabel = isUserGroup
-        ? t('User Exclusive Ratio')
-        : t('Group Ratio')
+        ? t("User Exclusive Ratio")
+        : t("Group Ratio");
 
       if (effectiveRatio != null && Number.isFinite(effectiveRatio)) {
         segments.push({
           text: `${ratioLabel} ${formatRatioCompact(effectiveRatio)}x`,
-        })
+        });
       }
     }
   }
 
   if (other.is_system_prompt_overwritten) {
     segments.push({
-      text: t('System Prompt Override'),
+      text: t("System Prompt Override"),
       danger: true,
-    })
+    });
   }
 
-  return segments
+  return segments;
 }
 
 function DetailsPreviewCell(props: {
-  log: UsageLog
-  isAdmin: boolean
-  t: TranslateFn
-  className?: string
+  log: UsageLog;
+  isAdmin: boolean;
+  t: TranslateFn;
+  className?: string;
 }) {
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const other = parseLogOther(props.log.other)
-  const segments = buildDetailSegments(props.log, other, props.t)
-  const primary = segments[0]
-  const hasMore = segments.length > 1
-  let primaryContent = <span className='text-muted-foreground/40'>—</span>
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const other = parseLogOther(props.log.other);
+  const segments = buildDetailSegments(props.log, other, props.t);
+  const primary = segments[0];
+  const hasMore = segments.length > 1;
+  let primaryContent = <span className="text-muted-foreground/40">—</span>;
 
   if (props.log.content) {
     primaryContent = (
-      <span className='text-muted-foreground truncate group-hover:underline'>
+      <span className="text-muted-foreground truncate group-hover:underline">
         {props.log.content}
       </span>
-    )
+    );
   }
 
   if (primary) {
-    let primaryTextClassName = 'text-foreground'
+    let primaryTextClassName = "text-foreground";
     if (primary.muted) {
-      primaryTextClassName = 'text-muted-foreground/60'
+      primaryTextClassName = "text-muted-foreground/60";
     } else if (primary.danger) {
-      primaryTextClassName = 'text-red-600 dark:text-red-400'
+      primaryTextClassName = "text-red-600 dark:text-red-400";
     }
 
     primaryContent = (
       <span
         className={cn(
-          'truncate leading-snug group-hover:underline',
-          primaryTextClassName
+          "truncate leading-snug group-hover:underline",
+          primaryTextClassName,
         )}
       >
         {primary.text}
         {hasMore && (
-          <span className='text-muted-foreground/40 ml-0.5'>
+          <span className="text-muted-foreground/40 ml-0.5">
             +{segments.length - 1}
           </span>
         )}
       </span>
-    )
+    );
   }
 
   return (
     <>
       <button
-        type='button'
+        type="button"
         className={cn(
-          'group flex items-center gap-1 text-left text-xs',
-          props.className
+          "group flex items-center gap-1 text-left text-xs",
+          props.className,
         )}
         onClick={() => setDialogOpen(true)}
-        title={props.t('Click to view full details')}
+        title={props.t("Click to view full details")}
       >
         {primaryContent}
       </button>
@@ -358,105 +362,105 @@ function DetailsPreviewCell(props: {
         onOpenChange={setDialogOpen}
       />
     </>
-  )
+  );
 }
 
 export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   const columns: ColumnDef<UsageLog>[] = [
     {
-      accessorKey: 'created_at',
-      header: t('Time'),
+      accessorKey: "created_at",
+      header: t("Time"),
       cell: ({ row }) => {
-        const log = row.original
-        const timestamp = row.getValue('created_at') as number
-        const config = getLogTypeConfig(log.type)
+        const log = row.original;
+        const timestamp = row.getValue("created_at") as number;
+        const config = getLogTypeConfig(log.type);
 
         return (
-          <div className='flex min-w-0 flex-col gap-0.5'>
-            <span className='truncate font-mono text-xs tabular-nums'>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-mono text-xs tabular-nums">
               {formatTimestampToDate(timestamp)}
             </span>
             <StatusBadge
               label={t(config.label)}
-              variant={config.color as StatusBadgeProps['variant']}
-              size='sm'
+              variant={config.color as StatusBadgeProps["variant"]}
+              size="sm"
               copyable={false}
-              className='-ml-1.5 !text-xs [&_span]:!text-xs'
+              className="-ml-1.5 !text-xs [&_span]:!text-xs"
             />
           </div>
-        )
+        );
       },
       filterFn: (row, _id, value) => {
-        if (!Array.isArray(value) || value.length === 0) return true
-        if (value.includes(LOG_TYPE_ALL_VALUE)) return true
-        return value.includes(String(row.original.type))
+        if (!Array.isArray(value) || value.length === 0) return true;
+        if (value.includes(LOG_TYPE_ALL_VALUE)) return true;
+        return value.includes(String(row.original.type));
       },
       enableHiding: false,
       size: 180,
     },
-  ]
+  ];
 
   if (isAdmin) {
     columns.push(
       {
-        id: 'channel',
-        header: t('Channel'),
+        id: "channel",
+        header: t("Channel"),
         accessorFn: (row) => row.channel,
         cell: function ChannelCell({ row }) {
           const { sensitiveVisible, setAffinityTarget, setAffinityDialogOpen } =
-            useUsageLogsContext()
-          const log = row.original
+            useUsageLogsContext();
+          const log = row.original;
 
-          if (!isDisplayableLogType(log.type)) return null
+          if (!isDisplayableLogType(log.type)) return null;
 
-          const other = parseLogOther(log.other)
-          const affinity = other?.admin_info?.channel_affinity
-          const rawUseChannel = other?.admin_info?.use_channel ?? []
+          const other = parseLogOther(log.other);
+          const affinity = other?.admin_info?.channel_affinity;
+          const rawUseChannel = other?.admin_info?.use_channel ?? [];
           const useChannel = Array.isArray(rawUseChannel)
             ? rawUseChannel.map(String).filter(Boolean)
-            : []
-          const hasRetryChain = useChannel.length > 1
+            : [];
+          const hasRetryChain = useChannel.length > 1;
           const channelChain = hasRetryChain
-            ? useChannel.join(' → ')
-            : undefined
+            ? useChannel.join(" → ")
+            : undefined;
           const channelDisplay = log.channel_name
             ? `${log.channel_name} #${log.channel}`
-            : `#${log.channel}`
-          const channelIdDisplay = `#${log.channel}`
-          const channelName = sensitiveVisible ? log.channel_name : '••••'
-          const multiKeyIndex = other?.admin_info?.multi_key_index
+            : `#${log.channel}`;
+          const channelIdDisplay = `#${log.channel}`;
+          const channelName = sensitiveVisible ? log.channel_name : "••••";
+          const multiKeyIndex = other?.admin_info?.multi_key_index;
           const showMultiKeyIndex =
             other?.admin_info?.is_multi_key === true &&
-            typeof multiKeyIndex === 'number' &&
-            Number.isFinite(multiKeyIndex)
+            typeof multiKeyIndex === "number" &&
+            Number.isFinite(multiKeyIndex);
 
           return (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <div className='flex max-w-[160px] flex-col gap-0.5' />
+                    <div className="flex max-w-[160px] flex-col gap-0.5" />
                   }
                 >
-                  <div className='relative inline-flex w-fit items-center gap-1'>
+                  <div className="relative inline-flex w-fit items-center gap-1">
                     <StatusBadge
                       label={channelIdDisplay}
                       autoColor={String(log.channel)}
                       copyText={String(log.channel)}
-                      size='sm'
+                      size="sm"
                       showDot={false}
-                      className='font-mono'
+                      className="font-mono"
                     />
                     {showMultiKeyIndex && (
                       <StatusBadge
                         label={String(multiKeyIndex)}
-                        size='sm'
+                        size="sm"
                         showDot={false}
                         copyable={false}
-                        variant='neutral'
-                        className='h-5 min-w-5 justify-center rounded-full px-1 font-mono text-xs'
-                        aria-label={`${t('Key')} ${multiKeyIndex}`}
+                        variant="neutral"
+                        className="h-5 min-w-5 justify-center rounded-full px-1 font-mono text-xs"
+                        aria-label={`${t("Key")} ${multiKeyIndex}`}
                       />
                     )}
                     {hasRetryChain && (
@@ -464,26 +468,26 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                         <PopoverTrigger
                           render={
                             <button
-                              type='button'
-                              className='text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none'
-                              aria-label={t('Retry Chain')}
+                              type="button"
+                              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-5 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                              aria-label={t("Retry Chain")}
                               onClick={(e) => e.stopPropagation()}
                             />
                           }
                         >
                           <GitBranch
-                            className='size-3.5 text-amber-500'
-                            aria-hidden='true'
+                            className="size-3.5 text-amber-500"
+                            aria-hidden="true"
                           />
                         </PopoverTrigger>
                         <PopoverContent
-                          side='top'
-                          align='start'
-                          className='w-64 text-xs'
+                          side="top"
+                          align="start"
+                          className="w-64 text-xs"
                         >
-                          <div className='flex flex-col gap-1'>
-                            <p className='font-medium'>{t('Retry Chain')}</p>
-                            <p className='text-muted-foreground font-mono break-all'>
+                          <div className="flex flex-col gap-1">
+                            <p className="font-medium">{t("Retry Chain")}</p>
+                            <p className="text-muted-foreground font-mono break-all">
                               {channelChain}
                             </p>
                           </div>
@@ -492,60 +496,60 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     )}
                     {affinity && (
                       <button
-                        type='button'
-                        className='absolute -top-1 -right-1 leading-none text-amber-500'
+                        type="button"
+                        className="absolute -top-1 -right-1 leading-none text-amber-500"
                         onClick={(e) => {
-                          e.stopPropagation()
+                          e.stopPropagation();
                           setAffinityTarget({
-                            rule_name: affinity.rule_name || '',
+                            rule_name: affinity.rule_name || "",
                             using_group:
                               affinity.using_group ||
                               affinity.selected_group ||
-                              '',
-                            key_hint: affinity.key_hint || '',
-                            key_fp: affinity.key_fp || '',
-                          })
-                          setAffinityDialogOpen(true)
+                              "",
+                            key_hint: affinity.key_hint || "",
+                            key_fp: affinity.key_fp || "",
+                          });
+                          setAffinityDialogOpen(true);
                         }}
                       >
-                        <Sparkles className='size-3 fill-current' />
+                        <Sparkles className="size-3 fill-current" />
                       </button>
                     )}
                   </div>
                   {log.channel_name && (
-                    <span className='text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs'>
+                    <span className="text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs">
                       {channelName}
                     </span>
                   )}
                 </TooltipTrigger>
                 <TooltipContent>
-                  <div className='space-y-1'>
+                  <div className="space-y-1">
                     <p>
                       {sensitiveVisible ? channelDisplay : channelIdDisplay}
                     </p>
                     {channelChain && (
-                      <p className='text-muted-foreground text-xs'>
-                        {t('Chain')}: {channelChain}
+                      <p className="text-muted-foreground text-xs">
+                        {t("Chain")}: {channelChain}
                       </p>
                     )}
                     {showMultiKeyIndex && (
-                      <p className='text-muted-foreground text-xs'>
-                        {t('Key')}: {multiKeyIndex}
+                      <p className="text-muted-foreground text-xs">
+                        {t("Key")}: {multiKeyIndex}
                       </p>
                     )}
                     {affinity && (
-                      <div className='border-t pt-1 text-xs'>
-                        <p className='font-medium'>{t('Channel Affinity')}</p>
+                      <div className="border-t pt-1 text-xs">
+                        <p className="font-medium">{t("Channel Affinity")}</p>
                         <p>
-                          {t('Rule')}: {affinity.rule_name || '-'}
+                          {t("Rule")}: {affinity.rule_name || "-"}
                         </p>
                         <p>
-                          {t('Group')}:{' '}
+                          {t("Group")}:{" "}
                           {sensitiveVisible
                             ? affinity.using_group ||
                               affinity.selected_group ||
-                              '-'
-                            : '••••'}
+                              "-"
+                            : "••••"}
                         </p>
                       </div>
                     )}
@@ -553,35 +557,35 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-          )
+          );
         },
       },
       {
-        id: 'user',
-        header: t('User'),
+        id: "user",
+        header: t("User"),
         accessorFn: (row) => row.username,
         cell: function UserCell({ row }) {
           const { sensitiveVisible, setSelectedUserId, setUserInfoDialogOpen } =
-            useUsageLogsContext()
-          const log = row.original
+            useUsageLogsContext();
+          const log = row.original;
 
-          if (!log.username) return null
+          if (!log.username) return null;
 
           return (
             <button
-              type='button'
-              className='flex items-center gap-1.5 text-left'
+              type="button"
+              className="flex items-center gap-1.5 text-left"
               onClick={(e) => {
-                e.stopPropagation()
-                setSelectedUserId(log.user_id)
-                setUserInfoDialogOpen(true)
+                e.stopPropagation();
+                setSelectedUserId(log.user_id);
+                setUserInfoDialogOpen(true);
               }}
             >
-              <Avatar className='ring-border/60 size-6 ring-1 max-sm:hidden'>
+              <Avatar className="ring-border/60 size-6 ring-1 max-sm:hidden">
                 <AvatarFallback
                   className={cn(
-                    'text-[11px] font-semibold',
-                    !sensitiveVisible && 'bg-muted text-muted-foreground'
+                    "text-[11px] font-semibold",
+                    !sensitiveVisible && "bg-muted text-muted-foreground",
                   )}
                   style={
                     sensitiveVisible
@@ -589,127 +593,127 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       : undefined
                   }
                 >
-                  {sensitiveVisible ? getUserAvatarFallback(log.username) : '•'}
+                  {sensitiveVisible ? getUserAvatarFallback(log.username) : "•"}
                 </AvatarFallback>
               </Avatar>
               <TooltipProvider delay={300}>
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <span className='text-muted-foreground max-w-[100px] truncate text-sm hover:underline' />
+                      <span className="text-muted-foreground max-w-[100px] truncate text-sm hover:underline" />
                     }
                   >
-                    {sensitiveVisible ? log.username : '••••'}
+                    {sensitiveVisible ? log.username : "••••"}
                   </TooltipTrigger>
                   {sensitiveVisible && log.username.length > 12 && (
-                    <TooltipContent side='top'>{log.username}</TooltipContent>
+                    <TooltipContent side="top">{log.username}</TooltipContent>
                   )}
                 </Tooltip>
               </TooltipProvider>
             </button>
-          )
+          );
         },
-        meta: { label: t('User') },
-      }
-    )
+        meta: { label: t("User") },
+      },
+    );
   }
 
   columns.push({
-    accessorKey: 'token_name',
-    header: t('Token'),
+    accessorKey: "token_name",
+    header: t("Token"),
     cell: function TokenNameCell({ row }) {
-      const { sensitiveVisible } = useUsageLogsContext()
-      const log = row.original
-      if (!isDisplayableLogType(log.type)) return null
+      const { sensitiveVisible } = useUsageLogsContext();
+      const log = row.original;
+      if (!isDisplayableLogType(log.type)) return null;
 
-      const tokenName = log.token_name
-      if (!tokenName) return null
+      const tokenName = log.token_name;
+      if (!tokenName) return null;
 
-      const other = parseLogOther(log.other)
-      const displayName = sensitiveVisible ? tokenName : '••••'
-      let group = log.group
-      if (!group) group = other?.group || ''
-      const groupRatio = getGroupRatio(other)
+      const other = parseLogOther(log.other);
+      const displayName = sensitiveVisible ? tokenName : "••••";
+      let group = log.group;
+      if (!group) group = other?.group || "";
+      const groupRatio = getGroupRatio(other);
 
       return (
-        <div className='flex max-w-[200px] flex-col gap-0.5'>
+        <div className="flex max-w-[200px] flex-col gap-0.5">
           <TooltipProvider delay={300}>
             <Tooltip>
-              <TooltipTrigger render={<div className='max-w-full' />}>
+              <TooltipTrigger render={<div className="max-w-full" />}>
                 <StatusBadge
                   label={displayName}
                   icon={KeyRound}
                   copyText={sensitiveVisible ? tokenName : undefined}
-                  size='sm'
+                  size="sm"
                   showDot={false}
-                  className='border-border/60 bg-muted/30 text-foreground h-6 max-w-full gap-1.5 overflow-hidden rounded-md border px-2 py-0.5 [font-family:var(--font-body)]'
+                  className="border-border/60 bg-muted/30 text-foreground h-6 max-w-full gap-1.5 overflow-hidden rounded-md border px-2 py-0.5 [font-family:var(--font-body)]"
                 />
               </TooltipTrigger>
               {sensitiveVisible && tokenName.length > 16 && (
-                <TooltipContent side='top' className='max-w-xs break-all'>
+                <TooltipContent side="top" className="max-w-xs break-all">
                   {tokenName}
                 </TooltipContent>
               )}
             </Tooltip>
           </TooltipProvider>
           {(group || groupRatio != null) && (
-            <span className='block max-w-full truncate text-xs leading-none'>
+            <span className="block max-w-full truncate text-xs leading-none">
               {group ? (
                 <GroupBadge
                   group={group}
-                  label={sensitiveVisible ? undefined : '••••'}
-                  type='text'
-                  size='sm'
-                  className='inline align-baseline text-xs leading-none [&>span]:leading-none'
+                  label={sensitiveVisible ? undefined : "••••"}
+                  type="text"
+                  size="sm"
+                  className="inline align-baseline text-xs leading-none [&>span]:leading-none"
                 />
               ) : null}
-              {group && groupRatio != null ? ' ' : null}
+              {group && groupRatio != null ? " " : null}
               {groupRatio != null ? (
-                <span className='text-muted-foreground/60 relative top-px align-baseline tabular-nums'>
+                <span className="text-muted-foreground/60 relative top-px align-baseline tabular-nums">
                   {formatRatioCompact(groupRatio)}x
                 </span>
               ) : null}
             </span>
           )}
         </div>
-      )
+      );
     },
     size: 160,
-  })
+  });
   columns.push(
     {
-      accessorKey: 'model_name',
-      header: t('Model'),
+      accessorKey: "model_name",
+      header: t("Model"),
       cell: function ModelCell({ row }) {
-        const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
+        const log = row.original;
+        if (!isDisplayableLogType(log.type)) return null;
 
-        const modelInfo = formatModelName(log)
+        const modelInfo = formatModelName(log);
 
         return (
-          <div className='flex w-fit flex-col gap-0.5'>
+          <div className="flex w-fit flex-col gap-0.5">
             <ModelBadge
               modelName={modelInfo.name}
               actualModel={modelInfo.actualModel}
             />
           </div>
-        )
+        );
       },
       meta: { mobileTitle: true },
     },
     {
-      accessorKey: 'is_stream',
-      header: t('Stream'),
+      accessorKey: "is_stream",
+      header: t("Stream"),
       cell: ({ row }) => {
-        const log = row.original
-        if (!isTimingLogType(log.type)) return null
+        const log = row.original;
+        if (!isTimingLogType(log.type)) return null;
 
-        const useTime = row.getValue('use_time') as number
-        const other = parseLogOther(log.other)
+        const useTime = row.getValue("use_time") as number;
+        const other = parseLogOther(log.other);
         const tokensPerSecond =
           useTime > 0 && log.completion_tokens > 0
             ? log.completion_tokens / useTime
-            : null
+            : null;
 
         return (
           <StreamTpsCell
@@ -717,79 +721,79 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             tokensPerSecond={tokensPerSecond}
             streamStatus={other?.stream_status}
           />
-        )
+        );
       },
-      meta: { label: t('Stream') },
+      meta: { label: t("Stream") },
     },
     {
-      accessorKey: 'prompt_tokens',
-      header: 'Tokens',
+      accessorKey: "prompt_tokens",
+      header: "Tokens",
       cell: ({ row }) => {
-        const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
+        const log = row.original;
+        if (!isDisplayableLogType(log.type)) return null;
 
-        const other = parseLogOther(log.other)
+        const other = parseLogOther(log.other);
 
-        const promptTokens = log.prompt_tokens || 0
-        const completionTokens = log.completion_tokens || 0
+        const promptTokens = log.prompt_tokens || 0;
+        const completionTokens = log.completion_tokens || 0;
         if (promptTokens === 0 && completionTokens === 0) {
-          return <span className='text-muted-foreground text-xs'>-</span>
+          return <span className="text-muted-foreground text-xs">-</span>;
         }
 
-        const cacheReadTokens = other?.cache_tokens || 0
-        const cacheWrite5m = other?.cache_creation_tokens_5m || 0
-        const cacheWrite1h = other?.cache_creation_tokens_1h || 0
-        const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
+        const cacheReadTokens = other?.cache_tokens || 0;
+        const cacheWrite5m = other?.cache_creation_tokens_5m || 0;
+        const cacheWrite1h = other?.cache_creation_tokens_1h || 0;
+        const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0;
         const cacheWriteTokens = hasSplitCache
           ? cacheWrite5m + cacheWrite1h
-          : other?.cache_creation_tokens || 0
+          : other?.cache_creation_tokens || 0;
 
         return (
-          <div className='flex flex-col gap-0.5'>
-            <span className='font-mono text-xs font-medium tabular-nums'>
-              {promptTokens.toLocaleString()} /{' '}
+          <div className="flex flex-col gap-0.5">
+            <span className="font-mono text-xs font-medium tabular-nums">
+              {promptTokens.toLocaleString()} /{" "}
               {completionTokens.toLocaleString()}
             </span>
             {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-              <div className='flex items-center gap-1 text-[11px]'>
+              <div className="flex items-center gap-1 text-[11px]">
                 {cacheReadTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+                  <span className="text-muted-foreground/60">
+                    {t("Cache")}↓ {cacheReadTokens.toLocaleString()}
                   </span>
                 )}
                 {cacheWriteTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
+                  <span className="text-muted-foreground/60">
                     ↑ {cacheWriteTokens.toLocaleString()}
                   </span>
                 )}
               </div>
             )}
           </div>
-        )
+        );
       },
     },
     {
-      accessorKey: 'quota',
-      header: t('Cost'),
+      accessorKey: "quota",
+      header: t("Cost"),
       cell: ({ row }) => {
-        const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
+        const log = row.original;
+        if (!isDisplayableLogType(log.type)) return null;
 
-        const quota = row.getValue('quota') as number
-        const other = parseLogOther(log.other)
-        return <LogCostDisplay quota={quota} other={other} />
+        const quota = row.getValue("quota") as number;
+        const other = parseLogOther(log.other);
+        return <LogCostDisplay quota={quota} other={other} />;
       },
     },
 
     {
-      accessorKey: 'use_time',
-      header: t('Timing'),
+      accessorKey: "use_time",
+      header: t("Timing"),
       cell: ({ row }) => {
-        const log = row.original
-        if (!isTimingLogType(log.type)) return null
+        const log = row.original;
+        if (!isTimingLogType(log.type)) return null;
 
-        const useTime = row.getValue('use_time') as number
-        const other = parseLogOther(log.other)
+        const useTime = row.getValue("use_time") as number;
+        const other = parseLogOther(log.other);
 
         return (
           <TimingMetricsCell
@@ -798,66 +802,66 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             frtMs={other?.frt}
             isStream={log.is_stream}
           />
-        )
+        );
       },
-    }
-  )
+    },
+  );
 
   if (isAdmin) {
     columns.push({
-      id: 'upstream_time',
-      header: t('Upstream Time'),
+      id: "upstream_time",
+      header: t("Upstream Time"),
       cell: ({ row }) => {
-        const other = parseLogOther(row.original.other)
-        let upstreamMilliseconds: number | undefined
-        if (other?.request_path === '/async/v1/generateImage') {
+        const other = parseLogOther(row.original.other);
+        let upstreamMilliseconds: number | undefined;
+        if (other?.request_path === "/async/v1/generateImage") {
           upstreamMilliseconds =
-            other.admin_info?.generate_image_timing?.upstream_total_ms
-        } else if (other?.request_path === '/v1/responses') {
+            other.admin_info?.generate_image_timing?.upstream_total_ms;
+        } else if (other?.request_path === "/v1/responses") {
           upstreamMilliseconds =
-            other.admin_info?.responses_timing?.upstream_total_ms
+            other.admin_info?.responses_timing?.upstream_total_ms;
         }
 
         if (upstreamMilliseconds == null) {
-          return <span className='text-muted-foreground text-xs'>—</span>
+          return <span className="text-muted-foreground text-xs">—</span>;
         }
 
         return (
-          <span className='font-mono text-xs font-medium tabular-nums'>
+          <span className="font-mono text-xs font-medium tabular-nums">
             {formatDurationMilliseconds(upstreamMilliseconds)}
           </span>
-        )
+        );
       },
-      meta: { label: t('Upstream Time') },
-    })
+      meta: { label: t("Upstream Time") },
+    });
   }
 
   columns.push({
-    accessorKey: 'content',
-    header: t('Details'),
+    accessorKey: "content",
+    header: t("Details"),
     cell: ({ row }) => (
       <DetailsPreviewCell
         log={row.original}
         isAdmin={isAdmin}
         t={t}
-        className='max-w-[200px]'
+        className="max-w-[200px]"
       />
     ),
     meta: {
-      label: t('Details'),
+      label: t("Details"),
       mobileSpan: 2,
       mobileCell: (cell: Cell<UsageLog, unknown>) => (
         <DetailsPreviewCell
           log={cell.row.original}
           isAdmin={isAdmin}
           t={t}
-          className='max-w-full'
+          className="max-w-full"
         />
       ),
     },
     size: 180,
     maxSize: 200,
-  })
+  });
 
-  return columns
+  return columns;
 }

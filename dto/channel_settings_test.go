@@ -46,6 +46,29 @@ func TestAdvancedCustomValidateResponsesToChatConverterPath(t *testing.T) {
 	}
 }
 
+func TestAdvancedCustomRoutesSplitByClientModel(t *testing.T) {
+	config := &AdvancedCustomConfig{Routes: []AdvancedCustomRoute{
+		{IncomingPath: "/v1/chat/completions", UpstreamPath: "/special", Converter: AdvancedCustomConverterNone, Models: []string{"gpt-4o", "re:^claude-"}},
+		{IncomingPath: "/v1/chat/completions", UpstreamPath: "/fallback", Converter: AdvancedCustomConverterNone},
+	}}
+	require.NoError(t, config.Validate())
+
+	route, ok := config.MatchPathForModel("/v1/chat/completions", "claude-sonnet-4")
+	require.True(t, ok)
+	assert.Equal(t, "/special", route.UpstreamPath)
+	route, ok = config.MatchPathForModel("/v1/chat/completions", "unknown-model")
+	require.True(t, ok)
+	assert.Equal(t, "/fallback", route.UpstreamPath)
+}
+
+func TestAdvancedCustomRoutesRejectSplitAfterFallback(t *testing.T) {
+	config := &AdvancedCustomConfig{Routes: []AdvancedCustomRoute{
+		{IncomingPath: "/v1/chat/completions", UpstreamPath: "/fallback", Converter: AdvancedCustomConverterNone},
+		{IncomingPath: "/v1/chat/completions", UpstreamPath: "/special", Converter: AdvancedCustomConverterNone, Models: []string{"gpt-4o"}},
+	}}
+	assert.ErrorContains(t, config.Validate(), "catch-all route must be last")
+}
+
 func TestChannelOtherSettingsGeminiFileDataCapabilityDefaultsOff(t *testing.T) {
 	var defaultSettings ChannelOtherSettings
 	require.NoError(t, common.Unmarshal([]byte(`{}`), &defaultSettings))

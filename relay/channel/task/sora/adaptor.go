@@ -347,9 +347,25 @@ func firstDirectURL(values ...string) string {
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	data := task.Data
+	canonicalFields := map[string]any{
+		"id":           task.TaskID,
+		"task_id":      task.TaskID,
+		"object":       "video",
+		"model":        task.Properties.OriginModelName,
+		"status":       task.Status.ToVideoStatus(),
+		"created_at":   task.CreatedAt,
+		"completed_at": task.UpdatedAt,
+	}
+	progress := &dto.OpenAIVideo{}
+	progress.SetProgressStr(task.Progress)
+	canonicalFields["progress"] = progress.Progress
+
 	var err error
-	if data, err = sjson.SetBytes(data, "id", task.TaskID); err != nil {
-		return nil, errors.Wrap(err, "set id failed")
+	for field, value := range canonicalFields {
+		data, err = sjson.SetBytes(data, field, value)
+		if err != nil {
+			return nil, errors.Wrapf(err, "set %s failed", field)
+		}
 	}
 	return data, nil
 }

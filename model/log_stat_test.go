@@ -84,6 +84,8 @@ func TestSumQuotaByLogTypeSumsRefundsSeparately(t *testing.T) {
 	stat, err := SumUsedQuota(LogTypeUnknown, now-10, now+10, "gpt-test", "alice", "token-a", 7, "default")
 	require.NoError(t, err)
 	require.Equal(t, 1500, stat.Quota)
+	require.Equal(t, 2, stat.Rpm)
+	require.Equal(t, 0, stat.Tpm)
 
 	refundQuota, err := SumQuotaByLogType(LogTypeRefund, now-10, now+10, "gpt-test", "alice", "token-a", 7, "default")
 	require.NoError(t, err)

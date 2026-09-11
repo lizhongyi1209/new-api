@@ -48,6 +48,16 @@ const channelActionConfig = (
   skipErrorHandler: true,
 })
 
+export type TaskPluginOption = { key: string; name: string; models: string[] }
+
+export async function getTaskPluginOptions(): Promise<TaskPluginOption[]> {
+  const response = await api.get<{
+    success: boolean
+    data: TaskPluginOption[]
+  }>('/api/task_plugin_options')
+  return response.data.data
+}
+
 export type CodexUsageResponse = {
   success: boolean
   message?: string
@@ -295,13 +305,16 @@ export async function deleteDisabledChannels(): Promise<{
  */
 export async function getChannelKey(
   id: number,
-  code?: string
+  proofToken: string,
+  signal?: AbortSignal
 ): Promise<{ success: boolean; message?: string; data?: { key: string } }> {
-  const payload = code ? { code } : undefined
   const res = await api.post(
     `/api/channel/${id}/key`,
-    payload,
-    channelActionConfig()
+    undefined,
+    channelActionConfig({
+      headers: { 'X-Security-Proof': proofToken },
+      signal,
+    })
   )
   return res.data
 }
@@ -523,12 +536,16 @@ export async function getTagModels(
 // ============================================================================
 
 /**
- * Fetch models from a custom endpoint (for testing before creating channel)
+ * Fetch models from the current unsaved channel form configuration.
  */
 export async function fetchModels(data: {
   base_url: string
   type: number
-  key: string
+  key?: string
+  channel_id?: number
+  advanced_custom?: string
+  header_override?: string
+  proxy?: string
 }): Promise<FetchModelsResponse> {
   const res = await api.post(
     '/api/channel/fetch_models',

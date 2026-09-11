@@ -132,6 +132,7 @@ export interface AdvancedCustomRoute {
   incoming_path?: string
   upstream_path?: string
   converter?: AdvancedCustomConverter
+  models?: string[]
   auth?: AdvancedCustomRouteAuth
 }
 
@@ -208,6 +209,7 @@ export interface ChannelBalanceResponse {
   message?: string
   balance?: number
   currency?: string
+  raw_response?: string
 }
 
 export interface FetchModelsResponse {

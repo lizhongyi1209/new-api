@@ -96,6 +96,46 @@ func TestGeneralOpenAIRequestDropsThinkingBudgetForNonQwenModel(t *testing.T) {
 	assert.False(t, gjson.GetBytes(encoded, "thinking_budget").Exists())
 }
 
+func TestGeneralOpenAIRequestPreservesVLLMThinkingTokenBudget(t *testing.T) {
+	req := GeneralOpenAIRequest{
+		Model:               "local-model",
+		ThinkingTokenBudget: json.RawMessage(`0`),
+	}
+
+	encoded, err := common.Marshal(req)
+	require.NoError(t, err)
+
+	value := gjson.GetBytes(encoded, "thinking_token_budget")
+	assert.True(t, value.Exists())
+	assert.Equal(t, int64(0), value.Int())
+}
+
+func TestGeneralOpenAIRequestPreservesKimiDynamicToolMessage(t *testing.T) {
+	req := GeneralOpenAIRequest{
+		Model: "kimi-k3",
+		Messages: []Message{
+			{Role: "system", Tools: json.RawMessage(`[{"type":"function","function":{"name":"lookup"}}]`)},
+			{Role: "assistant", Content: nil},
+		},
+	}
+
+	encoded, err := common.Marshal(req)
+	require.NoError(t, err)
+
+	var payload struct {
+		Messages []map[string]json.RawMessage `json:"messages"`
+	}
+	require.NoError(t, common.Unmarshal(encoded, &payload))
+	require.Len(t, payload.Messages, 2)
+	assert.NotContains(t, payload.Messages[0], "content")
+	assert.Contains(t, payload.Messages[0], "tools")
+	assert.Contains(t, payload.Messages[1], "content")
+
+	meta := req.GetTokenCountMeta()
+	assert.Equal(t, 1, meta.ToolsCount)
+	assert.Contains(t, meta.CombineText, "lookup")
+}
+
 func TestIsQwenThinkingBudgetModel(t *testing.T) {
 	tests := []struct {
 		model string
@@ -191,6 +231,11 @@ func TestGeneralOpenAIRequestGetSystemRoleName(t *testing.T) {
 		{name: "o1 mini stays system", model: "o1-mini", want: "system"},
 		{name: "o1 preview stays system", model: "o1-preview", want: "system"},
 		{name: "gpt 5 uses developer", model: "gpt-5", want: "developer"},
+		{name: "gpt 5 snapshot uses developer", model: "gpt-5.4-2026-03-05", want: "developer"},
+		{name: "gpt 6 astra uses developer", model: "gpt-6-astra", want: "developer"},
+		{name: "gpt 6 astra snapshot uses developer", model: "gpt-6-astra-2026-09-01", want: "developer"},
+		{name: "invalid gpt 6 astra suffix stays system", model: "gpt-6-astra-preview", want: "system"},
+		{name: "unrecognized gpt 6 stays system", model: "gpt-6", want: "system"},
 		{name: "omni is not o series", model: "omni-moderation-latest", want: "system"},
 	}
 
@@ -201,4 +246,40 @@ func TestGeneralOpenAIRequestGetSystemRoleName(t *testing.T) {
 			require.Equal(t, tt.want, req.GetSystemRoleName())
 		})
 	}
+}
+
+func TestOpenAIChatCapabilities(t *testing.T) {
+	tests := []struct {
+		name                string
+		model               string
+		effort              string
+		useMaxTokens        bool
+		supportsTemperature bool
+		supportsTopP        bool
+		supportsLogProbs    bool
+	}{
+		{name: "unknown model unchanged", model: "gpt-6-preview", supportsTemperature: true, supportsTopP: true, supportsLogProbs: true},
+		{name: "gpt 5.2 no reasoning supports sampling", model: "gpt-5.2", useMaxTokens: true, supportsTemperature: true, supportsTopP: true, supportsLogProbs: true},
+		{name: "gpt 5.2 reasoning drops sampling", model: "gpt-5.2", effort: "high", useMaxTokens: true},
+		{name: "gpt 5 codex drops sampling", model: "gpt-5-codex", useMaxTokens: true},
+		{name: "gpt 6 astra drops sampling", model: "gpt-6-astra-2026-09-01", useMaxTokens: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			capabilities := GetOpenAIChatCapabilities(tt.model, tt.effort)
+			assert.Equal(t, tt.useMaxTokens, capabilities.UseMaxCompletionTokens)
+			assert.Equal(t, tt.supportsTemperature, capabilities.SupportsTemperature)
+			assert.Equal(t, tt.supportsTopP, capabilities.SupportsTopP)
+			assert.Equal(t, tt.supportsLogProbs, capabilities.SupportsLogProbs)
+		})
+	}
+}
+
+func TestIsOpenAIGPT5ModelUsesFamilyBoundaries(t *testing.T) {
+	assert.True(t, IsOpenAIGPT5Model("gpt-5"))
+	assert.True(t, IsOpenAIGPT5Model("gpt-5-codex"))
+	assert.True(t, IsOpenAIGPT5Model("gpt-5.4"))
+	assert.False(t, IsOpenAIGPT5Model("gpt-50"))
+	assert.False(t, IsOpenAIGPT5Model("gpt-5x"))
 }

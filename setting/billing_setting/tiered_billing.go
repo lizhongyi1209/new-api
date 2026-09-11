@@ -47,6 +47,14 @@ func GetBillingExpr(model string) (string, bool) {
 	return expr, ok
 }
 
+func GetBuiltinBillingExpr(model string) (string, bool) {
+	return "", false
+}
+
+func GetBuiltinBillingExprCopy() map[string]string {
+	return map[string]string{}
+}
+
 func GetBillingModeCopy() map[string]string {
 	return lo.Assign(billingSetting.BillingMode)
 }

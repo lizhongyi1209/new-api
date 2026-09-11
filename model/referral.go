@@ -120,6 +120,10 @@ func GetReferralProgramSummary(inviterId int) (*ReferralProgramSummary, error) {
 		if err != nil {
 			return nil, err
 		}
+		// GORM Scan zeroes fields that are not selected. Restore the values that
+		// are derived from the current traversal level rather than SQL columns.
+		levelSummary.Level = level
+		levelSummary.RewardRate = rewardRate
 		levelSummary.Revenue, err = referralRevenue(levelSummary.TotalTopUp, level)
 		if err != nil {
 			return nil, err

@@ -41,4 +41,8 @@ func UsingLogDatabase(databaseType DatabaseType) bool {
 	return logDatabaseType == databaseType
 }
 
-var SQLitePath = "one-api.db?_busy_timeout=30000"
+// SQLitePath enables WAL for concurrent readers and serializes writers through
+// a working 30-second busy timeout. The pure-Go driver ignores `_busy_timeout`;
+// busy_timeout must be supplied as a pragma. Immediate transactions prevent a
+// read-then-write transaction from failing with SQLITE_BUSY_SNAPSHOT.
+var SQLitePath = "one-api.db?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_txlock=immediate"

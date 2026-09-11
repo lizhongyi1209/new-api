@@ -115,7 +115,7 @@ func TestRegisterStoresInviterFromInvitationCode(t *testing.T) {
 	}
 	require.NoError(t, model.DB.Create(&inviter).Error)
 
-	response := performRegisterRequest(t, `{"username":"new-user","password":"password123","aff_code":" joinme "}`)
+	response := performRegisterRequest(t, `{"username":"new-user","password":"Cedar-harbor-2026!","aff_code":" joinme "}`)
 	assert.True(t, response.Success)
 	assert.Empty(t, response.Message)
 

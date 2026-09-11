@@ -102,6 +102,7 @@ var ItemsPerPage = 10
 var MaxRecentItems = 1000
 
 var PasswordLoginEnabled = true
+var PasswordLoginEncryptionEnabled = false
 var PasswordRegisterEnabled = true
 var EmailVerificationEnabled = false
 var GitHubOAuthEnabled = false
@@ -173,6 +174,11 @@ var QuotaRemindThreshold = 1000
 var PreConsumedQuota = 500
 
 var RetryTimes = 0
+
+// RelayResponseHeaderTimeout limits how long relay transports wait for an
+// upstream response header after the request has been written. A value of 0
+// disables the limit; streaming after the headers arrive is unaffected.
+var RelayResponseHeaderTimeout int // unit is second
 
 //var RootUserEmail = ""
 

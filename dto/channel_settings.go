@@ -3,7 +3,9 @@ package dto
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
+	"sync"
 )
 
 type ChannelSettings struct {
@@ -164,6 +166,7 @@ type AdvancedCustomRoute struct {
 	IncomingPath string                   `json:"incoming_path,omitempty"`
 	UpstreamPath string                   `json:"upstream_path,omitempty"`
 	Converter    string                   `json:"converter,omitempty"`
+	Models       []string                 `json:"models,omitempty"`
 	Auth         *AdvancedCustomRouteAuth `json:"auth,omitempty"`
 }
 
@@ -173,7 +176,12 @@ type AdvancedCustomRouteAuth struct {
 	Value string `json:"value,omitempty"`
 }
 
-const advancedCustomModelPlaceholder = "{model}"
+const (
+	advancedCustomModelPlaceholder = "{model}"
+	advancedCustomModelRegexPrefix = "re:"
+	AdvancedCustomModelListPath    = "/v1/models"
+	AdvancedCustomBalancePath      = "/v1/dashboard/billing/credit_grants"
+)
 
 // MatchPath returns the first route whose IncomingPath matches requestPath.
 // Matching mirrors the relay adaptor: exact match, {model} placeholder, and
@@ -190,10 +198,84 @@ func (c *AdvancedCustomConfig) MatchPath(requestPath string) (AdvancedCustomRout
 	return AdvancedCustomRoute{}, false
 }
 
+// MatchPathForModel selects a model-specific route before a catch-all route.
+func (c *AdvancedCustomConfig) MatchPathForModel(requestPath string, model string) (AdvancedCustomRoute, bool) {
+	if c == nil {
+		return AdvancedCustomRoute{}, false
+	}
+	model = strings.TrimSpace(model)
+	for _, route := range c.Routes {
+		if matchAdvancedCustomIncomingPath(strings.TrimSpace(route.IncomingPath), requestPath) &&
+			matchAdvancedCustomRouteModel(route.Models, model) {
+			return route, true
+		}
+	}
+	return AdvancedCustomRoute{}, false
+}
+
+func (c *AdvancedCustomConfig) ModelListRoute() (AdvancedCustomRoute, bool) {
+	return c.managementRoute(AdvancedCustomModelListPath)
+}
+
+func (c *AdvancedCustomConfig) BalanceRoute() (AdvancedCustomRoute, bool) {
+	return c.managementRoute(AdvancedCustomBalancePath)
+}
+
+func (c *AdvancedCustomConfig) managementRoute(path string) (AdvancedCustomRoute, bool) {
+	if c == nil {
+		return AdvancedCustomRoute{}, false
+	}
+	for _, route := range c.Routes {
+		if strings.TrimSpace(route.IncomingPath) == path {
+			return route, true
+		}
+	}
+	return AdvancedCustomRoute{}, false
+}
+
 // SupportsPath reports whether any route matches requestPath.
 func (c *AdvancedCustomConfig) SupportsPath(requestPath string) bool {
 	_, ok := c.MatchPath(requestPath)
 	return ok
+}
+
+func (c *AdvancedCustomConfig) SupportsPathForModel(requestPath string, model string) bool {
+	_, ok := c.MatchPathForModel(requestPath, model)
+	return ok
+}
+
+func matchAdvancedCustomRouteModel(models []string, model string) bool {
+	normalized := normalizeAdvancedCustomRouteModels(models)
+	if len(normalized) == 0 {
+		return true
+	}
+	for _, rule := range normalized {
+		if !strings.HasPrefix(rule, advancedCustomModelRegexPrefix) && rule == model {
+			return true
+		}
+		if strings.HasPrefix(rule, advancedCustomModelRegexPrefix) {
+			pattern := strings.TrimPrefix(rule, advancedCustomModelRegexPrefix)
+			if compiled := compileAdvancedCustomModelRegex(pattern); compiled != nil && compiled.MatchString(model) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+var advancedCustomModelRegexCache sync.Map
+
+func compileAdvancedCustomModelRegex(pattern string) *regexp.Regexp {
+	if cached, ok := advancedCustomModelRegexCache.Load(pattern); ok {
+		compiled, _ := cached.(*regexp.Regexp)
+		return compiled
+	}
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		compiled = nil
+	}
+	advancedCustomModelRegexCache.Store(pattern, compiled)
+	return compiled
 }
 
 func matchAdvancedCustomIncomingPath(configuredPath string, requestPath string) bool {
@@ -247,7 +329,8 @@ func (c *AdvancedCustomConfig) Validate() error {
 		return fmt.Errorf("advanced_custom requires at least one route")
 	}
 
-	seenPaths := make(map[string]struct{}, len(c.Routes))
+	paths := make(map[string]*advancedCustomPathModelState, len(c.Routes))
+	managementRoutes := make(map[string]int, 2)
 	for i := range c.Routes {
 		route := c.Routes[i]
 		route.IncomingPath = strings.TrimSpace(route.IncomingPath)
@@ -266,10 +349,24 @@ func (c *AdvancedCustomConfig) Validate() error {
 		if strings.Contains(route.IncomingPath, "?") {
 			return fmt.Errorf("advanced_custom.advanced_routes[%d].incoming_path must not include query", i)
 		}
-		if _, exists := seenPaths[route.IncomingPath]; exists {
-			return fmt.Errorf("advanced_custom.advanced_routes[%d].incoming_path must be unique: %s", i, route.IncomingPath)
+		if route.IncomingPath == AdvancedCustomModelListPath || route.IncomingPath == AdvancedCustomBalancePath {
+			if previous, exists := managementRoutes[route.IncomingPath]; exists {
+				return fmt.Errorf("advanced_custom.advanced_routes[%d] duplicates the %s route at advanced_routes[%d]", i, route.IncomingPath, previous)
+			}
+			managementRoutes[route.IncomingPath] = i
+			if len(normalizeAdvancedCustomRouteModels(route.Models)) > 0 {
+				return fmt.Errorf("advanced_custom.advanced_routes[%d].models must be empty for %s", i, route.IncomingPath)
+			}
+			if route.Converter != AdvancedCustomConverterNone {
+				return fmt.Errorf("advanced_custom.advanced_routes[%d].converter must be none for %s", i, route.IncomingPath)
+			}
+			if strings.Contains(upstreamPath, advancedCustomModelPlaceholder) {
+				return fmt.Errorf("advanced_custom.advanced_routes[%d].upstream_path must not contain %s for %s", i, advancedCustomModelPlaceholder, route.IncomingPath)
+			}
 		}
-		seenPaths[route.IncomingPath] = struct{}{}
+		if err := validateAdvancedCustomRouteModels(i, route.IncomingPath, route.Models, paths); err != nil {
+			return err
+		}
 
 		if upstreamPath == "" {
 			return fmt.Errorf("advanced_custom.advanced_routes[%d].upstream_path is required", i)
@@ -290,6 +387,58 @@ func (c *AdvancedCustomConfig) Validate() error {
 	}
 
 	return nil
+}
+
+type advancedCustomPathModelState struct {
+	catchAllIndex int
+	modelIndexes  map[string]int
+}
+
+func validateAdvancedCustomRouteModels(index int, incomingPath string, models []string, paths map[string]*advancedCustomPathModelState) error {
+	state := paths[incomingPath]
+	if state == nil {
+		state = &advancedCustomPathModelState{catchAllIndex: -1, modelIndexes: make(map[string]int)}
+		paths[incomingPath] = state
+	}
+	normalized := normalizeAdvancedCustomRouteModels(models)
+	if len(normalized) == 0 {
+		if state.catchAllIndex >= 0 {
+			return fmt.Errorf("advanced_custom.advanced_routes[%d].models catch-all already exists for incoming_path: %s", index, incomingPath)
+		}
+		state.catchAllIndex = index
+		return nil
+	}
+	if state.catchAllIndex >= 0 {
+		return fmt.Errorf("advanced_custom.advanced_routes[%d].models catch-all route must be last for incoming_path: %s", index, incomingPath)
+	}
+	seen := make(map[string]struct{}, len(normalized))
+	for _, model := range normalized {
+		if strings.HasPrefix(model, advancedCustomModelRegexPrefix) {
+			pattern := strings.TrimPrefix(model, advancedCustomModelRegexPrefix)
+			if pattern == "" || compileAdvancedCustomModelRegex(pattern) == nil {
+				return fmt.Errorf("advanced_custom.advanced_routes[%d].models regex is invalid for incoming_path %s: %s", index, incomingPath, model)
+			}
+		}
+		if _, exists := seen[model]; exists {
+			return fmt.Errorf("advanced_custom.advanced_routes[%d].models contains duplicate model for incoming_path %s: %s", index, incomingPath, model)
+		}
+		seen[model] = struct{}{}
+		if previous, exists := state.modelIndexes[model]; exists {
+			return fmt.Errorf("advanced_custom.advanced_routes[%d].models overlaps with advanced_routes[%d] for incoming_path %s: %s", index, previous, incomingPath, model)
+		}
+		state.modelIndexes[model] = index
+	}
+	return nil
+}
+
+func normalizeAdvancedCustomRouteModels(models []string) []string {
+	normalized := make([]string, 0, len(models))
+	for _, model := range models {
+		if model = strings.TrimSpace(model); model != "" {
+			normalized = append(normalized, model)
+		}
+	}
+	return normalized
 }
 
 func validateAdvancedCustomUpstreamTarget(index int, upstreamPath string) error {
