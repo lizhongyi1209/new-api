@@ -192,7 +192,7 @@ func InitOptionMap() {
 
 func ensureDefaultR2PublicUploadClients() {
 	var count int64
-	if err := DB.Model(&Option{}).Where("key = ?", setting.R2PublicUploadClientsOptionKey).Count(&count).Error; err != nil || count > 0 {
+	if err := DB.Model(&Option{}).Where(commonKeyCol+" = ?", setting.R2PublicUploadClientsOptionKey).Count(&count).Error; err != nil || count > 0 {
 		return
 	}
 	clients, err := setting.NewDefaultR2PublicUploadClients()

@@ -274,6 +274,9 @@ func migrateDB() error {
 	if err := migrateOptionPrimaryKey(DB); err != nil {
 		common.SysError("failed to migrate options primary key: " + err.Error())
 	}
+	if err := migratePrefillGroupSchema(DB); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -293,7 +296,6 @@ func migrateDB() error {
 		&Task{},
 		&Model{},
 		&Vendor{},
-		&PrefillGroup{},
 		&Setup{},
 		&TwoFA{},
 		&TwoFABackupCode{},

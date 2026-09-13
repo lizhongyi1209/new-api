@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 
 	"github.com/QuantumNous/new-api/common"
 
@@ -82,6 +83,38 @@ type PrefillGroup struct {
 	CreatedTime int64          `json:"created_time" gorm:"bigint"`
 	UpdatedTime int64          `json:"updated_time" gorm:"bigint"`
 	DeletedAt   gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+func migratePrefillGroupSchema(db *gorm.DB) error {
+	if db == nil {
+		return nil
+	}
+	if db.Dialector.Name() != "postgres" || !db.Migrator().HasTable(&PrefillGroup{}) {
+		return db.AutoMigrate(&PrefillGroup{})
+	}
+
+	const legacyConstraint = "idx_prefill_groups_name"
+	if !db.Migrator().HasConstraint(&PrefillGroup{}, legacyConstraint) {
+		return db.AutoMigrate(&PrefillGroup{})
+	}
+
+	// GORM 1.25.12 mistakes the legacy full unique constraint for the partial
+	// unique index declared on Name and tries to drop a constraint with a
+	// generated, non-existent name. Temporarily remove the legacy constraint so
+	// GORM can reconcile the table, then restore it before committing. Keeping
+	// the existing constraint preserves current production and rollback behavior.
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Migrator().DropConstraint(&PrefillGroup{}, legacyConstraint); err != nil {
+			return fmt.Errorf("temporarily drop legacy prefill group name constraint: %w", err)
+		}
+		if err := tx.AutoMigrate(&PrefillGroup{}); err != nil {
+			return fmt.Errorf("migrate prefill group schema: %w", err)
+		}
+		if err := tx.Exec(`ALTER TABLE "prefill_groups" ADD CONSTRAINT "idx_prefill_groups_name" UNIQUE ("name")`).Error; err != nil {
+			return fmt.Errorf("restore legacy prefill group name constraint: %w", err)
+		}
+		return nil
+	})
 }
 
 // Insert 新建组
