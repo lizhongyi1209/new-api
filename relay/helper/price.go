@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
@@ -138,9 +140,15 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 			return types.PriceData{}, err
 		}
 		preConsumedQuota = quota
+		if _, image := info.Request.(*dto.ImageRequest); image {
+			info.ImageQuotaBeforeGroup = float64(preConsumedTokens) * modelRatio
+		}
 	} else {
 		if meta.ImagePriceRatio != 0 {
 			modelPrice = modelPrice * meta.ImagePriceRatio
+		}
+		if _, image := info.Request.(*dto.ImageRequest); image {
+			info.ImageQuotaBeforeGroup = modelPrice * common.QuotaPerUnit
 		}
 	}
 
@@ -184,11 +192,26 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		for name, ratio := range meta.BillingRatios {
 			priceData.AddOtherRatio(name, ratio)
 		}
-		quotaToPreConsume := modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio
-		for _, ratio := range priceData.OtherRatios {
-			quotaToPreConsume *= ratio
-		}
+		quotaToPreConsume := priceData.ApplyOtherRatiosToFloat(modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 		quota, err := common.QuotaFromFloatStrict(quotaToPreConsume)
+		if err != nil {
+			return types.PriceData{}, err
+		}
+		priceData.QuotaToPreConsume = quota
+	}
+	if request, image := info.Request.(*dto.ImageRequest); image {
+		channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
+		count, err := request.ImageCount(channelType == constant.ChannelTypeAli)
+		if err != nil {
+			return types.PriceData{}, err
+		}
+		if usePrice || channelType == constant.ChannelTypeAli {
+			priceData.AddOtherRatio("n", float64(count))
+		}
+		if channelType == constant.ChannelTypeAli && request.BillingParameters != nil && request.BillingParameters.PromptExtend != nil && *request.BillingParameters.PromptExtend && strings.Contains(info.OriginModelName, "z-image") {
+			priceData.AddOtherRatio("prompt_extend", common.ZImagePromptExtendMultiplier)
+		}
+		quota, err := common.QuotaFromFloatStrict(priceData.ApplyOtherRatiosToFloat(info.ImageQuotaBeforeGroup * groupRatioInfo.GroupRatio))
 		if err != nil {
 			return types.PriceData{}, err
 		}
@@ -300,8 +323,15 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, promptT
 	if err != nil {
 		return types.PriceData{}, err
 	}
+	exprHash := billingexpr.ExprHashString(exprStr)
+	if billingexpr.UsedVarsByHash(exprStr, exprHash)["image_count"] {
+		requestInput, err = ResolveImageBillingRequestInput(c, info, requestInput)
+		if err != nil {
+			return types.PriceData{}, err
+		}
+	}
 
-	rawCost, trace, err := billingexpr.RunExprWithRequest(exprStr, billingexpr.TokenParams{
+	rawCost, trace, err := billingexpr.RunExprByHashWithRequest(exprStr, exprHash, billingexpr.TokenParams{
 		P:   float64(promptTokens),
 		C:   float64(estimatedCompletionTokens),
 		Len: float64(promptTokens),
@@ -325,8 +355,8 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, promptT
 		}
 	}
 
-	exprHash := billingexpr.ExprHashString(exprStr)
 	snapshot := &billingexpr.BillingSnapshot{
+		EstimatedImageCount:       trace.ImageCount,
 		BillingMode:               billing_setting.BillingModeTieredExpr,
 		ModelName:                 info.OriginModelName,
 		ExprString:                exprStr,

@@ -317,6 +317,11 @@ func InjectTieredBillingInfo(other map[string]interface{}, relayInfo *relaycommo
 	other["billing_mode"] = "tiered_expr"
 	other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
 	if result != nil {
+		if result.ImageCount != nil {
+			other["image_count"] = *result.ImageCount
+		}
 		other["matched_tier"] = result.MatchedTier
+	} else if snap.EstimatedImageCount != nil {
+		other["image_count"] = *snap.EstimatedImageCount
 	}
 }

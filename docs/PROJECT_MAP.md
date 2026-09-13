@@ -64,6 +64,17 @@ Aliases: 状态请求去重, status dedup, 日志分组筛选, log group filter.
 - Shared cached status query and consumers: `web/default/src/lib/status-query.ts`, `web/default/src/hooks/use-status.ts`, `web/default/src/hooks/use-system-config.ts`.
 - Group-aware log query and filter UI: `model/log.go`, `controller/log.go`, `web/default/src/features/usage-logs/components/common-logs-filter-bar.tsx`.
 
+## Image quantity validation and billing reservation
+
+Aliases: 图片数量, 图片预扣费, image_count, parameters.n, image reservation, 图像重试退款.
+
+- Public routes: `/v1/images/generations`, `/v1/images/edits` in `router/relay-router.go`; dispatch: `controller/relay.go`.
+- Request quantities and provider parameter validation: `dto/openai_image.go`, `relay/helper/valid_request.go`.
+- Final outbound quantity, overrides and retry preparation: `relay/image_handler.go`; Ali forwarding: `relay/channel/ali/image.go`, `relay/channel/ali/image_wan.go`.
+- Per-attempt reservation: `service/image_billing.go`; atomic wallet reservation and full refunds: `service/billing_session.go`, `service/funding_source.go`.
+- Expression quantity input and settlement: `relay/helper/billing_expr_request.go`, `pkg/billingexpr/`, `service/tiered_settle.go`.
+- Contract tests: `relay/image_billing_test.go`, `relay/helper/openai_image_request_test.go`, `service/tiered_settle_test.go`.
+
 ## Image output strategy
 
 Aliases: 图片输出策略, 媒体输出策略, 视频输出策略, image output strategy, media output strategy, 图片落盘, 视频存储, 本机临时图片, temporary image, CF 图片, Cloudflare 图片, ESA 图片, `/tmp/output`, `/async/v1/generateImage`.

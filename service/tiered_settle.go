@@ -181,6 +181,11 @@ func TryTieredSettle(relayInfo *relaycommon.RelayInfo, params billingexpr.TokenP
 	if relayInfo.BillingRequestInput != nil {
 		requestInput = *relayInfo.BillingRequestInput
 	}
+	if relayInfo.BillingImageCount != nil {
+		requestInput.ImageCount = relayInfo.BillingImageCount
+	} else if snap.EstimatedImageCount != nil {
+		requestInput.ImageCount = snap.EstimatedImageCount
+	}
 
 	tr, err := billingexpr.ComputeTieredQuotaWithRequest(snap, params, requestInput)
 	if err != nil {

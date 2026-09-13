@@ -49,7 +49,9 @@ func (w *WalletFunding) PreConsume(amount int) error {
 	if !reserved {
 		return ErrInsufficientWalletQuota
 	}
-	w.consumed = amount
+	// A request can reserve additional quota before a retry or after a channel
+	// override. Track the full held amount so a later refund returns everything.
+	w.consumed += amount
 	return nil
 }
 

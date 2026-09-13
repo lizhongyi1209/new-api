@@ -4,6 +4,7 @@
 .claude
 data
 logs
+backups
 *.md
 .vscode
 .gitignore

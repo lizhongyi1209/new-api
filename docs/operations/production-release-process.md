@@ -2,6 +2,12 @@
 
 Production releases use `custom` as the only release branch. A hotfix may be developed elsewhere, but its commit history must be merged back into `custom` before another production deployment. Do not deploy a detached HEAD or a commit that is not on `origin/custom`.
 
+Exception: when the user explicitly requests a local-only production release without a Git push, set `LOCAL_RELEASE=1`. The worktree must still be clean, the branch must still be `custom`, and both `origin/custom` and the latest production tag must be ancestors of the candidate. This mode creates the production tag locally but does not push any Git refs. It does not imply that remote CI has run; complete local validation and a fresh verified database backup before deployment.
+
+```bash
+LOCAL_RELEASE=1 DEPLOY_CONFIRM=DEPLOY_NEW_API_PRODUCTION scripts/deploy-production.sh deploy
+```
+
 ## Required flow
 
 1. Merge or cherry-pick the change into `custom` and push it.

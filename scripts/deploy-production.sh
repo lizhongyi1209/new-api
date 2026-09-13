@@ -13,6 +13,7 @@ usage() {
   echo "  check   Validate repository and production ancestry without changing runtime state."
   echo "  build   Run checks and build an immutable, revision-labelled image; does not deploy."
   echo "  deploy  Build and deploy. Requires DEPLOY_CONFIRM=${deploy_confirmation}."
+  echo "  Set LOCAL_RELEASE=1 to deploy local commits without pushing Git refs."
 }
 
 fail() {
@@ -30,7 +31,12 @@ check_release() {
   [[ "${current_branch}" == "${production_branch}" ]] || fail "branch must be ${production_branch}, got ${current_branch:-detached HEAD}"
   [[ -z "$(git status --porcelain)" ]] || fail "working tree is not clean"
   git show-ref --verify --quiet "refs/remotes/origin/${production_branch}" || fail "origin/${production_branch} is missing; run git fetch first"
-  [[ "${head_sha}" == "$(git rev-parse "origin/${production_branch}")" ]] || fail "HEAD must exactly match origin/${production_branch}"
+  if [[ "${LOCAL_RELEASE:-0}" == "1" ]]; then
+    git merge-base --is-ancestor "origin/${production_branch}" HEAD || fail "local release must contain origin/${production_branch}"
+    echo "Local release: Git refs will not be pushed."
+  else
+    [[ "${head_sha}" == "$(git rev-parse "origin/${production_branch}")" ]] || fail "HEAD must exactly match origin/${production_branch}"
+  fi
 
   local latest_production_tag
   latest_production_tag=$(git for-each-ref --count=1 --sort=-creatordate --format='%(refname:short)' "refs/tags/${production_tag_prefix}*")
@@ -98,7 +104,9 @@ case "${command}" in
     [[ "$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "${production_container}")" == "healthy" ]] || fail "deployed container did not become healthy"
     smoke_test
     git tag -a "${release_tag}" -m "Production deployment ${head_sha}"
-    git push origin "refs/tags/${release_tag}"
+    if [[ "${LOCAL_RELEASE:-0}" != "1" ]]; then
+      git push origin "refs/tags/${release_tag}"
+    fi
     echo "Deployed and tagged ${release_tag}"
     ;;
   *)

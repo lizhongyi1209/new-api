@@ -10,6 +10,9 @@ import (
 type RequestInput struct {
 	Headers map[string]string
 	Body    []byte
+	// ImageCount is a validated billing quantity, separate from the frozen
+	// request body. Channel overrides may replace it before submission.
+	ImageCount *int
 }
 
 // TokenParams holds all token dimensions passed into an Expr evaluation.
@@ -32,6 +35,7 @@ type TokenParams struct {
 // during Expr execution. This replaces the old Breakdown mechanism —
 // the Expr itself is the single source of truth for billing logic.
 type TraceResult struct {
+	ImageCount  *int    `json:"image_count,omitempty"`
 	MatchedTier string  `json:"matched_tier"`
 	Cost        float64 `json:"cost"`
 }
@@ -41,6 +45,7 @@ type TraceResult struct {
 // auto-group retry and settlement. It is fully serializable and contains no
 // compiled program pointers.
 type BillingSnapshot struct {
+	EstimatedImageCount       *int    `json:"estimated_image_count,omitempty"`
 	BillingMode               string  `json:"billing_mode"`
 	ModelName                 string  `json:"model_name"`
 	ExprString                string  `json:"expr_string"`
@@ -57,6 +62,7 @@ type BillingSnapshot struct {
 
 // TieredResult holds everything needed after running tiered settlement.
 type TieredResult struct {
+	ImageCount             *int    `json:"image_count,omitempty"`
 	ActualQuotaBeforeGroup float64 `json:"actual_quota_before_group"`
 	ActualQuotaAfterGroup  int     `json:"actual_quota_after_group"`
 	MatchedTier            string  `json:"matched_tier"`

@@ -90,6 +90,25 @@ func TestTryTieredSettleUsesFrozenRequestInput(t *testing.T) {
 	}
 }
 
+func TestInjectTieredBillingInfoRecordsSettledImageCount(t *testing.T) {
+	expr := `tier("image", 40000) * image_count`
+	count := 3
+	info := &relaycommon.RelayInfo{TieredBillingSnapshot: &billingexpr.BillingSnapshot{
+		BillingMode: "tiered_expr",
+		ExprString:  expr,
+		ExprHash:    billingexpr.ExprHashString(expr),
+	}}
+	other := map[string]any{}
+
+	InjectTieredBillingInfo(other, info, &billingexpr.TieredResult{
+		ImageCount:  &count,
+		MatchedTier: "image",
+	})
+
+	assert.Equal(t, count, other["image_count"])
+	assert.Equal(t, "image", other["matched_tier"])
+}
+
 func TestTryTieredSettleFallsBackToFrozenPreConsumeOnExprError(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		FinalPreConsumedQuota: 321,
@@ -512,6 +531,49 @@ func TestBillingSessionReserveWalletTopUpDecrementsBalance(t *testing.T) {
 	userQuota, err := model.GetUserQuota(userID, false)
 	require.NoError(t, err)
 	assert.Equal(t, 450_000, userQuota)
+}
+
+func TestImageBillingSessionReserveRejectsInsufficientWalletWithoutDebt(t *testing.T) {
+	truncate(t)
+
+	const userID = 703
+	seedUser(t, userID, 30_000)
+	relayInfo := &relaycommon.RelayInfo{
+		UserId:       userID,
+		IsPlayground: true,
+		Request:      &dto.ImageRequest{},
+	}
+	session := &BillingSession{
+		relayInfo:        relayInfo,
+		funding:          &WalletFunding{userId: userID, consumed: 20_000},
+		preConsumedQuota: 20_000,
+	}
+
+	err := session.Reserve(80_000)
+	require.Error(t, err)
+	assert.Equal(t, 20_000, session.GetPreConsumedQuota())
+	userQuota, quotaErr := model.GetUserQuota(userID, false)
+	require.NoError(t, quotaErr)
+	assert.Equal(t, 30_000, userQuota, "failed image reservation must not create wallet debt")
+}
+
+func TestWalletFundingRepeatedReservationsRefundFullAmount(t *testing.T) {
+	truncate(t)
+
+	const userID = 704
+	seedUser(t, userID, 100_000)
+	funding := &WalletFunding{userId: userID}
+
+	require.NoError(t, funding.PreConsume(10_000))
+	require.NoError(t, funding.PreConsume(20_000))
+	quota, err := model.GetUserQuota(userID, false)
+	require.NoError(t, err)
+	assert.Equal(t, 70_000, quota)
+
+	require.NoError(t, funding.Refund())
+	quota, err = model.GetUserQuota(userID, false)
+	require.NoError(t, err)
+	assert.Equal(t, 100_000, quota, "refund must include every supplemental reservation")
 }
 
 func TestTryTieredSettleUsesFinalGroupAfterRetry(t *testing.T) {

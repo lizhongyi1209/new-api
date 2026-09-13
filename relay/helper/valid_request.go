@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -183,6 +185,9 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			}
 			imageRequest.Quality = formData.Get("quality")
 			imageRequest.Size = formData.Get("size")
+			if parameters := formData.Get("parameters"); parameters != "" {
+				imageRequest.Extra = map[string]json.RawMessage{"parameters": json.RawMessage(parameters)}
+			}
 			if formData.Has("moderation") {
 				imageRequest.Moderation, _ = common.Marshal(formData.Get("moderation"))
 			}
@@ -315,6 +320,19 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 				formData.Set("moderation", moderation)
 			}
 		}
+	}
+
+	// Provider parameters can override the top-level count. Validate them before
+	// pricing so malformed multipliers fail before any quota is reserved.
+	if raw, exists := imageRequest.Extra["parameters"]; exists {
+		parameters := &dto.ImageBillingParameters{}
+		if err := common.Unmarshal(raw, parameters); err != nil {
+			return nil, fmt.Errorf("invalid image parameters: %w", err)
+		}
+		imageRequest.BillingParameters = parameters
+	}
+	if _, err := imageRequest.ImageCount(common.GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeAli); err != nil {
+		return nil, err
 	}
 
 	return imageRequest, nil

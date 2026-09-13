@@ -32,6 +32,7 @@ if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
     {
       git diff --binary HEAD -- . ':!UPSTREAM_SELECTIVE_MERGE_PLAN.md' ':!docs/archive/upstream-merge/UPSTREAM_SELECTIVE_MERGE_ROADMAP.md'
       while IFS= read -r -d '' file; do
+        [[ "${file}" == backups/* ]] && continue
         skip=0
         for merge_doc in "${merge_docs[@]}"; do
           [[ "${file}" == "${merge_doc}" ]] && skip=1 && break

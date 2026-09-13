@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ---------------------------------------------------------------------------
@@ -985,6 +987,27 @@ func TestLen_ZeroDefaultsToZero(t *testing.T) {
 	}
 	if trace.MatchedTier != "standard" {
 		t.Errorf("tier = %q, want standard (len=0 <= 200000)", trace.MatchedTier)
+	}
+}
+
+func TestImageCountIsBoundedAndOnlyTracedWhenProvided(t *testing.T) {
+	expr := `tier("image", 40000) * image_count`
+
+	cost, trace, err := billingexpr.RunExprWithRequest(expr, billingexpr.TokenParams{}, billingexpr.RequestInput{})
+	require.NoError(t, err)
+	assert.Equal(t, 40000.0, cost)
+	assert.Nil(t, trace.ImageCount, "token-only billing snapshots must not become quantity-aware implicitly")
+
+	count := 4
+	cost, trace, err = billingexpr.RunExprWithRequest(expr, billingexpr.TokenParams{}, billingexpr.RequestInput{ImageCount: &count})
+	require.NoError(t, err)
+	assert.Equal(t, 160000.0, cost)
+	require.NotNil(t, trace.ImageCount)
+	assert.Equal(t, count, *trace.ImageCount)
+
+	for _, invalid := range []int{0, 129} {
+		_, _, err = billingexpr.RunExprWithRequest(expr, billingexpr.TokenParams{}, billingexpr.RequestInput{ImageCount: &invalid})
+		require.ErrorContains(t, err, "image_count")
 	}
 }
 

@@ -72,3 +72,6 @@ gcloud/
 *secret*.yml
 docs/seedance-max-test.md
 uploads/
+
+# Production database backups must never be committed.
+/backups/

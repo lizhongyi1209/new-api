@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/dto"
+
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
 	"github.com/tidwall/gjson"
@@ -51,18 +53,27 @@ func RunExprByHashWithRequest(exprStr, hash string, params TokenParams, request 
 func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (float64, TraceResult, error) {
 	trace := TraceResult{}
 	headers := normalizeHeaders(request.Headers)
+	imageCount := 1
+	if request.ImageCount != nil {
+		imageCount = *request.ImageCount
+		if imageCount < 1 || imageCount > dto.MaxImageN {
+			return 0, trace, fmt.Errorf("image_count must be between 1 and %d", dto.MaxImageN)
+		}
+		trace.ImageCount = &imageCount
+	}
 
 	env := map[string]interface{}{
-		"p":    params.P,
-		"c":    params.C,
-		"len":  params.Len,
-		"cr":   params.CR,
-		"cc":   params.CC,
-		"cc1h": params.CC1h,
-		"img":  params.Img,
-		"img_o": params.ImgO,
-		"ai":   params.AI,
-		"ao":   params.AO,
+		"image_count": float64(imageCount),
+		"p":           params.P,
+		"c":           params.C,
+		"len":         params.Len,
+		"cr":          params.CR,
+		"cc":          params.CC,
+		"cc1h":        params.CC1h,
+		"img":         params.Img,
+		"img_o":       params.ImgO,
+		"ai":          params.AI,
+		"ao":          params.AO,
 		"tier": func(name string, value float64) float64 {
 			trace.MatchedTier = name
 			trace.Cost = value
@@ -94,10 +105,10 @@ func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (flo
 		"month":   func(tz string) int { return int(timeInZone(tz).Month()) },
 		"day":     func(tz string) int { return timeInZone(tz).Day() },
 		"max":     math.Max,
-		"min":   math.Min,
-		"abs":   math.Abs,
-		"ceil":  math.Ceil,
-		"floor": math.Floor,
+		"min":     math.Min,
+		"abs":     math.Abs,
+		"ceil":    math.Ceil,
+		"floor":   math.Floor,
 	}
 
 	out, err := expr.Run(prog, env)

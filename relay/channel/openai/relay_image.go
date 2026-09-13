@@ -22,13 +22,6 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-func updateOpenAIImageCount(info *relaycommon.RelayInfo, count int64) {
-	if info == nil || !info.PriceData.UsePrice || count <= 0 || count > int64(dto.MaxImageN) {
-		return
-	}
-	info.PriceData.AddOtherRatio("n", float64(count))
-}
-
 func preserveGPTImage2UpstreamError(info *relaycommon.RelayInfo, resp *http.Response, body []byte, relayErr *types.NewAPIError) *types.NewAPIError {
 	if relayErr != nil && resp != nil && relaycommon.IsGPTImage2(info) {
 		relayErr.SetRawUpstreamResponse(resp.StatusCode, resp.Header.Get("Content-Type"), body)
@@ -58,7 +51,7 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 		return nil, preserveGPTImage2UpstreamError(info, resp, responseBody, relayErr)
 	}
 
-	updateOpenAIImageCount(info, gjson.GetBytes(responseBody, "data.#").Int())
+	info.UpdateImageCount(gjson.GetBytes(responseBody, "data.#").Int())
 
 	// When a storage strategy is selected (or ?image_format=url requests the
 	// historical R2 behavior), replace large base64/transient upstream values
@@ -213,12 +206,8 @@ func OpenaiImageStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp 
 	if info.StreamStatus != nil {
 		upstreamFinished := info.StreamStatus.EndReason == relaycommon.StreamEndReasonDone ||
 			info.StreamStatus.EndReason == relaycommon.StreamEndReasonEOF
-		requestedN := 1.0
-		if n, ok := info.PriceData.OtherRatios["n"]; ok {
-			requestedN = n
-		}
-		if upstreamFinished || float64(completedImages) > requestedN {
-			updateOpenAIImageCount(info, completedImages)
+		if upstreamFinished || completedImages > int64(info.RequestedImageCount()) {
+			info.UpdateImageCount(completedImages)
 		}
 	}
 	return usage, nil
@@ -318,7 +307,7 @@ func openaiImageJSONAsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo,
 	applyUsagePostProcessing(info, &usageResp.Usage, responseBody)
 
 	imageCount := gjson.GetBytes(responseBody, "data.#").Int()
-	updateOpenAIImageCount(info, imageCount)
+	info.UpdateImageCount(imageCount)
 
 	helper.SetEventStreamHeaders(c)
 	c.Status(http.StatusOK)
