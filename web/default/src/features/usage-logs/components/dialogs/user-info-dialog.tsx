@@ -1,3 +1,10 @@
+import { Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { Dialog } from '@/components/dialog'
+import { Label } from '@/components/ui/label'
+import { formatQuota, formatCompactNumber } from '@/lib/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,14 +23,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Loader2 } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { Dialog } from '@/components/dialog'
-import { Label } from '@/components/ui/label'
-import { formatQuota, formatCompactNumber } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { getUserInfo } from '../../api'
 import type { UserInfo } from '../../types'
@@ -34,54 +35,58 @@ interface UserInfoDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+const InfoItem = ({
+  label,
+  value,
+}: {
+  label: string
+  value: string | number
+}) => (
+  <div className='space-y-1.5'>
+    <Label className='text-muted-foreground text-xs'>{label}</Label>
+    <div className='text-sm font-semibold'>{value}</div>
+  </div>
+)
+
 export function UserInfoDialog({
   userId,
   open,
   onOpenChange,
 }: UserInfoDialogProps) {
   const { t } = useTranslation()
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
+  const [loaded, setLoaded] = useState<{
+    id: number
+    data: UserInfo | null
+  } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-
-  const fetchUserInfo = useCallback(
-    async (id: number) => {
-      setIsLoading(true)
-      try {
-        const result = await getUserInfo(id)
-        if (result.success) {
-          setUserInfo(result.data || null)
-        } else {
-          toast.error(result.message || t('Failed to fetch user information'))
-        }
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to fetch user info:', error)
-        toast.error(t('Failed to fetch user information'))
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [t]
-  )
+  const userInfo = open && loaded?.id === userId ? loaded.data : null
 
   useEffect(() => {
-    if (open && userId) {
-      fetchUserInfo(userId)
+    let active = true
+    setLoaded(null)
+    if (!open || !userId) {
+      setIsLoading(false)
+      return
     }
-  }, [open, userId, fetchUserInfo])
-
-  const InfoItem = ({
-    label,
-    value,
-  }: {
-    label: string
-    value: string | number
-  }) => (
-    <div className='space-y-1.5'>
-      <Label className='text-muted-foreground text-xs'>{label}</Label>
-      <div className='text-sm font-semibold'>{value}</div>
-    </div>
-  )
+    setIsLoading(true)
+    getUserInfo(userId)
+      .then((result) => {
+        if (!active) return
+        requireServerSuccess(result)
+        setLoaded({ id: userId, data: result.data ?? null })
+      })
+      .finally(() => {
+        if (active) setIsLoading(false)
+      })
+      .catch((error) => {
+        if (active) {
+          handleServerError(error, t('Failed to fetch user information'))
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [open, userId, t])
 
   return (
     <Dialog
@@ -95,11 +100,12 @@ export function UserInfoDialog({
       contentHeight='auto'
       bodyClassName='space-y-4'
     >
-      {isLoading ? (
+      {isLoading && (
         <div className='flex items-center justify-center py-8'>
           <Loader2 className='text-muted-foreground size-6 animate-spin' />
         </div>
-      ) : userInfo ? (
+      )}
+      {!isLoading && userInfo && (
         <div className='space-y-4 py-4'>
           {/* Basic Info */}
           <div className='grid grid-cols-2 gap-4'>
@@ -176,7 +182,8 @@ export function UserInfoDialog({
             </div>
           )}
         </div>
-      ) : (
+      )}
+      {!isLoading && !userInfo && (
         <div className='text-muted-foreground py-8 text-center text-sm'>
           {t('No user information available')}
         </div>

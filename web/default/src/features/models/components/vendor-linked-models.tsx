@@ -1,3 +1,17 @@
+import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
+import type { ColumnDef } from '@tanstack/react-table'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import {
+  DataTablePage,
+  DataTableBulkActions,
+  useDataTable,
+} from '@/components/data-table'
+import { ErrorState } from '@/components/error-state'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,20 +30,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from '@tanstack/react-router'
-import type { ColumnDef } from '@tanstack/react-table'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
 import {
-  DataTablePage,
-  DataTableBulkActions,
-  useDataTable,
-} from '@/components/data-table'
-import { ErrorState } from '@/components/error-state'
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 
 import { searchModels } from '../api'
 import { getNameRuleConfig } from '../constants'
@@ -61,9 +65,9 @@ export function VendorLinkedModels({
   const query = useQuery({
     queryKey: modelsQueryKeys.list(params),
     queryFn: async () => {
-      const response = await searchModels(params)
+      const response = requireServerSuccess(await searchModels(params))
       if (!response.success) {
-        throw new Error(response.message || t('Failed to load models'))
+        throw createServerError(response, t('Failed to load models'))
       }
       return response.data
     },

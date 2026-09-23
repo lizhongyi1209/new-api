@@ -123,23 +123,30 @@ func Query(params QueryParams) (QueryResult, error) {
 }
 
 func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
+	return querySummaryAllAt(hours, groups, time.Now().Unix())
+}
+
+func querySummaryAllAt(hours int, groups []string, endTs int64) (SummaryAllResult, error) {
 	if hours <= 0 {
 		hours = 24
 	}
 	if hours > 24*30 {
 		hours = 24 * 30
 	}
-	endTs := time.Now().Unix()
 	startTs := endTs - int64(hours)*3600
+	currentHourTs := endTs - endTs%3600
+	healthStartTs := currentHourTs - 23*3600
+	queryStartTs := min(startTs, healthStartTs)
 	allowedGroups := allowedGroupSet(groups)
 
-	rows, err := model.GetPerfMetricsSummaryBucketsAll(startTs, endTs, groups)
+	rows, err := model.GetPerfMetricsSummaryBucketsAll(queryStartTs, endTs, groups)
 	if err != nil {
 		return SummaryAllResult{}, err
 	}
 
 	totals := map[string]counters{}
 	modelBuckets := map[string]map[int64]counters{}
+	healthBuckets := map[string]map[int64]counters{}
 	for _, row := range rows {
 		value := counters{
 			requestCount:   row.RequestCount,
@@ -148,13 +155,18 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 			outputTokens:   row.OutputTokens,
 			generationMs:   row.GenerationMs,
 		}
-		mergeModelTotals(totals, row.ModelName, value)
-		mergeModelBucket(modelBuckets, row.ModelName, row.BucketTs, value)
+		if row.BucketTs >= startTs {
+			mergeModelTotals(totals, row.ModelName, value)
+			mergeModelBucket(modelBuckets, row.ModelName, row.BucketTs, value)
+		}
+		if row.BucketTs >= healthStartTs {
+			mergeModelBucket(healthBuckets, row.ModelName, row.BucketTs-row.BucketTs%3600, value)
+		}
 	}
 
 	hotBuckets.Range(func(key, value any) bool {
 		k := key.(bucketKey)
-		if k.bucketTs < startTs || k.bucketTs > endTs {
+		if k.bucketTs < queryStartTs || k.bucketTs > endTs {
 			return true
 		}
 		if allowedGroups != nil {
@@ -166,8 +178,13 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 		if snap.requestCount == 0 {
 			return true
 		}
-		mergeModelTotals(totals, k.model, snap)
-		mergeModelBucket(modelBuckets, k.model, k.bucketTs, snap)
+		if k.bucketTs >= startTs {
+			mergeModelTotals(totals, k.model, snap)
+			mergeModelBucket(modelBuckets, k.model, k.bucketTs, snap)
+		}
+		if k.bucketTs >= healthStartTs {
+			mergeModelBucket(healthBuckets, k.model, k.bucketTs-k.bucketTs%3600, snap)
+		}
 		return true
 	})
 
@@ -183,19 +200,37 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 			avgTps = float64(total.outputTokens) / (float64(total.generationMs) / 1000.0)
 		}
 		models = append(models, ModelSummary{
-			ModelName:          name,
-			AvgLatencyMs:       avgLatency,
-			SuccessRate:        math.Round(successRate*100) / 100,
-			AvgTps:             math.Round(avgTps*100) / 100,
-			RecentSuccessRates: recentSuccessRates(modelBuckets[name], 3),
-			RequestCount:       total.requestCount,
+			ModelName:           name,
+			AvgLatencyMs:        avgLatency,
+			SuccessRate:         math.Round(successRate*100) / 100,
+			AvgTps:              math.Round(avgTps*100) / 100,
+			RecentSuccessRates:  recentSuccessRates(modelBuckets[name], 3),
+			RecentSuccessSeries: hourlySuccessSeries(healthBuckets[name], currentHourTs),
+			RequestCount:        total.requestCount,
 		})
 	}
 	sort.Slice(models, func(i, j int) bool {
 		return models[i].RequestCount > models[j].RequestCount
 	})
 
-	return SummaryAllResult{Models: models}, nil
+	return SummaryAllResult{
+		Models:              models,
+		HourlyWindowStartTs: healthStartTs,
+		HourlyWindowEndTs:   endTs,
+	}, nil
+}
+
+func hourlySuccessSeries(buckets map[int64]counters, currentHourTs int64) []SuccessRatePoint {
+	points := make([]SuccessRatePoint, 24)
+	for slot := range points {
+		ts := currentHourTs - int64(23-slot)*3600
+		points[slot].Ts = ts
+		if value := buckets[ts]; value.requestCount > 0 {
+			rate := math.Round(successRate(value)*100) / 100
+			points[slot].SuccessRate = &rate
+		}
+	}
+	return points
 }
 
 func mergeModelTotals(totals map[string]counters, modelName string, value counters) {

@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SessionCookieOriginGuard protects cookie-authenticated refresh/logout
+// SessionCookieOriginGuard protects refresh/logout and OAuth state bootstrap
 // endpoints when secure cookie mode is enabled. In insecure local development
 // mode it preserves the legacy behavior and intentionally performs no Origin
 // validation. It never adds CORS response headers and must not be installed on

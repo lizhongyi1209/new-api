@@ -126,6 +126,33 @@ type TaskPrivateData struct {
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
 	SubmitLogID    int                 `json:"submit_log_id,omitempty"`   // 提交时消费日志的 ID，任务完成后更新
 	UsedChannels   []string            `json:"used_channels,omitempty"`   // 每次真实上游尝试使用的渠道，保留重复项用于展示重试链路
+	// Plugin fields are additive to preserve historical task JSON and the
+	// local async-image/video billing and audit snapshots above.
+	Execution    *TaskExecutionSnapshot `json:"execution,omitempty"`
+	PluginState  json.RawMessage        `json:"plugin_state,omitempty"`
+	PollFailures int                    `json:"poll_failures,omitempty"`
+}
+
+// TaskExecutionSnapshot contains only credential-free provenance. Plugin
+// source, request bodies, and channel secrets must never be stored here.
+type TaskExecutionSnapshot struct {
+	RequestID   string              `json:"request_id,omitempty"`
+	RequestPath string              `json:"request_path,omitempty"`
+	TaskPlugin  *TaskPluginSnapshot `json:"task_plugin,omitempty"`
+}
+
+type TaskPluginSnapshot struct {
+	Key        string                    `json:"key"`
+	Name       string                    `json:"name"`
+	Version    string                    `json:"version"`
+	Author     *TaskPluginAuthorSnapshot `json:"author,omitempty"`
+	APIVersion int                       `json:"api_version"`
+	Generation uint64                    `json:"generation"`
+}
+
+type TaskPluginAuthorSnapshot struct {
+	Name string `json:"name"`
+	URL  string `json:"url,omitempty"`
 }
 
 // GenerateImageTimingAudit records only aggregate durations and byte counts.
@@ -552,6 +579,22 @@ func GetByOnlyTaskId(taskId string) (*Task, bool, error) {
 	return task, exist, err
 }
 
+// GetUniqueByOnlyTaskId is for capability URLs. Historical task IDs may not
+// be globally unique, so ambiguous IDs must not select another user's row.
+func GetUniqueByOnlyTaskId(taskID string) (*Task, bool, error) {
+	if taskID == "" {
+		return nil, false, nil
+	}
+	var tasks []*Task
+	if err := DB.Where("task_id = ?", taskID).Order("id").Limit(2).Find(&tasks).Error; err != nil {
+		return nil, false, err
+	}
+	if len(tasks) != 1 {
+		return nil, false, nil
+	}
+	return tasks[0], true, nil
+}
+
 func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 	if taskId == "" {
 		return nil, false, nil
@@ -613,13 +656,15 @@ func (Task *Task) Insert() error {
 }
 
 type taskSnapshot struct {
-	Status     TaskStatus
-	Progress   string
-	StartTime  int64
-	FinishTime int64
-	FailReason string
-	ResultURL  string
-	Data       json.RawMessage
+	Status       TaskStatus
+	Progress     string
+	StartTime    int64
+	FinishTime   int64
+	FailReason   string
+	ResultURL    string
+	Data         json.RawMessage
+	PluginState  json.RawMessage
+	PollFailures int
 }
 
 func (s taskSnapshot) Equal(other taskSnapshot) bool {
@@ -629,18 +674,22 @@ func (s taskSnapshot) Equal(other taskSnapshot) bool {
 		s.FinishTime == other.FinishTime &&
 		s.FailReason == other.FailReason &&
 		s.ResultURL == other.ResultURL &&
-		bytes.Equal(s.Data, other.Data)
+		bytes.Equal(s.Data, other.Data) &&
+		bytes.Equal(s.PluginState, other.PluginState) &&
+		s.PollFailures == other.PollFailures
 }
 
 func (t *Task) Snapshot() taskSnapshot {
 	return taskSnapshot{
-		Status:     t.Status,
-		Progress:   t.Progress,
-		StartTime:  t.StartTime,
-		FinishTime: t.FinishTime,
-		FailReason: t.FailReason,
-		ResultURL:  t.PrivateData.ResultURL,
-		Data:       t.Data,
+		Status:       t.Status,
+		Progress:     t.Progress,
+		StartTime:    t.StartTime,
+		FinishTime:   t.FinishTime,
+		FailReason:   t.FailReason,
+		ResultURL:    t.PrivateData.ResultURL,
+		Data:         t.Data,
+		PluginState:  t.PrivateData.PluginState,
+		PollFailures: t.PrivateData.PollFailures,
 	}
 }
 

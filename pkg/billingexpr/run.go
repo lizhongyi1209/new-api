@@ -28,11 +28,11 @@ func RunExpr(exprStr string, params TokenParams) (float64, TraceResult, error) {
 }
 
 func RunExprWithRequest(exprStr string, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	prog, err := CompileFromCache(exprStr)
+	entry, err := compileEntryFromCacheByHash(exprStr, ExprHashString(exprStr))
 	if err != nil {
 		return 0, TraceResult{}, err
 	}
-	return runProgram(prog, params, request)
+	return runProgram(entry.prog, entry.requestRules, params, request)
 }
 
 // RunExprByHash is like RunExpr but accepts a pre-computed hash for the cache
@@ -43,16 +43,23 @@ func RunExprByHash(exprStr, hash string, params TokenParams) (float64, TraceResu
 }
 
 func RunExprByHashWithRequest(exprStr, hash string, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	prog, err := CompileFromCacheByHash(exprStr, hash)
+	entry, err := compileEntryFromCacheByHash(exprStr, hash)
 	if err != nil {
 		return 0, TraceResult{}, err
 	}
-	return runProgram(prog, params, request)
+	return runProgram(entry.prog, entry.requestRules, params, request)
 }
 
-func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (float64, TraceResult, error) {
-	trace := TraceResult{}
+func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, params TokenParams, request RequestInput) (float64, TraceResult, error) {
+	trace := TraceResult{
+		BillingUnit:  BillingUnitToken,
+		RequestRules: append([]RequestRuleTrace(nil), requestRules...),
+	}
 	headers := normalizeHeaders(request.Headers)
+	evaluatedAt := request.At
+	if evaluatedAt.IsZero() {
+		evaluatedAt = time.Now()
+	}
 	imageCount := 1
 	if request.ImageCount != nil {
 		imageCount = *request.ImageCount
@@ -62,7 +69,7 @@ func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (flo
 		trace.ImageCount = &imageCount
 	}
 
-	env := map[string]interface{}{
+	env := map[string]any{
 		"image_count": float64(imageCount),
 		"p":           params.P,
 		"c":           params.C,
@@ -71,6 +78,7 @@ func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (flo
 		"cc":          params.CC,
 		"cc1h":        params.CC1h,
 		"img":         params.Img,
+		"img_cr":      params.ImgCR,
 		"img_o":       params.ImgO,
 		"ai":          params.AI,
 		"ao":          params.AO,
@@ -79,11 +87,37 @@ func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (flo
 			trace.Cost = value
 			return value
 		},
+		"fixed": func(amount float64) float64 {
+			trace.BillingUnit = BillingUnitRequest
+			trace.FixedPrice = &amount
+			return amount * 1_000_000
+		},
+		requestRuleTraceFunction: func(ruleIndex int, matched bool, multiplier float64) float64 {
+			if matched && ruleIndex >= 0 && ruleIndex < len(trace.RequestRules) {
+				trace.RequestRules[ruleIndex].Matched = true
+			}
+			if matched {
+				return multiplier
+			}
+			return 1
+		},
+		requestRuleTraceIntFunction: func(ruleIndex int, matched bool, multiplier int) int {
+			if matched && ruleIndex >= 0 && ruleIndex < len(trace.RequestRules) {
+				trace.RequestRules[ruleIndex].Matched = true
+			}
+			if matched {
+				return multiplier
+			}
+			return 1
+		},
 		"header": func(key string) string {
 			return headers[strings.ToLower(strings.TrimSpace(key))]
 		},
-		"param": func(path string) interface{} {
+		"param": func(path string) any {
 			path = strings.TrimSpace(path)
+			if request.Params != nil {
+				return request.Params[path]
+			}
 			if path == "" || len(request.Body) == 0 {
 				return nil
 			}
@@ -93,17 +127,23 @@ func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (flo
 			}
 			return result.Value()
 		},
-		"has": func(source interface{}, substr string) bool {
+		"u": func(name string) any {
+			if request.Usage == nil {
+				return nil
+			}
+			return request.Usage[strings.TrimSpace(name)]
+		},
+		"has": func(source any, substr string) bool {
 			if source == nil || substr == "" {
 				return false
 			}
 			return strings.Contains(fmt.Sprint(source), substr)
 		},
-		"hour":    func(tz string) int { return timeInZone(tz).Hour() },
-		"minute":  func(tz string) int { return timeInZone(tz).Minute() },
-		"weekday": func(tz string) int { return int(timeInZone(tz).Weekday()) },
-		"month":   func(tz string) int { return int(timeInZone(tz).Month()) },
-		"day":     func(tz string) int { return timeInZone(tz).Day() },
+		"hour":    func(tz string) int { return evaluatedAtInZone(evaluatedAt, tz).Hour() },
+		"minute":  func(tz string) int { return evaluatedAtInZone(evaluatedAt, tz).Minute() },
+		"weekday": func(tz string) int { return int(evaluatedAtInZone(evaluatedAt, tz).Weekday()) },
+		"month":   func(tz string) int { return int(evaluatedAtInZone(evaluatedAt, tz).Month()) },
+		"day":     func(tz string) int { return evaluatedAtInZone(evaluatedAt, tz).Day() },
 		"max":     math.Max,
 		"min":     math.Min,
 		"abs":     math.Abs,
@@ -122,16 +162,16 @@ func runProgram(prog *vm.Program, params TokenParams, request RequestInput) (flo
 	return f, trace, nil
 }
 
-func timeInZone(tz string) time.Time {
+func evaluatedAtInZone(at time.Time, tz string) time.Time {
 	tz = strings.TrimSpace(tz)
 	if tz == "" {
-		return time.Now().UTC()
+		return at.UTC()
 	}
 	loc, err := time.LoadLocation(tz)
 	if err != nil {
-		return time.Now().UTC()
+		return at.UTC()
 	}
-	return time.Now().In(loc)
+	return at.In(loc)
 }
 
 func normalizeHeaders(headers map[string]string) map[string]string {

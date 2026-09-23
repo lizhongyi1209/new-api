@@ -1,3 +1,19 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { Dialog } from '@/components/dialog'
+import { GroupBadge } from '@/components/group-badge'
+import { JsonCodeEditor } from '@/components/json-code-editor'
+import { StatusBadge } from '@/components/status-badge'
+import { Button } from '@/components/ui/button'
+import { Combobox } from '@/components/ui/combobox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Separator } from '@/components/ui/separator'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,23 +32,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Combobox } from '@/components/ui/combobox'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { Dialog } from '@/components/dialog'
-import { GroupBadge } from '@/components/group-badge'
-import { JsonCodeEditor } from '@/components/json-code-editor'
-import { StatusBadge } from '@/components/status-badge'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { ScrollArea } from '@/components/ui/scroll-area'
-
-import { Separator } from '@/components/ui/separator'
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import {
   editTagChannels,
@@ -65,21 +66,22 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
   // Fetch tag models
   const { data: tagModelsData, isLoading: isLoadingTagModels } = useQuery({
     queryKey: ['tag-models', currentTag],
-    queryFn: () => (currentTag ? getTagModels(currentTag) : null),
+    queryFn: async () =>
+      currentTag ? requireServerSuccess(await getTagModels(currentTag)) : null,
     enabled: open && !!currentTag,
   })
 
   // Fetch all available models
   const { data: allModelsData } = useQuery({
     queryKey: ['all-models'],
-    queryFn: getAllModels,
+    queryFn: async () => requireServerSuccess(await getAllModels()),
     enabled: open,
   })
 
   // Fetch groups
   const { data: groupsData } = useQuery({
     queryKey: ['groups'],
-    queryFn: getGroups,
+    queryFn: async () => requireServerSuccess(await getGroups()),
     enabled: open,
   })
 
@@ -193,12 +195,10 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
         queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
         onOpenChange(false)
       } else {
-        toast.error(response.message || t('Failed to update tag'))
+        handleServerError(response, t('Failed to update tag'))
       }
     } catch (error: unknown) {
-      toast.error(
-        error instanceof Error ? error.message : t('Failed to update tag')
-      )
+      handleServerError(error, t('Failed to update tag'))
     } finally {
       setIsSubmitting(false)
     }
@@ -298,14 +298,19 @@ export function EditTagDialog({ open, onOpenChange }: EditTagDialogProps) {
 
                 <div className='flex gap-2'>
                   <Combobox
- options={availableModels.map((model) => ({ value: model, label: model }))}
- onValueChange={(value: string | null) => {
-   if (value !== null && !selectedModels.includes(value)) setSelectedModels([...selectedModels, value])
- }}
- className='flex-1'
- placeholder={t('Add from available models...')}
- aria-label={t('Add from available models...')}
-/>
+                    options={availableModels.map((model) => ({
+                      value: model,
+                      label: model,
+                    }))}
+                    onValueChange={(value: string | null) => {
+                      if (value !== null && !selectedModels.includes(value)) {
+                        setSelectedModels([...selectedModels, value])
+                      }
+                    }}
+                    className='flex-1'
+                    placeholder={t('Add from available models...')}
+                    aria-label={t('Add from available models...')}
+                  />
                 </div>
 
                 <div className='flex gap-2'>

@@ -16,11 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { formatBillingCurrencyFromUSD } from "@/lib/currency";
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 
-import { QUOTA_TYPE_VALUES, TOKEN_UNIT_DIVISORS } from "../constants";
-import type { PricingModel, TokenUnit, PriceType } from "../types";
-import { getConfiguredGroupRatio, getDisplayGroupRatio } from "./model-helpers";
+import { QUOTA_TYPE_VALUES, TOKEN_UNIT_DIVISORS } from '../constants'
+import type { PricingModel, TokenUnit, PriceType } from '../types'
+import { getConfiguredGroupRatio, getDisplayGroupRatio } from './model-helpers'
 
 // ----------------------------------------------------------------------------
 // Price Calculation Utilities
@@ -31,27 +31,27 @@ import { getConfiguredGroupRatio, getDisplayGroupRatio } from "./model-helpers";
  */
 export function stripTrailingZeros(formatted: string): string {
   // Match currency symbol at start, number, and potential 'k' suffix
-  const match = formatted.match(/^([^\d-]*)([-\d,]+\.?\d*)(k?)$/);
-  if (!match) return formatted;
+  const match = formatted.match(/^([^\d-]*)([-\d,]+\.?\d*)(k?)$/)
+  if (!match) return formatted
 
-  const [, symbol, number, suffix] = match;
+  const [, symbol, number, suffix] = match
 
   // Remove commas for processing
-  const cleanNumber = number.replaceAll(",", "");
+  const cleanNumber = number.replaceAll(',', '')
 
   // Convert to number and back to remove trailing zeros
-  const parsed = Number.parseFloat(cleanNumber);
-  if (Number.isNaN(parsed)) return formatted;
+  const parsed = Number.parseFloat(cleanNumber)
+  if (Number.isNaN(parsed)) return formatted
 
   // Convert to string, which automatically removes trailing zeros
-  let result = parsed.toString();
+  let result = parsed.toString()
 
   // If the result is in scientific notation, format it properly
-  if (result.includes("e")) {
-    result = parsed.toFixed(20).replace(/\.?0+$/, "");
+  if (result.includes('e')) {
+    result = parsed.toFixed(20).replace(/\.?0+$/, '')
   }
 
-  return `${symbol}${result}${suffix}`;
+  return `${symbol}${result}${suffix}`
 }
 
 /**
@@ -63,49 +63,47 @@ export function stripTrailingZeros(formatted: string): string {
 function calculateTokenPrice(
   model: PricingModel,
   type: PriceType,
-  ratio: number,
+  ratio: number
 ): number {
-  const base = model.model_ratio * 2 * ratio;
+  const base = model.model_ratio * 2 * ratio
 
   switch (type) {
-    case "input":
-      return base;
-    case "output":
-      return base * model.completion_ratio;
-    case "cache":
+    case 'input':
+      return base
+    case 'output':
+      return base * model.completion_ratio
+    case 'cache':
       return hasRatio(model.cache_ratio)
         ? base * Number(model.cache_ratio)
-        : Number.NaN;
-    case "create_cache":
+        : Number.NaN
+    case 'create_cache':
       return hasRatio(model.create_cache_ratio)
         ? base * Number(model.create_cache_ratio)
-        : Number.NaN;
-    case "image":
+        : Number.NaN
+    case 'image':
       return hasRatio(model.image_ratio)
         ? base * Number(model.image_ratio)
-        : Number.NaN;
-    case "audio_input":
+        : Number.NaN
+    case 'audio_input':
       return hasRatio(model.audio_ratio)
         ? base * Number(model.audio_ratio)
-        : Number.NaN;
-    case "audio_output":
+        : Number.NaN
+    case 'audio_output':
       return hasRatio(model.audio_ratio) &&
         hasRatio(model.audio_completion_ratio)
         ? base *
             Number(model.audio_ratio) *
             Number(model.audio_completion_ratio)
-        : Number.NaN;
-    case "video_output":
+        : Number.NaN
+    case 'video_output':
       return hasRatio(model.video_completion_ratio)
         ? base * Number(model.video_completion_ratio)
-        : Number.NaN;
+        : Number.NaN
   }
 }
 
 function hasRatio(value: number | null | undefined): boolean {
-  return (
-    value !== undefined && value !== null && Number.isFinite(Number(value))
-  );
+  return value !== undefined && value !== null && Number.isFinite(Number(value))
 }
 
 /**
@@ -138,10 +136,10 @@ function applyRechargeRate(
   price: number,
   showWithRecharge: boolean,
   priceRate: number,
-  usdExchangeRate: number,
+  usdExchangeRate: number
 ): number {
-  if (!showWithRecharge) return price;
-  return (price * priceRate) / usdExchangeRate;
+  if (!showWithRecharge) return price
+  return (price * priceRate) / usdExchangeRate
 }
 
 /**
@@ -154,28 +152,28 @@ export function formatPrice(
   showWithRecharge = false,
   priceRate = 1,
   usdExchangeRate = 1,
-  selectedGroup?: string,
+  selectedGroup?: string
 ): string {
   if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
-    return "-";
+    return '-'
   }
 
-  const displayGroupRatio = getDisplayGroupRatio(model, selectedGroup);
+  const displayGroupRatio = getDisplayGroupRatio(model, selectedGroup)
 
-  let priceInUSD = calculateTokenPrice(model, type, displayGroupRatio);
+  let priceInUSD = calculateTokenPrice(model, type, displayGroupRatio)
   priceInUSD = applyRechargeRate(
     priceInUSD,
     showWithRecharge,
     priceRate,
-    usdExchangeRate,
-  );
+    usdExchangeRate
+  )
 
-  const price = priceInUSD / TOKEN_UNIT_DIVISORS[tokenUnit];
+  const price = priceInUSD / TOKEN_UNIT_DIVISORS[tokenUnit]
   return formatBillingCurrencyFromUSD(price, {
     digitsLarge: 4,
     digitsSmall: 6,
     abbreviate: false,
-  });
+  })
 }
 
 /**
@@ -189,28 +187,28 @@ export function formatGroupPrice(
   showWithRecharge = false,
   priceRate = 1,
   usdExchangeRate = 1,
-  groupRatio: Record<string, number>,
+  groupRatio: Record<string, number>
 ): string {
   if (model.quota_type === QUOTA_TYPE_VALUES.REQUEST) {
-    return "-";
+    return '-'
   }
 
-  const ratio = getConfiguredGroupRatio(groupRatio, group);
-  let priceInUSD = calculateTokenPrice(model, type, ratio);
+  const ratio = getConfiguredGroupRatio(groupRatio, group)
+  let priceInUSD = calculateTokenPrice(model, type, ratio)
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
     showWithRecharge,
     priceRate,
-    usdExchangeRate,
-  );
+    usdExchangeRate
+  )
 
-  const price = priceInUSD / TOKEN_UNIT_DIVISORS[tokenUnit];
+  const price = priceInUSD / TOKEN_UNIT_DIVISORS[tokenUnit]
   return formatBillingCurrencyFromUSD(price, {
     digitsLarge: 4,
     digitsSmall: 6,
     abbreviate: false,
-  });
+  })
 }
 
 /**
@@ -222,27 +220,27 @@ export function formatFixedPrice(
   showWithRecharge = false,
   priceRate = 1,
   usdExchangeRate = 1,
-  groupRatio: Record<string, number>,
+  groupRatio: Record<string, number>
 ): string {
   if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
-    return "-";
+    return '-'
   }
 
-  const ratio = getConfiguredGroupRatio(groupRatio, group);
-  let priceInUSD = (model.model_price || 0) * ratio;
+  const ratio = getConfiguredGroupRatio(groupRatio, group)
+  let priceInUSD = (model.model_price ?? Number.NaN) * ratio
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
     showWithRecharge,
     priceRate,
-    usdExchangeRate,
-  );
+    usdExchangeRate
+  )
 
   return formatBillingCurrencyFromUSD(priceInUSD, {
     digitsLarge: 4,
     digitsSmall: 4,
     abbreviate: false,
-  });
+  })
 }
 
 /**
@@ -253,26 +251,26 @@ export function formatRequestPrice(
   showWithRecharge = false,
   priceRate = 1,
   usdExchangeRate = 1,
-  selectedGroup?: string,
+  selectedGroup?: string
 ): string {
   if (model.quota_type !== QUOTA_TYPE_VALUES.REQUEST) {
-    return "-";
+    return '-'
   }
 
-  const displayGroupRatio = getDisplayGroupRatio(model, selectedGroup);
+  const displayGroupRatio = getDisplayGroupRatio(model, selectedGroup)
 
-  let priceInUSD = (model.model_price || 0) * displayGroupRatio;
+  let priceInUSD = (model.model_price ?? Number.NaN) * displayGroupRatio
 
   priceInUSD = applyRechargeRate(
     priceInUSD,
     showWithRecharge,
     priceRate,
-    usdExchangeRate,
-  );
+    usdExchangeRate
+  )
 
   return formatBillingCurrencyFromUSD(priceInUSD, {
     digitsLarge: 4,
     digitsSmall: 4,
     abbreviate: false,
-  });
+  })
 }

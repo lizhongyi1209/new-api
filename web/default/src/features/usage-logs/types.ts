@@ -19,6 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 /**
  * Type definitions for usage logs
  */
+import type { BillingUsageSchema } from '@/features/pricing/types'
+
 import type { UsageLog } from './data/schema'
 
 // ============================================================================
@@ -290,6 +292,8 @@ export interface LogOtherData {
   audio_output?: number
   text_input?: number
   text_output?: number
+  image_cache_tokens?: number
+  billing_tokens?: Record<string, number>
   cache_tokens?: number
   cache_creation_tokens?: number
   cache_creation_tokens_5m?: number
@@ -312,9 +316,15 @@ export interface LogOtherData {
   // Tiered (expression-based) billing fields, set by backend when
   // billing_mode === 'tiered_expr'. expr_b64 is the base64-encoded billing
   // expression and matched_tier is the label of the tier that fired.
+  billing_unit?: 'token' | 'request'
+  fixed_price?: number
+  image_count?: number
+  request_rules?: { cond: string; multiplier: number; matched: boolean }[]
   billing_mode?: string
   expr_b64?: string
   matched_tier?: string
+  usage_facts?: Record<string, string | number | boolean>
+  usage_schema?: BillingUsageSchema
   reasoning_effort?: string
   image?: boolean
   image_ratio?: number
@@ -442,7 +452,10 @@ export interface TaskLog {
   channel_type?: number
   channel_type_name?: string
   submit_time: number // seconds
+  start_time?: number // seconds
   finish_time?: number // seconds
+  quota?: number
+  group?: string
   progress?: string
   progress_message_en?: string
   data?: string // JSON string

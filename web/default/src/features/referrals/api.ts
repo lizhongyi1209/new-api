@@ -1,3 +1,4 @@
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { createServerError } from '@/lib/server-error-message'
 
 import type {
   ReferralApiResponse,
@@ -29,7 +30,7 @@ export async function getReferralProgramSummary() {
     '/api/user/referrals'
   )
   if (!response.data.success) {
-    throw new Error(response.data.message)
+    throw createServerError(response.data)
   }
   return response.data.data
 }
@@ -39,7 +40,7 @@ export async function getReferralUsers(level: number) {
     `/api/user/referrals/${level}`
   )
   if (!response.data.success) {
-    throw new Error(response.data.message)
+    throw createServerError(response.data)
   }
   return response.data.data
 }

@@ -26,6 +26,7 @@ import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 
 interface MarkdownProps {
+  baseUrl?: string
   breaks?: boolean
   children: string
   className?: string
@@ -718,7 +719,7 @@ const markdownParser = new Marked({
 
 markdownParser.use(...markdownExtensions)
 
-function addExternalLinkAttributes(html: string): string {
+function addExternalLinkAttributes(html: string, baseUrl?: string): string {
   if (typeof window === 'undefined') {
     return html
   }
@@ -726,28 +727,55 @@ function addExternalLinkAttributes(html: string): string {
   const template = document.createElement('template')
   template.innerHTML = html
 
+  let safeBaseUrl: URL | null = null
+  if (baseUrl) {
+    try {
+      const parsed = new URL(baseUrl)
+      if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+        safeBaseUrl = parsed
+      }
+    } catch {
+      // An invalid base URL leaves relative links unchanged.
+    }
+  }
+
   template.content.querySelectorAll('a[href]').forEach((link) => {
+    const href = link.getAttribute('href')
+    if (href && safeBaseUrl && !/^[a-z][a-z\d+.-]*:/i.test(href)) {
+      link.setAttribute('href', new URL(href, safeBaseUrl).href)
+    }
     link.setAttribute('target', '_blank')
     link.setAttribute('rel', 'noopener noreferrer')
+  })
+
+  template.content.querySelectorAll('img[src]').forEach((image) => {
+    const src = image.getAttribute('src')
+    if (src && safeBaseUrl && !/^[a-z][a-z\d+.-]*:/i.test(src)) {
+      image.setAttribute('src', new URL(src, safeBaseUrl).href)
+    }
   })
 
   return template.innerHTML
 }
 
-function renderMarkdown(markdown: string, breaks = false): string {
+function renderMarkdown(
+  markdown: string,
+  breaks = false,
+  baseUrl?: string
+): string {
   const parsedHtml = markdownParser.parse(markdown, {
     ...markdownOptions,
     breaks,
   })
   const html = DOMPurify.sanitize(parsedHtml, sanitizeOptions)
 
-  return addExternalLinkAttributes(html)
+  return addExternalLinkAttributes(html, baseUrl)
 }
 
 export function Markdown(props: MarkdownProps) {
   const html = useMemo(
-    () => renderMarkdown(props.children, props.breaks),
-    [props.breaks, props.children]
+    () => renderMarkdown(props.children, props.breaks, props.baseUrl),
+    [props.baseUrl, props.breaks, props.children]
   )
 
   return (

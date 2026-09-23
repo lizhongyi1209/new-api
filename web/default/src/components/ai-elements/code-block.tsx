@@ -22,7 +22,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { EditorState, type Extension } from '@codemirror/state'
-import { EditorView, lineNumbers } from '@codemirror/view'
+import {
+  EditorView,
+  lineNumbers,
+  placeholder as codeMirrorPlaceholder,
+} from '@codemirror/view'
 import { tags as highlightTags } from '@lezer/highlight'
 import {
   CheckIcon,
@@ -75,9 +79,11 @@ type CodeBlockEditorProps = Omit<
 > & {
   actions?: ReactNode
   ariaLabel: string
+  autoFocus?: boolean
   language: BundledLanguage | string
   onChange: (value: string) => void
   onKeyDown?: (event: globalThis.KeyboardEvent) => void
+  placeholder?: string
   rows?: number
   title?: ReactNode
   value: string
@@ -89,6 +95,7 @@ type CodeMirrorCodeViewProps = {
   language: BundledLanguage | string
   onChange?: (value: string) => void
   onKeyDown?: (event: globalThis.KeyboardEvent) => void
+  placeholder?: string
   readOnly?: boolean
   rows?: number
   showLineNumbers?: boolean
@@ -302,6 +309,7 @@ function CodeMirrorCodeView({
   language,
   onChange,
   onKeyDown,
+  placeholder,
   readOnly = false,
   rows = 8,
   showLineNumbers = true,
@@ -313,14 +321,16 @@ function CodeMirrorCodeView({
   const onChangeRef = useRef(onChange)
   const editorMinHeight = `${Math.max(4, rows) * 1.5 + 2}rem`
   const editorExtensions = useMemo(
-    () =>
-      getCodeMirrorExtensions({
+    () => [
+      ...getCodeMirrorExtensions({
         language,
         onKeyDown,
         readOnly,
         showLineNumbers,
       }),
-    [language, onKeyDown, readOnly, showLineNumbers]
+      ...(placeholder ? [codeMirrorPlaceholder(placeholder)] : []),
+    ],
+    [language, onKeyDown, placeholder, readOnly, showLineNumbers]
   )
 
   useEffect(() => {
@@ -570,10 +580,12 @@ export const CodeBlock = ({
 export const CodeBlockEditor = ({
   actions,
   ariaLabel,
+  autoFocus = true,
   className,
   language,
   onChange,
   onKeyDown,
+  placeholder,
   rows = 8,
   title,
   value,
@@ -590,10 +602,11 @@ export const CodeBlockEditor = ({
     >
       <CodeMirrorCodeView
         ariaLabel={ariaLabel}
-        autoFocus
+        autoFocus={autoFocus}
         language={language}
         onChange={onChange}
         onKeyDown={onKeyDown}
+        placeholder={placeholder}
         rows={rows}
         showLineNumbers
         value={value}

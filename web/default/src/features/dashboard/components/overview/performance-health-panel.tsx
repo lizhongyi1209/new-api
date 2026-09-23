@@ -1,3 +1,19 @@
+import { useQuery } from '@tanstack/react-query'
+import { Gauge, HeartPulse, Timer } from 'lucide-react'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
+import {
+  formatLatency,
+  formatThroughput,
+  formatUptimePct,
+  getSuccessRateDotClass,
+  getSuccessRateTextClass,
+} from '@/features/performance-metrics/lib/format'
+import type { PerfModelSummary } from '@/features/performance-metrics/types'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,22 +32,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { Gauge, HeartPulse, Timer } from 'lucide-react'
-import { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { getPerfMetricsSummary } from '@/features/performance-metrics/api'
-import {
-  formatLatency,
-  formatThroughput,
-  formatUptimePct,
-  getSuccessRateDotClass,
-  getSuccessRateTextClass,
-} from '@/features/performance-metrics/lib/format'
-import type { PerfModelSummary } from '@/features/performance-metrics/types'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 const PERFORMANCE_WINDOW_HOURS = 24
@@ -59,7 +60,10 @@ export function PerformanceHealthPanel() {
   const { t } = useTranslation()
   const metricsQuery = useQuery({
     queryKey: ['perf-metrics-summary', PERFORMANCE_WINDOW_HOURS],
-    queryFn: () => getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS),
+    queryFn: async () =>
+      requireServerSuccess(
+        await getPerfMetricsSummary(PERFORMANCE_WINDOW_HOURS)
+      ),
     staleTime: 60 * 1000,
     retry: false,
   })

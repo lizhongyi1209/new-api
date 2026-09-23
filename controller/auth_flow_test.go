@@ -350,7 +350,7 @@ func TestSecurityLoginAllPrimaryTransportsRequireAdditionalVerification(t *testi
 			case "telegram":
 				require.NoError(t, model.DB.Model(user).Update("telegram_id", "42").Error)
 				state, code := telegram.authorization(t, "login", service.AuthIdentity{}, "", telegramIdentityClaims(42))
-				response = telegramOAuthCallback(state, code, service.AuthIdentity{})
+				response = telegram.callback(state, code, service.AuthIdentity{})
 			case "wechat":
 				require.NoError(t, model.DB.Model(user).Update("wechat_id", "bound-wechat").Error)
 				upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -383,12 +383,13 @@ func TestSecurityLoginAllPrimaryTransportsRequireAdditionalVerification(t *testi
 					oauth.Register(slug, &boundLoginOAuthProvider{userID: user.Id})
 				}
 				t.Cleanup(func() { oauth.Unregister(slug) })
-				token, _, err := model.CreateAuthFlow(model.AuthFlowCreate{Purpose: model.AuthFlowPurposeOAuth, Provider: slug, Intent: model.AuthFlowIntentLogin, Payload: `{}`, ExpiresAt: time.Now().Add(time.Minute)})
-				require.NoError(t, err)
+				token, cookie := beginBrowserOAuthLogin(t, slug, "", nil)
 				router := gin.New()
 				router.GET("/api/oauth/:provider", HandleOAuth)
 				response = httptest.NewRecorder()
-				router.ServeHTTP(response, httptest.NewRequest("GET", "/api/oauth/"+slug+"?state="+token+"&code=provider-code", nil))
+				request := httptest.NewRequest("GET", "/api/oauth/"+slug+"?state="+token+"&code=provider-code", nil)
+				request.AddCookie(cookie)
+				router.ServeHTTP(response, request)
 			}
 			var result struct {
 				Success bool                   `json:"success"`
@@ -739,15 +740,12 @@ func TestOAuthLoginConsumesFlowOnlyAfterProviderIdentity(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			provider.exchangeErr = test.exchangeErr
 			provider.userInfoErr = test.userInfoErr
-			token, _, err := model.CreateAuthFlow(model.AuthFlowCreate{
-				Purpose: model.AuthFlowPurposeOAuth, Provider: "auth-flow-test", Intent: model.AuthFlowIntentLogin,
-				Payload: `{}`, ExpiresAt: time.Now().Add(time.Minute),
-			})
-			require.NoError(t, err)
+			token, cookie := beginBrowserOAuthLogin(t, "auth-flow-test", "", nil)
 
 			router := gin.New()
 			router.GET("/api/oauth/:provider", HandleOAuth)
 			request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+token+"&code=test", nil)
+			request.AddCookie(cookie)
 			response := httptest.NewRecorder()
 			router.ServeHTTP(response, request)
 
@@ -765,27 +763,21 @@ func TestOAuthLoginConsumesFlowAfterProviderIdentityAndOnProviderError(t *testin
 
 	provider.exchangeErr = nil
 	provider.userInfoErr = nil
-	successToken, _, err := model.CreateAuthFlow(model.AuthFlowCreate{
-		Purpose: model.AuthFlowPurposeOAuth, Provider: "auth-flow-test", Intent: model.AuthFlowIntentLogin,
-		Payload: `{invalid`, ExpiresAt: time.Now().Add(time.Minute),
-	})
-	require.NoError(t, err)
+	successToken, cookie := beginBrowserOAuthLogin(t, "auth-flow-test", "", nil)
 	router := gin.New()
 	router.GET("/api/oauth/:provider", HandleOAuth)
 	request := httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+successToken+"&code=test", nil)
+	request.AddCookie(cookie)
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, request)
-	_, err = model.GetAuthFlow(successToken, model.AuthFlowMatch{Purpose: model.AuthFlowPurposeOAuth})
+	_, err := model.GetAuthFlow(successToken, model.AuthFlowMatch{Purpose: model.AuthFlowPurposeOAuth})
 	assert.ErrorIs(t, err, model.ErrAuthFlowConsumed)
 	assert.Equal(t, 1, provider.exchangeCalls)
 	assert.Equal(t, 1, provider.userInfoCalls)
 
-	providerErrorToken, _, err := model.CreateAuthFlow(model.AuthFlowCreate{
-		Purpose: model.AuthFlowPurposeOAuth, Provider: "auth-flow-test", Intent: model.AuthFlowIntentLogin,
-		Payload: `{}`, ExpiresAt: time.Now().Add(time.Minute),
-	})
-	require.NoError(t, err)
+	providerErrorToken, cookie := beginBrowserOAuthLogin(t, "auth-flow-test", "", nil)
 	request = httptest.NewRequest(http.MethodGet, "/api/oauth/auth-flow-test?state="+providerErrorToken+"&error=access_denied", nil)
+	request.AddCookie(cookie)
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, request)
 	_, err = model.GetAuthFlow(providerErrorToken, model.AuthFlowMatch{Purpose: model.AuthFlowPurposeOAuth})

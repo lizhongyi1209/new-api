@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
@@ -57,6 +39,29 @@ import {
 } from '@/components/ui/tooltip'
 import { toIntlLocale } from '@/i18n/languages'
 import { formatTimestampRelative, formatTimestampToDate } from '@/lib/format'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { handleServerError } from '@/lib/handle-server-error'
+import {
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import {
@@ -498,9 +503,9 @@ export function SystemInstancesPanel() {
   const instancesQuery = useQuery({
     queryKey: ['system-info', 'instances'],
     queryFn: async () => {
-      const res = await listSystemInstances()
+      const res = requireServerSuccess(await listSystemInstances())
       if (!res.success || !Array.isArray(res.data)) {
-        throw new Error(res.message || t('We could not load instances.'))
+        throw createServerError(res, t('We could not load instances.'))
       }
       return res.data
     },
@@ -524,9 +529,11 @@ export function SystemInstancesPanel() {
 
   const deleteStaleInstanceMutation = useMutation({
     mutationFn: async (nodeName: string) => {
-      const res = await deleteStaleSystemInstance(nodeName)
+      const res = requireServerSuccess(
+        await deleteStaleSystemInstance(nodeName)
+      )
       if (!res.success) {
-        throw new Error(res.message || t('Delete failed'))
+        throw createServerError(res, t('Delete failed'))
       }
       return res
     },
@@ -539,7 +546,7 @@ export function SystemInstancesPanel() {
       setDeleteTarget(null)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : t('Delete failed'))
+      handleServerError(error, t('Delete failed'))
       void invalidateInstances()
     },
     onSettled: () => {
@@ -549,9 +556,9 @@ export function SystemInstancesPanel() {
 
   const deleteStaleInstancesMutation = useMutation({
     mutationFn: async () => {
-      const res = await deleteStaleSystemInstances()
+      const res = requireServerSuccess(await deleteStaleSystemInstances())
       if (!res.success) {
-        throw new Error(res.message || t('Delete failed'))
+        throw createServerError(res, t('Delete failed'))
       }
       return res
     },
@@ -565,7 +572,7 @@ export function SystemInstancesPanel() {
       setDeleteAllConfirmOpen(false)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : t('Delete failed'))
+      handleServerError(error, t('Delete failed'))
     },
   })
 

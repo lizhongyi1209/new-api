@@ -66,6 +66,14 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
+import { BILLING_PRICING_VARS } from '@/features/pricing/lib/billing-expr'
+import {
+  formatTaskUsageUnitPrice,
+  getTaskUsagePriceUnitLabelKey,
+} from '@/features/pricing/lib/dynamic-price'
+import { getTaskPricingDisplayTiers } from '@/features/pricing/lib/task-matrix-display'
+import { taskPriceLabel, taskPricingConditions } from '@/features/pricing/lib/task-price-display'
+import type { BillingUsageSchema } from '@/features/pricing/types'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
@@ -110,6 +118,71 @@ const CHANNEL_FIELD_LABELS: Record<string, string> = {
   type: 'Type',
   base_url: 'Base URL',
   key: 'Key',
+}
+
+function TaskUsageLogBreakdown(props: {
+  expression: string
+  schema: BillingUsageSchema
+  facts: Record<string, string | number | boolean>
+}) {
+  const { t, i18n } = useTranslation()
+  const tiers = getTaskPricingDisplayTiers(props.expression, props.schema)
+  const priceFields = Object.entries(props.schema)
+    .filter(([, definition]) => definition.type === 'number' && definition.unit)
+    .sort(([left], [right]) => left.localeCompare(right))
+
+  return (
+    <div className='space-y-3'>
+      <div className='rounded-md border p-3'>
+        <p className='mb-2 text-xs font-medium'>{t('Usage parameters')}</p>
+        <dl className='grid gap-2 sm:grid-cols-2'>
+          {Object.entries(props.facts).map(([field, value]) => (
+            <div key={field} className='flex justify-between gap-2 text-xs'>
+              <dt className='text-muted-foreground'>
+                {taskPriceLabel(props.schema[field]?.description, field, i18n.language)}
+              </dt>
+              <dd className='font-mono'>{String(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      {tiers.length > 0 ? (
+        <div className='space-y-2'>
+          {tiers.map((tier, index) => (
+            <div key={`${tier.label}:${index}`} className='rounded-md border p-3 text-xs'>
+              <div className='font-medium'>
+                {taskPricingConditions(tier.conditions, props.schema, i18n.language, t) ||
+                  t(tiers.length > 1 ? 'Other cases' : 'All requests')}
+              </div>
+              <dl className='mt-2 grid gap-1 sm:grid-cols-2'>
+                {priceFields.map(([field, definition]) => (
+                  <div key={field} className='flex justify-between gap-2'>
+                    <dt className='text-muted-foreground'>
+                      {taskPriceLabel(definition.description, field, i18n.language)}
+                    </dt>
+                    <dd className='font-mono'>
+                      {formatTaskUsageUnitPrice(tier.unitPrices[field] ?? 0, { tokenUnit: 'M' })}
+                      /{t(getTaskUsagePriceUnitLabelKey(definition.unit))}
+                    </dd>
+                  </div>
+                ))}
+                <div className='flex justify-between gap-2'>
+                  <dt className='text-muted-foreground'>{t('Additional charge')}</dt>
+                  <dd className='font-mono'>
+                    {formatTaskUsageUnitPrice(tier.constant, { tokenUnit: 'M' })}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <code className='block break-all rounded-md border p-3 text-xs'>
+          {props.expression}
+        </code>
+      )}
+    </div>
+  )
 }
 
 function timingTextColorClass(
@@ -688,7 +761,9 @@ function BillingBreakdown(props: {
       for (const entry of tieredSummary.priceEntries) {
         rows.push({
           label: t(entry.shortLabel),
-          value: `${fmtPrice(entry.price)}/M`,
+          value: entry.unit
+            ? `${fmtPrice(entry.price)} / ${t(entry.unit)}`
+            : `${fmtPrice(entry.price)}/M`,
         })
       }
     } else {
@@ -883,7 +958,10 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   const cacheWrite = other.cache_creation_tokens || 0
   const cacheWrite5m = other.cache_creation_tokens_5m || 0
   const cacheWrite1h = other.cache_creation_tokens_1h || 0
-  const hasTokens = promptTokens > 0 || completionTokens > 0
+  const hasTokens =
+    promptTokens > 0 ||
+    completionTokens > 0 ||
+    Object.values(other.billing_tokens ?? {}).some((count) => count > 0)
 
   if (!hasTokens) return null
 
@@ -895,6 +973,23 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
     value: completionTokens.toLocaleString(),
   })
 
+  if ((other.image_cache_tokens ?? 0) > 0) {
+    rows.push({
+      label: t('Image Cache'),
+      value: String(other.image_cache_tokens),
+    })
+  }
+  if (other.billing_tokens) {
+    for (const variable of BILLING_PRICING_VARS) {
+      const count = other.billing_tokens[variable.key]
+      if (count !== undefined && Number.isFinite(count) && count >= 0) {
+        rows.push({
+          label: `${t(variable.shortLabel)} (${variable.key})`,
+          value: count.toLocaleString(),
+        })
+      }
+    }
+  }
   if (cacheRead > 0) {
     rows.push({
       label: t('Cache Read'),
@@ -1585,12 +1680,30 @@ export function DetailsDialog(props: DetailsDialogProps) {
         {/* Tiered pricing breakdown (when billing_mode is tiered_expr) */}
         {isTieredBilling && other?.expr_b64 && (
           <DetailSection label={t('Dynamic Pricing')}>
-            <DynamicPricingBreakdown
-              compact
-              billingExpr={decodeBillingExprB64(other.expr_b64)}
-              matchedTierLabel={other.matched_tier}
-              hideCacheColumns={!hasAnyCacheTokens(other)}
-            />
+            {other.image_count !== undefined && (
+              <DetailRow
+                label={t('Billable image count')}
+                value={other.image_count}
+                mono
+              />
+            )}
+            {other.usage_schema ? (
+              <TaskUsageLogBreakdown
+                expression={decodeBillingExprB64(other.expr_b64)}
+                schema={other.usage_schema}
+                facts={other.usage_facts ?? {}}
+              />
+            ) : (
+              <DynamicPricingBreakdown
+                compact
+                billingExpr={decodeBillingExprB64(other.expr_b64)}
+                matchedTierLabel={other.matched_tier}
+                matchedBillingUnit={other.billing_unit}
+                matchedFixedPrice={other.fixed_price}
+                requestRuleTraces={other.request_rules}
+                hideCacheColumns={!hasAnyCacheTokens(other)}
+              />
+            )}
           </DetailSection>
         )}
 

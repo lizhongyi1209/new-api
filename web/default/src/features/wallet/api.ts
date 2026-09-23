@@ -95,8 +95,18 @@ export async function calculateStripeAmount(
 }
 
 /**
- * Request regular payment
+ * Calculate payment amount for Waffo payment
  */
+export async function calculateWaffoAmount(
+  request: AmountRequest
+): Promise<AmountResponse> {
+  const res = await api.post('/api/user/waffo/amount', request, {
+    skipBusinessError: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+/** Request regular payment */
 export async function requestPayment(
   request: PaymentRequest
 ): Promise<PaymentResponse> {

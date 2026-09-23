@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
@@ -47,6 +49,21 @@ func attachQuotaSaturation(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, o
 	attachQuotaSaturationToOther(other, clamp)
 	logger.LogWarn(ctx, fmt.Sprintf("quota saturation on consume log: op=%s kind=%s original=%g clamped=%d user=%d model=%s",
 		clamp.Op, clamp.Kind, clamp.Original, clamp.Clamped, relayInfo.UserId, relayInfo.OriginModelName))
+}
+
+// attachTaskQuotaSaturation retains task billing anomalies and their request context.
+func attachTaskQuotaSaturation(ctx context.Context, task *model.Task, other map[string]interface{}, clamp *common.QuotaClamp) {
+	if clamp == nil {
+		return
+	}
+	attachQuotaSaturationToOther(other, clamp)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if task.PrivateData.RequestID != "" {
+		ctx = context.WithValue(ctx, common.RequestIdKey, task.PrivateData.RequestID)
+	}
+	logger.LogWarn(ctx, fmt.Sprintf("quota saturation on task settlement: task=%s op=%s kind=%s original=%g clamped=%d user=%d model=%s", task.TaskID, clamp.Op, clamp.Kind, clamp.Original, clamp.Clamped, task.UserId, taskModelName(task)))
 }
 
 func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
@@ -317,11 +334,38 @@ func InjectTieredBillingInfo(other map[string]interface{}, relayInfo *relaycommo
 	other["billing_mode"] = "tiered_expr"
 	other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(snap.ExprString))
 	if result != nil {
+		if tokens := result.BillingTokens; tokens != nil && result.BillingUnit == billingexpr.BillingUnitToken {
+			other["image_cache_tokens"] = tokens.ImgCR
+			other["billing_tokens"] = map[string]float64{
+				"p": tokens.P, "c": tokens.C, "len": tokens.Len,
+				"cr": tokens.CR, "cc": tokens.CC, "cc1h": tokens.CC1h,
+				"img": tokens.Img, "img_cr": tokens.ImgCR, "img_o": tokens.ImgO,
+				"ai": tokens.AI, "ao": tokens.AO,
+			}
+		}
+		if result.BillingUnit != "" {
+			other["billing_unit"] = result.BillingUnit
+		}
+		if result.FixedPrice != nil {
+			other["fixed_price"] = *result.FixedPrice
+		}
+		if len(result.RequestRules) > 0 {
+			other["request_rules"] = result.RequestRules
+		}
 		if result.ImageCount != nil {
 			other["image_count"] = *result.ImageCount
 		}
 		other["matched_tier"] = result.MatchedTier
-	} else if snap.EstimatedImageCount != nil {
-		other["image_count"] = *snap.EstimatedImageCount
+	} else {
+		if snap.EstimatedImageCount != nil {
+			other["image_count"] = *snap.EstimatedImageCount
+		}
+		if snap.EstimatedBillingUnit != "" {
+			other["billing_unit"] = snap.EstimatedBillingUnit
+			other["matched_tier"] = snap.EstimatedTier
+			if snap.EstimatedFixedPrice != nil {
+				other["fixed_price"] = *snap.EstimatedFixedPrice
+			}
+		}
 	}
 }

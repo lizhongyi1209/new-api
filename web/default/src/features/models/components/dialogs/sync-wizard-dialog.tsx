@@ -1,3 +1,25 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { StaticDataTable } from '@/components/data-table'
+import { Dialog } from '@/components/dialog'
+import { EmptyState } from '@/components/empty-state'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { handleServerError } from '@/lib/handle-server-error'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,21 +38,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { StaticDataTable } from '@/components/data-table'
-import { Dialog } from '@/components/dialog'
-import { EmptyState } from '@/components/empty-state'
-import { ErrorState } from '@/components/error-state'
-import { LoadingState } from '@/components/loading-state'
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { handleServerError } from '@/lib/handle-server-error'
+import {
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 
 import { previewUpstreamDiff, syncUpstream } from '../../api'
 import { getSyncLocaleOptions } from '../../constants'
@@ -95,28 +106,32 @@ export function SyncWizardDialog(props: {
       setPage(0)
     },
     mutationFn: async () => {
-      const response = await previewUpstreamDiff({ locale })
+      const response = requireServerSuccess(
+        await previewUpstreamDiff({ locale })
+      )
       if (!response.success || !response.data) {
-        throw new Error(response.message || t('Failed to preview metadata'))
+        throw createServerError(response, t('Failed to preview metadata'))
       }
       return response.data
     },
     onSuccess: (data) => {
       setPreview(data)
     },
-    onError: handleServerError,
+    onError: (error) => handleServerError(error),
   })
 
   const apply = useMutation({
     mutationFn: async (selections: MetadataSyncSelection[]) => {
       if (!preview) throw new Error(t('Preview metadata first'))
-      const response = await syncUpstream({
-        locale: preview.source.locale,
-        source_version: preview.source.version,
-        selections,
-      })
+      const response = requireServerSuccess(
+        await syncUpstream({
+          locale: preview.source.locale,
+          source_version: preview.source.version,
+          selections,
+        })
+      )
       if (!response.success || !response.data) {
-        throw new Error(response.message || t('Metadata sync failed'))
+        throw createServerError(response, t('Metadata sync failed'))
       }
       return response.data
     },
@@ -128,7 +143,7 @@ export function SyncWizardDialog(props: {
       )
       setStep(3)
     },
-    onError: handleServerError,
+    onError: (error) => handleServerError(error),
   })
 
   useEffect(() => {
@@ -373,20 +388,31 @@ export function SyncWizardDialog(props: {
             <div className='space-y-1'>
               <Label>{t('Metadata language')}</Label>
               <Select
- value={locale}
- disabled={busy}
- items={getSyncLocaleOptions(t)}
- onValueChange={(value) => {
-   if (value) setLocale(value as SyncLocale)
-   setPreview(null)
-   setSelection({})
-   setPage(0)
-   load.reset()
- }}
->
- <SelectTrigger className='w-44' aria-label={t('Metadata language')}><SelectValue /></SelectTrigger>
- <SelectContent>{getSyncLocaleOptions(t).map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-</Select>
+                value={locale}
+                disabled={busy}
+                items={getSyncLocaleOptions(t)}
+                onValueChange={(value) => {
+                  if (value) setLocale(value as SyncLocale)
+                  setPreview(null)
+                  setSelection({})
+                  setPage(0)
+                  load.reset()
+                }}
+              >
+                <SelectTrigger
+                  className='w-44'
+                  aria-label={t('Metadata language')}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {getSyncLocaleOptions(t).map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button
               variant='outline'

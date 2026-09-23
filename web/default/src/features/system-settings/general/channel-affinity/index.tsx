@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { Edit, FileText, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -36,6 +18,26 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { SettingsSwitchField } from '../../components/settings-form-layout'
 import { SettingsPageActionsPortal } from '../../components/settings-page-context'
@@ -194,10 +196,10 @@ export function ChannelAffinitySection(props: Props) {
   const refreshCache = useCallback(async () => {
     setCacheLoading(true)
     try {
-      const res = await getCacheStats()
+      const res = requireServerSuccess(await getCacheStats())
       if (res.success) setCacheStats(res.data || null)
-    } catch {
-      toast.error(t('Failed to refresh cache stats'))
+    } catch (error) {
+      handleServerError(error, t('Failed to refresh cache stats'))
     } finally {
       setCacheLoading(false)
     }
@@ -323,8 +325,8 @@ export function ChannelAffinitySection(props: Props) {
         await updateOption.mutateAsync(u)
       }
       toast.success(t('Saved successfully'))
-    } catch {
-      toast.error(t('Failed to save'))
+    } catch (error) {
+      handleServerError(error, t('Failed to save'))
     } finally {
       setSaving(false)
     }
@@ -353,22 +355,26 @@ export function ChannelAffinitySection(props: Props) {
   }
 
   const handleClearAll = async () => {
-    const res = await clearAllCache()
-    if (res.success) {
+    try {
+      requireServerSuccess(await clearAllCache())
       toast.success(t('Cleared'))
       refreshCache()
+      setClearAllDialogOpen(false)
+    } catch (error) {
+      handleServerError(error)
     }
-    setClearAllDialogOpen(false)
   }
 
   const handleClearRule = async () => {
     if (!clearRuleName) return
-    const res = await clearRuleCache(clearRuleName)
-    if (res.success) {
+    try {
+      requireServerSuccess(await clearRuleCache(clearRuleName))
       toast.success(t('Cleared'))
       refreshCache()
+      setClearRuleName(null)
+    } catch (error) {
+      handleServerError(error)
     }
-    setClearRuleName(null)
   }
 
   const switchToJsonMode = () => {

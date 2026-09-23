@@ -55,6 +55,7 @@ type textQuotaSummary struct {
 	AudioInputPrice          float64
 	ImageGenerationCallPrice float64
 	ToolCallSurchargeQuota   decimal.Decimal
+	FixedPriceBilling        bool
 }
 
 func cacheWriteTokensTotal(summary textQuotaSummary) int {
@@ -364,16 +365,25 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	var tieredResult *billingexpr.TieredResult
 	tieredBillingApplied := false
-	if originUsage != nil {
+	// A successful per-request response can be billed without token metadata.
+	// Token-priced responses keep their existing missing-usage fallback.
+	if originUsage != nil || isFixedPriceSettlement(relayInfo, nil) {
+		billingUsage := usage
+		if billingUsage == nil {
+			billingUsage = &dto.Usage{}
+		}
 		var tieredUsedVars map[string]bool
 		if snap := relayInfo.TieredBillingSnapshot; snap != nil {
 			tieredUsedVars = billingexpr.UsedVars(snap.ExprString)
 		}
-		tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, BuildTieredTokenParams(usage, summary.IsClaudeUsageSemantic, tieredUsedVars))
+		tieredOk, tieredQuota, tieredRes := TryTieredSettle(relayInfo, BuildTieredTokenParams(billingUsage, summary.IsClaudeUsageSemantic, tieredUsedVars))
 		if tieredOk {
 			tieredBillingApplied = true
 			tieredResult = tieredRes
 			summary.Quota = composeTieredTextQuota(relayInfo, summary, tieredQuota, tieredRes)
+			summary.FixedPriceBilling = isFixedPriceSettlement(relayInfo, tieredRes)
+			// Audio input is already included in the expression settlement.
+			summary.AudioInputPrice = 0
 		}
 	}
 
@@ -393,7 +403,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		extraContent = append(extraContent, fmt.Sprintf("Image Generation Call 花费 %s", decimal.NewFromFloat(summary.ImageGenerationCallPrice).Mul(decimal.NewFromFloat(summary.GroupRatio)).Mul(decimal.NewFromFloat(common.QuotaPerUnit)).String()))
 	}
 
-	if summary.TotalTokens == 0 {
+	if summary.TotalTokens == 0 && !summary.FixedPriceBilling {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
 	} else {
@@ -547,16 +557,16 @@ func RefundIfZeroCompletionTokens(ctx *gin.Context, relayInfo *relaycommon.Relay
 
 	// Safety filters, content blocks, etc. - provider processed input and will bill for it
 	if strings.Contains(rejectReason, "block_reason") ||
-	   strings.Contains(rejectReason, "PROHIBITED_CONTENT") ||
-	   strings.Contains(rejectReason, "SAFETY") ||
-	   strings.Contains(rejectReason, "content_filter") {
+		strings.Contains(rejectReason, "PROHIBITED_CONTENT") ||
+		strings.Contains(rejectReason, "SAFETY") ||
+		strings.Contains(rejectReason, "content_filter") {
 		logger.LogInfo(ctx, fmt.Sprintf("上游内容拦截（%s），已消耗输入token，不退费", rejectReason))
 		return
 	}
 
 	// Client disconnects - provider processed input
 	if strings.Contains(rejectReason, "client_gone") ||
-	   strings.Contains(rejectReason, "context canceled") {
+		strings.Contains(rejectReason, "context canceled") {
 		logger.LogInfo(ctx, "客户端断开连接，上游已处理输入token，不退费")
 		return
 	}

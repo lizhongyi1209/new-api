@@ -50,7 +50,7 @@ import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 
 const thinkingBlacklistExample = JSON.stringify(
-  ['moonshotai/kimi-k2-thinking', 'kimi-k2-thinking'],
+  ['moonshotai/kimi-k2-thinking', 'kimi-k2-thinking', 're:.*@sha256:.*'],
   null,
   2
 )
@@ -231,7 +231,8 @@ export function GlobalSettingsCard({ defaultValues }: GlobalSettingsCardProps) {
                 <FormDescription>
                   {t(
                     'Models listed here will not automatically append or remove -thinking / -nothinking suffixes.'
-                  )}
+                  )}{' '}
+                  {t('Use exact model names such as gpt-4o, or regex rules prefixed with re: such as re:^gemini-.')}
                 </FormDescription>
                 <FormMessage />
               </FormItem>

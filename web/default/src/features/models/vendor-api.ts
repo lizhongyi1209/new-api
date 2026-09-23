@@ -1,3 +1,7 @@
+import type { QueryClient } from '@tanstack/react-query'
+import { t } from 'i18next'
+
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,11 +20,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { QueryClient } from '@tanstack/react-query'
-import { isAxiosError } from 'axios'
-import { t } from 'i18next'
-
-import { api } from '@/lib/api'
+import {
+  createServerError,
+  getServerErrorMessage,
+  getServerErrorSources,
+} from '@/lib/server-error-message'
 
 import type { Model, Vendor } from './types'
 
@@ -54,9 +58,10 @@ type VendorErrorPayload = {
   reference_counts?: Record<string, number>
 }
 export function vendorErrorMessage(error: unknown): string {
-  const payload = isAxiosError<VendorErrorPayload>(error)
-    ? error.response?.data
-    : undefined
+  const payload = getServerErrorSources(error).find(
+    (source) =>
+      source.code === 'VENDOR_CONFLICT' || source.code === 'VENDOR_REFERENCED'
+  ) as VendorErrorPayload | undefined
   if (payload?.code === 'VENDOR_CONFLICT') {
     return t('Vendor data changed. Preview again before applying.')
   }
@@ -70,8 +75,7 @@ export function vendorErrorMessage(error: unknown): string {
       { count }
     )
   }
-  const message =
-    payload?.message || (error instanceof Error ? error.message : '')
+  const message = getServerErrorMessage(error, t('Operation failed'))
   switch (message) {
     case 'vendor name is required':
       return t('Vendor name is required')
@@ -106,8 +110,9 @@ export async function previewVendorOperation(
 ): Promise<VendorOperationPreview> {
   const response = await api.post('/api/vendors/operations/preview', operation)
   if (!response.data.success) {
-    throw new Error(
-      response.data.message || t('Failed to preview vendor changes')
+    throw createServerError(
+      response.data,
+      t('Failed to preview vendor changes')
     )
   }
   return response.data.data
@@ -117,9 +122,7 @@ export async function applyVendorOperation(
 ): Promise<VendorOperationResult> {
   const response = await api.post('/api/vendors/operations', operation)
   if (!response.data.success) {
-    throw new Error(
-      response.data.message || t('Failed to apply vendor changes')
-    )
+    throw createServerError(response.data, t('Failed to apply vendor changes'))
   }
   return response.data.data
 }

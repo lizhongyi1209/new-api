@@ -262,7 +262,10 @@ func getUpstreamModelUpdateMinCheckIntervalSeconds() int64 {
 }
 
 func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
-	baseURL := constant.ChannelBaseURLs[channel.Type]
+	baseURL := ""
+	if channel.Type > 0 && channel.Type < len(constant.ChannelBaseURLs) {
+		baseURL = constant.ChannelBaseURLs[channel.Type]
+	}
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
 	}

@@ -724,12 +724,21 @@ func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
 }
 
+type OriginTaskRef struct {
+	TaskID         string
+	UpstreamTaskID string
+	Action         string
+	Status         string
+	Data           []byte
+}
+
 type TaskRelayInfo struct {
 	Action       string
 	OriginTaskID string
 	// PublicTaskID 是提交时预生成的 task_xxxx 格式公开 ID，
 	// 供 DoResponse 在返回给客户端时使用（避免暴露上游真实 ID）。
 	PublicTaskID string
+	OriginTasks  []OriginTaskRef
 
 	ConsumeQuota bool
 
@@ -881,8 +890,10 @@ type TaskInfo struct {
 	OutputTokensByModality map[string]int         `json:"output_tokens_by_modality,omitempty"`
 	ActualCost             float64                `json:"actual_cost,omitempty"` // 上游返回的实际成本（RMB），用于精确计费
 	Metadata               map[string]interface{} `json:"metadata,omitempty"`    // 额外的元数据（如视频时长、分辨率等）
-	QuotaClamp             *common.QuotaClamp     `json:"-"`                     // 完成结算时的额度饱和审计标记
-	VideoBilling           *VideoBillingDetails   `json:"-"`                     // 视频任务完成后的结构化计费明细
+	UsageFacts             map[string]any         `json:"usage_facts,omitempty"`
+	PluginState            json.RawMessage        `json:"plugin_state,omitempty"`
+	QuotaClamp             *common.QuotaClamp     `json:"-"` // 完成结算时的额度饱和审计标记
+	VideoBilling           *VideoBillingDetails   `json:"-"` // 视频任务完成后的结构化计费明细
 }
 
 // VideoBillingDetails records provider-native video pricing and the gateway

@@ -1,3 +1,5 @@
+import type { ApiResponse } from '@/features/profile/types'
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,8 +18,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { ApiResponse } from '@/features/profile/types'
-import { api } from '@/lib/api'
+import { createServerError } from '@/lib/server-error-message'
 
 export interface AuditLog {
   event_id: string
@@ -59,7 +60,7 @@ export async function getAuditLogs(
     ApiResponse<{ items: AuditLog[]; total: number }>
   >(scope === 'all' ? '/api/audit' : '/api/audit/self', { params })
   if (!response.data.success || !response.data.data) {
-    throw new Error(response.data.message || 'Failed to load audit records')
+    throw createServerError(response.data, 'Failed to load audit records')
   }
   return response.data.data
 }

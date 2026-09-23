@@ -24,10 +24,11 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { useDebounce } from '@/hooks'
+import { useDebounce, useMediaQuery } from '@/hooks'
 import { cn } from '@/lib/utils'
 
 import { DataTableFacetedFilter } from './faceted-filter'
+import { DataTableMobileFilterPanel } from './mobile-filter-panel'
 import { DataTableViewOptions } from './view-options'
 
 type FilterDef = {
@@ -131,6 +132,8 @@ export type DataTableToolbarProps<TData> = {
    *   Row 3: leftActions …… Reset / Search / ViewOptions
    */
   leftActions?: ReactNode
+  /** Keep actions visible while collapsing filters on narrow screens. */
+  collapsibleOnMobile?: boolean
   /**
    * Outer wrapper className override.
    */
@@ -338,6 +341,34 @@ export function DataTableToolbar<TData>(props: DataTableToolbarProps<TData>) {
       />
     </Button>
   ) : null
+
+  const isMobile = useMediaQuery('(max-width: 640px)')
+  if (isMobile && props.collapsibleOnMobile) {
+    return (
+      <DataTableMobileFilterPanel
+        compact
+        className={props.className}
+        actions={
+          <>
+            {props.leftActions}
+            {props.preActions}
+            {resetButton}
+            {searchButton}
+            {viewToggleNode}
+            {viewOptionsNode}
+          </>
+        }
+      >
+        <div className='flex min-w-0 flex-wrap items-center gap-2'>
+          {props.customSearch !== undefined ? props.customSearch : searchInput}
+          {props.additionalSearch}
+          {filterChips}
+          {expanded && hasExpandable && props.expandable}
+          {expandToggle}
+        </div>
+      </DataTableMobileFilterPanel>
+    )
+  }
 
   const hasLeftActions = props.leftActions != null
 

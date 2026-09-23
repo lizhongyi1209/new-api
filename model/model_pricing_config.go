@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -29,10 +30,13 @@ type ModelPricingChange struct {
 }
 
 type ModelPricingEntry struct {
-	ModelName  string        `json:"model_name"`
-	Version    string        `json:"version"`
-	Configured PricingValues `json:"configured"`
-	Effective  PricingValues `json:"effective"`
+	ModelName     string                               `json:"model_name"`
+	Version       string                               `json:"version"`
+	Configured    PricingValues                        `json:"configured"`
+	Effective     PricingValues                        `json:"effective"`
+	UsageSchema   map[string]jsplugin.UsageFieldSchema `json:"usage_schema,omitempty"`
+	UsageExamples []jsplugin.UsageExample              `json:"usage_examples,omitempty"`
+	UsageVariants []PricingPluginVariant               `json:"usage_variants,omitempty"`
 }
 
 type ModelPricingSnapshot struct {
@@ -123,7 +127,8 @@ func effectiveModelPricing(values map[string]map[string]any, name string) Pricin
 	result := modelPricingValues(values, name)
 	// Legacy wildcard aliases are resolved by the same normalization as relay.
 	alias := ratio_setting.FormatMatchingModelName(name)
-	for _, key := range modelPricingOptionKeys[:8] {
+	for _, key := range []string{"ModelPrice", "ModelRatio", "CompletionRatio", "AudioRatio", "AudioCompletionRatio", "VideoCompletionRatio"} {
+		delete(result, key)
 		if value, exists := values[key][alias]; exists {
 			result[key] = value
 		}
@@ -153,11 +158,41 @@ func effectiveModelPricing(values map[string]map[string]any, name string) Pricin
 	}
 	// Completion ratios include engine-enforced model defaults. Expose their
 	// effective value without persisting them into the editable configuration.
-	completion := ratio_setting.GetCompletionRatioInfo(name)
-	if _, exists := result["CompletionRatio"]; !exists || completion.Locked {
-		result["CompletionRatio"] = completion.Ratio
+	var configuredCompletion *float64
+	if ratio, exists := result["CompletionRatio"].(float64); exists {
+		configuredCompletion = &ratio
+	}
+	result["CompletionRatio"] = ratio_setting.ResolveCompletionRatio(name, configuredCompletion).Ratio
+	for key, fallback := range map[string]float64{
+		"CacheRatio": 1, "CreateCacheRatio": 1.25, "ImageRatio": 1,
+	} {
+		if _, exists := result[key]; !exists {
+			result[key] = fallback
+		}
 	}
 	return result
+}
+
+// PreviewModelPricing resolves a complete draft without saving options or
+// changing the in-memory pricing maps used by live requests.
+func PreviewModelPricing(name string, draft PricingValues) (PricingValues, error) {
+	if draft == nil {
+		return nil, errors.New("pricing draft is required")
+	}
+	if err := ValidateModelPricing(name, draft); err != nil {
+		return nil, err
+	}
+	values, _, _, err := readModelPricingMaps(DB)
+	if err != nil {
+		return nil, err
+	}
+	for _, key := range modelPricingOptionKeys {
+		delete(values[key], name)
+		if value, exists := draft[key]; exists {
+			values[key][name] = value
+		}
+	}
+	return effectiveModelPricing(values, name), nil
 }
 
 func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
@@ -175,15 +210,42 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 		for name := range billing_setting.GetBuiltinBillingExprCopy() {
 			nameSet[name] = true
 		}
+		for _, plugin := range jsplugin.DefaultRegistry.Generation().Plugins() {
+			for _, name := range plugin.Meta.Models {
+				nameSet[name] = true
+			}
+		}
 		for name := range nameSet {
 			names = append(names, name)
 		}
 	}
 	sort.Strings(names)
 	result := &ModelPricingSnapshot{Entries: make([]ModelPricingEntry, 0, len(names)), Options: make(map[string]string), EmptyVersion: ModelPricingVersion(PricingValues{})}
+	generation := jsplugin.DefaultRegistry.Generation()
 	for _, name := range names {
 		configured := modelPricingValues(values, name)
 		entry := ModelPricingEntry{ModelName: name, Version: ModelPricingVersion(configured), Configured: configured, Effective: effectiveModelPricing(values, name)}
+		for _, plugin := range generation.PluginsByModel(name) {
+			schema, examples := plugin.Meta.UsageForModel(name)
+			if len(schema) == 0 {
+				continue
+			}
+			variant := PricingPluginVariant{
+				PluginKey: plugin.Meta.Key, PluginName: plugin.Meta.Name, Icon: plugin.Meta.Icon,
+				BillingUsageSchema:   jsplugin.CloneUsageSchema(schema),
+				BillingUsageExamples: jsplugin.CloneUsageExamples(examples),
+			}
+			variant.BillingExpr, _ = billing_setting.GetTaskPluginBillingExpr(plugin.Meta.Key, name)
+			if variant.BillingExpr != "" {
+				variant.BillingMode = billing_setting.BillingModeTieredExpr
+			}
+			variant.Version = TaskPluginPricingVersion(variant.BillingExpr)
+			entry.UsageVariants = append(entry.UsageVariants, variant)
+			if len(entry.UsageSchema) == 0 {
+				entry.UsageSchema = variant.BillingUsageSchema
+				entry.UsageExamples = variant.BillingUsageExamples
+			}
+		}
 		result.Entries = append(result.Entries, entry)
 	}
 	// Preserve the existing settings editor's full-map interface. Built-in

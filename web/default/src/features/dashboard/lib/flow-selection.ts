@@ -1,3 +1,7 @@
+import type {
+  FlowQuotaDataItem,
+  FlowUserFilterOption,
+} from '@/features/dashboard/types'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,10 +20,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type {
-  FlowQuotaDataItem,
-  FlowUserFilterOption,
-} from '@/features/dashboard/types'
+import { createServerError } from '@/lib/server-error-message'
 
 export type FlowDisplayState = 'loading' | 'error' | 'empty' | 'chart'
 
@@ -34,7 +35,7 @@ export function requireSuccessfulFlowRows(
   fallbackMessage: string
 ): FlowQuotaDataItem[] {
   if (!response.success) {
-    throw new Error(response.message || fallbackMessage)
+    throw createServerError(response, fallbackMessage)
   }
   return response.data ?? []
 }

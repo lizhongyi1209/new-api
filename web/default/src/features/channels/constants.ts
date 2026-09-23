@@ -80,6 +80,7 @@ export const CHANNEL_TYPES = {
   59: 'Advanced Custom',
   60: 'TokenMartSeedance',
   61: 'xinhankr',
+  62: 'Task Plugin',
   63: 'Sub2API',
   64: 'New API',
 } as const
@@ -87,7 +88,7 @@ export const CHANNEL_TYPES = {
 const CHANNEL_TYPE_DISPLAY_ORDER: number[] = [
   1, 14, 33, 24, 43, 3, 41, 48, 58, 42, 34, 20, 4, 40, 27, 25, 17, 26, 15, 46,
   23, 18, 45, 31, 35, 49, 19, 47, 37, 38, 39, 11, 8, 57, 22, 21, 44, 2, 5, 36,
-  50, 51, 52, 53, 54, 55, 56, 60, 61, 63, 64,
+  50, 51, 52, 53, 54, 55, 56, 60, 61, 62, 63, 64,
 ]
 
 export const CHANNEL_TYPE_OPTIONS: { value: number; label: string }[] = (() => {
@@ -402,6 +403,7 @@ export const GEMINI_FILE_DATA_CHANNEL_TYPES = new Set([24, 41])
 // Do not copy upstream's literals verbatim — 58 is TencentVideo here and 60 is
 // TokenMartSeedance.
 export const CHANNEL_TYPE_ADVANCED_CUSTOM = 59
+export const CHANNEL_TYPE_TASK_PLUGIN = 62
 export const CHANNEL_TYPE_SUB2API = 63
 export const CHANNEL_TYPE_NEW_API = 64
 

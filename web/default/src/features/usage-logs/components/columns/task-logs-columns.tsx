@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { ColumnDef } from '@tanstack/react-table'
+import type { CellContext, ColumnDef } from '@tanstack/react-table'
 import { Music } from 'lucide-react'
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useMemo } from 'react'
@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -36,12 +37,41 @@ import {
   type AudioClip,
 } from '../dialogs/audio-preview-dialog'
 import { FailReasonDialog } from '../dialogs/fail-reason-dialog'
-import { useUsageLogsContext } from '../usage-logs-provider'
+import { TaskDetailDialog } from '../dialogs/task-detail-dialog'
+import { useLogsViewScope, useUsageLogsContext } from '../usage-logs-provider'
 import {
   createDurationColumn,
   createChannelColumn,
   createProgressColumn,
 } from './column-helpers'
+
+function TaskDetailsCell(props: CellContext<TaskLog, unknown>) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const { sensitiveVisible } = useUsageLogsContext()
+  const { isAdminView } = useLogsViewScope()
+  return (
+    <>
+      <Button
+        variant='ghost'
+        size='sm'
+        className='h-7 px-0 text-xs'
+        onClick={() => setOpen(true)}
+      >
+        {t('View details')}
+      </Button>
+      {open && (
+        <TaskDetailDialog
+          log={props.row.original}
+          isAdmin={isAdminView}
+          sensitiveVisible={sensitiveVisible}
+          open={open}
+          onOpenChange={setOpen}
+        />
+      )}
+    </>
+  )
+}
 
 function parseTaskData(data: unknown): unknown[] {
   if (Array.isArray(data)) return data
@@ -195,6 +225,13 @@ export function useTaskLogsColumns(isAdmin: boolean): ColumnDef<TaskLog>[] {
         )
       },
       meta: { mobileTitle: true },
+    },
+    {
+      id: 'task_details',
+      header: t('Task Detail'),
+      cell: TaskDetailsCell,
+      size: 100,
+      meta: { mobileOrder: 25 },
     },
     createDurationColumn<TaskLog>({
       submitTimeKey: 'submit_time',

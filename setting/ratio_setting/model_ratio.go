@@ -423,6 +423,12 @@ func handleThinkingBudgetModel(name, prefix, wildcard string) string {
 	return name
 }
 
+// HasConfiguredModelRatio excludes the self-use fallback when choosing defaults.
+func HasConfiguredModelRatio(name string) bool {
+	_, exists := modelRatioMap.Get(FormatMatchingModelName(name))
+	return exists
+}
+
 func GetModelRatio(name string) (float64, bool, string) {
 	name = FormatMatchingModelName(name)
 
@@ -502,14 +508,19 @@ type CompletionRatioInfo struct {
 
 func GetCompletionRatioInfo(name string) CompletionRatioInfo {
 	name = FormatMatchingModelName(name)
+	var configured *float64
+	if ratio, ok := completionRatioMap.Get(name); ok {
+		configured = &ratio
+	}
+	return ResolveCompletionRatio(name, configured)
+}
 
-	if strings.Contains(name, "/") {
-		if ratio, ok := completionRatioMap.Get(name); ok {
-			return CompletionRatioInfo{
-				Ratio:  ratio,
-				Locked: false,
-			}
-		}
+// ResolveCompletionRatio applies relay defaults to a detached pricing draft.
+// A nil override must not inherit a discarded saved completion ratio.
+func ResolveCompletionRatio(name string, configured *float64) CompletionRatioInfo {
+	name = FormatMatchingModelName(name)
+	if strings.Contains(name, "/") && configured != nil {
+		return CompletionRatioInfo{Ratio: *configured}
 	}
 
 	hardCodedRatio, locked := getHardcodedCompletionModelRatio(name)
@@ -520,9 +531,9 @@ func GetCompletionRatioInfo(name string) CompletionRatioInfo {
 		}
 	}
 
-	if ratio, ok := completionRatioMap.Get(name); ok {
+	if configured != nil {
 		return CompletionRatioInfo{
-			Ratio:  ratio,
+			Ratio:  *configured,
 			Locked: false,
 		}
 	}

@@ -48,13 +48,41 @@ const channelActionConfig = (
   skipErrorHandler: true,
 })
 
-export type TaskPluginOption = { key: string; name: string; models: string[] }
+export type TaskPluginOption = {
+  key: string
+  name: string
+  models: string[]
+  baseUrl?: string
+}
+
+export async function getChannelDefaultBaseURLs(): Promise<
+  Record<number, string>
+> {
+  try {
+    const response = await api.get<{
+      success: boolean
+      data: Record<number, string>
+    }>('/api/channel/default_base_urls', channelActionConfig())
+    if (!response.data.success || !response.data.data) {
+      throw new Error('Failed to load default channel addresses')
+    }
+    return response.data.data
+  } catch (error) {
+    // Optional placeholder hints must not trigger the global HTTP 500 route.
+    throw new Error('Failed to load default channel addresses', {
+      cause: error,
+    })
+  }
+}
 
 export async function getTaskPluginOptions(): Promise<TaskPluginOption[]> {
   const response = await api.get<{
     success: boolean
     data: TaskPluginOption[]
-  }>('/api/task_plugin_options')
+  }>('/api/task_plugin_options', channelActionConfig())
+  if (!response.data.success || !Array.isArray(response.data.data)) {
+    throw new Error('Failed to load task plugins')
+  }
   return response.data.data
 }
 
@@ -248,11 +276,15 @@ export async function updateChannelBalance(
  * Fetch available models from upstream provider
  */
 export async function fetchUpstreamModels(
-  id: number
+  id: number,
+  options?: { signal?: AbortSignal }
 ): Promise<FetchModelsResponse> {
   const res = await api.get(
     `/api/channel/fetch_models/${id}`,
-    channelActionConfig()
+    channelActionConfig({
+      signal: options?.signal,
+      disableDuplicate: Boolean(options?.signal),
+    })
   )
   return res.data
 }
@@ -538,7 +570,7 @@ export async function getTagModels(
 /**
  * Fetch models from the current unsaved channel form configuration.
  */
-export async function fetchModels(data: {
+export type ChannelModelDiscoveryRequest = {
   base_url: string
   type: number
   key?: string
@@ -546,11 +578,16 @@ export async function fetchModels(data: {
   advanced_custom?: string
   header_override?: string
   proxy?: string
-}): Promise<FetchModelsResponse> {
+}
+
+export async function fetchModels(
+  data: ChannelModelDiscoveryRequest,
+  options?: { signal?: AbortSignal }
+): Promise<FetchModelsResponse> {
   const res = await api.post(
     '/api/channel/fetch_models',
     data,
-    channelActionConfig()
+    channelActionConfig({ signal: options?.signal })
   )
   return res.data
 }

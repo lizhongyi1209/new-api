@@ -21,6 +21,8 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { useCountdown } from '@/hooks/use-countdown'
+import { handleServerError } from '@/lib/handle-server-error'
+import { createServerError } from '@/lib/server-error-message'
 
 import { sendEmailVerification } from '../api'
 import { EMAIL_VERIFICATION_COUNTDOWN } from '../constants'
@@ -28,6 +30,7 @@ import { EMAIL_VERIFICATION_COUNTDOWN } from '../constants'
 interface UseEmailVerificationOptions {
   turnstileToken?: string
   validateTurnstile?: () => boolean
+  onVerificationAttempt?: () => void
 }
 
 /**
@@ -55,6 +58,7 @@ export function useEmailVerification(options?: UseEmailVerificationOptions) {
       return false
     }
 
+    options?.onVerificationAttempt?.()
     setIsSending(true)
     try {
       const res = await sendEmailVerification(email, options?.turnstileToken)
@@ -63,12 +67,12 @@ export function useEmailVerification(options?: UseEmailVerificationOptions) {
         toast.success(i18next.t('Verification email sent'))
         return true
       }
-      toast.error(
-        res?.message || i18next.t('Failed to send verification email')
+      handleServerError(
+        createServerError(res, i18next.t('Failed to send verification email'))
       )
       return false
-    } catch (_error) {
-      // Errors are handled by global interceptor
+    } catch (error: unknown) {
+      handleServerError(error, i18next.t('Failed to send verification email'))
       return false
     } finally {
       setIsSending(false)

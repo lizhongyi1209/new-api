@@ -99,7 +99,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if common.IsRequestBodyTooLargeError(err) || errors.Is(err, common.ErrRequestBodyTooLarge) {
 			newAPIError = types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusRequestEntityTooLarge, types.ErrOptionWithSkipRetry())
 		} else {
-			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest)
+			newAPIError = types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
 		}
 		return
 	}
@@ -411,6 +411,7 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			adminInfo["upstream_response"] = snapshot
 		}
 		other["admin_info"] = adminInfo
+		service.AppendTaskPluginAuditFields(c, other)
 		startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
 		if startTime.IsZero() {
 			startTime = time.Now()
@@ -581,8 +582,9 @@ func RelayTask(c *gin.Context) {
 
 	var result *relay.TaskSubmitResult
 	var taskErr *dto.TaskError
+	durableTask := false
 	defer func() {
-		if taskErr != nil && relayInfo.Billing != nil {
+		if taskErr != nil && !durableTask && relayInfo.Billing != nil {
 			relayInfo.Billing.Refund(c)
 		}
 	}()
@@ -661,10 +663,95 @@ func RelayTask(c *gin.Context) {
 
 	// ── 成功：结算 + 日志 + 插入任务 ──
 	if taskErr == nil {
+		if result == nil {
+			taskErr = service.TaskErrorWrapperLocal(errors.New("task submission returned no result"), "task_submit_failed", http.StatusInternalServerError)
+			respondTaskError(c, taskErr)
+			return
+		}
+		if result.PluginKey != "" {
+			task := model.InitTask(result.Platform, relayInfo)
+			task.PrivateData.Execution = service.TaskExecutionSnapshotFromContext(c)
+			task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
+			task.PrivateData.RequestID = c.GetString(common.RequestIdKey)
+			task.PrivateData.RequestSnapshot = service.BuildTaskRequestSnapshot(c, relayInfo)
+			task.PrivateData.SubmitResponse = service.SanitizeTaskAuditResponse(result.TaskData)
+			task.PrivateData.BillingSource = relayInfo.BillingSource
+			task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
+			task.PrivateData.TokenId = relayInfo.TokenId
+			task.PrivateData.NodeName = common.NodeName
+			task.PrivateData.PluginState = append([]byte(nil), result.PluginState...)
+			task.PrivateData.BillingContext = &model.TaskBillingContext{
+				ModelPrice:           relayInfo.PriceData.ModelPrice,
+				GroupRatio:           relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+				ModelRatio:           relayInfo.PriceData.ModelRatio,
+				CompletionRatio:      relayInfo.PriceData.CompletionRatio,
+				VideoCompletionRatio: relayInfo.PriceData.VideoCompletionRatio,
+				OtherRatios:          relayInfo.PriceData.OtherRatios,
+				OriginModelName:      relayInfo.OriginModelName,
+				PerCallBilling:       common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName) || relayInfo.PriceData.UsePrice,
+				VideoBilling:         relayInfo.VideoBilling,
+			}
+			if relayInfo.TieredBillingSnapshot != nil {
+				if snapshot, err := common.Marshal(relayInfo.TieredBillingSnapshot); err == nil {
+					task.PrivateData.BillingContext.TieredSnapshot = snapshot
+				} else {
+					common.SysError("marshal task tiered billing snapshot error: " + err.Error())
+				}
+			}
+			task.Quota = result.Quota
+			task.Data = result.TaskData
+			task.Action = relayInfo.Action
+			if result.Immediate != nil {
+				task.Status = model.TaskStatus(result.Immediate.Status)
+				task.Progress = result.Immediate.Progress
+				if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
+					task.FinishTime = time.Now().Unix()
+				}
+				if task.Status == model.TaskStatusFailure {
+					task.FailReason = result.Immediate.Reason
+				}
+				if result.Immediate.Url != "" {
+					task.PrivateData.ResultURL = result.Immediate.Url
+				}
+			}
+			if insertErr := task.Insert(); insertErr != nil {
+				common.SysError("insert plugin task error: " + insertErr.Error())
+				taskErr = service.TaskErrorWrapperLocal(errors.New("failed to persist task"), "task_insert_failed", http.StatusInternalServerError)
+				respondTaskError(c, taskErr)
+				return
+			}
+			durableTask = true
+			c.Set(common.UpstreamRequestIdKey, result.UpstreamTaskID)
+			if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
+				common.SysError("settle plugin task billing error: " + settleErr.Error())
+				taskErr = service.TaskErrorWrapperLocal(errors.New("failed to settle task billing"), "task_billing_settlement_failed", http.StatusInternalServerError)
+				respondTaskError(c, taskErr)
+				return
+			}
+			task.PrivateData.SubmitLogID = service.LogTaskConsumption(c, relayInfo, task.TaskID)
+			if updateErr := task.UpdatePrivateData(); updateErr != nil {
+				common.SysError("update plugin task log reference error: " + updateErr.Error())
+			}
+			if result.ClientResponse != nil {
+				c.JSON(http.StatusOK, result.ClientResponse)
+			} else {
+				status := "queued"
+				if result.Immediate != nil {
+					status = task.Status.ToVideoStatus()
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"id": task.TaskID, "task_id": task.TaskID,
+					"status": status, "model": relayInfo.OriginModelName,
+					"created_at": task.SubmitTime,
+				})
+			}
+			return
+		}
 		if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
 			common.SysError("settle task billing error: " + settleErr.Error())
 		}
 		task := model.InitTask(result.Platform, relayInfo)
+		task.PrivateData.Execution = service.TaskExecutionSnapshotFromContext(c)
 		c.Set(common.UpstreamRequestIdKey, result.UpstreamTaskID)
 		submitLogID := service.LogTaskConsumption(c, relayInfo, task.TaskID)
 
@@ -718,6 +805,9 @@ func respondTaskError(c *gin.Context, taskErr *dto.TaskError) {
 
 func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError, retryTimes int) bool {
 	if taskErr == nil {
+		return false
+	}
+	if taskErr.NoRetry {
 		return false
 	}
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {

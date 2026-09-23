@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Code, Plus, Table, Trash2 } from 'lucide-react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useEffectEvent,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { JsonCodeEditor } from '@/components/json-code-editor'
@@ -56,7 +63,7 @@ function getDuplicateSources(rows: MappingRow[]): string[] {
     }
   }
 
-  return Array.from(duplicates)
+  return [...duplicates]
 }
 
 export function ModelMappingEditor(props: ModelMappingEditorProps) {
@@ -68,6 +75,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
   const [jsonValue, setJsonValue] = useState(props.value)
   const [jsonError, setJsonError] = useState<string | null>(null)
   const nextRowIdRef = useRef(0)
+  const emittedValueRef = useRef<string | undefined>(undefined)
   const duplicateSources = useMemo(() => getDuplicateSources(rows), [rows])
 
   const createRowId = () => {
@@ -120,17 +128,24 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       })
       setJsonError(null)
       return true
-    } catch (_error) {
+    } catch {
       setJsonError(t('Model mapping must be valid JSON format'))
       return false
     }
   }
 
-  // Parse JSON to rows when value changes externally
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  const syncExternalValue = useEffectEvent(() => {
+    if (props.value === emittedValueRef.current) {
+      emittedValueRef.current = undefined
+      return
+    }
     setJsonValue(props.value)
     parseJsonToRows(props.value)
+  })
+
+  // Only replace drafts when the external value changes.
+  useEffect(() => {
+    syncExternalValue()
   }, [props.value])
 
   const convertRowsToJson = (updatedRows: MappingRow[]): string => {
@@ -152,6 +167,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     if (duplicates.length > 0) {
       setJsonError(t('Duplicate source model mappings are not allowed'))
       setJsonValue(DUPLICATE_MAPPING_SENTINEL)
+      emittedValueRef.current = DUPLICATE_MAPPING_SENTINEL
       props.onChange(DUPLICATE_MAPPING_SENTINEL)
       return
     }
@@ -159,6 +175,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
     const json = convertRowsToJson(updatedRows)
     setJsonError(null)
     setJsonValue(json)
+    emittedValueRef.current = json
     props.onChange(json)
   }
 
@@ -188,6 +205,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
 
   const handleJsonChange = (newJson: string) => {
     setJsonValue(newJson)
+    emittedValueRef.current = newJson
     props.onChange(newJson)
     parseJsonToRows(newJson)
   }
@@ -199,6 +217,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       2
     )
     setJsonValue(template)
+    emittedValueRef.current = template
     props.onChange(template)
     parseJsonToRows(template)
   }
@@ -210,6 +229,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
       if (duplicates.length === 0) {
         const json = convertRowsToJson(rows)
         setJsonValue(json)
+        emittedValueRef.current = json
         props.onChange(json)
       }
       setMode('json')
@@ -265,9 +285,9 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
           {rows.length > 0 ? (
             <div className='space-y-2'>
               <div className='grid grid-cols-[1fr_1fr_auto] gap-2 text-sm font-medium'>
-                <div>{t('Original Model')}</div>
-                <div>{t('Replacement Model')}</div>
-                <div className='w-10'></div>
+                <div>{t('Request Model Name')}</div>
+                <div>{t('Upstream Model Name')}</div>
+                <div className='w-10' />
               </div>
               {rows.map((row) => (
                 <div
@@ -276,6 +296,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                 >
                   <Input
                     value={row.from}
+                    aria-label={t('Request Model Name')}
                     onChange={(e) =>
                       handleRowChange(row.id, 'from', e.target.value)
                     }
@@ -285,6 +306,7 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
                   />
                   <Input
                     value={row.to}
+                    aria-label={t('Upstream Model Name')}
                     onChange={(e) =>
                       handleRowChange(row.id, 'to', e.target.value)
                     }
@@ -325,11 +347,16 @@ export function ModelMappingEditor(props: ModelMappingEditorProps) {
             {t('Add Mapping')}
           </Button>
         </TabsContent>
-        <TabsContent value='json'>
+        <TabsContent value='json' className='space-y-2'>
+          <p className='text-muted-foreground text-sm'>
+            {t(
+              'JSON keys are request model names; values are upstream model names.'
+            )}
+          </p>
           <JsonCodeEditor
             value={jsonValue}
             onChange={handleJsonChange}
-            placeholder={t('{"original-model": "replacement-model"}')}
+            placeholder='{"request-model": "upstream-model"}'
             disabled={props.disabled}
             className={jsonError ? 'border-destructive' : undefined}
             aria-invalid={Boolean(jsonError)}

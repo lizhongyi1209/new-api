@@ -49,9 +49,12 @@ export function ModelCardGrid(props: ModelCardGridProps) {
 
   const perfQuery = useQuery({
     queryKey: ['perf-metrics-summary', 24],
-    queryFn: () => getPerfMetricsSummary(24),
+    queryFn: ({ signal }) =>
+      getPerfMetricsSummary(24, { signal, optional: true }),
     staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
     retry: false,
+    meta: { errorToast: false, errorRedirect: false },
   })
 
   const pagedModels = useMemo(() => {
@@ -62,7 +65,10 @@ export function ModelCardGrid(props: ModelCardGridProps) {
   const perfMap = useMemo(() => {
     const map = new Map<string, ModelPerfBadgeData>()
     for (const model of perfQuery.data?.data?.models ?? []) {
-      map.set(model.model_name, model)
+      map.set(model.model_name, {
+        ...model,
+        hourly_window_end_ts: perfQuery.data?.data?.hourly_window_end_ts,
+      })
     }
     return map
   }, [perfQuery.data])
@@ -73,7 +79,7 @@ export function ModelCardGrid(props: ModelCardGridProps) {
 
   return (
     <div className='space-y-4 sm:space-y-5'>
-      <div className='grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-3'>
+      <div className='grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3'>
         {pagedModels.map((model) => (
           <ModelCard
             key={model.id ?? model.model_name}

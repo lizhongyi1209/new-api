@@ -16,11 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 
 import { api } from '@/lib/api'
+import { STATUS_QUERY_KEY } from '@/lib/status-query'
 import type { AuthBundle } from '@/stores/auth-store'
 
 import { SecureVerificationDialog } from '../components/secure-verification-dialog'
@@ -130,7 +132,15 @@ it('lets a pending login switch from Passkey to 2FA without using authenticated 
     .mockResolvedValue({ data: { success: true, data: bundle } })
   const result = vi.fn()
   const user = userEvent.setup()
-  render(<LoginHarness onResult={result} />)
+  const queryClient = new QueryClient()
+  queryClient.setQueryData(STATUS_QUERY_KEY, {
+    passkey_rp_ids: ['example.com'],
+  })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <LoginHarness onResult={result} />
+    </QueryClientProvider>
+  )
   await user.click(screen.getByRole('button', { name: 'Continue sign-in' }))
   expect(await screen.findByRole('tab', { name: 'Passkey' })).toHaveAttribute(
     'aria-selected',

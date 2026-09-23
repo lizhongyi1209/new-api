@@ -1,3 +1,16 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
+import { useId, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import {
+  useCanEditModelPricing,
+  invalidateModelPricing,
+} from '@/features/model-pricing/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,19 +29,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { isAxiosError } from 'axios'
-import { useId, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { ConfirmDialog } from '@/components/confirm-dialog'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Label } from '@/components/ui/label'
 import {
-  useCanEditModelPricing,
-  invalidateModelPricing,
-} from '@/features/model-pricing/api'
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 
 import { deleteModel, deleteModels } from '../../api'
 import type { Model } from '../../types'
@@ -56,18 +60,22 @@ export function ModelDeleteDialog(props: ModelDeleteDialogProps) {
       const ids = props.models.map((model) => model.id)
       const response =
         ids.length === 1
-          ? await deleteModel(
-              ids[0],
-              removeFromChannels && supportsChannelRemoval,
-              removePricing && canEditPricing
+          ? requireServerSuccess(
+              await deleteModel(
+                ids[0],
+                removeFromChannels && supportsChannelRemoval,
+                removePricing && canEditPricing
+              )
             )
-          : await deleteModels(
-              ids,
-              removeFromChannels && supportsChannelRemoval,
-              removePricing && canEditPricing
+          : requireServerSuccess(
+              await deleteModels(
+                ids,
+                removeFromChannels && supportsChannelRemoval,
+                removePricing && canEditPricing
+              )
             )
       if (!response.success) {
-        throw new Error(response.message || t('Failed to delete model'))
+        throw createServerError(response, t('Failed to delete model'))
       }
       return response.data
     },

@@ -40,11 +40,14 @@ function roundToDecimals(value: number, decimals: number): number {
 }
 
 function snapFloatDrift(value: number): number {
-  const tolerance = Math.max(SNAP_EPSILON, Math.abs(value) * Number.EPSILON * 8)
+  const tolerance = Math.min(SNAP_EPSILON, Math.abs(value) * Number.EPSILON * 8)
 
   for (let decimals = 0; decimals <= SNAP_DECIMALS; decimals += 1) {
     const rounded = roundToDecimals(value, decimals)
-    if (Math.abs(value - rounded) <= tolerance) {
+    if (
+      (rounded !== 0 || value === 0) &&
+      Math.abs(value - rounded) <= tolerance
+    ) {
       return rounded
     }
   }
@@ -57,5 +60,8 @@ export function formatPricingNumber(value: unknown): string {
   if (num === null) return ''
 
   const normalized = snapFloatDrift(num)
+  if (normalized !== 0 && Math.abs(normalized) < 1e-8) {
+    return Number.parseFloat(normalized.toPrecision(15)).toString()
+  }
   return Number.parseFloat(normalized.toFixed(DISPLAY_DECIMALS)).toString()
 }

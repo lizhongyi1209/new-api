@@ -1,3 +1,19 @@
+import { LayoutDashboard } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { IconBadge } from '@/components/ui/icon-badge'
+import { Switch } from '@/components/ui/switch'
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,22 +32,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { LayoutDashboard } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { IconBadge } from '@/components/ui/icon-badge'
-import { Switch } from '@/components/ui/switch'
-import { api } from '@/lib/api'
+import { handleServerError } from '@/lib/handle-server-error'
 import { useAuthStore } from '@/stores/auth-store'
 
 type SidebarModuleConfig = {
@@ -197,10 +198,10 @@ export function SidebarModulesCard() {
         }
         toast.success(t('Saved successfully'))
       } else {
-        toast.error(res.data.message || t('Save failed'))
+        handleServerError(res.data, t('Save failed'))
       }
-    } catch {
-      toast.error(t('Save failed, please retry'))
+    } catch (error) {
+      handleServerError(error, t('Save failed, please retry'))
     } finally {
       setLoading(false)
     }

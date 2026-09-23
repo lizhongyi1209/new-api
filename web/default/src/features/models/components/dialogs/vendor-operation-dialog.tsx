@@ -1,3 +1,16 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { StaticDataTable } from '@/components/data-table'
+import { Dialog } from '@/components/dialog'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
+import { Button } from '@/components/ui/button'
+import { Combobox } from '@/components/ui/combobox'
+import { Label } from '@/components/ui/label'
+import { getLobeIcon } from '@/lib/lobe-icon'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,19 +29,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { StaticDataTable } from '@/components/data-table'
-import { Dialog } from '@/components/dialog'
-import { ErrorState } from '@/components/error-state'
-import { LoadingState } from '@/components/loading-state'
-import { Button } from '@/components/ui/button'
-import { Combobox } from '@/components/ui/combobox'
-import { Label } from '@/components/ui/label'
-import { getLobeIcon } from '@/lib/lobe-icon'
+import {
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 
 import { getVendors } from '../../api'
 import { vendorsQueryKeys } from '../../lib'
@@ -55,9 +59,11 @@ export function VendorOperationDialog(props: {
   const vendorsQuery = useQuery({
     queryKey: vendorsQueryKeys.list(),
     queryFn: async () => {
-      const response = await getVendors({ page_size: 1000 })
+      const response = requireServerSuccess(
+        await getVendors({ page_size: 1000 })
+      )
       if (!response.success) {
-        throw new Error(response.message || t('Failed to load vendors'))
+        throw createServerError(response, t('Failed to load vendors'))
       }
       return response
     },

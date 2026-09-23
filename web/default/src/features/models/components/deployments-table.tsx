@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
@@ -35,6 +17,26 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useMediaQuery } from '@/hooks'
 import { useTableUrlState } from '@/hooks/use-table-url-state'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { deleteDeployment, listDeployments, searchDeployments } from '../api'
 import { getDeploymentStatusOptions } from '../constants'
@@ -123,18 +125,22 @@ export function DeploymentsTable() {
     }),
     queryFn: async () => {
       if (keyword.trim()) {
-        return searchDeployments({
-          keyword,
+        return requireServerSuccess(
+          await searchDeployments({
+            keyword,
+            status: activeStatus,
+            p: pagination.pageIndex + 1,
+            page_size: pagination.pageSize,
+          })
+        )
+      }
+      return requireServerSuccess(
+        await listDeployments({
           status: activeStatus,
           p: pagination.pageIndex + 1,
           page_size: pagination.pageSize,
         })
-      }
-      return listDeployments({
-        status: activeStatus,
-        p: pagination.pageIndex + 1,
-        page_size: pagination.pageSize,
-      })
+      )
     },
     placeholderData: (prev) => prev,
   })
@@ -153,10 +159,10 @@ export function DeploymentsTable() {
           queryKey: deploymentsQueryKeys.lists(),
         })
       } else {
-        toast.error(res?.message || t('Delete failed'))
+        handleServerError(res, t('Delete failed'))
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('Delete failed'))
+      handleServerError(err, t('Delete failed'))
     } finally {
       setIsDeleting(false)
       setDeleteOpen(false)
@@ -230,6 +236,7 @@ export function DeploymentsTable() {
         applyHeaderSize
         toolbarProps={{
           searchPlaceholder: t('Search deployments...'),
+          searchDebounceMs: 500,
           filters: [
             {
               columnId: 'status',

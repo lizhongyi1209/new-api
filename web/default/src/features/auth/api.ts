@@ -23,6 +23,10 @@ import { AuthOperationError } from '@/lib/secure-verification'
 import { getServerErrorMessageKey } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
+import {
+  clearPasswordEncryptionCache,
+  encryptPassword,
+} from './lib/password-encryption'
 import { getAffiliateCode } from './lib/storage'
 import type { TelegramAuthorization } from './lib/telegram-login'
 import type { VerificationOperation } from './secure-verification/types'
@@ -44,17 +48,29 @@ import type {
 // ----------------------------------------------------------------------------
 
 // User login with username and password
-export async function login(payload: LoginPayload) {
-  const turnstile = payload.turnstile ?? ''
-  const res = await api.post<LoginResponse>(
-    `/api/user/login?turnstile=${turnstile}`,
-    {
-      username: payload.username,
-      password: payload.password,
-    },
-    { skipAuthRefresh: true }
-  )
-  return res.data
+export async function login(payload: LoginPayload): Promise<LoginResponse> {
+  try {
+    const passwordFields = payload.passwordEncryptionEnabled
+      ? await encryptPassword(payload.password)
+      : { password: payload.password }
+    const res = await api.post<LoginResponse>(
+      '/api/user/login',
+      { username: payload.username, ...passwordFields },
+      {
+        params: { turnstile: payload.turnstile ?? '' },
+        skipAuthRefresh: true,
+      }
+    )
+    if (payload.passwordEncryptionEnabled && !res.data?.success) {
+      clearPasswordEncryptionCache()
+    }
+    return res.data
+  } catch (error: unknown) {
+    if (payload.passwordEncryptionEnabled) {
+      clearPasswordEncryptionCache()
+    }
+    throw error
+  }
 }
 
 // Two-factor authentication login

@@ -43,12 +43,18 @@ export type PerformanceMetricsData = {
   }
 }
 
+export type SuccessRatePoint = {
+  ts: number
+  success_rate: number | null
+}
+
 export type PerfModelSummary = {
   model_name: string
   avg_latency_ms: number
   success_rate: number
   avg_tps: number
   recent_success_rates?: number[]
+  recent_success_series?: SuccessRatePoint[]
   request_count?: number
 }
 
@@ -57,5 +63,7 @@ export type PerfSummaryAllData = {
   message?: string
   data: {
     models: PerfModelSummary[]
+    hourly_window_start_ts?: number
+    hourly_window_end_ts?: number
   }
 }

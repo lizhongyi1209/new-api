@@ -48,16 +48,26 @@ type QueryResult struct {
 }
 
 type ModelSummary struct {
-	ModelName          string    `json:"model_name"`
-	AvgLatencyMs       int64     `json:"avg_latency_ms"`
-	SuccessRate        float64   `json:"success_rate"`
-	AvgTps             float64   `json:"avg_tps"`
-	RecentSuccessRates []float64 `json:"recent_success_rates,omitempty"`
-	RequestCount       int64     `json:"-"`
+	ModelName           string             `json:"model_name"`
+	AvgLatencyMs        int64              `json:"avg_latency_ms"`
+	SuccessRate         float64            `json:"success_rate"`
+	AvgTps              float64            `json:"avg_tps"`
+	RecentSuccessRates  []float64          `json:"recent_success_rates,omitempty"`
+	RecentSuccessSeries []SuccessRatePoint `json:"recent_success_series"`
+	RequestCount        int64              `json:"-"`
+}
+
+// SuccessRatePoint is an hourly request sample. A nil rate means no traffic,
+// rather than a failed request or a healthy model.
+type SuccessRatePoint struct {
+	Ts          int64    `json:"ts"`
+	SuccessRate *float64 `json:"success_rate"`
 }
 
 type SummaryAllResult struct {
-	Models []ModelSummary `json:"models"`
+	Models              []ModelSummary `json:"models"`
+	HourlyWindowStartTs int64          `json:"hourly_window_start_ts"`
+	HourlyWindowEndTs   int64          `json:"hourly_window_end_ts"`
 }
 
 type bucketKey struct {

@@ -11,6 +11,7 @@ type TaskError struct {
 	RequestID  string `json:"request_id,omitempty"`
 	StatusCode int    `json:"-"`
 	LocalError bool   `json:"-"`
+	NoRetry    bool   `json:"-"`
 	Error      error  `json:"-"`
 }
 

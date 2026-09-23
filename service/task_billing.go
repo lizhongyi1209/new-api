@@ -225,6 +225,12 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 	if info.TieredBillingSnapshot != nil {
 		InjectTieredBillingInfo(other, info, nil)
 		other["matched_tier"] = info.TieredBillingSnapshot.EstimatedTier
+		if len(info.TieredBillingSnapshot.UsageFacts) > 0 {
+			other["usage_facts"] = info.TieredBillingSnapshot.UsageFacts
+		}
+		if len(info.TieredBillingSnapshot.UsageSchema) > 0 {
+			other["usage_schema"] = info.TieredBillingSnapshot.UsageSchema
+		}
 	}
 	if info.VideoBilling != nil {
 		videoBilling := *info.VideoBilling
@@ -260,6 +266,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 		}
 	}
 	attachQuotaSaturation(c, info, other)
+	AppendTaskPluginAuditFields(c, other)
 	submitLogID := model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -524,6 +531,9 @@ func RefundZeroUsageTaskQuota(ctx context.Context, task *model.Task, promptToken
 // reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。
 // clamps 可选：若计算 actualQuota 时发生额度饱和，将其记入日志 admin_info（仅管理员可见）。
 func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason string, clamps ...*common.QuotaClamp) {
+	if actualQuota <= 0 {
+		return
+	}
 	recalculateTaskQuota(ctx, task, actualQuota, reason, "", clamps...)
 }
 
@@ -534,7 +544,7 @@ func RecalculateTaskQuotaWithTier(ctx context.Context, task *model.Task, actualQ
 }
 
 func recalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason, matchedTier string, clamps ...*common.QuotaClamp) {
-	if actualQuota <= 0 {
+	if actualQuota < 0 {
 		return
 	}
 	preConsumedQuota := task.Quota
@@ -560,7 +570,7 @@ func recalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 				otherUpdates["use_time_seconds"] = useTimeSeconds
 			}
 			for _, clamp := range clamps {
-				attachQuotaSaturationToOther(otherUpdates, clamp)
+				attachTaskQuotaSaturation(ctx, task, otherUpdates, clamp)
 			}
 			model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, actualQuota, otherUpdates)
 		}
@@ -603,7 +613,7 @@ func recalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 			otherUpdates["use_time_seconds"] = useTimeSeconds
 		}
 		for _, clamp := range clamps {
-			attachQuotaSaturationToOther(otherUpdates, clamp)
+			attachTaskQuotaSaturation(ctx, task, otherUpdates, clamp)
 		}
 
 		// 添加 tiered_expr 计费信息（如果提交时没有的话）
@@ -732,7 +742,30 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 		}
 	}
 
-	requestInput := billingexpr.RequestInput{Body: bc.TieredRequestBody}
+	// Historical snapshots keep the previous task normalization. Newly captured
+	// snapshots use the same opt-in categories and input length as sync billing.
+	if snap.EstimatedBillingUnit != "" {
+		usage := &dto.Usage{PromptTokens: promptTokens, CompletionTokens: completionTokens}
+		if details, ok := tokenDetails["input_token_details"].(dto.InputTokenDetails); ok {
+			usage.PromptTokensDetails = details.Clone()
+		} else if v, ok := tokenDetails["image_tokens"].(int); ok {
+			usage.PromptTokensDetails.ImageTokens = v
+		}
+		if v, ok := tokenDetails["image_output_tokens"].(int); ok {
+			usage.CompletionTokenDetails.ImageTokens = v
+		}
+		if v, ok := tokenDetails["audio_output_tokens"].(int); ok {
+			usage.CompletionTokenDetails.AudioTokens = v
+		}
+		params = BuildTieredTokenParams(usage, false, billingexpr.UsedVarsByHash(snap.ExprString, snap.ExprHash))
+	}
+
+	requestInput := billingexpr.RequestInput{Body: bc.TieredRequestBody, Headers: snap.RequestHeaders, ImageCount: snap.EstimatedImageCount}
+	if snap.EstimatedImageCount != nil {
+		if count, ok := tokenDetails["generated_image_count"].(int); ok && count > 0 && count <= dto.MaxImageN {
+			requestInput.ImageCount = &count
+		}
+	}
 	requestBody := make(map[string]interface{})
 	if err := common.Unmarshal(bc.TieredRequestBody, &requestBody); err == nil {
 		for _, key := range []string{"generated_image_count", "generated_image_standard_count", "generated_image_high_resolution_count"} {
@@ -749,6 +782,10 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 	tr, err := billingexpr.ComputeTieredQuotaWithRequest(&snap, params, requestInput)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("任务 %s tiered 结算失败：表达式计算错误 %v", task.TaskID, err))
+		return
+	}
+
+	if tr.ActualQuotaAfterGroup == 0 && snap.EstimatedBillingUnit == "" {
 		return
 	}
 
@@ -769,5 +806,10 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 	finalAmount := float64(tr.ActualQuotaAfterGroup) / snap.QuotaPerUnit
 	RecalculateTaskQuotaWithTier(ctx, task, tr.ActualQuotaAfterGroup,
 		fmt.Sprintf("tiered_expr重算 [%s档]：%s → %.3f计费单位 (%d额度)",
-			tr.MatchedTier, breakdown, finalAmount, tr.ActualQuotaAfterGroup), tr.MatchedTier)
+			tr.MatchedTier, breakdown, finalAmount, tr.ActualQuotaAfterGroup), tr.MatchedTier, tr.Clamp)
+	if task.Quota == tr.ActualQuotaAfterGroup && task.PrivateData.SubmitLogID > 0 {
+		other := map[string]interface{}{}
+		InjectTieredBillingInfo(other, &relaycommon.RelayInfo{TieredBillingSnapshot: &snap}, &tr)
+		model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, tr.ActualQuotaAfterGroup, other)
+	}
 }

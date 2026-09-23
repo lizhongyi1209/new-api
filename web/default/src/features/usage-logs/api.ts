@@ -1,3 +1,6 @@
+import axios, { type AxiosResponse } from 'axios'
+
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,9 +19,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import axios, { type AxiosResponse } from 'axios'
-
-import { api } from '@/lib/api'
+import {
+  createServerError,
+  requireServerSuccess,
+} from '@/lib/server-error-message'
 
 import { buildQueryParams } from './lib/query'
 import type {
@@ -132,7 +136,7 @@ export async function getUsageLogExportOptions(params: {
 }): Promise<UsageLogExportOptions> {
   const queryParams = buildQueryParams(params)
   const response = await api.get(`/api/log/export/options?${queryParams}`)
-  return response.data.data
+  return requireServerSuccess(response.data).data
 }
 
 export async function getUserInfo(
@@ -161,3 +165,72 @@ export const getAllTaskLogs = (params: GetTaskLogsParams) =>
 
 export const getUserTaskLogs = (params: GetTaskLogsParams) =>
   fetchLogs('/api/task', params, false)
+
+export interface TaskArtifact {
+  key: string
+  type: 'video' | 'audio' | 'image' | 'file'
+  mime_type?: string
+  content_url: string
+}
+
+export async function getTaskArtifacts(
+  taskId: string,
+  signal?: AbortSignal
+): Promise<TaskArtifact[]> {
+  const response = await api.get<{
+    success: boolean
+    message?: string
+    data?: { task_id: string; artifacts: TaskArtifact[] }
+  }>(`/api/task/${encodeURIComponent(taskId)}/artifacts`, {
+    signal,
+    skipErrorHandler: true,
+    skipBusinessError: true,
+    disableDuplicate: true,
+  })
+  if (!response.data.success || !response.data.data) {
+    throw createServerError(response.data, 'Failed to load artifacts')
+  }
+  return response.data.data.artifacts ?? []
+}
+
+export interface TaskAuditDetails {
+  schema_version: number
+  task_id: string
+  request_id?: string
+  upstream_task_id?: string
+  channel_id: number
+  quota: number
+  start_time?: number
+}
+
+/** Existing administrator-only endpoint; never requested by self log views. */
+export async function getTaskAuditDetails(
+  taskId: string,
+  signal?: AbortSignal
+): Promise<TaskAuditDetails> {
+  try {
+    const response = await api.get<{
+      success: boolean
+      message?: string
+      data?: TaskAuditDetails
+    }>(`/api/task/${encodeURIComponent(taskId)}/audit`, {
+      signal,
+      skipErrorHandler: true,
+      skipBusinessError: true,
+      // React Query owns cancellation and deduplication for this query. A remount
+      // must not inherit an aborted request from the shared HTTP GET cache.
+      disableDuplicate: true,
+    })
+    if (!response.data.success || !response.data.data) {
+      throw createServerError(response.data, 'Failed to load task details')
+    }
+    return response.data.data
+  } catch (error) {
+    // Optional diagnostics stay in the detail dialog rather than triggering
+    // the global Axios 500 route. Authentication refresh still runs normally.
+    if (axios.isAxiosError(error) && !axios.isCancel(error)) {
+      throw createServerError(error)
+    }
+    throw error
+  }
+}

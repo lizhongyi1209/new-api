@@ -20,9 +20,13 @@ import i18next from 'i18next'
 import { useState, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 
+import { handleServerError } from '@/lib/handle-server-error'
+import { getServerErrorMessage } from '@/lib/server-error-message'
+
 import {
   calculateAmount,
   calculateStripeAmount,
+  calculateWaffoAmount,
   calculateWaffoPancakeAmount,
   requestPayment,
   requestStripePayment,
@@ -30,6 +34,7 @@ import {
 } from '../api'
 import {
   isStripePayment,
+  isWaffoPayment,
   isWaffoPancakePayment,
   submitPaymentForm,
 } from '../lib'
@@ -59,6 +64,8 @@ export function usePayment() {
         let response
         if (isStripe) {
           response = await calculateStripeAmount({ amount: topupAmount })
+        } else if (isWaffoPayment(paymentType)) {
+          response = await calculateWaffoAmount({ amount: topupAmount })
         } else if (isPancake) {
           response = await calculateWaffoPancakeAmount({ amount: topupAmount })
         } else {
@@ -70,21 +77,30 @@ export function usePayment() {
           if (calculationId !== calculationIdRef.current) {
             return 0
           }
-          setAmount(calculatedAmount)
-          return calculatedAmount
+          if (Number.isFinite(calculatedAmount) && calculatedAmount > 0) {
+            setAmount(calculatedAmount)
+            return calculatedAmount
+          }
         }
 
         if (calculationId === calculationIdRef.current) {
+          setAmount(0)
           setCalculationError(
-            typeof response.data === 'string' && response.data
+            !isApiSuccess(response) &&
+              typeof response.data === 'string' &&
+              response.data
               ? response.data
-              : response.message || 'Payment request failed'
+              : (!isApiSuccess(response) && response.message) ||
+                  'Payment request failed'
           )
         }
         return 0
-      } catch {
+      } catch (error) {
         if (calculationId === calculationIdRef.current) {
-          setCalculationError('Payment request failed')
+          setAmount(0)
+          setCalculationError(
+            getServerErrorMessage(error, 'Payment request failed')
+          )
         }
         return 0
       } finally {
@@ -116,15 +132,7 @@ export function usePayment() {
             })
 
         if (!isApiSuccess(response)) {
-          const errorMessage =
-            typeof response.data === 'string' && response.data
-              ? response.data
-              : response.message
-          toast.error(
-            errorMessage && errorMessage !== 'error'
-              ? i18next.t(errorMessage)
-              : i18next.t('Payment request failed')
-          )
+          handleServerError(response, i18next.t('Payment request failed'))
           return false
         }
 
@@ -146,8 +154,8 @@ export function usePayment() {
         }
 
         return false
-      } catch {
-        toast.error(i18next.t('Payment request failed'))
+      } catch (error) {
+        handleServerError(error, i18next.t('Payment request failed'))
         return false
       } finally {
         setProcessing(false)

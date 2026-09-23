@@ -1,3 +1,14 @@
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { StaticDataTable } from '@/components/data-table'
+import { Dialog } from '@/components/dialog'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { useDebounce } from '@/hooks/use-debounce'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,17 +27,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { StaticDataTable } from '@/components/data-table'
-import { Dialog } from '@/components/dialog'
-import { ErrorState } from '@/components/error-state'
-import { LoadingState } from '@/components/loading-state'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { useDebounce } from '@/hooks/use-debounce'
+import {
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 
 import { searchVendors } from '../../api'
 import { vendorsQueryKeys } from '../../lib'
@@ -46,9 +50,11 @@ export function VendorsManagementDialog(props: {
   const query = useQuery({
     queryKey: vendorsQueryKeys.list({ keyword, p: page }),
     queryFn: async () => {
-      const response = await searchVendors({ keyword, p: page, page_size: 20 })
+      const response = requireServerSuccess(
+        await searchVendors({ keyword, p: page, page_size: 20 })
+      )
       if (!response.success || !response.data) {
-        throw new Error(response.message || t('Failed to load vendors'))
+        throw createServerError(response, t('Failed to load vendors'))
       }
       return response.data
     },

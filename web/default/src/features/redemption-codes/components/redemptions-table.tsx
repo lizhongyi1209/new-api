@@ -1,3 +1,16 @@
+import { useQuery } from '@tanstack/react-query'
+import { getRouteApi } from '@tanstack/react-router'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import {
+  DISABLED_ROW_DESKTOP,
+  DISABLED_ROW_MOBILE,
+  DataTablePage,
+  useDataTable,
+} from '@/components/data-table'
+import { useMediaQuery } from '@/hooks'
+import { useTableUrlState } from '@/hooks/use-table-url-state'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,19 +29,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
-import { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import {
-  DISABLED_ROW_DESKTOP,
-  DISABLED_ROW_MOBILE,
-  DataTablePage,
-  useDataTable,
-} from '@/components/data-table'
-import { useMediaQuery } from '@/hooks'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { getRedemptions, searchRedemptions } from '../api'
 import { REDEMPTION_STATUS, getRedemptionStatusOptions } from '../constants'
@@ -87,8 +88,10 @@ export function RedemptionsTable() {
       }
 
       const result = hasFilter
-        ? await searchRedemptions({ ...params, keyword: globalFilter })
-        : await getRedemptions(params)
+        ? requireServerSuccess(
+            await searchRedemptions({ ...params, keyword: globalFilter })
+          )
+        : requireServerSuccess(await getRedemptions(params))
 
       return {
         items: result.data?.items || [],

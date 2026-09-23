@@ -1,3 +1,16 @@
+import { useQuery } from '@tanstack/react-query'
+import { getRouteApi } from '@tanstack/react-router'
+import type { ColumnDef } from '@tanstack/react-table'
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import {
+  DataTablePage,
+  DataTableRow,
+  useDataTable,
+} from '@/components/data-table'
+import { useMediaQuery } from '@/hooks'
+import { useTableUrlState } from '@/hooks/use-table-url-state'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,20 +29,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
-import type { ColumnDef } from '@tanstack/react-table'
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import {
-  DataTablePage,
-  DataTableRow,
-  useDataTable,
-} from '@/components/data-table'
-import { useMediaQuery } from '@/hooks'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { createServerError } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import {
@@ -72,7 +72,7 @@ interface UsageLogsTableProps {
 
 export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
-  const { isAdminView: isAdmin } = useLogsViewScope()
+  const { isAdminView: isAdmin, viewAccess } = useLogsViewScope()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
   const [autoRefreshMs, setAutoRefreshMs] = useState(0)
@@ -119,7 +119,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     queryKey: [
       'logs',
       logCategory,
-      isAdmin,
+      viewAccess,
       pagination.pageIndex + 1,
       pagination.pageSize,
       columnFilters,
@@ -137,14 +137,16 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       })
 
       if (!result?.success) {
-        toast.error(result?.message || t('Failed to load logs'))
-        return DEFAULT_LOGS_DATA
+        throw createServerError(result, t('Failed to load logs'))
       }
 
       return result.data || DEFAULT_LOGS_DATA
     },
     placeholderData: (previousData, previousQuery) => {
-      if (previousQuery?.queryKey[1] === logCategory) {
+      if (
+        previousQuery?.queryKey[1] === logCategory &&
+        previousQuery.queryKey[2] === viewAccess
+      ) {
         return previousData
       }
       return undefined
@@ -161,6 +163,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     data: logs as Record<string, unknown>[],
     columns: columns as ColumnDef<Record<string, unknown>>[],
     columnFilters,
+    columnVisibilityStorageKey: `usage-logs:${logCategory}:${viewAccess}:column-visibility`,
     pagination,
     enableRowSelection: false,
     onPaginationChange,
@@ -185,6 +188,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   return (
     <DataTablePage
       table={table}
+      compactPagination={isMobile && isCommon}
       columns={columns as ColumnDef<Record<string, unknown>>[]}
       isLoading={isLoadingData}
       isFetching={isFetching}

@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Search, Info, ChevronDown } from 'lucide-react'
 import { useState, useEffect, useMemo } from 'react'
@@ -38,6 +20,25 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { handleServerError } from '@/lib/handle-server-error'
 
 import { fetchUpstreamModels, updateChannel } from '../../api'
 import {
@@ -49,9 +50,7 @@ import {
 import { useChannels } from '../channels-provider'
 
 function normalizeModelNameList(models: readonly string[]): string[] {
-  return Array.from(
-    new Set(models.map((m) => normalizeModelName(m)).filter(Boolean))
-  )
+  return [...new Set(models.map((m) => normalizeModelName(m)).filter(Boolean))]
 }
 
 type FetchModelsDialogProps = {
@@ -140,22 +139,20 @@ export function FetchModelsDialog({
         setFetchedModels(list)
         setSelectedModels(existingModels)
         toast.success(t('Fetched {{count}} models', { count: list.length }))
-      } else {
-        const response = await fetchUpstreamModels(activeChannel!.id)
+      } else if (activeChannel) {
+        const response = await fetchUpstreamModels(activeChannel.id)
         if (response.success) {
           const list = Array.isArray(response.data) ? response.data : []
           setFetchedModels(list)
           setSelectedModels(existingModels)
           toast.success(t('Fetched {{count}} models', { count: list.length }))
         } else {
-          toast.error(response.message || t('Failed to fetch models'))
+          handleServerError(response, t('Failed to fetch models'))
           setFetchedModels([])
         }
       }
     } catch (error: unknown) {
-      toast.error(
-        error instanceof Error ? error.message : t('Failed to fetch models')
-      )
+      handleServerError(error, t('Failed to fetch models'))
       setFetchedModels([])
     } finally {
       setIsFetching(false)
@@ -184,12 +181,10 @@ export function FetchModelsDialog({
         queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
         onOpenChange(false)
       } else {
-        toast.error(response.message || t('Failed to update models'))
+        handleServerError(response, t('Failed to update models'))
       }
     } catch (error: unknown) {
-      toast.error(
-        error instanceof Error ? error.message : t('Failed to update models')
-      )
+      handleServerError(error, t('Failed to update models'))
     } finally {
       setIsSaving(false)
     }
@@ -345,7 +340,7 @@ export function FetchModelsDialog({
                     <Tooltip>
                       <TooltipTrigger
                         render={<Info className='h-3.5 w-3.5 text-amber-500' />}
-                      ></TooltipTrigger>
+                      />
                       <TooltipContent>
                         {t('From model redirect, not yet added to models list')}
                       </TooltipContent>
@@ -365,19 +360,20 @@ export function FetchModelsDialog({
     !isFetching &&
     (fetchedModels.length > 0 || removedModels.length > 0)
 
+  let defaultModelTab = 'existing'
+  if (newModels.length > 0) defaultModelTab = 'new'
+  else if (removedModels.length > 0) defaultModelTab = 'removed'
+
   return (
     <Dialog
       open={open}
       onOpenChange={handleClose}
       title={t('Fetch Models')}
       description={
-        activeChannel ? (
+        activeChannel || channelName ? (
           <>
-            {t('Channel:')} <strong>{activeChannel.name}</strong>
-          </>
-        ) : channelName ? (
-          <>
-            {t('Channel:')} <strong>{channelName}</strong>
+            {t('Channel:')}{' '}
+            <strong>{activeChannel?.name ?? channelName}</strong>
           </>
         ) : (
           t('Fetch available models from upstream')
@@ -400,27 +396,34 @@ export function FetchModelsDialog({
         ) : null
       }
     >
-      {!activeChannel && !customFetcher ? (
+      {!activeChannel && !customFetcher && (
         <div className='text-muted-foreground py-8 text-center'>
           {t('No channel selected')}
         </div>
-      ) : isFetching ? (
+      )}
+      {(activeChannel || customFetcher) && isFetching && (
         <div className='flex items-center justify-center py-12'>
           <Loader2 className='text-muted-foreground h-8 w-8 animate-spin' />
         </div>
-      ) : fetchedModels.length === 0 && removedModels.length === 0 ? (
-        <div className='text-muted-foreground py-8 text-center'>
-          <p>{t('No models fetched yet.')}</p>
-          <Button
-            className='mt-4'
-            onClick={handleFetchModels}
-            disabled={isFetching}
-          >
-            {t('Fetch Models')}
-          </Button>
-        </div>
-      ) : (
-        <>
+      )}
+      {(activeChannel || customFetcher) &&
+        !isFetching &&
+        fetchedModels.length === 0 &&
+        removedModels.length === 0 && (
+          <div className='text-muted-foreground py-8 text-center'>
+            <p>{t('No models fetched yet.')}</p>
+            <Button
+              className='mt-4'
+              onClick={handleFetchModels}
+              disabled={isFetching}
+            >
+              {t('Fetch Models')}
+            </Button>
+          </div>
+        )}
+      {(activeChannel || customFetcher) &&
+        !isFetching &&
+        (fetchedModels.length > 0 || removedModels.length > 0) && (
           <div className='space-y-4'>
             {/* Search Bar */}
             <div className='relative'>
@@ -436,13 +439,7 @@ export function FetchModelsDialog({
             {/* Tabs for New vs Existing vs Removed */}
             <Tabs
               key={`${activeChannel?.id ?? 'custom'}-${fetchedModels.length}-${removedModels.length}`}
-              defaultValue={
-                newModels.length > 0
-                  ? 'new'
-                  : removedModels.length > 0
-                    ? 'removed'
-                    : 'existing'
-              }
+              defaultValue={defaultModelTab}
             >
               <TabsList
                 className={`grid w-full ${removedModels.length > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}
@@ -505,8 +502,7 @@ export function FetchModelsDialog({
               {t('{{n}} model(s) selected', { n: selectedModels.length })}
             </div>
           </div>
-        </>
-      )}
+        )}
     </Dialog>
   )
 }

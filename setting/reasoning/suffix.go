@@ -3,6 +3,7 @@ package reasoning
 import (
 	"strings"
 
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/samber/lo"
 )
 
@@ -28,6 +29,9 @@ func TrimEffortSuffixWithSuffixes(modelName string, suffixes []string) (string, 
 }
 
 func ParseOpenAIReasoningEffortFromModelSuffix(modelName string) (string, string) {
+	if model_setting.ShouldPreserveEffortTail(modelName) {
+		return "", modelName
+	}
 	baseModel, effort, ok := TrimEffortSuffixWithSuffixes(modelName, OpenAIEffortSuffixes)
 	if !ok {
 		return "", modelName

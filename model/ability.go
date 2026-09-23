@@ -105,7 +105,11 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 	return channelQuery, nil
 }
 
-func GetChannel(group string, model string, retry int, requestPath string) (*Channel, error) {
+func GetChannel(group string, model string, retry int, requestPath string, taskPluginKey ...string) (*Channel, error) {
+	expectedPluginKey := ""
+	if len(taskPluginKey) > 0 {
+		expectedPluginKey = taskPluginKey[0]
+	}
 	var abilities []Ability
 
 	var err error = nil
@@ -121,7 +125,7 @@ func GetChannel(group string, model string, retry int, requestPath string) (*Cha
 	if err != nil {
 		return nil, err
 	}
-	abilities = filterAbilitiesByRequestPath(abilities, requestPath)
+	abilities = filterAbilitiesByRequestPath(abilities, requestPath, expectedPluginKey)
 	channel := Channel{}
 	if len(abilities) > 0 {
 		// Randomly choose one
@@ -150,8 +154,8 @@ func GetChannel(group string, model string, retry int, requestPath string) (*Cha
 // (non-memory-cache) selection path. Advanced Custom channels must match a
 // configured route. Other channel types pass. When requestPath is empty,
 // filtering is skipped.
-func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Ability {
-	if requestPath == "" || len(abilities) == 0 {
+func filterAbilitiesByRequestPath(abilities []Ability, requestPath string, expectedPluginKey string) []Ability {
+	if len(abilities) == 0 {
 		return abilities
 	}
 
@@ -167,12 +171,14 @@ func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Abi
 
 	var channels []*Channel
 	if err := DB.Where("id IN ?", channelIds).Find(&channels).Error; err != nil {
-		// On error, fall back to unfiltered candidates to avoid blocking selection
-		return abilities
+		// Channel identity must be known before selecting a plugin task channel.
+		return nil
 	}
 
 	advancedConfigs := make(map[int]*dto.AdvancedCustomConfig)
+	channelByID := make(map[int]*Channel, len(channels))
 	for _, channel := range channels {
+		channelByID[channel.Id] = channel
 		if channel.Type == constant.ChannelTypeAdvancedCustom {
 			advancedConfigs[channel.Id] = channel.GetOtherSettings().AdvancedCustom
 		}
@@ -180,6 +186,21 @@ func filterAbilitiesByRequestPath(abilities []Ability, requestPath string) []Abi
 
 	filtered := make([]Ability, 0, len(abilities))
 	for _, ability := range abilities {
+		channel := channelByID[ability.ChannelId]
+		if channel == nil {
+			continue
+		}
+		if expectedPluginKey != "" {
+			if channel.Type != constant.ChannelTypeTaskPlugin || channel.GetSetting().TaskPluginKey != expectedPluginKey {
+				continue
+			}
+		} else if channel.Type == constant.ChannelTypeTaskPlugin {
+			continue
+		}
+		if requestPath == "" {
+			filtered = append(filtered, ability)
+			continue
+		}
 		config, isAdvancedCustom := advancedConfigs[ability.ChannelId]
 		if !isAdvancedCustom {
 			filtered = append(filtered, ability)

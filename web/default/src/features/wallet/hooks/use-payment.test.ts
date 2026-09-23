@@ -19,12 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { calculateAmount } from '../api'
+import { calculateAmount, calculateWaffoAmount } from '../api'
 import { usePayment } from './use-payment'
 
 vi.mock('../api', () => ({
   calculateAmount: vi.fn(),
   calculateStripeAmount: vi.fn(),
+  calculateWaffoAmount: vi.fn(),
   calculateWaffoPancakeAmount: vi.fn(),
   requestPayment: vi.fn(),
   requestStripePayment: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('../api', () => ({
 describe('usePayment', () => {
   beforeEach(() => {
     vi.mocked(calculateAmount).mockReset()
+    vi.mocked(calculateWaffoAmount).mockReset()
   })
 
   it('exposes the server reason when an Epay amount cannot be quoted', async () => {
@@ -82,4 +84,38 @@ describe('usePayment', () => {
     expect(result.current.amount).toBe(101.6)
     expect(result.current.calculationError).toBeNull()
   })
+
+  it('quotes Waffo through its dedicated amount endpoint', async () => {
+    vi.mocked(calculateWaffoAmount).mockResolvedValue({
+      message: 'success',
+      data: '12.80',
+    })
+    const hook = renderHook(() => usePayment())
+    await act(async () => {
+      await hook.result.current.calculatePaymentAmount(10, 'waffo')
+    })
+    expect(calculateWaffoAmount).toHaveBeenCalledWith({ amount: 10 })
+    expect(calculateAmount).not.toHaveBeenCalled()
+    expect(hook.result.current.amount).toBe(12.8)
+  })
+
+  it.each(['NaN', 'Infinity', '0', '-1'])(
+    'rejects unusable Waffo quote %s',
+    async (data) => {
+      vi.mocked(calculateWaffoAmount).mockResolvedValue({
+        message: 'success',
+        data,
+      })
+      const hook = renderHook(() => usePayment())
+      let amount: number | undefined
+      await act(async () => {
+        amount = await hook.result.current.calculatePaymentAmount(10, 'waffo')
+      })
+      expect(amount).toBe(0)
+      expect(hook.result.current.amount).toBe(0)
+      expect(hook.result.current.calculationError).toBe(
+        'Payment request failed'
+      )
+    }
+  )
 })

@@ -5,10 +5,12 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/go-webauthn/webauthn/protocol"
 )
@@ -34,6 +36,10 @@ func writeSecurityOperationError(c *gin.Context, err error) {
 	var code, message string
 	var protocolError *protocol.Error
 	switch {
+	case errors.Is(err, system_setting.ErrPasskeyRPIDUnavailable):
+		code, message = "PASSKEY_RP_ID_UNAVAILABLE", i18n.T(c, i18n.MsgPasskeyRPIDUnavailable)
+	case errors.Is(err, system_setting.ErrPasskeyRPIDInvalid):
+		code, message = "PASSKEY_RP_ID_INVALID", i18n.T(c, i18n.MsgPasskeyRPIDInvalid)
 	case errors.Is(err, service.ErrAccountEmailInvalid), errors.Is(err, service.ErrAccountEmailRestricted):
 		code, message = "EMAIL_ADDRESS_REJECTED", err.Error()
 	case errors.Is(err, model.ErrEmailAlreadyTaken):

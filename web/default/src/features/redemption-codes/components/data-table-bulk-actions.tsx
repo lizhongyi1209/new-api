@@ -1,3 +1,19 @@
+import { useMutation } from '@tanstack/react-query'
+import type { Table } from '@tanstack/react-table'
+import { Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { CopyButton } from '@/components/copy-button'
+import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
+import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,22 +32,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMutation } from '@tanstack/react-query'
-import type { Table } from '@tanstack/react-table'
-import { Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { ConfirmDialog } from '@/components/confirm-dialog'
-import { CopyButton } from '@/components/copy-button'
-import { DataTableBulkActions as BulkActionsToolbar } from '@/components/data-table'
-import { Button } from '@/components/ui/button'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 
 import { batchDeleteRedemptions } from '../api'
 import type { Redemption } from '../types'
@@ -57,10 +61,10 @@ export function DataTableBulkActions(props: DataTableBulkActionsProps) {
 
   const deletion = useMutation({
     mutationFn: async (targets: Redemption[]) => {
-      const result = await batchDeleteRedemptions(
-        targets.map((code) => code.id)
+      const result = requireServerSuccess(
+        await batchDeleteRedemptions(targets.map((code) => code.id))
       )
-      if (!result.success) throw new Error(result.message)
+      if (!result.success) throw createServerError(result)
       return result.data ?? 0
     },
     onSuccess: (count, targets) => {

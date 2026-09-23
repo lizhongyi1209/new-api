@@ -24,7 +24,11 @@ import { toast } from 'sonner'
 
 import { useActiveChatKey } from '@/features/chat/hooks/use-active-chat-key'
 import { useChatPresets } from '@/features/chat/hooks/use-chat-presets'
-import { resolveChatUrl } from '@/features/chat/lib/chat-links'
+import {
+  chatLinkRequiresApiKey,
+  resolveChatUrl,
+} from '@/features/chat/lib/chat-links'
+import { handleServerError } from '@/lib/handle-server-error'
 
 export const Route = createFileRoute('/_authenticated/chat2link')({
   component: Chat2LinkPage,
@@ -40,9 +44,10 @@ function Chat2LinkPage() {
     [chatPresets]
   )
 
-  const { data: activeKey, error: keyError } = useActiveChatKey(
-    Boolean(firstWebPreset)
+  const requiresKey = Boolean(
+    firstWebPreset && chatLinkRequiresApiKey(firstWebPreset.url)
   )
+  const { data: activeKey, error: keyError } = useActiveChatKey(requiresKey)
 
   useEffect(() => {
     if (!firstWebPreset) {
@@ -52,21 +57,21 @@ function Chat2LinkPage() {
       return
     }
 
-    if (activeKey === undefined && !keyError) return
+    if (requiresKey && activeKey === undefined && !keyError) return
 
-    if (keyError || !activeKey) {
+    if (requiresKey && (keyError || !activeKey)) {
       const message =
         keyError instanceof Error
           ? keyError.message
           : t('No enabled tokens available')
-      toast.error(message)
+      handleServerError(keyError, message)
       navigate({ to: '/keys' })
       return
     }
 
     const url = resolveChatUrl({
       template: firstWebPreset.url,
-      apiKey: activeKey,
+      apiKey: requiresKey ? activeKey : undefined,
       serverAddress,
     })
 
@@ -75,6 +80,7 @@ function Chat2LinkPage() {
     }
   }, [
     firstWebPreset,
+    requiresKey,
     activeKey,
     keyError,
     serverAddress,

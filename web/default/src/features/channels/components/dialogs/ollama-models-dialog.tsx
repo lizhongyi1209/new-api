@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, RefreshCw, Trash2, Download, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -40,6 +22,25 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { getCommonHeaders } from '@/lib/api'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { handleServerError } from '@/lib/handle-server-error'
 
 import {
   deleteOllamaModel,
@@ -170,7 +171,7 @@ export function OllamaModelsDialog({
       })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : undefined
-      toast.error(msg || t('Failed to fetch models'))
+      handleServerError(err, msg || t('Failed to fetch models'))
       setModels([])
     } finally {
       setIsFetching(false)
@@ -216,12 +217,10 @@ export function OllamaModelsDialog({
         )
         queryClient.invalidateQueries({ queryKey: channelsQueryKeys.lists() })
       } else {
-        toast.error(res.message || t('Failed to update models'))
+        handleServerError(res, t('Failed to update models'))
       }
     } catch (err: unknown) {
-      toast.error(
-        err instanceof Error ? err.message : t('Failed to update models')
-      )
+      handleServerError(err, t('Failed to update models'))
     }
   }
 
@@ -328,7 +327,7 @@ export function OllamaModelsDialog({
         (err as { name?: unknown }).name === 'AbortError'
       if (!isAbort) {
         const msg = err instanceof Error ? err.message : ''
-        toast.error(t('Model pull failed: {{msg}}', { msg }))
+        handleServerError(err, t('Model pull failed: {{msg}}', { msg }))
       }
       setIsPulling(false)
       setPullProgress(null)
@@ -355,7 +354,7 @@ export function OllamaModelsDialog({
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : undefined
-      toast.error(msg || t('Failed to delete model'))
+      handleServerError(err, msg || t('Failed to delete model'))
     } finally {
       setIsDeleting(false)
     }

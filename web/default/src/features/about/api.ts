@@ -17,10 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type { AboutResponse } from './types'
 
 export async function getAboutContent() {
-  const res = await api.get<AboutResponse>('/api/about')
-  return res.data
+  const res = await api.get<AboutResponse>('/api/about', {
+    headers: { 'Cache-Control': null },
+  })
+  return requireServerSuccess(res.data)
 }

@@ -286,3 +286,9 @@ custom_oauth.name_empty: "提供商名称不能为空"
 custom_oauth.has_bindings: "无法删除已有用户绑定的提供商"
 custom_oauth.binding_not_found: "OAuth 绑定不存在"
 custom_oauth.provider_id_field_invalid: "无法从提供商响应中提取用户 ID"
+
+passkey.rp_id_invalid: "通行密钥域名无效。请填写域名，不包含协议、端口、路径或通配符。"
+passkey.rp_id_unavailable: "此通行密钥域名无法在当前网站使用。请前往原网站或选择其他验证方式。"
+passkey.rp_id_removal_confirmation: "请核对受影响的通行密钥并确认删除域名。配置或影响范围发生变化后，需要重新确认。"
+
+task_plugin.unknown_meta_field: '插件元数据包含未知字段“{{.Field}}”。如果插件来自官方市场，可能需要更高版本的 new-api。请尝试更新 new-api 后重新安装插件。'

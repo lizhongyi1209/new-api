@@ -105,22 +105,26 @@ func SyncChannelCache(frequency int) {
 	}
 }
 
-func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string) (*Channel, error) {
+func GetRandomSatisfiedChannel(group string, model string, retry int, requestPath string, taskPluginKey ...string) (*Channel, error) {
+	expectedPluginKey := ""
+	if len(taskPluginKey) > 0 {
+		expectedPluginKey = taskPluginKey[0]
+	}
 	// if memory cache is disabled, get channel directly from database
 	if !common.MemoryCacheEnabled {
-		return GetChannel(group, model, retry, requestPath)
+		return GetChannel(group, model, retry, requestPath, expectedPluginKey)
 	}
 
 	channelSyncLock.RLock()
 	defer channelSyncLock.RUnlock()
 
 	// First, try to find channels with the exact model name.
-	channels := filterChannelsByRequestPath(group2model2channels[group][model], requestPath)
+	channels := filterChannelsByRequestPath(group2model2channels[group][model], requestPath, expectedPluginKey)
 
 	// If no channels found, try to find channels with the normalized model name.
 	if len(channels) == 0 {
 		normalizedModel := ratio_setting.FormatMatchingModelName(model)
-		channels = filterChannelsByRequestPath(group2model2channels[group][normalizedModel], requestPath)
+		channels = filterChannelsByRequestPath(group2model2channels[group][normalizedModel], requestPath, expectedPluginKey)
 	}
 
 	if len(channels) == 0 {
@@ -207,8 +211,8 @@ func GetRandomSatisfiedChannel(group string, model string, retry int, requestPat
 // Other channel types pass.
 // When requestPath is empty (non-relay callers) filtering is skipped.
 // Caller must hold channelSyncLock (read lock). The cached slice is never mutated.
-func filterChannelsByRequestPath(channels []int, requestPath string) []int {
-	if requestPath == "" || len(channels) == 0 {
+func filterChannelsByRequestPath(channels []int, requestPath string, expectedPluginKey string) []int {
+	if len(channels) == 0 {
 		return channels
 	}
 	filtered := make([]int, 0, len(channels))
@@ -216,6 +220,17 @@ func filterChannelsByRequestPath(channels []int, requestPath string) []int {
 		channel, ok := channelsIDM[channelId]
 		if !ok {
 			// keep it so the downstream consistency error is raised as before
+			filtered = append(filtered, channelId)
+			continue
+		}
+		if expectedPluginKey != "" {
+			if channel.Type != constant.ChannelTypeTaskPlugin || channel.GetSetting().TaskPluginKey != expectedPluginKey {
+				continue
+			}
+		} else if channel.Type == constant.ChannelTypeTaskPlugin {
+			continue
+		}
+		if requestPath == "" {
 			filtered = append(filtered, channelId)
 			continue
 		}

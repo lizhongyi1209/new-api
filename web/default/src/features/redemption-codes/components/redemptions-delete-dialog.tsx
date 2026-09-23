@@ -1,3 +1,17 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,20 +30,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { deleteRedemption } from '../api'
 import { SUCCESS_MESSAGES } from '../constants'
@@ -45,12 +47,14 @@ export function RedemptionsDeleteDialog() {
 
     setIsDeleting(true)
     try {
-      const result = await deleteRedemption(currentRow.id)
+      const result = requireServerSuccess(await deleteRedemption(currentRow.id))
       if (result.success) {
         toast.success(t(SUCCESS_MESSAGES.REDEMPTION_DELETED))
         setOpen(null)
         triggerRefresh()
       }
+    } catch (error) {
+      handleServerError(error)
     } finally {
       setIsDeleting(false)
     }

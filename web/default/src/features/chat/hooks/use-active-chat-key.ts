@@ -17,29 +17,50 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
+import { t } from 'i18next'
 
 import { fetchTokenKey, getApiKeys } from '@/features/keys/api'
 import { API_KEY_STATUS } from '@/features/keys/constants'
+import { createServerError } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
 export async function fetchActiveChatKey() {
+  const initialAuth = useAuthStore.getState().auth
+  const userId = initialAuth.user?.id
+  const sessionId = initialAuth.session?.sid
+  if (!userId) throw new Error(t('Session expired!'))
   const result = await getApiKeys({ p: 1, size: 50 })
   if (!result.success) {
-    throw new Error(result.message || 'Failed to load API keys')
+    throw createServerError(result, t('Failed to load API keys'))
   }
 
   const items = result.data?.items ?? []
   const active = items.find((item) => item.status === API_KEY_STATUS.ENABLED)
   if (!active) {
-    throw new Error('No enabled API keys found. Create or enable one first.')
+    throw new Error(t('No enabled API keys found. Create or enable one first.'))
   }
 
+  const currentAuth = useAuthStore.getState().auth
+  if (
+    currentAuth.user?.id !== userId ||
+    currentAuth.session?.sid !== sessionId
+  ) {
+    throw new Error(t('Session expired!'))
+  }
   const keyResult = await fetchTokenKey(active.id)
+  const resolvedAuth = useAuthStore.getState().auth
+  if (
+    resolvedAuth.user?.id !== userId ||
+    resolvedAuth.session?.sid !== sessionId
+  ) {
+    throw new Error(t('Session expired!'))
+  }
   if (!keyResult.success || !keyResult.data?.key) {
-    throw new Error(keyResult.message || 'Failed to load API key')
+    throw createServerError(keyResult, t('Failed to load API keys'))
   }
 
-  return `sk-${keyResult.data.key}`
+  const key = keyResult.data.key
+  return key.startsWith('sk-') ? key : `sk-${key}`
 }
 
 /**

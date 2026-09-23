@@ -212,6 +212,9 @@ export type DataTablePageProps<TData> = {
    */
   paginationInFooter?: boolean
 
+  /** Use previous/next controls and a page count for compact lists. */
+  compactPagination?: boolean
+
   /**
    * Extra content rendered between the table/mobile list and the pagination.
    * E.g. summary stats, helper text.
@@ -392,7 +395,12 @@ function renderPagination<TData>(
     return null
   }
 
-  const pagination = <DataTablePagination table={props.table} />
+  const pagination = (
+    <DataTablePagination
+      table={props.table}
+      compact={props.compactPagination}
+    />
+  )
 
   return props.paginationInFooter !== false ? (
     <PageFooterPortal>{pagination}</PageFooterPortal>

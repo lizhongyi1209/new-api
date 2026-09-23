@@ -326,7 +326,7 @@ export function decodeBillingExprB64(exprB64: string | undefined): string {
 
     return decodeURIComponent(
       Array.prototype.map
-        .call(bytes, (byte: number) => '%' + byte.toString(16).padStart(2, '0'))
+        .call(bytes, (byte: number) => `%${byte.toString(16).padStart(2, '0')}`)
         .join('')
     )
   } catch {
@@ -362,7 +362,12 @@ export interface TieredBillingSummary {
   tiers: ParsedTier[]
   tier: ParsedTier
   requestPrice: number | null
-  priceEntries: Array<{ field: string; shortLabel: string; price: number }>
+  priceEntries: Array<{
+    field: string
+    shortLabel: string
+    price: number
+    unit?: 'request' | 'image'
+  }>
 }
 
 /**
@@ -376,6 +381,7 @@ export function hasAnyCacheTokens(
   if (!other) return false
   return (
     (other.cache_tokens || 0) > 0 ||
+    (other.image_cache_tokens || 0) > 0 ||
     (other.cache_creation_tokens || 0) > 0 ||
     (other.cache_creation_tokens_5m || 0) > 0 ||
     (other.cache_creation_tokens_1h || 0) > 0
@@ -392,7 +398,56 @@ export function getTieredBillingSummary(
     splitBillingExprAndRequestRules(exprStr).billingExpr
   )
   const tier = resolveMatchedTier(tiers, other.matched_tier)
+  if (
+    other.billing_unit === 'request' &&
+    typeof other.fixed_price === 'number' &&
+    Number.isFinite(other.fixed_price) &&
+    other.fixed_price >= 0
+  ) {
+    const actualTier: ParsedTier = tiers.find(
+      (candidate) =>
+        normalizeTierLabel(candidate.label) ===
+          normalizeTierLabel(other.matched_tier) &&
+        candidate.billingUnit === 'request' &&
+        candidate.fixedPrice === other.fixed_price
+    ) ?? {
+      label: other.matched_tier ?? '',
+      conditions: [],
+      requestPrice: 0,
+      billingUnit: 'request',
+      fixedPrice: other.fixed_price,
+    }
+    return {
+      tiers,
+      tier: actualTier,
+      requestPrice: null,
+      priceEntries: [
+        {
+          field: 'fixedPrice',
+          shortLabel:
+            other.image_count !== undefined ? 'Per image' : 'Per-call',
+          price: other.fixed_price,
+          unit: other.image_count !== undefined ? 'image' : 'request',
+        },
+      ],
+    }
+  }
   if (!tier) return null
+  if (tier.billingUnit === 'request' && typeof tier.fixedPrice === 'number') {
+    return {
+      tiers,
+      tier,
+      requestPrice: null,
+      priceEntries: [
+        {
+          field: 'fixedPrice',
+          shortLabel: tier.imageCount ? 'Per image' : 'Per-call',
+          price: tier.fixedPrice,
+          unit: tier.imageCount ? 'image' : 'request',
+        },
+      ],
+    }
+  }
 
   const cacheTokensPresent = hasAnyCacheTokens(other)
   const rawRequestPrice = Number(tier.requestPrice)
@@ -404,10 +459,12 @@ export function getTieredBillingSummary(
   const priceEntries: TieredBillingSummary['priceEntries'] = []
   for (const v of BILLING_PRICING_VARS) {
     if (!v.field) continue
-    if (v.group === 'cache' && !cacheTokensPresent) continue
+    if ((v.group === 'cache' || v.key === 'img_cr') && !cacheTokensPresent) {
+      continue
+    }
     const raw = tier[v.field as keyof ParsedTier]
     const price = Number(raw)
-    if (Number.isFinite(price) && price > 0) {
+    if (raw !== undefined && Number.isFinite(price) && price >= 0) {
       priceEntries.push({
         field: v.field,
         shortLabel: v.shortLabel,

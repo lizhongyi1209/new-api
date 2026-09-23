@@ -64,6 +64,7 @@ export function SignUpForm({
   const [wechatCode, setWeChatCode] = useState('')
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
+  const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
   const [invitationCodeFromLink] = useState(
     () => new URLSearchParams(window.location.search).get('aff')?.trim() ?? ''
   )
@@ -86,6 +87,12 @@ export function SignUpForm({
   } = useEmailVerification({
     turnstileToken,
     validateTurnstile,
+    onVerificationAttempt: () => {
+      if (isTurnstileEnabled) {
+        setTurnstileToken('')
+        setTurnstileWidgetKey((current) => current + 1)
+      }
+    },
   })
 
   const form = useForm<z.infer<typeof registerFormSchema>>({
@@ -369,6 +376,7 @@ export function SignUpForm({
         {isTurnstileEnabled && (
           <div className='mt-2'>
             <Turnstile
+              key={turnstileWidgetKey}
               siteKey={turnstileSiteKey}
               onVerify={setTurnstileToken}
             />

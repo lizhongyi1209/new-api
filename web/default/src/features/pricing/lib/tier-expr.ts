@@ -17,6 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { BILLING_CACHE_VAR_MAP } from './billing-expr'
+import { compileBillingExpression } from './billing-expression/parser'
+import { evaluateBillingExpression } from './billing-expression/runtime'
+import type {
+  BillingSimulationContext,
+  TokenVariable,
+} from './billing-expression/types'
 
 export const CACHE_MODE_TIMED = 'timed'
 export const CACHE_MODE_GENERIC = 'generic'
@@ -164,6 +170,7 @@ export function tryParseVisualConfig(
   exprStr: string | null | undefined
 ): VisualConfig | null {
   if (!exprStr) return null
+  if (/\b(?!tier\b)[A-Za-z_]\w*\s*\(/.test(exprStr)) return null
   try {
     let body = exprStr
     const versionMatch = body.match(/^v\d+:([\s\S]*)$/)
@@ -234,7 +241,7 @@ export function tryParseVisualConfig(
 
     const cfg = normalizeVisualConfig({ tiers })
     const regenerated = generateExprFromVisualConfig(cfg)
-    if (regenerated.replace(/\s+/g, '') !== body.replace(/\s+/g, '')) {
+    if (regenerated.replaceAll(/\s+/g, '') !== body.replaceAll(/\s+/g, '')) {
       return null
     }
     return cfg
@@ -252,6 +259,7 @@ const ESTIMATOR_VARS = [
   { var: 'cc', stateKey: 'cacheCreateTokens' },
   { var: 'cc1h', stateKey: 'cacheCreate1hTokens' },
   { var: 'img', stateKey: 'imageTokens' },
+  { var: 'img_cr', stateKey: 'imageCacheTokens' },
   { var: 'img_o', stateKey: 'imageOutputTokens' },
   { var: 'ai', stateKey: 'audioInputTokens' },
   { var: 'ao', stateKey: 'audioOutputTokens' },
@@ -266,58 +274,67 @@ export type EvalResult = {
   cost: number
   matchedTier: string
   error: string | null
+  billingUnit?: 'token' | 'request'
 }
 
 export function evalExprLocally(
   exprStr: string,
   promptTokens: number,
   completionTokens: number,
-  extraTokenValues: ExtraTokenValues
+  extraTokenValues: ExtraTokenValues,
+  context?: BillingSimulationContext
 ): EvalResult {
-  try {
-    if (!exprStr || !exprStr.trim()) {
-      return { cost: 0, matchedTier: '', error: null }
-    }
-    let matchedTier = ''
-    const tierFn = (name: string, value: number) => {
-      matchedTier = name
-      return value
-    }
-    const cacheReadTokens = extraTokenValues.cacheReadTokens || 0
-    const cacheCreateTokens = extraTokenValues.cacheCreateTokens || 0
-    const cacheCreate1hTokens = extraTokenValues.cacheCreate1hTokens || 0
-    const len =
-      promptTokens + cacheReadTokens + cacheCreateTokens + cacheCreate1hTokens
-    const env: Record<string, unknown> = {
-      p: promptTokens,
-      c: completionTokens,
-      len,
-      tier: tierFn,
-      max: Math.max,
-      min: Math.min,
-      abs: Math.abs,
-      ceil: Math.ceil,
-      floor: Math.floor,
-    }
-    for (const field of ESTIMATOR_VARS) {
-      env[field.var] = extraTokenValues[field.stateKey] || 0
-    }
-    const fn = new Function(
-      ...Object.keys(env),
-      `"use strict"; return (${exprStr});`
-    )
-    const cost = Number(fn(...Object.values(env))) || 0
-    return { cost, matchedTier, error: null }
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e)
-    return { cost: 0, matchedTier: '', error: message }
+  if (!exprStr.trim()) return { cost: 0, matchedTier: '', error: null }
+  const result = evaluateBillingExpression(exprStr, {
+    ...context,
+    tokens: {
+      ...buildEstimatorTokens(promptTokens, completionTokens, extraTokenValues),
+      ...context?.tokens,
+    },
+  })
+  if (result.status !== 'success') {
+    return { cost: 0, matchedTier: '', error: result.diagnostic.detail }
+  }
+  return {
+    cost: result.cost,
+    matchedTier: result.matchedTier,
+    error: null,
+    ...(result.billingUnit === 'request'
+      ? { billingUnit: result.billingUnit }
+      : {}),
+  }
+}
+
+export function buildEstimatorTokens(
+  promptTokens: number,
+  completionTokens: number,
+  extraTokenValues: ExtraTokenValues
+): Partial<Record<TokenVariable, number>> {
+  return {
+    p: promptTokens,
+    c: completionTokens,
+    len:
+      promptTokens +
+      extraTokenValues.cacheReadTokens +
+      extraTokenValues.imageCacheTokens +
+      extraTokenValues.imageTokens +
+      extraTokenValues.audioInputTokens +
+      extraTokenValues.cacheCreateTokens +
+      extraTokenValues.cacheCreate1hTokens,
+    ...Object.fromEntries(
+      ESTIMATOR_VARS.map((field) => [
+        field.var,
+        extraTokenValues[field.stateKey],
+      ])
+    ),
   }
 }
 
 export function exprUsesExtraVars(exprStr: string): boolean {
   if (!exprStr) return false
-  const varNames = ESTIMATOR_VARS.map((f) => f.var).join('|')
-  return new RegExp(`\\b(${varNames})\\b`).test(exprStr)
+  const compiled = compileBillingExpression(exprStr)
+  if (compiled.status !== 'ready') return false
+  return ESTIMATOR_VARS.some((field) => compiled.variables.has(field.var))
 }
 
 export const ESTIMATOR_EXTRA_FIELDS = ESTIMATOR_VARS

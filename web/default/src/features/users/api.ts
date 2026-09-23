@@ -1,3 +1,6 @@
+import type { PermissionCatalog } from '@/lib/admin-permissions'
+import { api } from '@/lib/api'
+import type { CustomOAuthBinding } from '@/lib/oauth'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,9 +19,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { PermissionCatalog } from '@/lib/admin-permissions'
-import { api } from '@/lib/api'
-import type { CustomOAuthBinding } from '@/lib/oauth'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type {
   User,
@@ -169,6 +170,7 @@ export async function getGroups(): Promise<ApiResponse<string[]>> {
  */
 export async function getPermissionCatalog(): Promise<PermissionCatalog> {
   const res = await api.get('/api/authz/catalog')
+  requireServerSuccess(res.data)
   return {
     resources: res.data?.data?.resources ?? [],
     roles: res.data?.data?.roles ?? [],

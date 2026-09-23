@@ -102,7 +102,7 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
+				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found && c.GetString("expected_task_plugin_key") == "" {
 					affinityUsable := false
 					preferred, err := model.CacheGetChannel(preferredChannelID)
 					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled &&
@@ -160,6 +160,18 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 				selectedGroup = selectGroup
+			}
+		}
+		if channel != nil {
+			expectedPluginKey := c.GetString("expected_task_plugin_key")
+			if expectedPluginKey != "" {
+				if channel.Type != constant.ChannelTypeTaskPlugin || channel.GetSetting().TaskPluginKey != expectedPluginKey {
+					abortWithOpenAiMessage(c, http.StatusForbidden, "selected channel does not belong to the requested task plugin")
+					return
+				}
+			} else if channel.Type == constant.ChannelTypeTaskPlugin {
+				abortWithOpenAiMessage(c, http.StatusForbidden, "task plugin channel requires its task endpoint")
+				return
 			}
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())

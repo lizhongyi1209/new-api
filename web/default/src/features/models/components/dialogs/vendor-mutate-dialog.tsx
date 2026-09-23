@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
@@ -54,6 +36,29 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { formatTimestampToDate } from '@/lib/format'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { markServerErrorHandled } from '@/lib/handle-server-error'
+import {
+  requireServerSuccess,
+  createServerError,
+} from '@/lib/server-error-message'
 
 import { createVendor, getVendor, updateVendor } from '../../api'
 import { vendorsQueryKeys } from '../../lib'
@@ -85,13 +90,14 @@ export function VendorMutateDialog(props: {
     queryKey: vendorsQueryKeys.detail(id ?? 0),
     queryFn: async () => {
       if (!id) throw new Error(t('Select a saved vendor.'))
-      const response = await getVendor(id)
+      const response = requireServerSuccess(await getVendor(id))
       if (!response.success || !response.data) {
-        throw new Error(response.message || t('Failed to load vendor'))
+        throw createServerError(response, t('Failed to load vendor'))
       }
       return response.data
     },
     enabled: props.open && Boolean(id),
+    meta: { errorToast: false, errorRedirect: false },
   })
   useEffect(() => {
     if (!props.open) {
@@ -113,13 +119,14 @@ export function VendorMutateDialog(props: {
   const save = useMutation({
     mutationFn: async (values: VendorFormValues) => {
       const response = id
-        ? await updateVendor({ ...values, id })
-        : await createVendor(values)
+        ? requireServerSuccess(await updateVendor({ ...values, id }))
+        : requireServerSuccess(await createVendor(values))
       if (!response.success) {
-        throw new Error(response.message || t('Operation failed'))
+        throw createServerError(response, t('Operation failed'))
       }
       return response.data
     },
+    onError: (error) => markServerErrorHandled(error),
     onSuccess: async () => {
       await invalidateVendorData(client)
       toast.success(
@@ -189,7 +196,7 @@ export function VendorMutateDialog(props: {
                         name='name'
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{t('Vendor Name *')}</FormLabel>
+                            <FormLabel required>{t('Vendor Name')}</FormLabel>
                             <FormControl>
                               <Input maxLength={128} {...field} />
                             </FormControl>

@@ -49,7 +49,7 @@ export function MaskedValueDisplay(props: MaskedValueDisplayProps) {
             <Button
               variant='ghost'
               size='sm'
-              className='h-7 max-w-full min-w-0 justify-start truncate px-0 font-mono hover:bg-transparent aria-expanded:bg-transparent'
+              className='text-muted-foreground h-7 max-w-full min-w-0 justify-start truncate px-0 font-mono text-xs hover:bg-transparent aria-expanded:bg-transparent'
             />
           }
         >

@@ -285,3 +285,9 @@ custom_oauth.name_empty: "Provider name cannot be empty"
 custom_oauth.has_bindings: "Cannot delete provider with existing user bindings"
 custom_oauth.binding_not_found: "OAuth binding not found"
 custom_oauth.provider_id_field_invalid: "Could not extract user ID from provider response"
+
+passkey.rp_id_invalid: "Invalid Passkey domain. Enter a domain without a scheme, port, path or wildcard."
+passkey.rp_id_unavailable: "This Passkey domain is not available on this website. Use its original website or another verification method."
+passkey.rp_id_removal_confirmation: "Review the affected Passkeys and confirm the domain removal. If the settings or impact have changed, confirmation is required again."
+
+task_plugin.unknown_meta_field: 'Plugin metadata contains an unknown field "{{.Field}}". If this plugin was downloaded from the official marketplace, it may require a newer version of new-api. Try updating new-api and installing the plugin again.'

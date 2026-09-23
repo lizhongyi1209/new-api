@@ -1,3 +1,4 @@
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import type { HomePageContentResponse } from './types'
 
@@ -29,6 +30,8 @@ import type { HomePageContentResponse } from './types'
  * Returns Markdown/HTML content or iframe URL
  */
 export async function getHomePageContent(): Promise<HomePageContentResponse> {
-  const res = await api.get('/api/home_page_content')
-  return res.data
+  const res = await api.get('/api/home_page_content', {
+    headers: { 'Cache-Control': null },
+  })
+  return requireServerSuccess(res.data)
 }

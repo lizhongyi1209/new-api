@@ -1290,34 +1290,64 @@ func extractGeminiUsage(geminiResp map[string]interface{}) (promptTokens, comple
 	if !ok {
 		return 0, 0, details
 	}
-	if pt, ok := usage["promptTokenCount"].(float64); ok {
-		promptTokens = int(pt)
+	counts := make(map[string]int)
+	for _, key := range []string{"promptTokenCount", "candidatesTokenCount", "totalTokenCount", "thoughtsTokenCount", "cachedContentTokenCount"} {
+		if count, ok := usage[key].(float64); ok {
+			counts[key] = max(0, common.QuotaFromFloat(count))
+		}
 	}
-	if ct, ok := usage["candidatesTokenCount"].(float64); ok {
-		completionTokens = int(ct)
-	}
-	if tt, ok := usage["totalTokenCount"].(float64); ok {
-		details["total_tokens"] = int(tt)
-	}
-	if th, ok := usage["thoughtsTokenCount"].(float64); ok {
-		completionTokens += int(th)
-		details["thought_tokens"] = int(th)
-	}
-
-	// 提取输出图像 token（用于 tiered_expr 表达式的 img_o 变量）
-	if candidatesTokensDetails, ok := usage["candidatesTokensDetails"].([]interface{}); ok {
-		for _, detail := range candidatesTokensDetails {
-			if detailMap, ok := detail.(map[string]interface{}); ok {
-				if modality, _ := detailMap["modality"].(string); modality == "IMAGE" {
-					if tokenCount, ok := detailMap["tokenCount"].(float64); ok {
-						details["image_output_tokens"] = int(tokenCount)
-						break
+	promptTokens = counts["promptTokenCount"]
+	completionTokens = common.QuotaFromFloat(float64(counts["candidatesTokenCount"]) + float64(counts["thoughtsTokenCount"]))
+	details["total_tokens"] = counts["totalTokenCount"]
+	details["thought_tokens"] = counts["thoughtsTokenCount"]
+	input := dto.InputTokenDetails{CachedTokens: counts["cachedContentTokenCount"]}
+	for _, key := range []string{"promptTokensDetails", "cacheTokensDetails", "candidatesTokensDetails"} {
+		modalities := make(map[string]float64)
+		if entries, ok := usage[key].([]interface{}); ok {
+			for _, entry := range entries {
+				if entry, ok := entry.(map[string]interface{}); ok {
+					modality, _ := entry["modality"].(string)
+					if count, ok := entry["tokenCount"].(float64); ok {
+						modalities[modality] += float64(max(0, common.QuotaFromFloat(count)))
 					}
 				}
 			}
 		}
+		for modality, count := range modalities {
+			tokens := common.QuotaFromFloat(count)
+			switch key {
+			case "promptTokensDetails":
+				switch modality {
+				case "TEXT":
+					input.TextTokens = tokens
+				case "IMAGE":
+					input.ImageTokens = tokens
+				case "AUDIO":
+					input.AudioTokens = tokens
+				}
+			case "cacheTokensDetails":
+				if input.CachedTokensDetails == nil {
+					input.CachedTokensDetails = &dto.CachedTokenDetails{}
+				}
+				switch modality {
+				case "TEXT":
+					input.CachedTokensDetails.TextTokens = &tokens
+				case "IMAGE":
+					input.CachedTokensDetails.ImageTokens = &tokens
+				case "AUDIO":
+					input.CachedTokensDetails.AudioTokens = &tokens
+				}
+			case "candidatesTokensDetails":
+				switch modality {
+				case "IMAGE":
+					details["image_output_tokens"] = tokens
+				case "AUDIO":
+					details["audio_output_tokens"] = tokens
+				}
+			}
+		}
 	}
-
+	details["input_token_details"] = input
 	return promptTokens, completionTokens, details
 }
 
@@ -1764,6 +1794,13 @@ func extractOpenAIImageUsage(bodyBytes []byte) (promptTokens, completionTokens i
 	if resp.InputImages > 0 {
 		details["input_image_count"] = resp.InputImages
 	}
+	inputDetails := resp.PromptTokensDetails.Clone()
+	if resp.InputTokensDetails != nil {
+		inputDetails = resp.InputTokensDetails.Clone()
+	}
+	// Carry the typed, presence-preserving breakdown to the shared settlement.
+	// JSON serialization of task logs keeps this object usable after reload.
+	details["input_token_details"] = inputDetails
 	if resp.InputTokensDetails != nil && resp.InputTokensDetails.ImageTokens > 0 {
 		details["image_tokens"] = resp.InputTokensDetails.ImageTokens
 	}

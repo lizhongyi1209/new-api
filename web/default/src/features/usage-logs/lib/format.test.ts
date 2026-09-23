@@ -37,4 +37,44 @@ describe('getTieredBillingSummary', () => {
     expect(summary?.requestPrice).toBe(0.6)
     expect(summary?.priceEntries).toEqual([])
   })
+  it('uses the settled fixed zero instead of a time branch or guessed tier price', () => {
+    const other: LogOtherData = {
+      billing_mode: 'tiered_expr',
+      billing_unit: 'request',
+      fixed_price: 0,
+      matched_tier: 'same',
+      expr_b64: btoa(
+        'hour("UTC") < 8 ? tier("same", fixed(0.025)) : tier("same", p * 2)'
+      ),
+    }
+    expect(getTieredBillingSummary(other)?.priceEntries).toEqual([
+      {
+        field: 'fixedPrice',
+        shortLabel: 'Per-call',
+        price: 0,
+        unit: 'request',
+      },
+    ])
+    expect(
+      getTieredBillingSummary({ ...other, image_count: 2 })?.priceEntries[0]
+        .unit
+    ).toBe('image')
+  })
+
+  it('shows explicit free image cache prices only with actual cache facts and preserves unknown matches', () => {
+    const other: LogOtherData = {
+      billing_mode: 'tiered_expr',
+      matched_tier: 'base',
+      image_cache_tokens: 100,
+      billing_tokens: { img_cr: 100 },
+      expr_b64: btoa('tier("base", p * 2 + img_cr * 0)'),
+    }
+    expect(getTieredBillingSummary(other)?.priceEntries).toMatchObject([
+      { field: 'inputPrice', price: 2 },
+      { field: 'imageCachePrice', price: 0 },
+    ])
+    expect(
+      getTieredBillingSummary({ ...other, matched_tier: 'unknown' })
+    ).toBeNull()
+  })
 })

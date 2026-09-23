@@ -1,3 +1,16 @@
+import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { Settings2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+
+import { SectionPageLayout } from '@/components/layout'
+import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { ROLE } from '@/lib/roles'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,19 +29,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
-import { Settings2 } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-
-import { SectionPageLayout } from '@/components/layout'
-import { Badge } from '@/components/ui/badge'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { ROLE } from '@/lib/roles'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getChannelOps } from './api'
@@ -44,7 +45,7 @@ export function Channels() {
   )
   const channelOpsQuery = useQuery({
     queryKey: ['channel-ops'],
-    queryFn: getChannelOps,
+    queryFn: async () => requireServerSuccess(await getChannelOps()),
     retry: false,
     staleTime: 5 * 60 * 1000,
   })

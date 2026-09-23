@@ -1,3 +1,17 @@
+import { useQuery } from '@tanstack/react-query'
+import { getRouteApi } from '@tanstack/react-router'
+import type { OnChangeFn, SortingState } from '@tanstack/react-table'
+import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import {
+  DISABLED_ROW_DESKTOP,
+  DISABLED_ROW_MOBILE,
+  DataTablePage,
+  useDataTable,
+} from '@/components/data-table'
+import { useMediaQuery } from '@/hooks'
+import { useTableUrlState } from '@/hooks/use-table-url-state'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,21 +30,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { getRouteApi } from '@tanstack/react-router'
-import type { OnChangeFn, SortingState } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import {
-  DISABLED_ROW_DESKTOP,
-  DISABLED_ROW_MOBILE,
-  DataTablePage,
-  useDataTable,
-} from '@/components/data-table'
-import { useMediaQuery } from '@/hooks'
-import { useTableUrlState } from '@/hooks/use-table-url-state'
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { getUsers, searchUsers } from '../api'
 import {
@@ -144,18 +145,21 @@ export function UsersTable() {
 
       const result =
         hasFilter || hasColumnFilter
-          ? await searchUsers({
-              ...params,
-              keyword: globalFilter,
-              status: statusFilter[0] ?? '',
-              role: roleFilter[0] ?? '',
-              group: groupFilter,
-            })
-          : await getUsers(params)
+          ? requireServerSuccess(
+              await searchUsers({
+                ...params,
+                keyword: globalFilter,
+                status: statusFilter[0] ?? '',
+                role: roleFilter[0] ?? '',
+                group: groupFilter,
+              })
+            )
+          : requireServerSuccess(await getUsers(params))
 
       if (!result.success) {
-        toast.error(
-          result.message || `Failed to ${hasFilter ? 'search' : 'load'} users`
+        handleServerError(
+          result,
+          `Failed to ${hasFilter ? 'search' : 'load'} users`
         )
         return { items: [], total: 0 }
       }
@@ -232,13 +236,10 @@ export function UsersTable() {
           },
         ],
       }}
-      getRowClassName={(row, { isMobile }) =>
-        isDisabledUserRow(row.original)
-          ? isMobile
-            ? DISABLED_ROW_MOBILE
-            : DISABLED_ROW_DESKTOP
-          : undefined
-      }
+      getRowClassName={(row, { isMobile }) => {
+        if (!isDisabledUserRow(row.original)) return undefined
+        return isMobile ? DISABLED_ROW_MOBILE : DISABLED_ROW_DESKTOP
+      }}
       bulkActions={<DataTableBulkActions table={table} />}
     />
   )

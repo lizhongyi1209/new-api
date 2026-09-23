@@ -1,11 +1,3 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-*/
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Copy, Plus, RotateCw, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -19,6 +11,15 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+*/
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import {
   getR2PublicUploadClients,
@@ -40,7 +41,7 @@ export function R2PublicUploadSection() {
   const [rotateClientId, setRotateClientId] = useState<string | null>(null)
   const query = useQuery({
     queryKey,
-    queryFn: getR2PublicUploadClients,
+    queryFn: async () => requireServerSuccess(await getR2PublicUploadClients()),
   })
 
   useEffect(() => {
@@ -48,14 +49,18 @@ export function R2PublicUploadSection() {
   }, [query.data])
 
   const saveMutation = useMutation({
-    mutationFn: updateR2PublicUploadClients,
+    mutationFn: async (
+      variables: Parameters<typeof updateR2PublicUploadClients>[0]
+    ) => requireServerSuccess(await updateR2PublicUploadClients(variables)),
     onSuccess: async () => {
       toast.success(t('R2 upload whitelist updated'))
       await queryClient.invalidateQueries({ queryKey })
     },
   })
   const rotateMutation = useMutation({
-    mutationFn: rotateR2PublicUploadSecret,
+    mutationFn: async (
+      variables: Parameters<typeof rotateR2PublicUploadSecret>[0]
+    ) => requireServerSuccess(await rotateR2PublicUploadSecret(variables)),
     onSuccess: async (response) => {
       setRotateClientId(null)
       await copyToClipboard(response.data.secret)

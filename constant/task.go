@@ -25,6 +25,11 @@ const (
 	TaskActionOmniVideo30       = "omniVideo30"
 	TaskActionVideoEdit         = "videoEdit"
 	TaskActionVideoExtend       = "videoExtend"
+	TaskActionImageToVideo      = "image_to_video"
+	TaskActionTextToVideo       = "text_to_video"
+	TaskActionFirstTailToVideo  = "first_tail_to_video"
+	TaskActionReferenceToVideo  = "reference_to_video"
+	TaskActionRemixCanonical    = "remix"
 	// NOTE: When adding a new video task action here, you MUST also register it
 	// in the frontend "is this a video task?" allowlists, or the Task Logs page
 	// will silently show "-" instead of a "preview video" link even when the
@@ -44,3 +49,25 @@ var SunoModel2Action = map[string]string{
 	"suno_music":  SunoActionMusic,
 	"suno_lyrics": SunoActionLyrics,
 }
+
+// NormalizeTaskAction gives plugin hooks canonical action names while keeping
+// persisted legacy task actions and their existing relay contracts intact.
+func NormalizeTaskAction(action string) string {
+	switch action {
+	case TaskActionGenerate:
+		return TaskActionImageToVideo
+	case TaskActionTextGenerate:
+		return TaskActionTextToVideo
+	case TaskActionFirstTailGenerate:
+		return TaskActionFirstTailToVideo
+	case TaskActionReferenceGenerate:
+		return TaskActionReferenceToVideo
+	case TaskActionRemix:
+		return TaskActionRemixCanonical
+	default:
+		return action
+	}
+}
+
+// TaskPluginEnabled is opt-in so existing routes retain their behavior after an upgrade.
+var TaskPluginEnabled = false

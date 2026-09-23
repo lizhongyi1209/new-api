@@ -1,7 +1,12 @@
 package helper
 
 import (
+	"fmt"
+	"math"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -10,6 +15,106 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
+
+var taskBillingParamPath = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(?:\.(?:[A-Za-z][A-Za-z0-9_]*|[0-9]+))*$`)
+
+// FreezeTaskBillingExprRequestInput retains only the scalar request fields
+// referenced by a plugin task expression. Complete task bodies can contain
+// prompts, credentials and media, so they must not enter a billing snapshot.
+func FreezeTaskBillingExprRequestInput(c *gin.Context, expression string) (billingexpr.RequestInput, error) {
+	value, exists := c.Get("task_request")
+	request, ok := value.(map[string]any)
+	if !exists || !ok {
+		return billingexpr.RequestInput{}, fmt.Errorf("task plugin request is unavailable for billing")
+	}
+	paramNames, err := billingexpr.ReferencedParams(expression)
+	if err != nil {
+		return billingexpr.RequestInput{}, err
+	}
+	headerNames, err := billingexpr.ReferencedHeaders(expression)
+	if err != nil {
+		return billingexpr.RequestInput{}, err
+	}
+	if len(paramNames) > 32 || len(headerNames) > 32 {
+		return billingexpr.RequestInput{}, fmt.Errorf("too many task billing request references")
+	}
+	input := billingexpr.RequestInput{
+		Headers: make(map[string]string, len(headerNames)),
+		Params:  make(map[string]any, len(paramNames)),
+		At:      time.Now().UTC().Truncate(time.Second),
+	}
+	for _, path := range paramNames {
+		if len(path) > 128 || !taskBillingParamPath.MatchString(path) {
+			return billingexpr.RequestInput{}, fmt.Errorf("task billing parameter path is invalid")
+		}
+		segments := strings.Split(path, ".")
+		for _, segment := range segments {
+			lower := strings.ToLower(segment)
+			for _, sensitive := range []string{"authorization", "cookie", "api_key", "apikey", "token", "secret", "password", "credential", "base64"} {
+				if strings.Contains(lower, sensitive) {
+					return billingexpr.RequestInput{}, fmt.Errorf("task billing parameter path references private content")
+				}
+			}
+			switch lower {
+			case "prompt", "input", "output", "image", "images", "audio", "video", "url", "content", "messages", "files", "file", "data":
+				return billingexpr.RequestInput{}, fmt.Errorf("task billing parameter path references private content")
+			}
+		}
+		var current any = request
+		for _, segment := range segments {
+			switch item := current.(type) {
+			case map[string]any:
+				current = item[segment]
+			case []any:
+				index, indexErr := strconv.Atoi(segment)
+				if indexErr != nil || index < 0 || index >= len(item) {
+					current = nil
+					break
+				}
+				current = item[index]
+			default:
+				current = nil
+			}
+			if current == nil {
+				break
+			}
+		}
+		switch scalar := current.(type) {
+		case nil:
+		case bool:
+			input.Params[path] = scalar
+		case string:
+			if len(scalar) > 256 || strings.ContainsAny(scalar, "\r\n") {
+				return billingexpr.RequestInput{}, fmt.Errorf("task billing parameter is too large")
+			}
+			input.Params[path] = scalar
+		case float64:
+			if math.IsNaN(scalar) || math.IsInf(scalar, 0) {
+				return billingexpr.RequestInput{}, fmt.Errorf("task billing parameter is not finite")
+			}
+			input.Params[path] = scalar
+		default:
+			return billingexpr.RequestInput{}, fmt.Errorf("task billing parameter must be scalar")
+		}
+	}
+	for _, name := range headerNames {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name == "" || len(name) > 128 || strings.ContainsAny(name, "\r\n") {
+			return billingexpr.RequestInput{}, fmt.Errorf("task billing header name is invalid")
+		}
+		for _, sensitive := range []string{"authorization", "cookie", "api-key", "apikey", "api_key", "token", "secret", "password", "session", "credential", "x-auth"} {
+			if strings.Contains(name, sensitive) {
+				return billingexpr.RequestInput{}, fmt.Errorf("credential headers cannot be persisted for task billing")
+			}
+		}
+		value := c.GetHeader(name)
+		if len(value) > 256 || strings.ContainsAny(value, "\r\n") {
+			return billingexpr.RequestInput{}, fmt.Errorf("task billing header value is too large")
+		}
+		input.Headers[name] = value
+	}
+	return input, nil
+}
 
 func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.RelayInfo) (billingexpr.RequestInput, error) {
 	if info != nil && info.BillingRequestInput != nil {
@@ -103,6 +208,13 @@ func readIncomingBillingExprBody(c *gin.Context) ([]byte, error) {
 func cloneRequestInput(src billingexpr.RequestInput) billingexpr.RequestInput {
 	input := billingexpr.RequestInput{
 		Headers: cloneStringMap(src.Headers),
+		At:      src.At,
+	}
+	if src.Params != nil {
+		input.Params = make(map[string]any, len(src.Params))
+		for key, value := range src.Params {
+			input.Params[key] = value
+		}
 	}
 	if src.ImageCount != nil {
 		count := *src.ImageCount

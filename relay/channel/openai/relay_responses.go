@@ -49,9 +49,11 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		usage.PromptTokens = responsesResponse.Usage.InputTokens
 		usage.CompletionTokens = responsesResponse.Usage.OutputTokens
 		usage.TotalTokens = responsesResponse.Usage.TotalTokens
+		if responsesResponse.Usage.OutputTokensDetails != nil {
+			usage.CompletionTokenDetails = *responsesResponse.Usage.OutputTokensDetails
+		}
 		if responsesResponse.Usage.InputTokensDetails != nil {
-			usage.PromptTokensDetails.CachedTokens = responsesResponse.Usage.InputTokensDetails.CachedTokens
-			usage.PromptTokensDetails.CacheWriteTokens = responsesResponse.Usage.InputTokensDetails.CacheWriteTokens
+			usage.PromptTokensDetails = responsesResponse.Usage.InputTokensDetails.Clone()
 		}
 	}
 	if info == nil || info.ResponsesUsageInfo == nil || info.ResponsesUsageInfo.BuiltInTools == nil {
@@ -103,9 +105,11 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 					if streamResponse.Response.Usage.TotalTokens != 0 {
 						usage.TotalTokens = streamResponse.Response.Usage.TotalTokens
 					}
+					if streamResponse.Response.Usage.OutputTokensDetails != nil {
+						usage.CompletionTokenDetails = *streamResponse.Response.Usage.OutputTokensDetails
+					}
 					if streamResponse.Response.Usage.InputTokensDetails != nil {
-						usage.PromptTokensDetails.CachedTokens = streamResponse.Response.Usage.InputTokensDetails.CachedTokens
-						usage.PromptTokensDetails.CacheWriteTokens = streamResponse.Response.Usage.InputTokensDetails.CacheWriteTokens
+						usage.PromptTokensDetails = streamResponse.Response.Usage.InputTokensDetails.Clone()
 					}
 				}
 				if streamResponse.Response.HasImageGenerationCall() {

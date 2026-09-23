@@ -1,3 +1,11 @@
+import { useQuery } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { DataTablePage, useDataTable } from '@/components/data-table'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,14 +24,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { isAxiosError } from 'axios'
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { DataTablePage, useDataTable } from '@/components/data-table'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { getAuditLogs, type AuditFilters, type AuditLog } from '../api'
@@ -58,7 +59,8 @@ export function AuditLogViewer(props: {
     filters.start_timestamp > filters.end_timestamp
   const query = useQuery({
     queryKey: ['audit', userId, props.scope, params],
-    queryFn: () => getAuditLogs(props.scope, params),
+    queryFn: async () =>
+      requireServerSuccess(await getAuditLogs(props.scope, params)),
     enabled: canQuery && !invalidRange,
     retry: false,
   })

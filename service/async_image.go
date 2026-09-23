@@ -856,29 +856,7 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 		return
 	}
 
-	// Extract upstream model version and token usage from raw response
-	var upstreamModelVersion string
-	promptTokens := 0
-	completionTokens := 0
-	var tokenDetails map[string]interface{}
-	var rawResp map[string]interface{}
-	if err := common.Unmarshal(bodyBytes, &rawResp); err == nil {
-		if mv, ok := rawResp["modelVersion"].(string); ok {
-			upstreamModelVersion = mv
-		}
-		if usage, ok := rawResp["usage"].(map[string]interface{}); ok {
-			if pt, ok := usage["prompt_tokens"].(float64); ok {
-				promptTokens = int(pt)
-			}
-			if ct, ok := usage["completion_tokens"].(float64); ok {
-				completionTokens = int(ct)
-			}
-			tokenDetails = map[string]interface{}{}
-			if tt, ok := usage["total_tokens"].(float64); ok {
-				tokenDetails["total_tokens"] = int(tt)
-			}
-		}
-	}
+	promptTokens, completionTokens, tokenDetails, upstreamModelVersion := extractOpenAIImageUsage(bodyBytes)
 
 	if len(imageResp.Data) == 0 {
 		task.PrivateData.ErrorDetail = imageUpstreamUsageDetail(promptTokens, completionTokens)
@@ -953,10 +931,9 @@ func ProcessAsyncImageTask(ctx context.Context, task *model.Task) {
 	task.FinishTime = time.Now().Unix()
 	_ = task.Update()
 
-	// Settle billing: per-token models need post-completion recalculation with actual usage
-	if bc := task.PrivateData.BillingContext; bc != nil && !bc.PerCallBilling {
-		RecalculateTaskQuotaByTokens(ctx, task, promptTokens+completionTokens)
-	}
+	// Use the frozen expression for tiered tasks and the existing ratio path otherwise.
+	tokenDetails["generated_image_count"] = len(imageResp.Data)
+	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
 	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费
 	RefundZeroUsageTaskQuota(ctx, task, promptTokens, completionTokens, len(imageResp.Data), "async_image")
@@ -1243,39 +1220,8 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 		return
 	}
 
-	// Extract token usage from response
-	promptTokens := 0
-	completionTokens := 0
-	var tokenDetails map[string]interface{}
-	if usageMetadata, ok := geminiResp["usageMetadata"].(map[string]interface{}); ok {
-		if pt, ok := usageMetadata["promptTokenCount"].(float64); ok {
-			promptTokens = int(pt)
-		}
-		if ct, ok := usageMetadata["candidatesTokenCount"].(float64); ok {
-			completionTokens = int(ct)
-		}
-		tokenDetails = map[string]interface{}{}
-		if tt, ok := usageMetadata["totalTokenCount"].(float64); ok {
-			tokenDetails["total_tokens"] = int(tt)
-		}
-		if tt, ok := usageMetadata["thoughtsTokenCount"].(float64); ok {
-			completionTokens += int(tt)
-			tokenDetails["thought_tokens"] = int(tt)
-		}
-		// 提取输出图像 token（tiered_expr 表达式的 img_o 变量），与 extractGeminiUsage 一致
-		if candidatesTokensDetails, ok := usageMetadata["candidatesTokensDetails"].([]interface{}); ok {
-			for _, detail := range candidatesTokensDetails {
-				if detailMap, ok := detail.(map[string]interface{}); ok {
-					if modality, _ := detailMap["modality"].(string); modality == "IMAGE" {
-						if tokenCount, ok := detailMap["tokenCount"].(float64); ok {
-							tokenDetails["image_output_tokens"] = int(tokenCount)
-							break
-						}
-					}
-				}
-			}
-		}
-	}
+	// Preserve modality and cache facts consistently across Gemini image entrances.
+	promptTokens, completionTokens, tokenDetails := extractGeminiUsage(geminiResp)
 
 	// Strip thoughtSignature before storing
 	stripThoughtSignature(geminiResp)
@@ -1363,6 +1309,10 @@ func ProcessUnifiedImageTask(ctx context.Context, task *model.Task, requestData 
 	_ = task.Update()
 
 	// Settle billing with actual token usage (tiered_expr or per-token models)
+	if tokenDetails == nil {
+		tokenDetails = make(map[string]interface{})
+	}
+	tokenDetails["generated_image_count"] = imageCount
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
 	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费
@@ -2050,39 +2000,8 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 		return
 	}
 
-	// Extract token usage from response
-	promptTokens := 0
-	completionTokens := 0
-	var tokenDetails map[string]interface{}
-	if usageMetadata, ok := geminiResp["usageMetadata"].(map[string]interface{}); ok {
-		if pt, ok := usageMetadata["promptTokenCount"].(float64); ok {
-			promptTokens = int(pt)
-		}
-		if ct, ok := usageMetadata["candidatesTokenCount"].(float64); ok {
-			completionTokens = int(ct)
-		}
-		tokenDetails = map[string]interface{}{}
-		if tt, ok := usageMetadata["totalTokenCount"].(float64); ok {
-			tokenDetails["total_tokens"] = int(tt)
-		}
-		if tt, ok := usageMetadata["thoughtsTokenCount"].(float64); ok {
-			completionTokens += int(tt)
-			tokenDetails["thought_tokens"] = int(tt)
-		}
-		// 提取输出图像 token（tiered_expr 表达式的 img_o 变量），与 extractGeminiUsage 一致
-		if candidatesTokensDetails, ok := usageMetadata["candidatesTokensDetails"].([]interface{}); ok {
-			for _, detail := range candidatesTokensDetails {
-				if detailMap, ok := detail.(map[string]interface{}); ok {
-					if modality, _ := detailMap["modality"].(string); modality == "IMAGE" {
-						if tokenCount, ok := detailMap["tokenCount"].(float64); ok {
-							tokenDetails["image_output_tokens"] = int(tokenCount)
-							break
-						}
-					}
-				}
-			}
-		}
-	}
+	// Preserve modality and cache facts consistently across Gemini image entrances.
+	promptTokens, completionTokens, tokenDetails := extractGeminiUsage(geminiResp)
 
 	// Strip thoughtSignature from parts before storing (it can be megabytes of base64)
 	stripThoughtSignature(geminiResp)
@@ -2194,6 +2113,10 @@ func ProcessAsyncGeminiTask(ctx context.Context, task *model.Task, requestData .
 	_ = task.Update()
 
 	// Settle billing with actual token usage (tiered_expr or per-token models)
+	if tokenDetails == nil {
+		tokenDetails = make(map[string]interface{})
+	}
+	tokenDetails["generated_image_count"] = imageCount
 	SettleAsyncImageTaskBilling(ctx, task, promptTokens, completionTokens, tokenDetails)
 
 	// 零用量退款检查：仅在既无 token 用量又无返图时退款；正常返图但不回显 usage 的上游照常扣费

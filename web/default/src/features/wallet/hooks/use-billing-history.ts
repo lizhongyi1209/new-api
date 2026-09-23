@@ -17,10 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import i18next from 'i18next'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 
 import { useIsAdmin } from '@/hooks/use-admin'
+import { useDebounce } from '@/hooks/use-debounce'
+import { handleServerError } from '@/lib/handle-server-error'
 
 import {
   getUserBillingHistory,
@@ -50,6 +52,9 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
   const [page, setPage] = useState(initialPage)
   const [pageSize, setPageSize] = useState(initialPageSize)
   const [keyword, setKeyword] = useState('')
+  const debouncedKeyword = useDebounce(keyword)
+  const requestIdRef = useRef(0)
+  const refreshRef = useRef<(() => Promise<void>) | null>(null)
   const [loading, setLoading] = useState(false)
   const [completing, setCompleting] = useState(false)
 
@@ -57,32 +62,36 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
    * Fetch billing history
    */
   const fetchBillingHistory = useCallback(async () => {
+    if (keyword !== debouncedKeyword) return
+
+    const requestId = ++requestIdRef.current
     setLoading(true)
     try {
       const response = isAdmin
-        ? await getAllBillingHistory(page, pageSize, keyword)
-        : await getUserBillingHistory(page, pageSize, keyword)
+        ? await getAllBillingHistory(page, pageSize, debouncedKeyword)
+        : await getUserBillingHistory(page, pageSize, debouncedKeyword)
+
+      if (requestId !== requestIdRef.current) return
 
       if (isApiSuccess(response) && response.data) {
         setRecords(response.data.items || [])
         setTotal(response.data.total || 0)
       } else {
-        toast.error(
-          response.message || i18next.t('Failed to load billing history')
-        )
+        handleServerError(response, i18next.t('Failed to load billing history'))
         setRecords([])
         setTotal(0)
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error('Failed to fetch billing history:', error)
-      toast.error(i18next.t('Failed to load billing history'))
+      if (requestId !== requestIdRef.current) return
+      handleServerError(error, i18next.t('Failed to load billing history'))
       setRecords([])
       setTotal(0)
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
-  }, [isAdmin, page, pageSize, keyword])
+  }, [debouncedKeyword, isAdmin, keyword, page, pageSize])
 
   /**
    * Complete a pending order (admin only)
@@ -100,51 +109,71 @@ export function useBillingHistory(options: UseBillingHistoryOptions = {}) {
         if (isApiSuccess(response)) {
           toast.success(i18next.t('Order completed successfully'))
           // Refresh the list
-          await fetchBillingHistory()
+          await refreshRef.current?.()
           return true
         } else {
-          toast.error(response.message || i18next.t('Failed to complete order'))
+          handleServerError(response, i18next.t('Failed to complete order'))
           return false
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error('Failed to complete order:', error)
-        toast.error(i18next.t('Failed to complete order'))
+        handleServerError(error, i18next.t('Failed to complete order'))
         return false
       } finally {
         setCompleting(false)
       }
     },
-    [isAdmin, fetchBillingHistory]
+    [isAdmin]
   )
 
   /**
    * Change page
    */
-  const handlePageChange = useCallback((newPage: number) => {
-    setPage(newPage)
-  }, [])
+  const handlePageChange = useCallback(
+    (newPage: number) => {
+      if (newPage === page) return
+      requestIdRef.current += 1
+      setPage(newPage)
+    },
+    [page]
+  )
 
   /**
    * Change page size
    */
-  const handlePageSizeChange = useCallback((newPageSize: number) => {
-    setPageSize(newPageSize)
-    setPage(1) // Reset to first page when changing page size
-  }, [])
+  const handlePageSizeChange = useCallback(
+    (newPageSize: number) => {
+      if (newPageSize === pageSize) return
+      requestIdRef.current += 1
+      setPageSize(newPageSize)
+      setPage(1) // Reset to first page when changing page size
+    },
+    [pageSize]
+  )
 
   /**
    * Search by keyword
    */
-  const handleSearch = useCallback((newKeyword: string) => {
-    setKeyword(newKeyword)
-    setPage(1) // Reset to first page when searching
-  }, [])
+  const handleSearch = useCallback(
+    (newKeyword: string) => {
+      if (newKeyword === keyword) return
+      requestIdRef.current += 1
+      setKeyword(newKeyword)
+      setPage(1) // Reset to first page when searching
+    },
+    [keyword]
+  )
 
-  // Fetch data when dependencies change
+  // Fetch data after the search draft has settled.
   useEffect(() => {
-    fetchBillingHistory()
-  }, [fetchBillingHistory])
+    refreshRef.current = fetchBillingHistory
+    if (keyword === debouncedKeyword) {
+      fetchBillingHistory()
+    }
+    return () => {
+      refreshRef.current = null
+      requestIdRef.current += 1
+    }
+  }, [debouncedKeyword, fetchBillingHistory, keyword])
 
   return {
     records,

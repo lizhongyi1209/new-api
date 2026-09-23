@@ -1,24 +1,5 @@
-/*
-Copyright (C) 2023-2026 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AxiosError } from 'axios'
 import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -65,6 +46,30 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { ModelPricingPanel } from '@/features/model-pricing/model-pricing-panel'
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+import { markServerErrorHandled } from '@/lib/handle-server-error'
+import {
+  requireServerSuccess,
+  createServerError,
+  getServerErrorMessage,
+} from '@/lib/server-error-message'
 
 import { createModel, updateModel, getModel, getVendors } from '../../api'
 import { getNameRuleOptions, ENDPOINT_TEMPLATES } from '../../constants'
@@ -120,7 +125,8 @@ export function ModelMutateDrawer(props: {
   })
   const vendorsQuery = useQuery({
     queryKey: vendorsQueryKeys.list(),
-    queryFn: () => getVendors({ page_size: 1000 }),
+    queryFn: async () =>
+      requireServerSuccess(await getVendors({ page_size: 1000 })),
     enabled: props.open,
   })
   const vendors = vendorsQuery.data?.data?.items ?? []
@@ -131,13 +137,14 @@ export function ModelMutateDrawer(props: {
     queryKey: modelsQueryKeys.detail(currentRow?.id ?? 0),
     queryFn: async () => {
       if (!currentRow?.id) throw new Error(t('Model ID is required'))
-      const response = await getModel(currentRow.id)
+      const response = requireServerSuccess(await getModel(currentRow.id))
       if (!response.success || !response.data) {
-        throw new Error(response.message || t('Failed to load model'))
+        throw createServerError(response, t('Failed to load model'))
       }
       return response.data
     },
     enabled: props.open && isEditing,
+    meta: { errorToast: false, errorRedirect: false },
   })
   const savedModel = modelQuery.data ?? currentRow
 
@@ -191,10 +198,12 @@ export function ModelMutateDrawer(props: {
       }
       const payload = transformFormDataToModelPayload(values)
       const response = currentRow?.id
-        ? await updateModel({ ...payload, id: currentRow.id })
-        : await createModel(payload)
+        ? requireServerSuccess(
+            await updateModel({ ...payload, id: currentRow.id })
+          )
+        : requireServerSuccess(await createModel(payload))
       if (!response.success) {
-        throw new Error(response.message || t('Operation failed'))
+        throw createServerError(response, t('Operation failed'))
       }
       return response
     },
@@ -218,10 +227,8 @@ export function ModelMutateDrawer(props: {
       if (!pricingDirty) props.onOpenChange(false)
     },
     onError: (error) => {
-      const message =
-        error instanceof AxiosError
-          ? error.response?.data?.message || error.message
-          : error.message
+      markServerErrorHandled(error)
+      const message = getServerErrorMessage(error, t('Operation failed'))
       form.setError('root.server', {
         message: message || t('Operation failed'),
       })
@@ -322,7 +329,7 @@ export function ModelMutateDrawer(props: {
                         name='model_name'
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>{t('Model Name *')}</FormLabel>
+                            <FormLabel required>{t('Model Name')}</FormLabel>
                             <FormControl>
                               <Input
                                 placeholder={t('gpt-4, claude-3-opus, etc.')}

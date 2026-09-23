@@ -49,7 +49,21 @@ func AsyncImageSubmit(c *gin.Context) {
 	tokenId := c.GetInt("token_id")
 
 	// Build relay info for billing
-	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, req.Model)
+	references := len(req.Images)
+	if len(req.Image) > 0 {
+		references++
+	}
+	billingInput, err := buildGenerateImageBillingRequestInput(&dto.GenerateImageRequest{
+		Model: req.Model, N: req.N, Size: req.Size, AspectRatio: req.AspectRatio,
+		Quality: req.Quality, Background: req.Background, Moderation: req.Moderation,
+		OutputFormat: req.OutputFormat, Watermark: req.Watermark, LayerDecomposition: req.LayerDecomposition,
+		Images: make([]dto.GenerateImageInput, references),
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
+		return
+	}
+	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, req.Model, billingInput)
 	if billingErr != nil {
 		c.JSON(billingErr.StatusCode, gin.H{
 			"error": gin.H{
@@ -96,6 +110,7 @@ func AsyncImageSubmit(c *gin.Context) {
 		if snapBytes, ok := c.Get("tiered_snapshot_bytes"); ok {
 			if b, ok := snapBytes.([]byte); ok {
 				bc.TieredSnapshot = b
+				bc.TieredRequestBody = append([]byte(nil), billingInput.Body...)
 			}
 		}
 		task.PrivateData.BillingContext = bc
@@ -174,6 +189,20 @@ func AsyncImageSubmit(c *gin.Context) {
 }
 
 func AsyncGeminiSubmit(c *gin.Context) {
+	validated, err := helper.GetAndValidateGeminiRequest(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
+		return
+	}
+	count := 1
+	if validated.GenerationConfig.CandidateCount != nil {
+		count = *validated.GenerationConfig.CandidateCount
+	}
+	if count < 1 || count > dto.MaxImageN {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "candidateCount is out of range", "type": "invalid_request_error"}})
+		return
+	}
+
 	var req map[string]interface{}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -202,8 +231,40 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		modelName = fmt.Sprintf("%v", req["model"])
 	}
 
-	// Build relay info for billing
-	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, modelName)
+	// Persist only generation settings used by pricing, never content or schemas.
+	config := validated.GenerationConfig
+	config.StopSequences = nil
+	config.ResponseSchema = nil
+	config.ResponseJsonSchema = nil
+	config.SpeechConfig = nil
+	if len(config.ImageConfig) > 0 {
+		var imageConfig struct {
+			AspectRatio string `json:"aspectRatio,omitempty"`
+			ImageSize   string `json:"imageSize,omitempty"`
+		}
+		if err := common.Unmarshal(config.ImageConfig, &imageConfig); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "imageConfig is invalid", "type": "invalid_request_error"}})
+			return
+		}
+		config.ImageConfig, err = common.Marshal(imageConfig)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
+			return
+		}
+	}
+	serviceTier, _ := req["serviceTier"].(string)
+	body, err := common.Marshal(struct {
+		Model            string                         `json:"model"`
+		N                int                            `json:"n"`
+		GenerationConfig dto.GeminiChatGenerationConfig `json:"generationConfig"`
+		ServiceTier      string                         `json:"serviceTier,omitempty"`
+	}{modelName, count, config, serviceTier})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
+		return
+	}
+	billingInput := billingexpr.RequestInput{Body: body}
+	relayInfo, priceData, billingErr := prepareAsyncBilling(c, userId, group, channelId, tokenId, modelName, billingInput)
 	if billingErr != nil {
 		c.JSON(billingErr.StatusCode, gin.H{
 			"error": gin.H{
@@ -250,6 +311,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		if snapBytes, ok := c.Get("tiered_snapshot_bytes"); ok {
 			if b, ok := snapBytes.([]byte); ok {
 				bc.TieredSnapshot = b
+				bc.TieredRequestBody = append([]byte(nil), billingInput.Body...)
 			}
 		}
 		task.PrivateData.BillingContext = bc
@@ -282,6 +344,25 @@ func AsyncGeminiSubmit(c *gin.Context) {
 		TaskID: task.TaskID,
 		Status: string(task.Status),
 	})
+}
+
+// freezeAsyncBillingHeaders retains referenced condition inputs without credentials.
+func freezeAsyncBillingHeaders(c *gin.Context, expression string) (map[string]string, error) {
+	names, err := billingexpr.ReferencedHeaders(expression)
+	if err != nil {
+		return nil, err
+	}
+	headers := make(map[string]string, len(names))
+	for _, name := range names {
+		// Frozen task inputs must never contain authentication credentials.
+		for _, sensitive := range []string{"authorization", "cookie", "api-key", "apikey", "api_key", "token", "secret", "password", "session", "credential", "x-auth"} {
+			if strings.Contains(name, sensitive) {
+				return nil, fmt.Errorf("credential headers cannot be persisted for asynchronous pricing")
+			}
+		}
+		headers[name] = c.GetHeader(name)
+	}
+	return headers, nil
 }
 
 // prepareAsyncBilling builds a RelayInfo, calculates price, and pre-consumes quota.
@@ -360,6 +441,28 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 		if len(requestInput) > 0 {
 			billingInput = requestInput[0]
 		}
+		billingInput.Headers, err = freezeAsyncBillingHeaders(c, exprStr)
+		if err != nil {
+			return nil, types.PriceData{}, types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+		}
+		if billingexpr.UsedVars(exprStr)["image_count"] {
+			var quantity struct {
+				N *uint `json:"n"`
+			}
+			if len(billingInput.Body) > 0 {
+				if err := common.Unmarshal(billingInput.Body, &quantity); err != nil {
+					return nil, types.PriceData{}, types.NewError(err, types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+				}
+			}
+			count := 1
+			if quantity.N != nil && *quantity.N > 0 {
+				if *quantity.N > dto.MaxImageN {
+					return nil, types.PriceData{}, types.NewError(fmt.Errorf("n must be between 1 and %d", dto.MaxImageN), types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+				}
+				count = int(*quantity.N)
+			}
+			billingInput.ImageCount = &count
+		}
 		rawCost, trace, err := billingexpr.RunExprWithRequest(exprStr, billingexpr.TokenParams{
 			P:   float64(estimatedPrompt),
 			C:   0,
@@ -373,9 +476,13 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 			)
 		}
 		quotaBeforeGroup := rawCost / 1_000_000 * common.QuotaPerUnit
-		preConsumedQuota := billingexpr.QuotaRound(quotaBeforeGroup * groupRatioInfo.GroupRatio)
+		preConsumedQuota, err := billingexpr.QuotaRoundStrict(quotaBeforeGroup * groupRatioInfo.GroupRatio)
+		if err != nil {
+			return nil, types.PriceData{}, types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+		}
 
 		snapshot := &billingexpr.BillingSnapshot{
+			RequestHeaders:            billingInput.Headers,
 			BillingMode:               billing_setting.BillingModeTieredExpr,
 			ModelName:                 modelName,
 			ExprString:                exprStr,
@@ -386,6 +493,9 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 			EstimatedQuotaBeforeGroup: quotaBeforeGroup,
 			EstimatedQuotaAfterGroup:  preConsumedQuota,
 			EstimatedTier:             trace.MatchedTier,
+			EstimatedBillingUnit:      trace.BillingUnit,
+			EstimatedFixedPrice:       trace.FixedPrice,
+			EstimatedImageCount:       trace.ImageCount,
 			QuotaPerUnit:              common.QuotaPerUnit,
 			ExprVersion:               billingexpr.ExprVersion(exprStr),
 		}

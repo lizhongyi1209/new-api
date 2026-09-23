@@ -1,3 +1,13 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { Dialog } from '@/components/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,16 +26,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { Dialog } from '@/components/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
-import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
+import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
 
 import { adjustUserQuota } from '../api'
@@ -49,7 +50,7 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
   const currencyLabel = getCurrencyLabel()
   const tokensOnly = currencyMeta.kind === 'tokens'
 
-  const amountValue = parseFloat(amount) || 0
+  const amountValue = Number.parseFloat(amount) || 0
   const quotaValue = parseQuotaFromDollars(Math.abs(amountValue))
 
   const getPreviewText = () => {
@@ -90,10 +91,13 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
         props.onOpenChange(false)
         props.onSuccess()
       } else {
-        toast.error(result.message || t('Failed to adjust quota'))
+        handleServerError(result, t('Failed to adjust quota'))
       }
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : t('Failed to adjust quota'))
+      handleServerError(
+        e,
+        e instanceof Error ? e.message : t('Failed to adjust quota')
+      )
     } finally {
       setLoading(false)
     }
@@ -149,11 +153,9 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
                   setAmount('')
                 }}
               >
-                {m === 'add'
-                  ? t('Add')
-                  : m === 'subtract'
-                    ? t('Subtract')
-                    : t('Override')}
+                {m === 'add' && t('Add')}
+                {m === 'subtract' && t('Subtract')}
+                {m === 'override' && t('Override')}
               </Button>
             ))}
           </div>

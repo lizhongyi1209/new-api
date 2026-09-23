@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"sort"
@@ -17,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 
@@ -32,6 +34,24 @@ type TaskPollingAdaptor interface {
 	// AdjustBillingOnComplete 在任务到达终态（成功/失败）时由轮询循环调用。
 	// 返回正数触发差额结算（补扣/退还），返回 0 保持预扣费金额不变。
 	AdjustBillingOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int
+}
+
+// TaskContextPollingAdaptor lets plugins poll with the persisted task data and
+// state. Legacy adaptors retain the map-based polling contract above.
+type TaskContextPollingAdaptor interface {
+	FetchTaskWithContext(baseURL, key string, task *model.Task, proxy string) (*http.Response, error)
+	ParseTaskResultWithContext(task *model.Task, resp *http.Response, body []byte) (*relaycommon.TaskInfo, error)
+}
+
+// BatchTaskResult is the parsed result of one plugin batch-poll item.
+// The legacy polling path continues to use TaskPollingAdaptor.
+type BatchTaskResult struct {
+	TaskInfo   relaycommon.TaskInfo
+	Action     string
+	SubmitTime int64
+	StartTime  int64
+	FinishTime int64
+	Data       any
 }
 
 // GetTaskAdaptorFunc 由 main 包注入，用于获取指定平台的任务适配器。
@@ -139,10 +159,27 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 			continue
 		}
 		summary.PlatformsScanned++
+		pluginTasks := make([]*model.Task, 0)
+		legacyTasks := make([]*model.Task, 0, len(tasks))
+		for _, task := range tasks {
+			if task.PrivateData.Execution != nil && task.PrivateData.Execution.TaskPlugin != nil {
+				pluginTasks = append(pluginTasks, task)
+			} else {
+				legacyTasks = append(legacyTasks, task)
+			}
+		}
+		if len(pluginTasks) > 0 {
+			if err := UpdateTaskPluginTasks(ctx, platform, pluginTasks); err != nil {
+				logger.LogError(ctx, fmt.Sprintf("Task plugin %s polling failed: %s", platform, err))
+			}
+		}
+		if len(legacyTasks) == 0 {
+			continue
+		}
 		taskChannelM := make(map[int][]string)
 		taskM := make(map[string]*model.Task)
 		nullTaskIds := make([]int64, 0)
-		for _, task := range tasks {
+		for _, task := range legacyTasks {
 			upstreamID := task.GetUpstreamTaskID()
 			if upstreamID == "" {
 				// 统计失败的未完成任务
@@ -175,6 +212,67 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 	}
 	common.SysLog("任务进度轮询完成")
 	return summary
+}
+
+// UpdateTaskPluginTasks keeps each task's persisted plugin state attached to
+// its poll and does not use upstream task IDs as map keys. Providers may reuse
+// those IDs across channels, while public tasks remain distinct.
+func UpdateTaskPluginTasks(ctx context.Context, platform constant.TaskPlatform, tasks []*model.Task) error {
+	byChannel := make(map[int][]*model.Task)
+	for _, task := range tasks {
+		byChannel[task.ChannelId] = append(byChannel[task.ChannelId], task)
+	}
+	channelIDs := make([]int, 0, len(byChannel))
+	for channelID := range byChannel {
+		channelIDs = append(channelIDs, channelID)
+	}
+	sort.Ints(channelIDs)
+	for _, channelID := range channelIDs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		ch, err := model.CacheGetChannel(channelID)
+		if err != nil {
+			logger.LogError(ctx, fmt.Sprintf("Task plugin channel #%d unavailable: %s", channelID, err))
+			continue
+		}
+		if ch.Type != constant.ChannelTypeTaskPlugin || ch.GetSetting().TaskPluginKey != string(platform) {
+			logger.LogError(ctx, fmt.Sprintf("Task plugin channel #%d identity changed; skipping pending tasks", channelID))
+			continue
+		}
+		adaptor := GetTaskAdaptorFunc(platform)
+		if adaptor == nil {
+			logger.LogError(ctx, fmt.Sprintf("Task plugin %s adaptor is unavailable", platform))
+			continue
+		}
+		if _, ok := adaptor.(TaskContextPollingAdaptor); !ok {
+			logger.LogError(ctx, fmt.Sprintf("Task plugin %s adaptor cannot poll persisted tasks", platform))
+			continue
+		}
+		info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: ch.GetBaseURL(), ApiKey: ch.Key}}
+		adaptor.Init(info)
+		for index, task := range byChannel[channelID] {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if task.GetUpstreamTaskID() == "" {
+				logger.LogError(ctx, fmt.Sprintf("Task plugin task %s has no upstream task ID", task.TaskID))
+				continue
+			}
+			if err := updateVideoSingleTask(ctx, adaptor, ch, task); err != nil {
+				logger.LogError(ctx, fmt.Sprintf("Task plugin task %s poll failed: %s", task.TaskID, err))
+			}
+			if ch.GetOtherSettings().DisableTaskPollingSleep || index == len(byChannel[channelID])-1 {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+		}
+	}
+	return nil
 }
 
 // DispatchPlatformUpdate 按平台分发轮询更新
@@ -427,7 +525,12 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := updateVideoSingleTask(ctx, adaptor, cacheGetChannel, taskId, taskM); err != nil {
+		task := taskM[taskId]
+		if task == nil {
+			logger.LogError(ctx, fmt.Sprintf("Task %s not found in taskM", taskId))
+			continue
+		}
+		if err := updateVideoSingleTask(ctx, adaptor, cacheGetChannel, task); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("Failed to update video task %s: %s", taskId, err.Error()))
 		}
 		if disablePollingSleep || i == len(taskIds)-1 {
@@ -444,40 +547,53 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	return nil
 }
 
-func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *model.Channel, taskId string, taskM map[string]*model.Task) error {
+func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *model.Channel, task *model.Task) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
+	if task == nil {
+		return fmt.Errorf("task is required")
+	}
+	taskId := task.GetUpstreamTaskID()
 	baseURL := constant.ChannelBaseURLs[ch.Type]
 	if ch.GetBaseURL() != "" {
 		baseURL = ch.GetBaseURL()
 	}
 	proxy := ch.GetSetting().Proxy
 
-	task := taskM[taskId]
-	if task == nil {
-		logger.LogError(ctx, fmt.Sprintf("Task %s not found in taskM", taskId))
-		return fmt.Errorf("task %s not found", taskId)
-	}
 	key := ch.Key
 
 	privateData := task.PrivateData
 	if privateData.Key != "" {
 		key = privateData.Key
 	}
-	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
-		"task_id":        task.GetUpstreamTaskID(),
-		"action":         task.Action,
-		"model":          task.Properties.OriginModelName,
-		"upstream_model": task.Properties.UpstreamModelName,
-	}, proxy)
+	var resp *http.Response
+	var err error
+	contextPoller, pluginPoll := adaptor.(TaskContextPollingAdaptor)
+	if pluginPoll {
+		resp, err = contextPoller.FetchTaskWithContext(baseURL, key, task, proxy)
+	} else {
+		resp, err = adaptor.FetchTask(baseURL, key, map[string]any{
+			"task_id":        task.GetUpstreamTaskID(),
+			"action":         task.Action,
+			"model":          task.Properties.OriginModelName,
+			"upstream_model": task.Properties.UpstreamModelName,
+		}, proxy)
+	}
 	if err != nil {
 		return fmt.Errorf("fetchTask failed for task %s: %w", taskId, err)
 	}
 	defer resp.Body.Close()
-	responseBody, err := io.ReadAll(resp.Body)
+	var responseReader io.Reader = resp.Body
+	if pluginPoll {
+		responseReader = io.LimitReader(resp.Body, (1<<20)+1)
+	}
+	responseBody, err := io.ReadAll(responseReader)
 	if err != nil {
 		return fmt.Errorf("readAll failed for task %s: %w", taskId, err)
+	}
+	if pluginPoll && len(responseBody) > 1<<20 {
+		return fmt.Errorf("plugin poll response exceeds size limit for task %s", taskId)
 	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask response: %s", responseBody)
@@ -485,7 +601,15 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	taskResult := &relaycommon.TaskInfo{}
 	// try parse as New API response format
 	var responseItems dto.TaskResponse[model.Task]
-	if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
+	if pluginPoll {
+		if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+			return fmt.Errorf("plugin poll returned HTTP %d for task %s", resp.StatusCode, taskId)
+		}
+		taskResult, err = contextPoller.ParseTaskResultWithContext(task, resp, responseBody)
+		if err != nil {
+			return fmt.Errorf("parse plugin task result failed for task %s: %w", taskId, err)
+		}
+	} else if err = common.Unmarshal(responseBody, &responseItems); err == nil && responseItems.IsSuccess() {
 		logger.LogDebug(ctx, "updateVideoSingleTask parsed as new api response format: %+v", responseItems)
 		t := responseItems.Data
 		taskResult.TaskID = t.TaskID
@@ -498,8 +622,10 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	}
 
-	if err := ApplyVideoOutputStrategy(ctx, ch, task, taskResult); err != nil {
-		return fmt.Errorf("apply video output strategy for task %s: %w", task.TaskID, err)
+	if !pluginPoll {
+		if err := ApplyVideoOutputStrategy(ctx, ch, task, taskResult); err != nil {
+			return fmt.Errorf("apply video output strategy for task %s: %w", task.TaskID, err)
+		}
 	}
 	return ApplyVideoTaskPollingResult(ctx, adaptor, task, taskResult, responseBody)
 }
@@ -612,7 +738,17 @@ func ApplyVideoTaskPollingResult(ctx context.Context, adaptor TaskPollingAdaptor
 		return fmt.Errorf("task and task result are required")
 	}
 	snap := task.Snapshot()
-	task.Data = redactVideoResponseBody(responseBody)
+	pluginTask := task.PrivateData.Execution != nil && task.PrivateData.Execution.TaskPlugin != nil
+	if !pluginTask {
+		task.Data = redactVideoResponseBody(responseBody)
+	} else {
+		// Plugin taskData is the deliberately persisted submit result. A raw
+		// provider poll response can include credentials or other private data.
+		if len(taskResult.PluginState) > 0 {
+			task.PrivateData.PluginState = append([]byte(nil), taskResult.PluginState...)
+		}
+		task.PrivateData.PollFailures = 0
+	}
 
 	logger.LogDebug(ctx, "updateVideoSingleTask taskResult: %+v", taskResult)
 
@@ -666,7 +802,7 @@ func ApplyVideoTaskPollingResult(ctx context.Context, adaptor TaskPollingAdaptor
 		} else if taskResult.Url != "" {
 			// Direct upstream URL (e.g. Kling, Ali, Doubao, etc.)
 			task.PrivateData.ResultURL = taskResult.Url
-		} else {
+		} else if !pluginTask {
 			// No URL from adaptor — construct proxy URL using public task ID
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
@@ -792,6 +928,30 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 			"completion_tokens": taskResult.CompletionTokens,
 			"use_time_seconds":  taskUseTimeSeconds(task),
 		})
+	}
+	if bc := task.PrivateData.BillingContext; bc != nil && len(bc.TieredSnapshot) > 0 {
+		var snap billingexpr.BillingSnapshot
+		if err := common.Unmarshal(bc.TieredSnapshot, &snap); err != nil {
+			logger.LogError(ctx, fmt.Sprintf("task %s plugin billing snapshot is invalid: %v", task.TaskID, err))
+			return
+		}
+		if snap.TaskUsageBilling {
+			usage := make(map[string]any, len(snap.UsageFacts)+len(taskResult.UsageFacts))
+			maps.Copy(usage, snap.UsageFacts)
+			maps.Copy(usage, taskResult.UsageFacts)
+			result, err := billingexpr.ComputeTieredQuotaWithRequest(&snap, billingexpr.TokenParams{}, snap.TaskRequestInput(usage))
+			if err != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("task %s usage settlement failed; retained reserved quota: %v", task.TaskID, err))
+				return
+			}
+			RecalculateTaskQuotaWithTier(ctx, task, result.ActualQuotaAfterGroup, "任务用量表达式结算", result.MatchedTier, result.Clamp)
+			if task.PrivateData.SubmitLogID > 0 {
+				model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, task.Quota, map[string]interface{}{
+					"usage_facts": usage,
+				})
+			}
+			return
+		}
 	}
 
 	// 0. 按次计费的任务不做差额结算

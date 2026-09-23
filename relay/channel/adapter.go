@@ -78,6 +78,62 @@ type TaskAdaptor interface {
 	ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error)
 }
 
+// TaskSubmitResponse keeps plugin parsing separate from the client response.
+// Legacy task adaptors continue to use DoResponse unchanged.
+type TaskSubmitResponse struct {
+	UpstreamTaskID string
+	TaskData       []byte
+	ClientResponse any
+	Immediate      *relaycommon.TaskInfo
+	PluginState    []byte
+}
+
+type TaskSubmitResponseParser interface {
+	ParseResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*TaskSubmitResponse, *dto.TaskError)
+}
+
+type TaskArtifact = types.TaskArtifact
+
+type TaskArtifactClientRequest struct {
+	Method  string            `json:"method"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+type TaskArtifactProvider interface {
+	ListArtifacts(task *model.Task) ([]TaskArtifact, error)
+}
+
+type TaskContentRequest struct {
+	URL            string
+	Method         string
+	Headers        map[string]string
+	Body           []byte
+	Credentialless bool
+}
+
+type TaskContentRequestProvider interface {
+	BuildContentRequest(task *model.Task, artifactKey string, clientRequest TaskArtifactClientRequest) (*TaskContentRequest, error)
+}
+
+type TaskUsageFactsProvider interface {
+	ExtractUsageFacts(c *gin.Context, info *relaycommon.RelayInfo) map[string]any
+}
+
+type TaskValidatedBillingProvider interface {
+	EstimateBillingValidated(c *gin.Context, info *relaycommon.RelayInfo) (map[string]float64, error)
+}
+
+type TaskValidatedUsageFactsProvider interface {
+	ExtractUsageFactsValidated(c *gin.Context, info *relaycommon.RelayInfo) (map[string]any, error)
+}
+
+// TaskContextPoller receives the persisted task and its plugin state. Legacy
+// pollers keep their existing map-based FetchTask/ParseTaskResult contract.
+type TaskContextPoller interface {
+	FetchTaskWithContext(baseURL, key string, task *model.Task, proxy string) (*http.Response, error)
+	ParseTaskResultWithContext(task *model.Task, resp *http.Response, body []byte) (*relaycommon.TaskInfo, error)
+}
+
 type OpenAIVideoConverter interface {
 	ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error)
 }

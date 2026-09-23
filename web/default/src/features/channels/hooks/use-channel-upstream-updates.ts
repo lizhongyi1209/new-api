@@ -1,3 +1,8 @@
+import { useRef, useState, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+
+import { api, type ApiRequestConfig } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,11 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useRef, useState, useCallback, useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-import { toast } from 'sonner'
-
-import { api, type ApiRequestConfig } from '@/lib/api'
+import { handleServerError } from '@/lib/handle-server-error'
 
 import { normalizeModelList } from '../lib/upstream-update-utils'
 
@@ -31,9 +32,9 @@ const upstreamUpdateRequestConfig = {
 
 function getManualIgnoredModelCount(settings: unknown): number {
   let parsed: Record<string, unknown> | null = null
-  if (settings && typeof settings === 'object')
+  if (settings && typeof settings === 'object') {
     parsed = settings as Record<string, unknown>
-  else if (typeof settings === 'string') {
+  } else if (typeof settings === 'string') {
     try {
       parsed = JSON.parse(settings)
     } catch {
@@ -150,7 +151,8 @@ export function useChannelUpstreamUpdates(refresh: () => Promise<void>) {
           response?: { data?: { message?: string } }
           message?: string
         }
-        toast.error(
+        handleServerError(
+          e,
           err?.response?.data?.message || err?.message || t('Operation failed')
         )
       } finally {
@@ -194,7 +196,8 @@ export function useChannelUpstreamUpdates(refresh: () => Promise<void>) {
         response?: { data?: { message?: string } }
         message?: string
       }
-      toast.error(
+      handleServerError(
+        e,
         err?.response?.data?.message ||
           err?.message ||
           t('Batch processing failed')
@@ -233,7 +236,8 @@ export function useChannelUpstreamUpdates(refresh: () => Promise<void>) {
           response?: { data?: { message?: string } }
           message?: string
         }
-        toast.error(
+        handleServerError(
+          e,
           err?.response?.data?.message || err?.message || t('Detection failed')
         )
       } finally {
@@ -270,7 +274,8 @@ export function useChannelUpstreamUpdates(refresh: () => Promise<void>) {
         response?: { data?: { message?: string } }
         message?: string
       }
-      toast.error(
+      handleServerError(
+        e,
         err?.response?.data?.message ||
           err?.message ||
           t('Batch detection failed')

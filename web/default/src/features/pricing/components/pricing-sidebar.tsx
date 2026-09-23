@@ -38,6 +38,10 @@ import {
   getQuotaTypeLabels,
 } from '../constants'
 import { parseTags } from '../lib/filters'
+import {
+  hasTaskUsageOption,
+  hasTaskUsageSchema,
+} from '../lib/dynamic-price'
 import type { PricingModel, PricingVendor } from '../types'
 
 type FilterOption = {
@@ -201,14 +205,29 @@ export function PricingSidebar(props: PricingSidebarProps) {
     {
       value: QUOTA_TYPES.TOKEN,
       label: quotaTypeLabels[QUOTA_TYPES.TOKEN],
-      count: countBy(props.models, (model) => model.quota_type === 0),
+      count: countBy(
+        props.models,
+        (model) => model.quota_type === 0 && !hasTaskUsageSchema(model)
+      ),
     },
     {
       value: QUOTA_TYPES.REQUEST,
       label: quotaTypeLabels[QUOTA_TYPES.REQUEST],
-      count: countBy(props.models, (model) => model.quota_type === 1),
+      count: countBy(
+        props.models,
+        (model) => model.quota_type === 1 && !hasTaskUsageSchema(model)
+      ),
     },
   ]
+
+  const taskModelCount = countBy(props.models, hasTaskUsageOption)
+  if (taskModelCount > 0) {
+    quotaOptions.push({
+      value: QUOTA_TYPES.TASK,
+      label: quotaTypeLabels[QUOTA_TYPES.TASK],
+      count: taskModelCount,
+    })
+  }
 
   const tagOptions: FilterOption[] = [
     {

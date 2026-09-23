@@ -494,6 +494,9 @@ func UpdateConsumeLogOnComplete(logId int, useTimeSeconds int, promptTokens int,
 			otherMap = make(map[string]interface{})
 		}
 		for k, v := range otherUpdates {
+			if k == "admin_info" {
+				v = mergeLogAdminInfo(otherMap[k], v)
+			}
 			otherMap[k] = v
 		}
 		updates["other"] = common.MapToJsonStr(otherMap)
@@ -502,6 +505,23 @@ func UpdateConsumeLogOnComplete(logId int, useTimeSeconds int, promptTokens int,
 	if err := LOG_DB.Model(&Log{}).Where("id = ?", logId).Updates(updates).Error; err != nil {
 		common.SysLog(fmt.Sprintf("UpdateConsumeLogOnComplete: failed to update log %d: %v", logId, err))
 	}
+}
+
+// mergeLogAdminInfo keeps audit facts when later task updates add admin metadata.
+func mergeLogAdminInfo(previous, update any) any {
+	incoming, ok := update.(map[string]interface{})
+	if !ok {
+		return update
+	}
+	existing, _ := previous.(map[string]interface{})
+	merged := make(map[string]interface{}, len(existing)+len(incoming))
+	for key, value := range existing {
+		merged[key] = value
+	}
+	for key, value := range incoming {
+		merged[key] = value
+	}
+	return merged
 }
 
 func UpdateConsumeLogQuotaAndOther(logId int, quota int, otherUpdates map[string]interface{}) {
@@ -543,6 +563,9 @@ func UpdateConsumeLogQuotaAndOther(logId int, quota int, otherUpdates map[string
 				}
 				continue
 			}
+			if k == "admin_info" {
+				v = mergeLogAdminInfo(otherMap[k], v)
+			}
 			otherMap[k] = v
 		}
 
@@ -581,6 +604,9 @@ func UpdateConsumeLogOther(logId int, otherUpdates map[string]interface{}) {
 		otherMap = make(map[string]interface{})
 	}
 	for k, v := range otherUpdates {
+		if k == "admin_info" {
+			v = mergeLogAdminInfo(otherMap[k], v)
+		}
 		otherMap[k] = v
 	}
 

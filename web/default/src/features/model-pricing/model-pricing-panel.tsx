@@ -16,70 +16,70 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { ErrorState } from "@/components/error-state";
-import { LoadingState } from "@/components/loading-state";
-import { Button } from "@/components/ui/button";
-import { DynamicPricingBreakdown } from "@/features/pricing/components/dynamic-pricing-breakdown";
-import { ModelPriceCell } from "@/features/pricing/components/model-price-cell";
-import { isDynamicPricingModel } from "@/features/pricing/lib/dynamic-price";
-import { formatPrice } from "@/features/pricing/lib/price";
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { ErrorState } from '@/components/error-state'
+import { LoadingState } from '@/components/loading-state'
+import { Button } from '@/components/ui/button'
+import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
+import { ModelPriceCell } from '@/features/pricing/components/model-price-cell'
+import { isDynamicPricingModel } from '@/features/pricing/lib/dynamic-price'
+import { formatPrice } from '@/features/pricing/lib/price'
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
-} from "@/features/system-settings/models/model-pricing-sheet";
-import { handleServerError } from "@/lib/handle-server-error";
-import { useSystemConfigStore } from "@/stores/system-config-store";
+} from '@/features/system-settings/models/model-pricing-sheet'
+import { handleServerError } from '@/lib/handle-server-error'
+import { useSystemConfigStore } from '@/stores/system-config-store'
 
 import {
   useCanEditModelPricing,
   useModelPricing,
   useSaveModelPricing,
   type ModelPricingEntry,
-} from "./api";
-import { modelPricingDisplay, pricingFromDraft, pricingRow } from "./pricing";
+} from './api'
+import { modelPricingDisplay, pricingFromDraft, pricingRow } from './pricing'
 
 export function ModelPricingPanel(props: {
-  modelName: string;
-  onDirtyChange?: (dirty: boolean) => void;
+  modelName: string
+  onDirtyChange?: (dirty: boolean) => void
 }) {
-  const { t } = useTranslation();
-  useSystemConfigStore((state) => state.config.currency);
-  const canEdit = useCanEditModelPricing();
-  const query = useModelPricing([props.modelName], Boolean(props.modelName));
-  const save = useSaveModelPricing();
-  const [entry, setEntry] = useState<ModelPricingEntry | null>(null);
-  const [resetOpen, setResetOpen] = useState(false);
-  const editor = useRef<ModelPricingEditorPanelHandle>(null);
+  const { t } = useTranslation()
+  useSystemConfigStore((state) => state.config.currency)
+  const canEdit = useCanEditModelPricing()
+  const query = useModelPricing([props.modelName], Boolean(props.modelName))
+  const save = useSaveModelPricing()
+  const [entry, setEntry] = useState<ModelPricingEntry | null>(null)
+  const [resetOpen, setResetOpen] = useState(false)
+  const editor = useRef<ModelPricingEditorPanelHandle>(null)
   const editData = useMemo(() => {
-    if (!entry) return null;
-    const values = { ...entry.configured };
-    if (entry.effective["billing_setting.billing_mode"] === "tiered_expr") {
-      values["billing_setting.billing_mode"] = "tiered_expr";
-      values["billing_setting.billing_expr"] =
-        entry.effective["billing_setting.billing_expr"];
+    if (!entry) return null
+    const values = { ...entry.configured }
+    if (entry.effective['billing_setting.billing_mode'] === 'tiered_expr') {
+      values['billing_setting.billing_mode'] = 'tiered_expr'
+      values['billing_setting.billing_expr'] =
+        entry.effective['billing_setting.billing_expr']
     }
-    return pricingRow(entry.model_name, values);
-  }, [entry]);
+    return pricingRow(entry.model_name, values)
+  }, [entry])
 
   useEffect(() => {
     const loaded = query.data?.entries.find(
-      (item) => item.model_name === props.modelName,
-    );
+      (item) => item.model_name === props.modelName
+    )
     if (loaded && (!entry || entry.model_name !== props.modelName)) {
-      setEntry(loaded);
+      setEntry(loaded)
     }
-  }, [query.data, entry, props.modelName]);
+  }, [query.data, entry, props.modelName])
 
   const persist = async (reset = false) => {
-    if (!entry) return;
+    if (!entry) return
     try {
-      const draft = reset ? null : await editor.current?.commitDraft();
-      if (!reset && !draft) return;
+      const draft = reset ? null : await editor.current?.commitDraft()
+      if (!reset && !draft) return
       await save.mutateAsync([
         {
           model_name: entry.model_name,
@@ -87,26 +87,26 @@ export function ModelPricingPanel(props: {
           pricing: draft ? pricingFromDraft(draft) : {},
           reset,
         },
-      ]);
-      const refreshed = await query.refetch();
+      ])
+      const refreshed = await query.refetch()
       setEntry(
         refreshed.data?.entries.find(
-          (item) => item.model_name === props.modelName,
-        ) ?? null,
-      );
-      setResetOpen(false);
-      toast.success(t("Model pricing saved"));
+          (item) => item.model_name === props.modelName
+        ) ?? null
+      )
+      setResetOpen(false)
+      toast.success(t('Model pricing saved'))
     } catch (error) {
-      handleServerError(error);
+      handleServerError(error)
     }
-  };
+  }
 
   if (!canEdit) {
     return (
-      <div className="text-muted-foreground p-6 text-sm">
-        {t("Model pricing is managed by a super administrator.")}
+      <div className='text-muted-foreground p-6 text-sm'>
+        {t('Model pricing is managed by a super administrator.')}
       </div>
-    );
+    )
   }
   if (query.isError) {
     return (
@@ -114,140 +114,148 @@ export function ModelPricingPanel(props: {
         description={query.error.message}
         onRetry={() => void query.refetch()}
       />
-    );
+    )
   }
-  if (!editData || !entry) return <LoadingState />;
-  const effectivePricing = modelPricingDisplay(entry);
+  if (!editData || !entry) return <LoadingState />
+  const effectivePricing = modelPricingDisplay(entry)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3">
-        <div>
-          <p className="text-muted-foreground text-xs">
-            {Object.keys(entry.configured).length
-              ? t("Stored configuration with effective defaults")
-              : t("Using built-in or default pricing")}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setResetOpen(true)}
-          disabled={save.isPending}
-        >
-          {t("Restore default pricing")}
-        </Button>
-      </div>
-      <section
-        aria-label={t("Current Billing")}
-        className="max-h-[40vh] shrink-0 space-y-3 overflow-auto border-b px-4 pb-3"
-      >
-        <h3 className="text-muted-foreground text-xs">
-          {t("Current Billing")}
-        </h3>
-        <div className="max-w-xs">
-          <ModelPriceCell
-            model={effectivePricing}
-            options={{ tokenUnit: "M" }}
-            showExpression={false}
-          />
-        </div>
-        {isDynamicPricingModel(effectivePricing) ? (
-          <DynamicPricingBreakdown
-            compact
-            billingExpr={effectivePricing.billing_expr}
-          />
-        ) : (
-          effectivePricing.quota_type === 0 &&
-          Number.isFinite(effectivePricing.model_ratio) && (
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
-              {(
-                [
-                  {
-                    field: "cache_ratio",
-                    type: "cache",
-                    label: t("Cache Read"),
-                  },
-                  {
-                    field: "create_cache_ratio",
-                    type: "create_cache",
-                    label: t("Cache write"),
-                  },
-                  {
-                    field: "image_ratio",
-                    type: "image",
-                    label: t("Image input"),
-                  },
-                  {
-                    field: "audio_ratio",
-                    type: "audio_input",
-                    label: t("Audio input"),
-                  },
-                  {
-                    field: "audio_completion_ratio",
-                    type: "audio_output",
-                    label: t("Audio output"),
-                  },
-                ] as const
-              ).map((field) => {
-                if (effectivePricing[field.field] == null) return null;
-                return (
-                  <div key={field.field}>
-                    <dt className="text-muted-foreground">{field.label}</dt>
-                    <dd className="mt-1 font-mono tabular-nums">
-                      {formatPrice(effectivePricing, field.type, "M")} / 1M
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-          )
-        )}
-      </section>
-      {save.isError && (
-        <div className="px-4">
-          <p role="alert" className="text-destructive mb-2 text-sm">
-            {save.error?.message}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              const refreshed = await query.refetch();
-              const loaded = refreshed.data?.entries.find(
-                (item) => item.model_name === props.modelName,
-              );
-              if (loaded) {
-                setEntry(loaded);
-                save.reset();
-              }
-            }}
-          >
-            {t("Reload pricing")}
-          </Button>
-        </div>
-      )}
+    <div className='flex min-h-0 flex-1 flex-col gap-3'>
       <ModelPricingEditorPanel
+        scrollHeader={
+          <>
+            <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
+              <div>
+                <p className='text-muted-foreground text-xs'>
+                  {Object.keys(entry.configured).length
+                    ? t('Stored configuration with effective defaults')
+                    : t('Using built-in or default pricing')}
+                </p>
+              </div>
+              <Button
+                variant='outline'
+                size='sm'
+                onClick={() => setResetOpen(true)}
+                disabled={save.isPending}
+              >
+                {t('Restore default pricing')}
+              </Button>
+            </div>
+            <section
+              aria-label={t('Current Billing')}
+              className='mb-4 space-y-3 border-b pb-3'
+            >
+              <h3 className='text-muted-foreground text-xs'>
+                {t('Current Billing')}
+              </h3>
+              <div className='max-w-xs'>
+                <ModelPriceCell
+                  model={effectivePricing}
+                  options={{ tokenUnit: 'M' }}
+                  showExpression={false}
+                />
+              </div>
+              {isDynamicPricingModel(effectivePricing) ? (
+                <DynamicPricingBreakdown
+                  compact
+                  currentTimePreview
+                  billingExpr={effectivePricing.billing_expr}
+                />
+              ) : (
+                effectivePricing.quota_type === 0 &&
+                Number.isFinite(effectivePricing.model_ratio) && (
+                  <dl className='grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3'>
+                    {(
+                      [
+                        {
+                          field: 'cache_ratio',
+                          type: 'cache',
+                          label: t('Cache Read'),
+                        },
+                        {
+                          field: 'create_cache_ratio',
+                          type: 'create_cache',
+                          label: t('Cache write'),
+                        },
+                        {
+                          field: 'image_ratio',
+                          type: 'image',
+                          label: t('Image input'),
+                        },
+                        {
+                          field: 'audio_ratio',
+                          type: 'audio_input',
+                          label: t('Audio input'),
+                        },
+                        {
+                          field: 'audio_completion_ratio',
+                          type: 'audio_output',
+                          label: t('Audio output'),
+                        },
+                      ] as const
+                    ).map((field) => {
+                      if (effectivePricing[field.field] == null) return null
+                      return (
+                        <div key={field.field}>
+                          <dt className='text-muted-foreground'>
+                            {field.label}
+                          </dt>
+                          <dd className='mt-1 font-mono tabular-nums'>
+                            {formatPrice(effectivePricing, field.type, 'M')} /
+                            1M
+                          </dd>
+                        </div>
+                      )
+                    })}
+                  </dl>
+                )
+              )}
+            </section>
+            {save.isError && (
+              <div className='px-4'>
+                <p role='alert' className='text-destructive mb-2 text-sm'>
+                  {save.error?.message}
+                </p>
+                <Button
+                  variant='outline'
+                  size='sm'
+                  onClick={async () => {
+                    const refreshed = await query.refetch()
+                    const loaded = refreshed.data?.entries.find(
+                      (item) => item.model_name === props.modelName
+                    )
+                    if (loaded) {
+                      setEntry(loaded)
+                      save.reset()
+                    }
+                  }}
+                >
+                  {t('Reload pricing')}
+                </Button>
+              </div>
+            )}
+          </>
+        }
         ref={editor}
         editData={editData}
         onDirtyChange={props.onDirtyChange}
         onSave={() => persist()}
         isSaving={save.isPending}
-        className="rounded-none border-0"
+        className='rounded-none border-0'
         showHeading={false}
         showModelName={false}
       />
       <ConfirmDialog
         open={resetOpen}
         onOpenChange={setResetOpen}
-        title={t("Restore default pricing")}
+        title={t('Restore default pricing')}
         desc={t(
-          "Remove this model’s custom pricing and use the built-in defaults. A model without a default may become unpriced.",
+          'Remove this model’s custom pricing and use the built-in defaults. A model without a default may become unpriced.'
         )}
-        confirmText={t("Restore defaults")}
+        confirmText={t('Restore defaults')}
         isLoading={save.isPending}
         handleConfirm={() => void persist(true)}
       />
     </div>
-  );
+  )
 }

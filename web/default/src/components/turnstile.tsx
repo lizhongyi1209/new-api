@@ -42,14 +42,25 @@ export function Turnstile({
   const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
+    let active = true
     const render = () => {
-      if (!ref.current || !window.turnstile) return
+      if (!active || !ref.current || !window.turnstile) return
       try {
         window.turnstile.render(ref.current, {
           sitekey: siteKey,
-          callback: (token: string) => onVerify(token),
-          'error-callback': () => onExpire?.(),
-          'expired-callback': () => onExpire?.(),
+          callback: (token: string) => {
+            if (active) onVerify(token)
+          },
+          'error-callback': () => {
+            if (!active) return
+            onVerify('')
+            onExpire?.()
+          },
+          'expired-callback': () => {
+            if (!active) return
+            onVerify('')
+            onExpire?.()
+          },
         })
       } catch {
         /* empty */
@@ -58,18 +69,27 @@ export function Turnstile({
 
     if (window.turnstile) {
       render()
-      return
+      return () => {
+        active = false
+      }
     }
     const scriptId = 'cf-turnstile'
-    if (document.getElementById(scriptId)) return
-    const s = document.createElement('script')
-    s.id = scriptId
-    s.src =
-      'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
-    s.async = true
-    s.defer = true
-    s.onload = () => render()
-    document.head.appendChild(s)
+    const existingScript = document.querySelector(`#${scriptId}`)
+    const script = existingScript ?? document.createElement('script')
+    script.addEventListener('load', render)
+    if (!existingScript) {
+      const newScript = script as HTMLScriptElement
+      newScript.id = scriptId
+      newScript.src =
+        'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
+      newScript.async = true
+      newScript.defer = true
+      document.head.appendChild(newScript)
+    }
+    return () => {
+      active = false
+      script.removeEventListener('load', render)
+    }
   }, [siteKey, onVerify, onExpire])
 
   return <div ref={ref} className={className} />

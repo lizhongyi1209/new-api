@@ -1,6 +1,11 @@
 package controller
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +25,7 @@ import (
 )
 
 const oauthAuthFlowTTL = 10 * time.Minute
+const oauthBrowserCookieName = "new_api_oauth_browser"
 
 type oauthStateRequest struct {
 	Provider string          `json:"provider"`
@@ -31,6 +37,7 @@ type oauthStateRequest struct {
 
 type oauthFlowPayload struct {
 	AffiliateCode   string                         `json:"affiliate_code,omitempty"`
+	BrowserBinding  string                         `json:"browser_binding,omitempty"`
 	Verification    *service.OAuthVerificationFlow `json:"verification,omitempty"`
 	Telegram        *oauth.TelegramOAuthFlow       `json:"telegram,omitempty"`
 	SessionIdentity *service.AuthIdentity          `json:"session_identity,omitempty"`
@@ -49,6 +56,7 @@ func providerParams(name string) map[string]any {
 
 // GenerateOAuthCode generates a state code for OAuth CSRF protection
 func GenerateOAuthCode(c *gin.Context) {
+	setAuthNoStore(c)
 	var request oauthStateRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
@@ -116,6 +124,30 @@ func GenerateOAuthCode(c *gin.Context) {
 			flowPayload.Verification = verification
 		}
 	}
+	var browserCookie *http.Cookie
+	if request.Intent == model.AuthFlowIntentLogin {
+		cookieName := oauthBrowserCookieName
+		if common.SessionCookieSecure {
+			cookieName = "__Host-" + cookieName
+		}
+		cookieValue, _ := c.Cookie(cookieName)
+		nonce, err := base64.RawURLEncoding.DecodeString(cookieValue)
+		if err != nil || len(nonce) != 32 {
+			nonce = make([]byte, 32)
+			if _, err := rand.Read(nonce); err != nil {
+				writeSecurityOperationError(c, err)
+				return
+			}
+			cookieValue = base64.RawURLEncoding.EncodeToString(nonce)
+		}
+		binding := sha256.Sum256(nonce)
+		flowPayload.BrowserBinding = hex.EncodeToString(binding[:])
+		browserCookie = &http.Cookie{
+			Name: cookieName, Value: cookieValue, Path: "/",
+			HttpOnly: true, Secure: common.SessionCookieSecure, SameSite: http.SameSiteLaxMode,
+			MaxAge: int(oauthAuthFlowTTL / time.Second),
+		}
+	}
 	payload, err := common.Marshal(flowPayload)
 	if err != nil {
 		writeSecurityOperationError(c, err)
@@ -135,6 +167,10 @@ func GenerateOAuthCode(c *gin.Context) {
 		writeSecurityOperationError(c, err)
 		return
 	}
+	if browserCookie != nil {
+		browserCookie.Expires = expiresAt
+		http.SetCookie(c.Writer, browserCookie)
+	}
 	bindingStarted = request.Intent == model.AuthFlowIntentBind
 	data := gin.H{"flow_token": state, "expires_at": expiresAt.Unix()}
 	if flowPayload.Telegram != nil {
@@ -149,6 +185,7 @@ func GenerateOAuthCode(c *gin.Context) {
 
 // HandleOAuth handles OAuth callback for all standard OAuth providers
 func HandleOAuth(c *gin.Context) {
+	setAuthNoStore(c)
 	providerName := c.Param("provider")
 	provider := oauth.GetProvider(providerName)
 	if provider == nil {
@@ -215,6 +252,21 @@ func HandleOAuth(c *gin.Context) {
 	} else if pendingFlow.Intent != model.AuthFlowIntentLogin {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
+	} else {
+		cookieName := oauthBrowserCookieName
+		if common.SessionCookieSecure {
+			cookieName = "__Host-" + cookieName
+		}
+		cookieValue, cookieErr := c.Cookie(cookieName)
+		nonce, decodeErr := base64.RawURLEncoding.DecodeString(cookieValue)
+		var payload oauthFlowPayload
+		payloadErr := common.UnmarshalJsonStr(pendingFlow.Payload, &payload)
+		binding := sha256.Sum256(nonce)
+		if cookieErr != nil || decodeErr != nil || len(nonce) != 32 || payloadErr != nil ||
+			subtle.ConstantTimeCompare([]byte(payload.BrowserBinding), []byte(hex.EncodeToString(binding[:]))) != 1 {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": i18n.T(c, i18n.MsgOAuthStateInvalid)})
+			return
+		}
 	}
 
 	// 3. Check if provider is enabled

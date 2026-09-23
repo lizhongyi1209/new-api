@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -461,6 +462,24 @@ func evaluateAccessCondition(body string, cond accessCondition) (bool, *accessPo
 		Current:  current,
 	}
 
+	if !result.Exists() && op != "not_exists" {
+		return false, failure
+	}
+	if lo.Contains([]string{"gt", "gte", "lt", "lte"}, op) {
+		_, currentIsNumber := toFloat(current)
+		_, expectedIsNumber := toFloat(cond.Value)
+		if currentIsNumber != expectedIsNumber {
+			return false, failure
+		}
+		if !currentIsNumber {
+			_, currentIsString := current.(string)
+			_, expectedIsString := cond.Value.(string)
+			if !currentIsString || !expectedIsString {
+				return false, failure
+			}
+		}
+	}
+
 	switch op {
 	case "exists":
 		return result.Exists(), failure
@@ -558,9 +577,10 @@ func compareAny(left any, right any) int {
 func toFloat(v any) (float64, bool) {
 	switch value := v.(type) {
 	case float64:
-		return value, true
+		return value, !math.IsNaN(value) && !math.IsInf(value, 0)
 	case float32:
-		return float64(value), true
+		number := float64(value)
+		return number, !math.IsNaN(number) && !math.IsInf(number, 0)
 	case int:
 		return float64(value), true
 	case int8:
@@ -583,12 +603,12 @@ func toFloat(v any) (float64, bool) {
 		return float64(value), true
 	case stdjson.Number:
 		n, err := value.Float64()
-		if err == nil {
+		if err == nil && !math.IsNaN(n) && !math.IsInf(n, 0) {
 			return n, true
 		}
 	case string:
 		n, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-		if err == nil {
+		if err == nil && !math.IsNaN(n) && !math.IsInf(n, 0) {
 			return n, true
 		}
 	}

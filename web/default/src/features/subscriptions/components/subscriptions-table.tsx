@@ -1,3 +1,8 @@
+import { useQuery } from '@tanstack/react-query'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { DataTablePage, useDataTable } from '@/components/data-table'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,11 +21,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { DataTablePage, useDataTable } from '@/components/data-table'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { getAdminPlans } from '../api'
 import { useSubscriptionsColumns } from './subscriptions-columns'
@@ -34,7 +35,7 @@ export function SubscriptionsTable() {
   const { data, isLoading } = useQuery({
     queryKey: ['admin-subscription-plans', refreshTrigger],
     queryFn: async () => {
-      const result = await getAdminPlans()
+      const result = requireServerSuccess(await getAdminPlans())
       return result.data || []
     },
     placeholderData: (prev) => prev,

@@ -46,6 +46,8 @@ import {
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { handleServerError } from '@/lib/handle-server-error'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { cn } from '@/lib/utils'
 
 import { confirmPaymentCompliance } from '../api'
@@ -332,18 +334,19 @@ export function PaymentSettingsSection({
     complianceDefaults.termsVersion === CURRENT_COMPLIANCE_TERMS_VERSION
 
   const confirmComplianceMutation = useMutation({
-    mutationFn: confirmPaymentCompliance,
+    mutationFn: async () =>
+      requireServerSuccess(await confirmPaymentCompliance()),
     onSuccess: (data) => {
       if (data.success) {
         toast.success(t('Compliance confirmed successfully'))
         setShowComplianceDialog(false)
         queryClient.invalidateQueries({ queryKey: ['system-options'] })
       } else {
-        toast.error(data.message || t('Failed to confirm compliance'))
+        handleServerError(data, t('Failed to confirm compliance'))
       }
     },
     onError: (error: Error) => {
-      toast.error(error.message || t('Failed to confirm compliance'))
+      handleServerError(error, t('Failed to confirm compliance'))
     },
   })
 
@@ -764,11 +767,7 @@ export function PaymentSettingsSection({
           : t('Waffo Pancake save failed')
       )
     } catch (error) {
-      toast.error(
-        `${t('Waffo Pancake save failed')}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      )
+      handleServerError(error, t('Waffo Pancake save failed'))
     }
   }
 

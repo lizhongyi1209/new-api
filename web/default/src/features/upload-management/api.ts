@@ -1,3 +1,4 @@
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { requireServerSuccess } from '@/lib/server-error-message'
 
 export type UploadCategory = '' | 'uploads' | 'elements' | 'temp'
 
@@ -74,7 +75,7 @@ export async function getUploadStats(): Promise<StorageStats> {
   const response = await api.get<{ success: boolean; data: StorageStats }>(
     '/api/upload-management/stats'
   )
-  return response.data.data
+  return requireServerSuccess(response.data).data
 }
 
 export async function cleanOldFiles(params: {

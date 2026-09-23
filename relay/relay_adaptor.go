@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/QuantumNous/new-api/constant"
+	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/advancedcustom"
 	"github.com/QuantumNous/new-api/relay/channel/ali"
@@ -38,6 +39,7 @@ import (
 	taskGemini "github.com/QuantumNous/new-api/relay/channel/task/gemini"
 	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
+	jspluginadaptor "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
 	taskserviceinference "github.com/QuantumNous/new-api/relay/channel/task/serviceinference"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
@@ -180,6 +182,11 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskserviceinference.TaskAdaptor{}
 		case constant.ChannelTypeXinhankr:
 			return &taskxinhankr.TaskAdaptor{}
+		}
+	}
+	if generation := pluginruntime.DefaultRegistry.Generation(); generation != nil {
+		if plugin, ok := generation.Get(string(platform)); ok {
+			return jspluginadaptor.New(plugin)
 		}
 	}
 	return nil

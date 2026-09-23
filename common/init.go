@@ -31,6 +31,7 @@ func printHelp() {
 
 func InitEnv() {
 	flag.Parse()
+	constant.TaskPluginEnabled = GetEnvOrDefaultBool("TASK_PLUGIN_ENABLED", false)
 
 	envVersion := os.Getenv("VERSION")
 	if envVersion != "" {

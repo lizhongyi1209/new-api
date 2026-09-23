@@ -1,3 +1,17 @@
+import { useQuery } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
+import { ArrowRight, Flame, ShieldCheck, TrendingDown } from 'lucide-react'
+import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
+
+import { StaggerContainer, StaggerItem } from '@/components/page-transition'
+import { Button } from '@/components/ui/button'
+import { getUserQuotaDates } from '@/features/dashboard/api'
+import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
+import type { QuotaDataItem } from '@/features/dashboard/types'
+import { useStatus } from '@/hooks/use-status'
+import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
+import { formatNumber, formatQuota } from '@/lib/format'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,20 +30,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
-import { ArrowRight, Flame, ShieldCheck, TrendingDown } from 'lucide-react'
-import { useMemo } from 'react'
-import { useTranslation } from 'react-i18next'
-
-import { StaggerContainer, StaggerItem } from '@/components/page-transition'
-import { Button } from '@/components/ui/button'
-import { getUserQuotaDates } from '@/features/dashboard/api'
-import { useSummaryCardsConfig } from '@/features/dashboard/hooks/use-dashboard-config'
-import type { QuotaDataItem } from '@/features/dashboard/types'
-import { useStatus } from '@/hooks/use-status'
-import { getCurrencyLabel, isCurrencyDisplayEnabled } from '@/lib/currency'
-import { formatNumber, formatQuota } from '@/lib/format'
+import { requireServerSuccess } from '@/lib/server-error-message'
 import { computeTimeRange } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
@@ -155,11 +156,13 @@ export function SummaryCards() {
       summaryTimeRange.end_timestamp,
     ],
     queryFn: async () =>
-      getUserQuotaDates({
-        start_timestamp: summaryTimeRange.start_timestamp,
-        end_timestamp: summaryTimeRange.end_timestamp,
-        default_time: 'hour',
-      }),
+      requireServerSuccess(
+        await getUserQuotaDates({
+          start_timestamp: summaryTimeRange.start_timestamp,
+          end_timestamp: summaryTimeRange.end_timestamp,
+          default_time: 'hour',
+        })
+      ),
     staleTime: 60 * 1000,
   })
 

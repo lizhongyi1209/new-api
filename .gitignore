@@ -75,3 +75,6 @@ uploads/
 
 # Production database backups must never be committed.
 /backups/
+
+# Local validation output can contain runtime data and build logs.
+/docs/reviews/artifacts/

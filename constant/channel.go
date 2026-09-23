@@ -59,6 +59,7 @@ const (
 	ChannelTypeAdvancedCustom        = 59
 	ChannelTypeServiceInferenceVideo = 60
 	ChannelTypeXinhankr              = 61
+	ChannelTypeTaskPlugin            = 62
 	ChannelTypeSub2API               = 63
 	ChannelTypeNewAPI                = 64
 	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
@@ -192,6 +193,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeAdvancedCustom:        "Advanced Custom",
 	ChannelTypeServiceInferenceVideo: "TokenMartSeedance",
 	ChannelTypeXinhankr:              "xinhankr",
+	ChannelTypeTaskPlugin:            "Task Plugin",
 	ChannelTypeSub2API:               "Sub2API",
 	ChannelTypeNewAPI:                "New API",
 }

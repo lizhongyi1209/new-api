@@ -33,6 +33,7 @@ ENV GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64}
 WORKDIR /build
 
 ADD go.mod go.sum ./
+COPY relaykit/go.mod relaykit/go.sum ./relaykit/
 RUN go mod download
 
 COPY . .

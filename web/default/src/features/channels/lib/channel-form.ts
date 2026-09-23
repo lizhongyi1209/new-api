@@ -1,3 +1,4 @@
+import { t } from 'i18next'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -20,6 +21,7 @@ import { z } from 'zod'
 
 import {
   CHANNEL_STATUS,
+  CHANNEL_TYPE_TASK_PLUGIN,
   CLAUDE_FIELD_PASSTHROUGH_TYPES,
   ERROR_MESSAGES,
   FIELD_PASSTHROUGH_TYPES,
@@ -193,6 +195,7 @@ export const channelFormSchema = z
   .object({
     name: z.string().min(1, ERROR_MESSAGES.REQUIRED_NAME),
     type: z.number().min(0, ERROR_MESSAGES.REQUIRED_TYPE),
+    task_plugin_key: z.string().optional(),
     base_url: z.string().optional(),
     key: z.string(),
     openai_organization: z.string().optional(),
@@ -288,6 +291,12 @@ export const channelFormSchema = z
     upstream_model_update_ignored_models: z.string().optional(),
   })
   .superRefine((data, ctx) => {
+    if (
+      data.type === CHANNEL_TYPE_TASK_PLUGIN &&
+      !data.task_plugin_key?.trim()
+    ) {
+      addRequiredIssue(ctx, 'task_plugin_key', t('Select task plugin'))
+    }
     if ([3, 8, 36, 45].includes(data.type) && !data.base_url?.trim()) {
       addRequiredIssue(
         ctx,
@@ -395,6 +404,7 @@ export type ChannelFormValues = z.infer<typeof channelFormSchema>
 export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   name: '',
   type: 1,
+  task_plugin_key: '',
   base_url: '',
   key: '',
   openai_organization: '',
@@ -467,6 +477,7 @@ export function transformChannelToFormDefaults(
 
   // Parse channel extra settings from setting field
   let extraSettings = {
+    task_plugin_key: '',
     force_format: false,
     thinking_to_content: false,
     proxy: '',
@@ -485,6 +496,7 @@ export function transformChannelToFormDefaults(
         parsed.http2_connection_shards
       )
       extraSettings = {
+        task_plugin_key: parsed.task_plugin_key || '',
         force_format: parsed.force_format || false,
         thinking_to_content: parsed.thinking_to_content || false,
         proxy: parsed.proxy || '',
@@ -618,7 +630,16 @@ export function transformChannelToFormDefaults(
  * Build the setting JSON string from form extra settings
  */
 export function buildSettingJSON(formData: ChannelFormValues): string {
+  const originalSetting = parseOptionalJson(formData.setting)
+  if (originalSetting !== undefined && !isJsonObjectValue(originalSetting)) {
+    throw new Error(ERROR_MESSAGES.INVALID_JSON)
+  }
   const settingObj: Record<string, unknown> = {
+    ...originalSetting,
+    task_plugin_key:
+      formData.type === CHANNEL_TYPE_TASK_PLUGIN
+        ? formData.task_plugin_key?.trim()
+        : undefined,
     force_format: formData.force_format || false,
     thinking_to_content: formData.thinking_to_content || false,
     proxy: formData.proxy?.trim() || '',
@@ -626,6 +647,9 @@ export function buildSettingJSON(formData: ChannelFormValues): string {
     system_prompt: formData.system_prompt || '',
     system_prompt_override: formData.system_prompt_override || false,
   }
+
+  delete settingObj.http_protocol
+  delete settingObj.http2_connection_shards
 
   const protocol = normalizeHttpProtocol(formData.http_protocol)
   const shards =

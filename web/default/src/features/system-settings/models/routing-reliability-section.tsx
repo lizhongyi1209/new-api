@@ -63,7 +63,7 @@ const numericString = z.string().refine((value) => {
   return !Number.isNaN(Number(trimmed)) && Number(trimmed) >= 0
 }, 'Enter a non-negative number or leave empty')
 
-const channelTestModes = ['scheduled_all', 'passive_recovery'] as const
+const channelTestModes = ['scheduled_all', 'auto_ban_only', 'passive_recovery'] as const
 type ChannelTestMode = (typeof channelTestModes)[number]
 
 const routingReliabilitySchema = z
@@ -82,6 +82,7 @@ const routingReliabilitySchema = z
         .int()
         .min(1, 'Interval must be at least 1 minute'),
       channel_test_mode: z.enum(channelTestModes),
+      channel_test_concurrency: z.coerce.number().int().min(1).max(32),
     }),
   })
   .superRefine((values, ctx) => {
@@ -127,6 +128,7 @@ type RoutingReliabilitySectionProps = {
     'monitor_setting.auto_test_channel_enabled': boolean
     'monitor_setting.auto_test_channel_minutes': number
     'monitor_setting.channel_test_mode': ChannelTestMode
+    'monitor_setting.channel_test_concurrency': number
   }
 }
 
@@ -145,10 +147,13 @@ type NormalizedRoutingReliabilityValues = {
   'monitor_setting.auto_test_channel_enabled': boolean
   'monitor_setting.auto_test_channel_minutes': number
   'monitor_setting.channel_test_mode': ChannelTestMode
+  'monitor_setting.channel_test_concurrency': number
 }
 
 function normalizeChannelTestMode(value?: string): ChannelTestMode {
-  return value === 'passive_recovery' ? 'passive_recovery' : 'scheduled_all'
+  return value === 'passive_recovery' || value === 'auto_ban_only'
+    ? value
+    : 'scheduled_all'
 }
 
 const buildFormDefaults = (
@@ -171,6 +176,8 @@ const buildFormDefaults = (
     channel_test_mode: normalizeChannelTestMode(
       defaults['monitor_setting.channel_test_mode']
     ),
+    channel_test_concurrency:
+      defaults['monitor_setting.channel_test_concurrency'] ?? 1,
   },
 })
 
@@ -197,6 +204,8 @@ const normalizeDefaults = (
   'monitor_setting.channel_test_mode': normalizeChannelTestMode(
     defaults['monitor_setting.channel_test_mode']
   ),
+  'monitor_setting.channel_test_concurrency':
+    defaults['monitor_setting.channel_test_concurrency'] ?? 1,
 })
 
 const normalizeFormValues = (
@@ -220,6 +229,8 @@ const normalizeFormValues = (
   'monitor_setting.auto_test_channel_minutes':
     values.monitor_setting.auto_test_channel_minutes,
   'monitor_setting.channel_test_mode': values.monitor_setting.channel_test_mode,
+  'monitor_setting.channel_test_concurrency':
+    values.monitor_setting.channel_test_concurrency,
 })
 
 export function RoutingReliabilitySection({
@@ -394,6 +405,10 @@ export function RoutingReliabilitySection({
                           label: t('Scheduled full test'),
                         },
                         {
+                          value: 'auto_ban_only',
+                          label: t('Actively check auto-disable-enabled channels'),
+                        },
+                        {
                           value: 'passive_recovery',
                           label: t('Passive recovery only'),
                         },
@@ -414,13 +429,18 @@ export function RoutingReliabilitySection({
                           <SelectItem value='passive_recovery'>
                             {t('Passive recovery only')}
                           </SelectItem>
+                          <SelectItem value='auto_ban_only'>
+                            {t('Actively check auto-disable-enabled channels')}
+                          </SelectItem>
                         </SelectGroup>
                       </SelectContent>
                     </Select>
                     <FormDescription>
-                      {t(
-                        'Scheduled full test probes non-manually-disabled channels; passive recovery only checks auto-disabled channels after real request failures.'
-                      )}
+                      {channelTestMode === 'auto_ban_only'
+                        ? t('Auto-disable-enabled mode probes non-manually-disabled channels with auto-disable enabled.')
+                        : t(
+                            'Scheduled full test probes non-manually-disabled channels; passive recovery only checks auto-disabled channels after real request failures.'
+                          )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -447,6 +467,29 @@ export function RoutingReliabilitySection({
                             'How frequently the system checks auto-disabled channels for recovery'
                           )
                         : t('How frequently the system tests all channels')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='monitor_setting.channel_test_concurrency'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Channel test concurrency')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        type='number'
+                        min={1}
+                        max={32}
+                        step={1}
+                        {...safeNumberFieldProps(field)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t('Channel test concurrency must be between 1 and 32')}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

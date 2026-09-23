@@ -1,3 +1,6 @@
+import axios from 'axios'
+
+import { api } from '@/lib/api'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -16,17 +19,38 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { api } from '@/lib/api'
+import { createServerError } from '@/lib/server-error-message'
 
 import type { PerformanceMetricsData, PerfSummaryAllData } from './types'
 
 export async function getPerfMetricsSummary(
-  hours = 24
+  hours = 24,
+  options?: { signal?: AbortSignal; optional?: boolean }
 ): Promise<PerfSummaryAllData> {
-  const res = await api.get<PerfSummaryAllData>('/api/perf-metrics/summary', {
-    params: { hours },
-  })
-  return res.data
+  try {
+    const res = await api.get<PerfSummaryAllData>('/api/perf-metrics/summary', {
+      params: { hours },
+      signal: options?.signal,
+      skipErrorHandler: options?.optional,
+      skipBusinessError: options?.optional,
+      disableDuplicate: options?.optional,
+    })
+    if (options?.optional && (!res.data.success || !res.data.data)) {
+      throw createServerError(res.data, 'Failed to load performance metrics')
+    }
+    return res.data
+  } catch (error) {
+    // Optional model-square diagnostics must not trigger the global 500 route.
+    // Other summary consumers retain their existing request/error behavior.
+    if (
+      options?.optional &&
+      axios.isAxiosError(error) &&
+      !axios.isCancel(error)
+    ) {
+      throw createServerError(error)
+    }
+    throw error
+  }
 }
 
 export async function getPerfMetrics(

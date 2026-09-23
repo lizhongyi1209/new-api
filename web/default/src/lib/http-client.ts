@@ -26,7 +26,8 @@ import {
   getFreshAuthHeaders,
   refreshAuthentication,
 } from '@/lib/auth-session'
-import { getServerErrorMessageKey } from '@/lib/server-error-message'
+import { markServerErrorHandled } from '@/lib/handle-server-error'
+import { getServerErrorMessage } from '@/lib/server-error-message'
 import { useAuthStore } from '@/stores/auth-store'
 
 declare module 'axios' {
@@ -86,18 +87,6 @@ api.interceptors.response.use(
       applyAuthRotation(response.data.data)
     }
 
-    if (
-      !response.config.skipBusinessError &&
-      typeof response.data?.success === 'boolean' &&
-      !response.data.success
-    ) {
-      const messageKey = getServerErrorMessageKey(response.data)
-      toast.error(
-        messageKey
-          ? t(messageKey)
-          : response.data.message || t('Request failed')
-      )
-    }
     return response
   },
   async (error) => {
@@ -121,24 +110,27 @@ api.interceptors.response.use(
         }
 
         if (outcome.kind === 'anonymous' || outcome.kind === 'out_of_sync') {
-          if (!skipErrorHandler) toast.error(t('Session expired!'))
+          if (!skipErrorHandler) {
+            markServerErrorHandled(error)
+            toast.error(t('Session expired!'))
+          }
           redirectToSignIn()
         }
       } else if (config?.authRetry) {
         clearAuthentication(false)
-        if (!skipErrorHandler) toast.error(t('Session expired!'))
+        if (!skipErrorHandler) {
+          markServerErrorHandled(error)
+          toast.error(t('Session expired!'))
+        }
         redirectToSignIn()
       } else if (!skipErrorHandler) {
+        markServerErrorHandled(error)
         toast.error(t('Session expired!'))
       }
-    } else if (!skipErrorHandler) {
-      const messageKey = getServerErrorMessageKey(error)
-      const message = messageKey
-        ? t(messageKey)
-        : error?.response?.data?.message ||
-          error?.message ||
-          t('Request failed')
-      toast.error(message)
+    }
+    // Notify after the query finishes retrying, or at the caller's chosen boundary.
+    if (axios.isAxiosError(error) && status !== 401) {
+      error.message = getServerErrorMessage(error)
     }
     throw error
   }
