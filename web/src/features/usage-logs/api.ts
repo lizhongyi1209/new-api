@@ -19,7 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 import axios from 'axios'
 
 import { api, type ApiRequestConfig } from '@/lib/api'
-import { createServerError, requireServerSuccess } from '@/lib/server-error-message'
+import {
+  createServerError,
+  requireServerSuccess,
+} from '@/lib/server-error-message'
 
 import { buildQueryParams } from './lib/query-params'
 import { parseTaskArtifactsResponse } from './lib/task-artifacts'
@@ -96,7 +99,9 @@ export async function exportUsageLogs(
   isAdmin: boolean
 ): Promise<{ blob: Blob; filename: string }> {
   const path = isAdmin ? '/api/log/export' : '/api/log/self/export'
-  const queryParams = buildQueryParams(params as unknown as Record<string, unknown>)
+  const queryParams = buildQueryParams(
+    params as unknown as Record<string, unknown>
+  )
   let response
   try {
     response = await api.get<Blob>(`${path}?${queryParams}`, {
@@ -112,13 +117,19 @@ export async function exportUsageLogs(
       } catch {
         // An upstream proxy may return a non-JSON error body.
       }
-      throw createServerError({ success: false, message: parsed.message }, 'Failed to export logs')
+      throw createServerError(
+        { success: false, message: parsed.message },
+        'Failed to export logs'
+      )
     }
     throw error
   }
   const disposition = String(response.headers['content-disposition'] || '')
   const filenameMatch = disposition.match(/filename="?([^";]+)"?/i)
-  return { blob: response.data, filename: filenameMatch?.[1] || `usage-logs.${params.format}` }
+  return {
+    blob: response.data,
+    filename: filenameMatch?.[1] || `usage-logs.${params.format}`,
+  }
 }
 
 export async function getUsageLogExportOptions(params: {
@@ -141,11 +152,20 @@ export interface TaskAuditDetails {
   start_time?: number
 }
 
-export async function getTaskAuditDetails(taskId: string, signal?: AbortSignal): Promise<TaskAuditDetails> {
-  const response = await api.get<{ success: boolean; message?: string; data?: TaskAuditDetails }>(
-    `/api/task/${encodeURIComponent(taskId)}/audit`,
-    { signal, skipErrorHandler: true, skipBusinessError: true, disableDuplicate: true }
-  )
+export async function getTaskAuditDetails(
+  taskId: string,
+  signal?: AbortSignal
+): Promise<TaskAuditDetails> {
+  const response = await api.get<{
+    success: boolean
+    message?: string
+    data?: TaskAuditDetails
+  }>(`/api/task/${encodeURIComponent(taskId)}/audit`, {
+    signal,
+    skipErrorHandler: true,
+    skipBusinessError: true,
+    disableDuplicate: true,
+  })
   if (!response.data.success || !response.data.data) {
     throw createServerError(response.data, 'Failed to load task details')
   }
@@ -174,7 +194,7 @@ export const getUserMidjourneyLogs = (params: GetMidjourneyLogsParams) =>
 // ============================================================================
 
 export const getAllTaskLogs = (params: GetTaskLogsParams) =>
-  fetchLogs('/api/task', params, true)
+  fetchLogs('/api/task/', params, true)
 
 export const getUserTaskLogs = (params: GetTaskLogsParams) =>
   fetchLogs('/api/task', params, false)

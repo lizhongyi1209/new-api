@@ -201,6 +201,7 @@ Aliases: 更新提醒, 忽略版本, GitHub 发布详情, 额度弹层, 手机�
 - Shared quota popover and user/key values: `web/src/components/quota-details-popover.tsx`, `web/src/features/users/components/user-quota-cell.tsx`, `web/src/features/keys/components/api-key-quota-cell.tsx`.
 - Shared mobile filter panel: `web/src/components/data-table/toolbar/mobile-filter-panel.tsx`; consumers: channel table toolbar and `web/src/features/usage-logs/components/logs-filter-toolbar.tsx`.
 - Structured task details: `web/src/features/usage-logs/components/dialogs/task-detail-dialog.tsx`, `web/src/features/usage-logs/api.ts`; self views use task-list fields only, administrator views additionally call existing `GET /api/task/:task_id/audit` in `router/api-router.go` / `controller/task.go`.
+- Administrator task-log list: `web/src/features/usage-logs/api.ts` calls `GET /api/task/`; `router/api-router.go` registers both `/api/task/` and `/api/task` (for cached clients) with `AdminAuth`, handled by `controller.GetAllTask` in `controller/task.go`. Self list uses `GET /api/task/self`.
 - Existing default/classic theme switching: `web/src/features/system-settings/general/system-info-section.tsx`, `setting/system_setting/theme.go`, `model/option.go`, `router/web-router.go`, `common/embed-file-system.go`; persists `theme.frontend` and selects the corresponding embedded assets. Default-frontend UI changes do not automatically port features to classic.
 
 ## Shared table visibility, compact pagination, and drawer popups
