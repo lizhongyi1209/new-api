@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -182,6 +183,112 @@ func TestDashboardTaskArtifactsReturnsLegacyCapabilityWithoutUpstreamURL(t *test
 	))
 	assert.NotContains(t, recorder.Body.String(), "upstream.invalid")
 	assert.NotContains(t, recorder.Body.String(), "signature=secret")
+}
+
+func TestDashboardTaskArtifactsProjectsCompletedImageResults(t *testing.T) {
+	task := setupGenericTaskTest(t)
+	previousSecret := common.CryptoSecret
+	previousPublicAddress := system_setting.TaskPublicAddress
+	common.CryptoSecret = "controller-image-artifact-access-secret"
+	system_setting.TaskPublicAddress = "https://gateway.example/prefix"
+	t.Cleanup(func() {
+		common.CryptoSecret = previousSecret
+		system_setting.TaskPublicAddress = previousPublicAddress
+	})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Empty(t, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("image-bytes"))
+	}))
+	defer upstream.Close()
+	allowPrivateTaskMediaTest(t)
+
+	task.Platform = constant.TaskPlatformGenerateImage
+	task.Action = constant.TaskActionGenerate
+	task.PrivateData.ResultURL = upstream.URL + "/first.png"
+	task.SetData(map[string]any{"images": []map[string]any{
+		{"url": upstream.URL + "/first.png", "mime_type": "image/png"},
+		{"url": upstream.URL + "/second.png", "mime_type": "image/png"},
+	}})
+	require.NoError(t, model.DB.Save(task).Error)
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set("id", task.UserId)
+	c.Set("role", common.RoleCommonUser)
+	c.Params = gin.Params{{Key: "task_id", Value: task.TaskID}}
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/task/"+task.TaskID+"/artifacts", nil)
+	GetDashboardTaskArtifacts(c)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			Artifacts        []taskArtifactResponse `json:"artifacts"`
+			LegacyContentURL string                 `json:"legacy_content_url"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.True(t, response.Success)
+	require.Len(t, response.Data.Artifacts, 2)
+	assert.Empty(t, response.Data.LegacyContentURL)
+	for i, artifact := range response.Data.Artifacts {
+		assert.Equal(t, fmt.Sprintf("image-%d", i), artifact.Key)
+		assert.Equal(t, "image", artifact.Type)
+		assert.Equal(t, "image/png", artifact.MimeType)
+		contentURL, err := url.Parse(artifact.ContentURL)
+		require.NoError(t, err)
+		assert.True(t, service.VerifyTaskArtifactAccess(
+			contentURL.Query().Get(service.TaskArtifactAccessQueryParameter), task.TaskID, artifact.Key,
+		))
+	}
+	assert.NotContains(t, recorder.Body.String(), upstream.URL)
+
+	contentRecorder := httptest.NewRecorder()
+	contentContext, _ := gin.CreateTestContext(contentRecorder)
+	contentContext.Set(middleware.TaskArtifactAccessContextKey, true)
+	contentContext.Params = gin.Params{
+		{Key: "key", Value: task.TaskID}, {Key: "artifact_key", Value: "image-1"},
+	}
+	contentContext.Request = httptest.NewRequest(http.MethodGet, "/v1/tasks/"+task.TaskID+"/artifacts/image-1/content", nil)
+	TaskArtifactContent(contentContext)
+	assert.Equal(t, http.StatusOK, contentRecorder.Code)
+	assert.Equal(t, "image/png", contentRecorder.Header().Get("Content-Type"))
+	assert.Equal(t, "image-bytes", contentRecorder.Body.String())
+}
+
+func TestDashboardTaskArtifactsIncludesNewVideoActions(t *testing.T) {
+	for _, action := range []string{
+		constant.TaskActionOmniVideo,
+		constant.TaskActionMotionControl,
+		constant.TaskActionVideoEdit,
+		constant.TaskActionRemix,
+	} {
+		t.Run(action, func(t *testing.T) {
+			task := setupGenericTaskTest(t)
+			task.Action = action
+			task.PrivateData.ResultURL = "https://upstream.invalid/video.mp4?signature=secret"
+			require.NoError(t, model.DB.Save(task).Error)
+
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Set("id", task.UserId)
+			c.Set("role", common.RoleCommonUser)
+			c.Params = gin.Params{{Key: "task_id", Value: task.TaskID}}
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/task/"+task.TaskID+"/artifacts", nil)
+			GetDashboardTaskArtifacts(c)
+
+			assert.Equal(t, http.StatusOK, recorder.Code)
+			var response struct {
+				Data struct {
+					LegacyContentURL string `json:"legacy_content_url"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.Contains(t, response.Data.LegacyContentURL, "/v1/tasks/"+task.TaskID+"/artifacts/video/content")
+			assert.NotContains(t, recorder.Body.String(), "upstream.invalid")
+		})
+	}
 }
 
 // Task lists no longer carry the persisted snapshot, so the dashboard reads a

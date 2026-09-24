@@ -29,6 +29,12 @@ type taskArtifactResponse struct {
 	ContentURL string `json:"content_url"`
 }
 
+type legacyImageArtifact struct {
+	key      string
+	source   string
+	mimeType string
+}
+
 var (
 	taskArtifactKeyPattern           = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]{0,127}$`)
 	errTaskArtifactPluginUnavailable = errors.New("task artifact plugin unavailable")
@@ -109,6 +115,16 @@ func writeTaskArtifacts(c *gin.Context, task *model.Task, dashboard bool) {
 			Type:       artifact.Type,
 			MimeType:   artifact.MimeType,
 			ContentURL: contentURL,
+		})
+	}
+	for _, artifact := range legacyImageArtifacts(task) {
+		contentURL, buildErr := service.BuildTaskArtifactContentURL(task.TaskID, artifact.key)
+		if buildErr != nil {
+			writeTaskArtifactError(c, http.StatusInternalServerError, "artifact_url_error", "Failed to build artifact content URL")
+			return
+		}
+		items = append(items, taskArtifactResponse{
+			Key: artifact.key, Type: "image", MimeType: artifact.mimeType, ContentURL: contentURL,
 		})
 	}
 	response := gin.H{"task_id": task.TaskID, "artifacts": items}
@@ -249,9 +265,100 @@ func taskHasPluginExecution(task *model.Task) bool {
 		strings.TrimSpace(task.PrivateData.Execution.TaskPlugin.Key) != ""
 }
 
+// legacyImageArtifacts reads the persisted image results only when the
+// artifacts endpoint is opened. Task lists deliberately omit the data column.
+func legacyImageArtifacts(task *model.Task) []legacyImageArtifact {
+	if task == nil || task.Status != model.TaskStatusSuccess ||
+		!task.ResultRetrievable() || taskHasPluginExecution(task) {
+		return nil
+	}
+	switch task.Platform {
+	case constant.TaskPlatformGenerateImage, constant.TaskPlatformUnifiedImage, constant.TaskPlatformAsyncImage:
+	default:
+		return nil
+	}
+
+	images := make([]legacyImageArtifact, 0)
+	addImage := func(source, mimeType string) {
+		if len(images) >= 64 {
+			return
+		}
+		source = strings.TrimSpace(source)
+		if source == "" {
+			return
+		}
+		switch mimeType {
+		case "image/png", "image/jpeg", "image/webp", "image/gif":
+		default:
+			mimeType = ""
+		}
+		if !strings.HasPrefix(source, "http://") && !strings.HasPrefix(source, "https://") &&
+			!strings.HasPrefix(source, "data:image/png;base64,") &&
+			!strings.HasPrefix(source, "data:image/jpeg;base64,") &&
+			!strings.HasPrefix(source, "data:image/webp;base64,") &&
+			!strings.HasPrefix(source, "data:image/gif;base64,") {
+			return
+		}
+		images = append(images, legacyImageArtifact{
+			key: fmt.Sprintf("image-%d", len(images)), source: source, mimeType: mimeType,
+		})
+	}
+	addBase64 := func(encoded, mimeType string) {
+		encoded = strings.TrimSpace(encoded)
+		if encoded == "" || len(encoded) > taskMediaDataURLMaxEncodedBytes-64 {
+			return
+		}
+		switch mimeType {
+		case "image/png", "image/jpeg", "image/webp", "image/gif":
+		default:
+			mimeType = "image/png"
+		}
+		addImage("data:"+mimeType+";base64,"+encoded, mimeType)
+	}
+
+	if task.Platform == constant.TaskPlatformGenerateImage {
+		var result dto.GenerateImageResult
+		if common.Unmarshal(task.Data, &result) == nil {
+			for _, image := range result.Images {
+				if image.Url != "" {
+					addImage(image.Url, image.MimeType)
+				} else {
+					addBase64(image.B64Json, image.MimeType)
+				}
+			}
+		}
+	} else if task.Platform == constant.TaskPlatformUnifiedImage {
+		var result struct {
+			URLs []string        `json:"urls"`
+			Data json.RawMessage `json:"data"`
+		}
+		if common.Unmarshal(task.Data, &result) == nil {
+			for _, imageURL := range result.URLs {
+				addImage(imageURL, "")
+			}
+			if len(images) == 0 && len(result.Data) > 0 {
+				var encoded []string
+				if common.Unmarshal(result.Data, &encoded) == nil {
+					for _, image := range encoded {
+						addBase64(image, "")
+					}
+				}
+			}
+		}
+	}
+	if len(images) == 0 {
+		addImage(task.PrivateData.ResultURL, "")
+	}
+	return images
+}
+
 func legacyVideoAvailable(task *model.Task) bool {
 	if task == nil || task.Status != model.TaskStatusSuccess ||
 		taskHasPluginExecution(task) || task.Platform == constant.TaskPlatformSuno ||
+		task.Platform == constant.TaskPlatformGenerateImage ||
+		task.Platform == constant.TaskPlatformUnifiedImage ||
+		task.Platform == constant.TaskPlatformAsyncImage ||
+		!task.ResultRetrievable() ||
 		strings.TrimSpace(task.GetResultURL()) == "" {
 		return false
 	}
@@ -260,7 +367,13 @@ func legacyVideoAvailable(task *model.Task) bool {
 		constant.TaskActionTextToVideo,
 		constant.TaskActionFirstTailToVideo,
 		constant.TaskActionReferenceToVideo,
-		constant.TaskActionRemix:
+		constant.TaskActionRemixCanonical,
+		constant.TaskActionMotionControl,
+		constant.TaskActionMotionControl30,
+		constant.TaskActionOmniVideo,
+		constant.TaskActionOmniVideo30,
+		constant.TaskActionVideoEdit,
+		constant.TaskActionVideoExtend:
 		return true
 	default:
 		return false
@@ -333,12 +446,23 @@ func TaskArtifactContent(c *gin.Context) {
 		return
 	}
 	if !taskHasPluginExecution(task) {
-		if artifactKey != "video" || !legacyVideoAvailable(task) {
+		var source string
+		if artifactKey == "video" && legacyVideoAvailable(task) {
+			source = task.GetResultURL()
+		} else {
+			for _, artifact := range legacyImageArtifacts(task) {
+				if artifact.key == artifactKey {
+					source = artifact.source
+					break
+				}
+			}
+		}
+		if source == "" {
 			writeTaskArtifactError(c, http.StatusNotFound, "artifact_not_found", "Task or artifact not found")
 			return
 		}
 		descriptor := &relaychannel.TaskContentRequest{
-			URL:            task.GetResultURL(),
+			URL:            source,
 			Method:         c.Request.Method,
 			Credentialless: true,
 		}
