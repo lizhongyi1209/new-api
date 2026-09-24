@@ -547,8 +547,13 @@ func GetUnrefundedFailedTasks(updatedBefore int64, limit int) []*Task {
 func GetAllUnFinishSyncTasks(limit int) []*Task {
 	var tasks []*Task
 	var err error
-	// get all tasks progress is not 100%
-	err = DB.Where("progress != ?", "100%").Where("status != ?", TaskStatusFailure).Where("status != ?", TaskStatusSuccess).Limit(limit).Order("id").Find(&tasks).Error
+	// Image tasks are completed by their own request/polling paths; the
+	// Suno/video poller has no adaptor for these platforms.
+	imagePlatforms := []constant.TaskPlatform{constant.TaskPlatformAsyncImage, constant.TaskPlatformUnifiedImage, constant.TaskPlatformGenerateImage}
+	err = DB.Where("progress != ?", "100%").
+		Where("status NOT IN ?", []TaskStatus{TaskStatusFailure, TaskStatusSuccess}).
+		Where("platform NOT IN ?", imagePlatforms).
+		Limit(limit).Order("id").Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -561,10 +566,11 @@ func GetAllUnFinishSyncTasks(limit int) []*Task {
 // the scheduler skips creating a row entirely.
 func HasUnfinishedSyncTasks() bool {
 	var id int64
+	imagePlatforms := []constant.TaskPlatform{constant.TaskPlatformAsyncImage, constant.TaskPlatformUnifiedImage, constant.TaskPlatformGenerateImage}
 	err := DB.Model(&Task{}).
 		Where("progress != ?", "100%").
-		Where("status != ?", TaskStatusFailure).
-		Where("status != ?", TaskStatusSuccess).
+		Where("status NOT IN ?", []TaskStatus{TaskStatusFailure, TaskStatusSuccess}).
+		Where("platform NOT IN ?", imagePlatforms).
 		Limit(1).
 		Pluck("id", &id).Error
 	return err == nil && id != 0

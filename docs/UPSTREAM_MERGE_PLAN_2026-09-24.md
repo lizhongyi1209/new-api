@@ -35,5 +35,10 @@
 - 生产 PostgreSQL 仅执行只读查询和 `pg_dump --schema-only`，未对生产库运行新版本迁移或写入。现有 `tasks` 约 168 GB、`logs` 约 4.1 GB；四个类型 60 渠道仍在，类型 58 已无记录，`task_plugins` 与 `prefill_groups` 均为空。
 - 将生产结构恢复到独立测试 PostgreSQL 数据库，连续运行两次 `InitDB`/`InitLogDB`。首次迁移的实质结构差异仅为将空的 `task_plugins.source` 从 `text` 改为 `varchar(8388608)`，以及移除空的 `prefill_groups` 表上的旧全局唯一约束；现有部分唯一索引保留。大表 `tasks` 的结构未变化。再次运行无 DDL。
 - 隔离 MySQL 数据库连续迁移两次，并运行 SQLite/MySQL/PostgreSQL 的迁移稳定性测试。修复了 MySQL 对等价 decimal 默认值及 MEDIUMTEXT/LONGTEXT 容量误判导致每次启动执行 `ALTER TABLE` 的问题；修复后第二次迁移无 DDL。跨数据库额度与结算测试通过。
-- 生产启动时的数据回填预检发现 6 条令牌会把已有旧版自动分组优先级复制到新字段；六条旧值均为有效 JSON 数组，且新字段均为空。用户鉴权版本、外部身份声明等当前无需回填。未读取或输出令牌密钥。
+- 生产启动后的只读复查确认 6 条含旧版自动分组优先级的令牌均已软删除，GORM 默认作用域不会回填这些记录；活跃令牌没有待回填数据。六条旧值均为有效 JSON 数组。用户鉴权版本、外部身份声明等当前无需回填。未读取或输出令牌密钥。
 - 部署前于 2026-09-24 16:15 UTC 对生产 PostgreSQL 创建完整自定义格式备份 `backups/new-api-postgres-20260924T161459Z.dump`（约 11 GB）。SHA-256 校验、`pg_restore --list` 以及将整个归档解码至 `/dev/null` 均通过；备份文件留在本机且不纳入 Git。旧生产镜像另存为 `new-api-rollback:20260924-pre-merge`。以上排查仍不能证明生产变更绝对零风险；本记录为部署前状态，尚未对生产数据库执行新版本迁移。
+
+## 首次部署后的运行核查
+
+- 通过 `scripts/deploy-production.sh deploy` 部署提交 `c9cc381d3`，应用健康，`/api/status` 返回该提交与 `v1.0.0-rc.40`。数据库只读复查确认 60 号渠道仍有 4 条，58 号为 0，插件表和预填分组表仍为空，预期的小表结构变更已完成。
+- 运行日志发现视频任务轮询器会扫描由独立链路处理的生图任务，每轮记录“video adaptor not found”。已在任务选择查询中排除三类生图平台，并添加验证视频任务仍可进入轮询的回归测试。
