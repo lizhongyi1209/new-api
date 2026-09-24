@@ -6,7 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/types"
 
-	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 type AudioRequest struct {
@@ -41,7 +41,7 @@ func (r *AudioRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	return meta
 }
 
-func (r *AudioRequest) IsStream(c *gin.Context) bool {
+func (r *AudioRequest) IsStream(c *http.Request) bool {
 	return r.StreamFormat == "sse"
 }
 

@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -79,6 +79,8 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 		return &usageResp.Usage, nil
 	}
 
+	info.UpdateImageCount(openaiImageResponseCount(responseBody))
+
 	// 写入新的 response body
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 
@@ -87,14 +89,54 @@ func OpenaiImageHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.
 	return &usageResp.Usage, nil
 }
 
+// openaiImageResponseCount counts billable images in an OpenAI-format image
+// response body. An object-shaped data is one image when it carries url or
+// b64_json. For arrays the count is the larger of the url-bearing and the
+// b64_json-bearing entry counts: a standard response uses one response_format
+// so this equals the entry count, an upstream that splits one image into a url
+// entry and a b64_json entry bills once, and entries without any image payload
+// bill nothing. A zero result leaves the requested quantity in place because
+// UpdateImageCount ignores non-positive counts.
+func openaiImageResponseCount(responseBody []byte) int64 {
+	data := gjson.GetBytes(responseBody, "data")
+	if data.IsObject() {
+		if openaiImageDataHasField(data, "url") || openaiImageDataHasField(data, "b64_json") {
+			return 1
+		}
+		return 0
+	}
+	if !data.IsArray() {
+		return 0
+	}
+	var urls, b64s int64
+	data.ForEach(func(_, item gjson.Result) bool {
+		if openaiImageDataHasField(item, "url") {
+			urls++
+		}
+		if openaiImageDataHasField(item, "b64_json") {
+			b64s++
+		}
+		return true
+	})
+	return max(urls, b64s)
+}
+
+// openaiImageDataHasField reports whether an image data entry carries a
+// non-empty string value for field.
+func openaiImageDataHasField(item gjson.Result, field string) bool {
+	value := item.Get(field)
+	return value.Type == gjson.String && value.Raw != `""`
+}
+
 // normalizeOpenAIUsage maps the OpenAI Images usage shape (input_tokens /
-// output_tokens / input_tokens_details) onto the canonical prompt/completion
-// fields. It is used only on the OpenAI image relay paths (generations/edits,
-// streaming and non-streaming): the image API never returns prompt_tokens /
-// completion_tokens, so the overwrite (=) semantics here are equivalent to the
-// previous additive (+=) behavior while avoiding any future double-counting if
-// both field sets are ever populated. Do not reuse this on chat/embedding paths
-// without revisiting the overwrite semantics.
+// output_tokens / input_tokens_details / output_tokens_details) onto the
+// canonical prompt/completion fields. It is used only on the OpenAI image
+// relay paths (generations/edits, streaming and non-streaming): the image
+// API never returns prompt_tokens / completion_tokens, so the overwrite (=)
+// semantics here are equivalent to the previous additive (+=) behavior while
+// avoiding any future double-counting if both field sets are ever populated.
+// Do not reuse this on chat/embedding paths without revisiting the overwrite
+// semantics.
 func normalizeOpenAIUsage(usage *dto.Usage) {
 	if usage == nil {
 		return

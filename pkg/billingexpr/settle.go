@@ -2,6 +2,7 @@ package billingexpr
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -33,8 +34,15 @@ func ComputeTieredQuotaWithRequest(snap *BillingSnapshot, params TokenParams, re
 	if err != nil {
 		return TieredResult{}, err
 	}
+	if math.IsNaN(cost) || math.IsInf(cost, 0) || cost < 0 ||
+		math.IsNaN(snap.GroupRatio) || math.IsInf(snap.GroupRatio, 0) || snap.GroupRatio < 0 {
+		return TieredResult{}, fmt.Errorf("task billing expression produced an invalid charge")
+	}
 
 	quotaBeforeGroup := quotaConversion(cost, snap)
+	if math.IsNaN(quotaBeforeGroup) || quotaBeforeGroup < 0 {
+		return TieredResult{}, fmt.Errorf("task billing expression produced an invalid quota")
+	}
 	afterGroup, clamp := common.QuotaRoundChecked(quotaBeforeGroup * snap.GroupRatio)
 	crossed := trace.MatchedTier != snap.EstimatedTier
 

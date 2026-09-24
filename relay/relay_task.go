@@ -34,9 +34,9 @@ import (
 type TaskSubmitResult struct {
 	UpstreamTaskID string
 	TaskData       []byte
+	ClientResponse any
 	Platform       constant.TaskPlatform
 	Quota          int
-	ClientResponse any
 	Immediate      *relaycommon.TaskInfo
 	PluginState    []byte
 	PluginKey      string
@@ -84,7 +84,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 		} else if originTask.Properties.UpstreamModelName != "" {
 			info.OriginModelName = originTask.Properties.UpstreamModelName
 		} else {
-			var taskData map[string]interface{}
+			var taskData map[string]any
 			_ = common.Unmarshal(originTask.Data, &taskData)
 			if m, ok := taskData["model"].(string); ok && m != "" {
 				info.OriginModelName = m
@@ -127,7 +127,7 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 			}
 		} else {
 			// 旧的 remix 逻辑：直接从 task data 解析 seconds 和 size（如果存在）
-			var taskData map[string]interface{}
+			var taskData map[string]any
 			_ = common.Unmarshal(originTask.Data, &taskData)
 			secondsStr, _ := taskData["seconds"].(string)
 			seconds, _ := strconv.Atoi(secondsStr)
@@ -150,11 +150,57 @@ func ResolveOriginTask(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskErr
 	return nil
 }
 
+// ApplyChannelPin copies plugin-declared origin-task facts from the prepare
+// context onto RelayInfo and, when the resolved pin retries on the same
+// channel, writes LockedChannel. ResolveOriginTask is unchanged.
+func ApplyChannelPin(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	if info == nil {
+		return nil
+	}
+	if info.TaskRelayInfo == nil {
+		info.TaskRelayInfo = &relaycommon.TaskRelayInfo{}
+	}
+	if tasks, ok := common.GetContextKeyType[[]*model.Task](c, constant.ContextKeyOriginTasks); ok {
+		refs := make([]relaycommon.OriginTaskRef, 0, len(tasks))
+		for _, task := range tasks {
+			if task == nil {
+				continue
+			}
+			refs = append(refs, relaycommon.OriginTaskRef{
+				TaskID:         task.TaskID,
+				UpstreamTaskID: task.GetUpstreamTaskID(),
+				Action:         task.Action,
+				Status:         string(task.Status),
+				Data:           append([]byte(nil), task.Data...),
+			})
+		}
+		info.OriginTasks = refs
+	}
+	pin, found, _ := service.GetChannelConstraints(c).ResolvedPin()
+	if !found || pin.RetryMode != dto.PinRetrySameChannel {
+		return nil
+	}
+	ch, err := model.CacheGetChannel(pin.ChannelId)
+	if err != nil {
+		return service.TaskErrorWrapperLocal(err, "origin_task_channel_disabled", http.StatusBadRequest)
+	}
+	if ch.Status != common.ChannelStatusEnabled {
+		return service.TaskErrorWrapperLocal(errors.New("the channel of the origin task is disabled"), "origin_task_channel_disabled", http.StatusBadRequest)
+	}
+	info.LockedChannel = ch
+	return nil
+}
+
+// ApplyOriginTaskAffinity is the compatibility name for ApplyChannelPin.
+func ApplyOriginTaskAffinity(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	return ApplyChannelPin(c, info)
+}
+
 // RelayTaskSubmit 完成 task 提交的全部流程（每次尝试调用一次）：
 // 刷新渠道元数据 → 确定 platform/adaptor → 验证请求 →
 // 估算计费(EstimateBilling) → 计算价格 → 预扣费（仅首次）→
 // 构建/发送/解析上游请求 → 提交后计费调整(AdjustBillingOnSubmit)。
-// 控制器负责 defer Refund 和成功后 Settle。
+// 共享控制器编排负责未落库退款、最终额度预留、落库和结算。
 func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitResult, *dto.TaskError) {
 	info.InitChannelMeta(c)
 
@@ -165,6 +211,8 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 	var adaptor channel.TaskAdaptor
 	var selectedPlugin *pluginruntime.LoadedPlugin
+	pinnedValue, hasPinnedPlugin := c.Get(pluginruntime.ContextKeyPinnedPlugin)
+	pinnedPlugin, _ := pinnedValue.(pluginruntime.PinnedPlugin)
 	if info.ChannelType == constant.ChannelTypeTaskPlugin {
 		pluginKey := info.ChannelSetting.TaskPluginKey
 		if pluginKey == "" || c.GetString("expected_task_plugin_key") != pluginKey {
@@ -178,9 +226,8 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		if !ok {
 			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task plugin is unavailable"), "task_plugin_unavailable", http.StatusServiceUnavailable)
 		}
-		if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedPlugin); exists {
-			pinned, valid := pinnedValue.(pluginruntime.PinnedPlugin)
-			if !valid || pinned.Plugin != plugin || pinned.Generation != generation {
+		if hasPinnedPlugin {
+			if pinnedPlugin.Plugin != plugin || pinnedPlugin.Generation != generation {
 				return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task plugin generation changed during channel selection"), "task_plugin_unavailable", http.StatusServiceUnavailable)
 			}
 		} else {
@@ -189,11 +236,21 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		platform = constant.TaskPlatform(pluginKey)
 		selectedPlugin = plugin
 		adaptor = jspluginadaptor.New(plugin)
+	} else if pinnedPlugin.Plugin != nil {
+		selectedPlugin = pinnedPlugin.Plugin
+		platform = constant.TaskPlatform(selectedPlugin.Meta.Key)
+		adaptor = jspluginadaptor.New(selectedPlugin)
 	} else {
 		adaptor = GetTaskAdaptor(platform)
 	}
 	if adaptor == nil {
-		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest)
+		code, message := TaskPlatformUnavailableError(platform)
+		return nil, service.TaskErrorWrapperLocal(errors.New(message), code, http.StatusBadRequest)
+	}
+	// buildSubmitRequest runs during validation and the unreleased plugin
+	// contract exposes this host-generated id to that hook.
+	if info.PublicTaskID == "" {
+		info.PublicTaskID = model.GenerateTaskID()
 	}
 	adaptor.Init(info)
 	// Plugin validation builds and caches the outbound request. Map a model that
@@ -233,22 +290,44 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	info.OriginModelName = modelName
 	var priceData types.PriceData
 	var err error
-	if info.ChannelType == constant.ChannelTypeTaskPlugin {
-		pluginKey := info.ChannelMeta.ChannelSetting.TaskPluginKey
-		expression, configured := billing_setting.GetTaskPluginBillingExpr(pluginKey, modelName)
-		if !configured || strings.TrimSpace(expression) == "" {
-			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task plugin model has no configured billing expression"), "task_plugin_price_unconfigured", http.StatusBadRequest)
+	pluginKey := c.GetString("task_plugin_key")
+	if selectedPlugin != nil {
+		pluginKey = selectedPlugin.Meta.Key
+	} else if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedPlugin); exists {
+		if pinned, ok := pinnedValue.(pluginruntime.PinnedPlugin); ok && pinned.Plugin != nil {
+			selectedPlugin = pinned.Plugin
+			pluginKey = pinned.Plugin.Meta.Key
 		}
-		if !billingexpr.UsesUsagePricing(expression) || billingexpr.UsesFixedPricing(expression) {
-			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task plugin model requires a usage expression without fixed pricing"), "task_plugin_price_invalid", http.StatusBadRequest)
+	}
+	expression, configured := billing_setting.ResolveTaskBillingExpr(pluginKey, modelName, info.UpstreamModelName)
+	if configured || billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr {
+		provider, supported := adaptor.(channel.TaskUsageFactsProvider)
+		if !configured || !supported || strings.TrimSpace(expression) == "" || billingexpr.UsesFixedPricing(expression) {
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task model %s has no usable billing expression or meter", modelName), "model_price_error", http.StatusBadRequest)
 		}
-		provider, supported := adaptor.(channel.TaskValidatedUsageFactsProvider)
-		if !supported {
-			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task plugin has no validated usage meter"), "task_plugin_meter_unavailable", http.StatusBadRequest)
+		if selectedPlugin != nil {
+			generation := pluginruntime.DefaultRegistry.Generation()
+			if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedPlugin); exists {
+				if pinned, ok := pinnedValue.(pluginruntime.PinnedPlugin); ok {
+					generation = pinned.Generation
+				}
+			}
+			if generation != nil && (generation.SharedModel(modelName) || generation.SharedModel(info.UpstreamModelName)) {
+				schema, _ := selectedPlugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
+				if !billing_setting.TaskExprCompatible(expression, schema) {
+					return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task model %s pricing is not configured for plugin %s", modelName, pluginKey), "model_price_error", http.StatusBadRequest)
+				}
+			}
 		}
-		facts, usageErr := provider.ExtractUsageFactsValidated(c, info)
-		if usageErr != nil {
-			return nil, service.TaskErrorWrapperLocal(usageErr, "plugin_usage_invalid", http.StatusBadRequest)
+		var facts map[string]any
+		if validated, ok := adaptor.(channel.TaskValidatedUsageFactsProvider); ok {
+			var usageErr error
+			facts, usageErr = validated.ExtractUsageFactsValidated(c, info)
+			if usageErr != nil {
+				return nil, service.TaskErrorWrapperLocal(usageErr, "plugin_usage_invalid", http.StatusBadRequest)
+			}
+		} else {
+			facts = provider.ExtractUsageFacts(c, info)
 		}
 		billingInput, inputErr := helper.FreezeTaskBillingExprRequestInput(c, expression)
 		if inputErr != nil {
@@ -266,16 +345,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		quota, clamp := common.QuotaRoundChecked(cost * common.QuotaPerUnit * groupRatio.GroupRatio)
 		noteTaskQuotaClamp(info, clamp)
 		priceData = types.PriceData{Quota: quota, QuotaToPreConsume: quota, GroupRatioInfo: groupRatio}
-		usageSchema, _ := selectedPlugin.Meta.UsageForModel(modelName)
-		usedUsageFields := billingexpr.UsedUsageKeys(expression)
-		for field := range usedUsageFields {
-			if _, declared := usageSchema[field]; !declared {
-				return nil, service.TaskErrorWrapperLocal(
-					fmt.Errorf("task plugin billing field %q is no longer declared", field),
-					"task_plugin_price_invalid", http.StatusBadRequest,
-				)
-			}
+		usageSchema := map[string]pluginruntime.UsageFieldSchema{}
+		if selectedPlugin != nil {
+			usageSchema, _ = selectedPlugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
 		}
+		usedUsageFields := billingexpr.UsedUsageKeys(expression)
 		usageDisplaySchema := make(map[string]billingexpr.UsageFieldSnapshot, len(usedUsageFields))
 		for field, definition := range usageSchema {
 			if !usedUsageFields[field] {
@@ -334,7 +408,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 6. 将 OtherRatios 应用到基础额度（饱和转换，防止溢出成负数）
 	if info.TieredBillingSnapshot == nil && !common.StringsContains(constant.TaskPricePatches, modelName) {
 		quotaWithRatios := float64(info.PriceData.Quota)
-		for _, ra := range info.PriceData.OtherRatios {
+		for _, ra := range info.PriceData.OtherRatios() {
 			if ra != 1.0 {
 				quotaWithRatios *= ra
 			}
@@ -367,17 +441,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 但若适配器声明自己能分类上游错误响应（HandlesUpstreamErrorResponse），
 	// 则交由其 DoResponse 处理，以便把上游代理层层包裹的真实错误（如客户端
 	// duration 参数不合法被包成 502）还原成可读、状态码正确、可判定是否重试的错误。
-	if resp != nil && resp.StatusCode != http.StatusOK {
+	if resp != nil && (resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices) {
 		handler, ok := adaptor.(channel.UpstreamErrorResponseHandler)
-		_, pluginParser := adaptor.(channel.TaskSubmitResponseParser)
-		if !pluginParser && (!ok || !handler.HandlesUpstreamErrorResponse()) {
+		if !ok || !handler.HandlesUpstreamErrorResponse() {
 			responseBody, _ := io.ReadAll(resp.Body)
 			return nil, service.TaskErrorWrapper(fmt.Errorf("%s", string(responseBody)), "fail_to_fetch_task", resp.StatusCode)
 		}
 	}
 
 	// 10. 返回 OtherRatios 给下游（header 必须在 DoResponse 写 body 之前设置）
-	otherRatios := info.PriceData.OtherRatios
+	otherRatios := info.PriceData.OtherRatios()
 	if otherRatios == nil {
 		otherRatios = map[string]float64{}
 	}
@@ -412,9 +485,16 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	finalQuota := info.PriceData.Quota
 	if info.TieredBillingSnapshot == nil {
 		if adjustedRatios := adaptor.AdjustBillingOnSubmit(info, taskData); len(adjustedRatios) > 0 {
+			previousRatios := info.PriceData.OtherRatios()
+			info.PriceData.ReplaceOtherRatios(adjustedRatios)
+			if len(info.PriceData.OtherRatios()) != len(adjustedRatios) {
+				info.PriceData.ReplaceOtherRatios(previousRatios)
+				return nil, service.TaskErrorWrapperLocal(fmt.Errorf("invalid upstream billing ratios"), "invalid_billing_ratio", http.StatusBadGateway)
+			}
 			// 基于调整后的 ratios 重新计算 quota
+			info.PriceData.ReplaceOtherRatios(previousRatios)
 			finalQuota = recalcQuotaFromRatios(info, adjustedRatios)
-			info.PriceData.OtherRatios = adjustedRatios
+			info.PriceData.ReplaceOtherRatios(adjustedRatios)
 			info.PriceData.Quota = finalQuota
 		}
 	}
@@ -463,7 +543,7 @@ func recalcQuotaFromRatios(info *relaycommon.RelayInfo, ratios map[string]float6
 	// 从 PriceData 获取不含 OtherRatios 的基础价格
 	baseQuota := float64(info.PriceData.Quota)
 	// 先除掉原有的 OtherRatios 恢复基础额度
-	for _, ra := range info.PriceData.OtherRatios {
+	for _, ra := range info.PriceData.OtherRatios() {
 		if ra != 1.0 && ra > 0 {
 			baseQuota /= ra
 		}
@@ -493,8 +573,6 @@ func noteTaskQuotaClamp(info *relaycommon.RelayInfo, clamp *common.QuotaClamp) {
 }
 
 var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp *dto.TaskError){
-	relayconstant.RelayModeSunoFetchByID:  sunoFetchByIDRespBodyBuilder,
-	relayconstant.RelayModeSunoFetch:      sunoFetchRespBodyBuilder,
 	relayconstant.RelayModeVideoFetchByID: videoFetchByIDRespBodyBuilder,
 }
 
@@ -534,7 +612,13 @@ func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.Ta
 	}
 	var tasks []any
 	if len(condition.IDs) > 0 {
-		taskModels, err := model.GetByTaskIds(userId, condition.IDs)
+		ids := make([]string, 0, len(condition.IDs))
+		for _, id := range condition.IDs {
+			if value, ok := id.(string); ok {
+				ids = append(ids, value)
+			}
+		}
+		taskModels, err := model.GetByTaskIdsForPlatforms(userId, []constant.TaskPlatform{constant.TaskPlatformSuno}, ids)
 		if err != nil {
 			taskResp = service.TaskErrorWrapper(err, "get_tasks_failed", http.StatusInternalServerError)
 			return
@@ -585,7 +669,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
 		return
 	}
-	if !exist {
+	if !exist || !originTask.ResultRetrievable() {
 		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
 		return
 	}
@@ -670,7 +754,7 @@ func tryRealtimeFetch(ctx context.Context, task *model.Task, isOpenAIVideoAPI bo
 		return nil
 	}
 
-	baseURL := constant.ChannelBaseURLs[channelModel.Type]
+	baseURL := constant.GetChannelBaseURL(channelModel.Type)
 	if channelModel.GetBaseURL() != "" {
 		baseURL = channelModel.GetBaseURL()
 	}
@@ -787,7 +871,7 @@ func TaskModel2Dto(task *model.Task, includeUpstreamData bool) *dto.TaskDto {
 		Group:      task.Group,
 		ChannelId:  task.ChannelId,
 		Quota:      task.Quota,
-		Action:     task.Action,
+		Action:     constant.NormalizeTaskAction(task.Action),
 		Status:     string(task.Status),
 		FailReason: task.FailReason,
 		ResultURL:  task.GetResultURL(),

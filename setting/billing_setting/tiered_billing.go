@@ -5,6 +5,7 @@ import (
 	"maps"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -17,23 +18,27 @@ import (
 )
 
 const (
-	BillingModeRatio      = "ratio"
-	BillingModeTieredExpr = "tiered_expr"
-	BillingModeField      = "billing_mode"
-	BillingExprField      = "billing_expr"
-	maxTaskExprSmokeTests = 64
+	BillingModeRatio        = "ratio"
+	BillingModeTieredExpr   = "tiered_expr"
+	BillingModeField        = "billing_mode"
+	BillingExprField        = "billing_expr"
+	PluginBillingExprOption = "billing_setting.plugin_billing_expr"
+	maxTaskExprSmokeTests   = 64
 )
 
 // BillingSetting is managed by config.GlobalConfig.Register.
-// DB keys: billing_setting.billing_mode, billing_setting.billing_expr
+// DB keys: billing_setting.billing_mode, billing_setting.billing_expr,
+// billing_setting.plugin_billing_expr
 type BillingSetting struct {
-	BillingMode map[string]string `json:"billing_mode"`
-	BillingExpr map[string]string `json:"billing_expr"`
+	BillingMode       map[string]string `json:"billing_mode"`
+	BillingExpr       map[string]string `json:"billing_expr"`
+	PluginBillingExpr map[string]string `json:"plugin_billing_expr"`
 }
 
 var billingSetting = BillingSetting{
-	BillingMode: make(map[string]string),
-	BillingExpr: make(map[string]string),
+	BillingMode:       make(map[string]string),
+	BillingExpr:       make(map[string]string),
+	PluginBillingExpr: make(map[string]string),
 }
 
 func init() {
@@ -78,6 +83,42 @@ func GetBuiltinBillingExpr(model string) (string, bool) {
 
 func GetBuiltinBillingExprCopy() map[string]string {
 	return lo.Assign(builtinBillingExpr)
+}
+
+func PluginBillingExprKey(pluginKey, model string) string {
+	return pluginKey + "::" + model
+}
+
+func SplitPluginBillingExprKey(key string) (plugin, model string, ok bool) {
+	plugin, model, ok = strings.Cut(key, "::")
+	if !ok || !jsplugin.ValidPluginKey(plugin) || strings.TrimSpace(model) == "" {
+		return "", "", false
+	}
+	return plugin, model, true
+}
+
+func GetPluginBillingExprCopy() map[string]string {
+	return maps.Clone(billingSetting.PluginBillingExpr)
+}
+
+func GetPluginBillingExpr(pluginKey, model string) (string, bool) {
+	expression, ok := billingSetting.PluginBillingExpr[PluginBillingExprKey(pluginKey, model)]
+	return expression, ok
+}
+
+func TaskExprCompatible(expression string, schema map[string]jsplugin.UsageFieldSchema) bool {
+	if strings.TrimSpace(expression) == "" {
+		return false
+	}
+	if _, err := billingexpr.CompileFromCache(expression); err != nil {
+		return false
+	}
+	for key := range billingexpr.UsedUsageKeys(expression) {
+		if _, exists := schema[key]; !exists {
+			return false
+		}
+	}
+	return !billingexpr.UsesFixedPricing(expression)
 }
 
 func GetBillingModeCopy() map[string]string {
@@ -136,19 +177,13 @@ func smokeTestExpr(exprStr string) error {
 		{ImgCR: 1000},
 		{P: 100000, C: 100000, Len: 100000},
 		{P: 1000000, C: 1000000, Len: 1000000},
-	}
-	requests := []billingexpr.RequestInput{
-		{},
-		{
-			Headers: map[string]string{
-				"anthropic-beta": "fast-mode-2026-02-01",
-			},
-			Body: []byte(`{"service_tier":"fast","stream_options":{"include_usage":true},"messages":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]}`),
-		},
+		{P: 300, C: 100, Len: 1000, CR: 100, Img: 400, ImgCR: 200},
+		{P: 800, C: 50, Len: 1000, AI: 200, AO: 50},
+		{Len: math.MaxInt32, ImgCR: math.MaxInt32},
 	}
 
 	for _, v := range vectors {
-		for _, request := range requests {
+		for _, request := range billingExprSmokeRequests() {
 			result, _, err := billingexpr.RunExprWithRequest(exprStr, v, request)
 			if err != nil {
 				return fmt.Errorf("vector {p=%g, c=%g}: run failed: %w", v.P, v.C, err)
@@ -159,6 +194,18 @@ func smokeTestExpr(exprStr string) error {
 		}
 	}
 	return nil
+}
+
+func billingExprSmokeRequests() []billingexpr.RequestInput {
+	return []billingexpr.RequestInput{
+		{},
+		{
+			Headers: map[string]string{
+				"anthropic-beta": "fast-mode-2026-02-01",
+			},
+			Body: []byte(`{"service_tier":"fast","stream_options":{"include_usage":true},"messages":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]}`),
+		},
+	}
 }
 
 // SmokeTestTaskExpr validates a task expression against the plugin's declared

@@ -17,6 +17,13 @@ const (
 	MaxWalletQuota = 1<<53 - 1
 )
 
+func ValidateWalletQuota(quota int) error {
+	if quota < 0 || quota > MaxWalletQuota {
+		return fmt.Errorf("wallet quota must be between 0 and %d", MaxWalletQuota)
+	}
+	return nil
+}
+
 // QuotaClampKind identifies why a quota conversion had to be saturated.
 type QuotaClampKind string
 

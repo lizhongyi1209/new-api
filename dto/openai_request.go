@@ -10,7 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
 
-	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 type ResponseFormat struct {
@@ -110,6 +110,7 @@ type GeneralOpenAIRequest struct {
 	ReasoningSplit json.RawMessage `json:"reasoning_split,omitempty"`
 	// vLLM
 	ThinkingTokenBudget json.RawMessage `json:"thinking_token_budget,omitempty"`
+	MinTokens           *uint           `json:"min_tokens,omitempty"`
 }
 
 func (r GeneralOpenAIRequest) MarshalJSON() ([]byte, error) {
@@ -251,7 +252,7 @@ func (r *GeneralOpenAIRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	return &tokenCountMeta
 }
 
-func (r *GeneralOpenAIRequest) IsStream(c *gin.Context) bool {
+func (r *GeneralOpenAIRequest) IsStream(c *http.Request) bool {
 	return lo.FromPtrOr(r.Stream, false)
 }
 
@@ -1068,7 +1069,7 @@ func (r *OpenAIResponsesRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	}
 }
 
-func (r *OpenAIResponsesRequest) IsStream(c *gin.Context) bool {
+func (r *OpenAIResponsesRequest) IsStream(c *http.Request) bool {
 	return lo.FromPtrOr(r.Stream, false)
 }
 

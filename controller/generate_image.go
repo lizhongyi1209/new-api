@@ -126,7 +126,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			ModelPrice:      priceData.ModelPrice,
 			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
 			ModelRatio:      priceData.ModelRatio,
-			OtherRatios:     priceData.OtherRatios,
+			OtherRatios:     priceData.OtherRatios(),
 			OriginModelName: req.Model,
 			PerCallBilling:  priceData.UsePrice,
 		}

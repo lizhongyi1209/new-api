@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -24,7 +25,7 @@ func resetAssetGroupCache() {
 	assetGroupCache = sync.Map{}
 }
 
-func newTestRelayInfo(serverURL string, other dto.ChannelOtherSettings) *relaycommon.RelayInfo {
+func newTestRelayInfo(serverURL string, other kitdto.ChannelOtherSettings) *relaycommon.RelayInfo {
 	return &relaycommon.RelayInfo{
 		ChannelMeta: &relaycommon.ChannelMeta{
 			ChannelType:          constant.ChannelTypeServiceInferenceVideo,
@@ -65,7 +66,7 @@ func requireBearer(t *testing.T, r *http.Request) {
 
 func TestGrokServiceInferencePreservesOfficialImageRequest(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+	info := newTestRelayInfo("https://example.com", kitdto.ChannelOtherSettings{})
 	info.OriginModelName = "grok-imagine-video-1.5"
 	requestBody := `{
 		"model":"grok-imagine-video-1.5",
@@ -102,7 +103,7 @@ func TestGrokServiceInferencePreservesOfficialImageRequest(t *testing.T) {
 
 func TestGrokServiceInferenceDoesNotInjectWrapperDefaults(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+	info := newTestRelayInfo("https://example.com", kitdto.ChannelOtherSettings{})
 	info.OriginModelName = "grok-imagine-video-1.5"
 	requestBody := `{
 		"model":"grok-imagine-video-1.5",
@@ -150,7 +151,7 @@ func TestGrokServiceInferenceSupportsOfficialTextAndReferenceModes(t *testing.T)
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+			info := newTestRelayInfo("https://example.com", kitdto.ChannelOtherSettings{})
 			context := newTaskContextForPath("/grok/v1/videos/generations", test.body)
 			adaptor := &TaskAdaptor{}
 			adaptor.Init(info)
@@ -178,7 +179,7 @@ func TestGrokServiceInferenceAcceptsOfficialDurationAliases(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+			info := newTestRelayInfo("https://example.com", kitdto.ChannelOtherSettings{})
 			context := newTaskContextForPath("/grok/v1/videos/generations", `{
 				"model":"grok-imagine-video-1.5",
 				"prompt":"move",
@@ -244,7 +245,7 @@ func TestGrokServiceInferencePassesOfficialOnlyInputs(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+			info := newTestRelayInfo("https://example.com", kitdto.ChannelOtherSettings{})
 			path := test.path
 			if path == "" {
 				path = "/grok/v1/videos/generations"
@@ -322,7 +323,7 @@ func TestBuildRequestBodyNativeContentUploadsImageAsset(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info := newTestRelayInfo(server.URL, dto.ChannelOtherSettings{
+	info := newTestRelayInfo(server.URL, kitdto.ChannelOtherSettings{
 		ServiceInferenceAssetPollAttempts:   1,
 		ServiceInferenceAssetPollIntervalMS: -1,
 	})
@@ -400,7 +401,7 @@ func TestBuildRequestBodyDFContentUsesDirectAssetWorkflow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info := newTestRelayInfo(server.URL, dto.ChannelOtherSettings{
+	info := newTestRelayInfo(server.URL, kitdto.ChannelOtherSettings{
 		ServiceInferenceAssetPollAttempts:   1,
 		ServiceInferenceAssetPollIntervalMS: -1,
 	})
@@ -464,7 +465,7 @@ func TestBuildRequestBodyHCContentUsesHCAssetWorkflow(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info := newTestRelayInfo(server.URL, dto.ChannelOtherSettings{
+	info := newTestRelayInfo(server.URL, kitdto.ChannelOtherSettings{
 		ServiceInferenceAssetPollAttempts:   1,
 		ServiceInferenceAssetPollIntervalMS: -1,
 	})
@@ -502,7 +503,7 @@ func TestBuildRequestBodyMaxPreservesPublicMediaURLs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info := newTestRelayInfo(server.URL, dto.ChannelOtherSettings{})
+	info := newTestRelayInfo(server.URL, kitdto.ChannelOtherSettings{})
 	info.OriginModelName = "dreamina-seedance-2-0-hc"
 	info.UpstreamModelName = "dreamina-seedance-2-0-260128-max"
 	info.IsModelMapped = true
@@ -538,7 +539,7 @@ func TestBuildRequestBodyMaxPreservesPublicMediaURLs(t *testing.T) {
 func TestBuildRequestBodyDoubaoUsesDocumentedContract(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
 	info.OriginModelName = "doubao-seedance-2-0-260128-max"
 	info.UpstreamModelName = "doubao-seedance-2-0-260128-max"
 	adaptor := &TaskAdaptor{}
@@ -589,7 +590,7 @@ func TestBuildRequestBodyDoubaoUsesDocumentedContract(t *testing.T) {
 func TestValidateSeedanceDurationRejectsBillingOverflowInput(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
 	adaptor := &TaskAdaptor{}
 	adaptor.Init(info)
 	c := newTaskContext(`{
@@ -723,7 +724,7 @@ func TestBuildRequestBodyRecreatesMissingConfiguredAssetGroup(t *testing.T) {
 	}))
 	defer server.Close()
 
-	info := newTestRelayInfo(server.URL, dto.ChannelOtherSettings{
+	info := newTestRelayInfo(server.URL, kitdto.ChannelOtherSettings{
 		ServiceInferenceAssetGroupID:        "group-old",
 		ServiceInferenceAssetPollAttempts:   1,
 		ServiceInferenceAssetPollIntervalMS: -1,
@@ -1093,7 +1094,7 @@ func TestVideoInputRatio(t *testing.T) {
 
 func TestEstimateBillingUsesMappedSeedance25UpstreamModel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	info := newTestRelayInfo("https://example.com", dto.ChannelOtherSettings{})
+	info := newTestRelayInfo("https://example.com", kitdto.ChannelOtherSettings{})
 	info.OriginModelName = "public-seedance-2-5"
 	info.UpstreamModelName = "dreamina-seedance-2-5-ep"
 
@@ -1130,7 +1131,7 @@ func TestMiniMaxH3ClientRequestMapsAndPreservesOfficialPayload(t *testing.T) {
 		"aigc_watermark":false
 	}`
 	context := newTaskContextForPath("/v1/video/generations", requestBody)
-	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
 	info.OriginModelName = "MiniMax-H3"
 
 	adaptor := &TaskAdaptor{}
@@ -1179,7 +1180,7 @@ func TestMiniMaxH3MaxClientRequestMapsAndPrechargesAtOfficialRate(t *testing.T) 
 		"duration":5,
 		"ratio":"adaptive"
 	}`)
-	info := newTestRelayInfo("https://model.service-inference.ai", dto.ChannelOtherSettings{})
+	info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
 	info.OriginModelName = "MiniMax-H3-MAX"
 
 	adaptor := &TaskAdaptor{}

@@ -8,10 +8,10 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
@@ -164,9 +164,9 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 			require.NoError(t, err)
 			require.Equal(t, tt.wantQuota, priceData.QuotaToPreConsume)
 			require.Equal(t, tt.wantUsePrice, priceData.UsePrice)
-			_, hasImageCount := priceData.OtherRatios["n"]
+			_, hasImageCount := priceData.OtherRatios()["n"]
 			require.Equal(t, tt.wantImageCount, hasImageCount)
-			require.Equal(t, priceData.OtherRatios, info.PriceData.OtherRatios)
+			require.Equal(t, priceData.OtherRatios(), info.PriceData.OtherRatios())
 		})
 	}
 
@@ -196,7 +196,7 @@ func TestModelPriceHelperRequestBillingRatiosOnlyApplyToFixedPrice(t *testing.T)
 	require.Nil(t, info.Billing)
 }
 
-func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
+func TestModelPriceHelperTieredPreConsumeUsesInputEstimate(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	saved := map[string]string{}
@@ -223,24 +223,20 @@ func TestModelPriceHelperTieredPreConsumeMaxTokensFallback(t *testing.T) {
 		expected  int
 	}{
 		{
-			// max_tokens omitted in a paid group -> fall back to 8192 completion tokens.
-			// p*3 + c*15 = 1000*3 + 8192*15 = 125880 -> /1e6 * 500000 = 62940
-			name:      "non-free group falls back to 8192 completion tokens",
+			// Reservation estimates input cost; output usage is settled after the response.
+			name:      "omitted max tokens",
 			group:     "default",
 			maxTokens: 0,
-			expected:  62940,
+			expected:  1500,
 		},
 		{
-			// explicit max_tokens is used verbatim, no fallback.
-			// 1000*3 + 100*15 = 4500 -> /1e6 * 500000 = 2250
-			name:      "explicit max_tokens is used verbatim",
+			name:      "explicit max tokens do not change input reservation",
 			group:     "default",
 			maxTokens: 100,
-			expected:  2250,
+			expected:  1500,
 		},
 		{
-			// free group (ratio 0) stays zero; fallback is gated on non-zero group ratio.
-			name:      "free group stays zero without fallback",
+			name:      "free group stays zero",
 			group:     "free",
 			maxTokens: 0,
 			expected:  0,

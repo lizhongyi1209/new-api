@@ -22,6 +22,16 @@ type QueryParams struct {
 	Model string
 	Group string
 	Hours int
+	// AllowedGroups restricts both the per-group results and the model summary;
+	// nil allows every group.
+	AllowedGroups []string
+}
+
+// Summary is the request-weighted aggregate over every bucket in the window.
+type Summary struct {
+	AvgLatencyMs int64   `json:"avg_latency_ms"`
+	SuccessRate  float64 `json:"success_rate"`
+	AvgTps       float64 `json:"avg_tps"`
 }
 
 type BucketPoint struct {
@@ -44,7 +54,16 @@ type GroupResult struct {
 type QueryResult struct {
 	ModelName    string        `json:"model_name"`
 	SeriesSchema string        `json:"series_schema"`
+	Summary      *Summary      `json:"summary"`
+	Series       []BucketPoint `json:"series"`
+	WindowStart  int64         `json:"window_start"`
+	WindowEnd    int64         `json:"window_end"`
 	Groups       []GroupResult `json:"groups"`
+}
+
+type SuccessRatePoint struct {
+	Ts          int64   `json:"ts"`
+	SuccessRate float64 `json:"success_rate"`
 }
 
 type ModelSummary struct {
@@ -52,22 +71,15 @@ type ModelSummary struct {
 	AvgLatencyMs        int64              `json:"avg_latency_ms"`
 	SuccessRate         float64            `json:"success_rate"`
 	AvgTps              float64            `json:"avg_tps"`
-	RecentSuccessRates  []float64          `json:"recent_success_rates,omitempty"`
-	RecentSuccessSeries []SuccessRatePoint `json:"recent_success_series"`
+	RecentSuccessSeries []SuccessRatePoint `json:"recent_success_series,omitempty"`
 	RequestCount        int64              `json:"-"`
 }
 
-// SuccessRatePoint is an hourly request sample. A nil rate means no traffic,
-// rather than a failed request or a healthy model.
-type SuccessRatePoint struct {
-	Ts          int64    `json:"ts"`
-	SuccessRate *float64 `json:"success_rate"`
-}
-
 type SummaryAllResult struct {
-	Models              []ModelSummary `json:"models"`
-	HourlyWindowStartTs int64          `json:"hourly_window_start_ts"`
-	HourlyWindowEndTs   int64          `json:"hourly_window_end_ts"`
+	Summary     *Summary       `json:"summary"`
+	WindowStart int64          `json:"window_start"`
+	WindowEnd   int64          `json:"window_end"`
+	Models      []ModelSummary `json:"models"`
 }
 
 type bucketKey struct {

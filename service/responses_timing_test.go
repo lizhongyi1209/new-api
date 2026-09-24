@@ -37,10 +37,11 @@ func TestGenerateTextOtherInfoIncludesResponsesTimingInAdminInfo(t *testing.T) {
 	}
 
 	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, -1)
-	adminInfo, ok := other["admin_info"].(map[string]interface{})
+	otherFields := other.Snapshot()
+	adminInfo, ok := otherFields["admin_info"].(map[string]interface{})
 	require.True(t, ok)
 	assert.Same(t, timing, adminInfo["responses_timing"])
-	assert.Equal(t, "/v1/responses", other["request_path"])
+	assert.Equal(t, "/v1/responses", otherFields["request_path"])
 
 	encoded, err := newapicommon.Marshal(other)
 	require.NoError(t, err)

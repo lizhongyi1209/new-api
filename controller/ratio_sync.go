@@ -19,8 +19,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/samber/lo"
@@ -52,7 +52,7 @@ func nearlyEqual(a, b float64) bool {
 	return b-a < floatEpsilon
 }
 
-func valuesEqual(a, b interface{}) bool {
+func valuesEqual(a, b any) bool {
 	af, aok := a.(float64)
 	bf, bok := b.(float64)
 	if aok && bok {
@@ -355,7 +355,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 			// 简单重试：最多 3 次，指数退避
 			var resp *http.Response
 			var lastErr error
-			for attempt := 0; attempt < 3; attempt++ {
+			for attempt := range 3 {
 				resp, lastErr = client.Do(httpReq)
 				if lastErr == nil {
 					break
@@ -725,7 +725,7 @@ func buildDifferences(localData map[string]any, successfulChannels []struct {
 				localValue = normalizeSyncValue(ratioType, val)
 			}
 
-			upstreamValues := make(map[string]interface{})
+			upstreamValues := make(map[string]any)
 			confidenceValues := make(map[string]bool)
 			hasUpstreamValue := false
 			hasDifference := false

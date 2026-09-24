@@ -31,7 +31,8 @@ func TestSetupContextForSelectedChannelUsesRequestBillingGroup(t *testing.T) {
 				Group: "image-special,gpt-image-special",
 			}
 
-			apiErr := SetupContextForSelectedChannel(c, channel, "gpt-image-test", test.selectedGroup)
+			common.SetContextKey(c, constant.ContextKeyUsingGroup, test.selectedGroup)
+			apiErr := SetupContextForSelectedChannel(c, channel, "gpt-image-test")
 
 			require.Nil(t, apiErr)
 			assert.Equal(t, test.selectedGroup, common.GetContextKeyString(c, constant.ContextKeyUsingGroup))

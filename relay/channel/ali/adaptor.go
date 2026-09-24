@@ -5,18 +5,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
-	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
@@ -26,16 +28,13 @@ type Adaptor struct {
 	IsSyncImageModel bool
 }
 
+func isSyncImageModel(modelName string) bool {
+	return model_setting.IsSyncImageModel(modelName)
+}
+
 const aliAnthropicMessagesModelsEnv = "ALI_ANTHROPIC_MESSAGES_MODELS"
 const defaultAliAnthropicMessagesModels = "qwen,deepseek-v4,kimi,glm,minimax-m"
 
-/*
-	var syncModels = []string{
-		"z-image",
-		"qwen-image",
-		"wan2.6",
-	}
-*/
 func supportsAliAnthropicMessages(modelName string) bool {
 	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
 	if normalizedModelName == "" {
@@ -55,16 +54,6 @@ func aliAnthropicMessagesModelPatterns() []string {
 	})
 }
 
-var syncModels = []string{
-	"z-image",
-	"qwen-image",
-	"wan2.6",
-}
-
-func isSyncImageModel(modelName string) bool {
-	return model_setting.IsSyncImageModel(modelName)
-}
-
 func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
 	//TODO implement me
 	return nil, errors.New("not implemented")
@@ -75,9 +64,13 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 		return req, nil
 	}
 
-	oaiReq, err := service.ClaudeToOpenAIRequest(*req, info)
+	result, err := service.ConvertRequest(c, info, types.RelayFormatOpenAI, req)
 	if err != nil {
 		return nil, err
+	}
+	oaiReq, ok := result.Value.(*dto.GeneralOpenAIRequest)
+	if !ok {
+		return nil, fmt.Errorf("expected OpenAI chat completions request, got %T", result.Value)
 	}
 	if info.SupportStreamOptions && info.IsStream {
 		oaiReq.StreamOptions = &dto.StreamOptions{IncludeUsage: true}
@@ -177,7 +170,26 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 	}
 }
 
+// ConvertImageRequest is not implemented: Ali image generation and editing
+// are served by the alibaba task plugin through the openai_image host
+// protocol, which claims every declared image model on /v1/images/*. A model
+// reaching this adaptor is not declared by the plugin (or is named
+// differently from the Bailian model list), so the request cannot be served.
+// The rejection is a 400 that skips channel retries: every channel of this
+// type refuses the same name, and a retryable 500 would only hide the
+// misconfiguration behind unrelated channels.
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
+	modelName := info.UpstreamModelName
+	if modelName == "" {
+		modelName = request.Model
+	}
+	if plugin, registered := jsplugin.DefaultRegistry.Get("alibaba"); registered &&
+		strings.HasPrefix(modelName, "wanx-") &&
+		!slices.Contains(plugin.Meta.Models, modelName) {
+		return nil, types.NewErrorWithStatusCode(
+			fmt.Errorf("model %q is not served by the alibaba task plugin", modelName),
+			types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+	}
 	if info.RelayMode == constant.RelayModeImagesGenerations {
 		if isSyncImageModel(info.UpstreamModelName) {
 			a.IsSyncImageModel = true
@@ -250,10 +262,6 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		return adaptor.DoResponse(c, resp, info)
 	default:
 		switch info.RelayMode {
-		case constant.RelayModeImagesGenerations:
-			err, usage = aliImageHandler(a, c, resp, info)
-		case constant.RelayModeImagesEdits:
-			err, usage = aliImageHandler(a, c, resp, info)
 		case constant.RelayModeRerank:
 			err, usage = RerankHandler(c, resp, info)
 		default:

@@ -11,12 +11,14 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
 
@@ -145,29 +147,49 @@ func SanitizeTaskAuditResponse(body []byte) json.RawMessage {
 
 // LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
 // 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
-func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID string) int {
+func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID string, tasks ...*model.Task) int {
 	tokenName := c.GetString("token_name")
 	logContent := fmt.Sprintf("操作 %s", info.Action)
+	var task *model.Task
+	if len(tasks) > 0 {
+		task = tasks[0]
+	}
 	// 支持任务仅按次计费
 	perCallBilling := common.StringsContains(constant.TaskPricePatches, info.OriginModelName) || info.PriceData.UsePrice
 	if perCallBilling {
 		logContent = fmt.Sprintf("%s，按次计费", logContent)
 	} else {
-		if len(info.PriceData.OtherRatios) > 0 {
-			keys := make([]string, 0, len(info.PriceData.OtherRatios))
-			for key := range info.PriceData.OtherRatios {
+		if len(info.PriceData.OtherRatios()) > 0 {
+			keys := make([]string, 0, len(info.PriceData.OtherRatios()))
+			for key := range info.PriceData.OtherRatios() {
 				keys = append(keys, key)
 			}
 			sort.Strings(keys)
 			contents := make([]string, 0, len(keys))
 			for _, key := range keys {
-				contents = append(contents, key+": "+strconv.FormatFloat(info.PriceData.OtherRatios[key], 'g', -1, 64))
+				contents = append(contents, fmt.Sprintf("%s: %.2f", key, info.PriceData.OtherRatios()[key]))
 			}
 			logContent = fmt.Sprintf("%s, 计算参数：%s", logContent, strings.Join(contents, ", "))
 		}
+		if snapshot := info.TieredBillingSnapshot; snapshot != nil && len(snapshot.UsageFacts) > 0 {
+			keys := make([]string, 0, len(snapshot.UsageFacts))
+			for key := range snapshot.UsageFacts {
+				keys = append(keys, key)
+			}
+			sort.Strings(keys)
+			facts := make([]string, 0, len(keys))
+			for _, key := range keys {
+				facts = append(facts, fmt.Sprintf("%s: %v", key, snapshot.UsageFacts[key]))
+			}
+			if strings.Contains(logContent, "计算参数：") {
+				logContent += ", " + strings.Join(facts, ", ")
+			} else {
+				logContent += ", 计算参数：" + strings.Join(facts, ", ")
+			}
+		}
 	}
 	requestSnapshot := BuildTaskRequestSnapshot(c, info)
-	otherRatios := make(map[string]float64, len(info.PriceData.OtherRatios))
+	otherRatios := make(map[string]float64, len(info.PriceData.OtherRatios()))
 	priceLabel := "model_price"
 	priceValue := info.PriceData.ModelPrice
 	if !perCallBilling && priceValue == 0 {
@@ -178,8 +200,8 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 		priceLabel + "(" + strconv.FormatFloat(priceValue, 'g', -1, 64) + ")",
 		"group_ratio(" + strconv.FormatFloat(info.PriceData.GroupRatioInfo.GroupRatio, 'g', -1, 64) + ")",
 	}
-	ratioKeys := make([]string, 0, len(info.PriceData.OtherRatios))
-	for key, ratio := range info.PriceData.OtherRatios {
+	ratioKeys := make([]string, 0, len(info.PriceData.OtherRatios()))
+	for key, ratio := range info.PriceData.OtherRatios() {
 		otherRatios[key] = ratio
 		ratioKeys = append(ratioKeys, key)
 	}
@@ -210,6 +232,17 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 			"per_call_billing": perCallBilling,
 		},
 	}
+	if task != nil {
+		other["task_status"] = string(task.Status)
+		if taskDeliveredInline(c, task) {
+			other["task_sync"] = true
+		}
+		if task.PrivateData.ResultDiscarded {
+			other["result_discarded"] = true
+		}
+	} else if taskDeliveredInline(c, nil) {
+		other["task_sync"] = true
+	}
 	if info.PriceData.ModelRatio > 0 {
 		other["model_ratio"] = info.PriceData.ModelRatio
 	}
@@ -223,7 +256,8 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
 	if info.TieredBillingSnapshot != nil {
-		InjectTieredBillingInfo(other, info, nil)
+		other["billing_mode"] = "tiered_expr"
+		other["expr_b64"] = base64.StdEncoding.EncodeToString([]byte(info.TieredBillingSnapshot.ExprString))
 		other["matched_tier"] = info.TieredBillingSnapshot.EstimatedTier
 		if len(info.TieredBillingSnapshot.UsageFacts) > 0 {
 			other["usage_facts"] = info.TieredBillingSnapshot.UsageFacts
@@ -267,6 +301,15 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 	}
 	attachQuotaSaturation(c, info, other)
 	AppendTaskPluginAuditFields(c, other)
+	logOther := model.NewLogOther()
+	logOther.MergePublic(other)
+	if admin, ok := other["admin_info"].(map[string]interface{}); ok {
+		logOther.MergeAdmin(admin)
+	}
+	if root, ok := other["root_info"].(map[string]interface{}); ok {
+		logOther.MergeRoot(root)
+	}
+	appendTaskLogInfo(task, logOther)
 	submitLogID := model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -275,7 +318,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 		Content:   logContent,
 		TokenId:   info.TokenId,
 		Group:     info.UsingGroup,
-		Other:     other,
+		Other:     logOther,
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
 	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
@@ -403,33 +446,114 @@ func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
 }
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
-func taskBillingOther(task *model.Task) map[string]interface{} {
-	other := make(map[string]interface{})
+func taskBillingOther(task *model.Task) *model.LogOther {
+	other := model.NewLogOther()
 	if len(task.PrivateData.UsedChannels) > 0 {
-		other["admin_info"] = imageTaskAdminInfo(task)
+		other.MergeAdmin(imageTaskAdminInfo(task))
 	}
 	if bc := task.PrivateData.BillingContext; bc != nil {
-		other["model_price"] = bc.ModelPrice
-		if bc.ModelRatio > 0 {
-			other["model_ratio"] = bc.ModelRatio
+		if len(bc.TieredSnapshot) > 0 {
+			var snapshot billingexpr.BillingSnapshot
+			if err := common.Unmarshal(bc.TieredSnapshot, &snapshot); err == nil {
+				InjectTieredBillingInfo(other, &relaycommon.RelayInfo{TieredBillingSnapshot: &snapshot}, nil)
+				if snapshot.EstimatedTier != "" {
+					other.SetPublic("matched_tier", snapshot.EstimatedTier)
+				}
+				if len(snapshot.UsageFacts) > 0 {
+					other.SetPublic("usage_facts", snapshot.UsageFacts)
+				}
+			}
 		}
-		other["group_ratio"] = bc.GroupRatio
-		if len(bc.OtherRatios) > 0 {
-			for k, v := range bc.OtherRatios {
-				other[k] = v
+		other.SetPublic("model_price", bc.ModelPrice)
+		if bc.ModelRatio > 0 {
+			other.SetPublic("model_ratio", bc.ModelRatio)
+		}
+		other.SetPublic("group_ratio", bc.GroupRatio)
+		if priceData := taskBillingContextPriceData(bc); priceData != nil {
+			for k, v := range priceData.OtherRatios() {
+				if !other.SetPublic(k, v) {
+					common.SysError("task billing other ratio key rejected: " + k)
+				}
 			}
 		}
 		if bc.VideoBilling != nil {
-			other["billing_mode"] = bc.VideoBilling.BillingMode
-			other["video_billing"] = bc.VideoBilling
+			other.SetPublic("billing_mode", bc.VideoBilling.BillingMode)
+			other.SetPublic("video_billing", bc.VideoBilling)
 		}
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {
-		other["is_model_mapped"] = true
-		other["upstream_model_name"] = props.UpstreamModelName
+		other.SetPublic("is_model_mapped", true)
+		other.SetPublic("upstream_model_name", props.UpstreamModelName)
 	}
+	appendTaskLogInfo(task, other)
 	return other
+}
+
+// setTaskImageCount publishes the billed image quantity of an image task as
+// other.image_count, the same field the HTTP image relay writes, so the log
+// detail shows one "billable image count" regardless of the serving path. The
+// value is a host-validated count fact (at most dto.MaxImageN), never a quota.
+func setTaskImageCount(other *model.LogOther, value any) {
+	count, ok := value.(float64)
+	if !ok || count < 0 || count > float64(dto.MaxImageN) {
+		return
+	}
+	other.SetPublic("image_count", common.QuotaRound(count))
+}
+
+// taskDeliveredInline reports whether the submitting HTTP request itself
+// returns the task deliverable: the upstream completed immediately, or the
+// request came through the synchronous OpenAI Images protocol, where the host
+// waits for an asynchronous upstream task before answering. The usage log
+// presents such requests as synchronous instead of as asynchronous jobs.
+func taskDeliveredInline(c *gin.Context, task *model.Task) bool {
+	if task != nil && (task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure) {
+		return true
+	}
+	pinnedValue, exists := c.Get(jsplugin.ContextKeyPinnedEndpoint)
+	if !exists {
+		return false
+	}
+	pinned, ok := pinnedValue.(jsplugin.PinnedEndpoint)
+	return ok && pinned.Protocol == jsplugin.ProtocolOpenAIImage
+}
+
+func appendTaskLogInfo(task *model.Task, other *model.LogOther) {
+	if task == nil || other == nil {
+		return
+	}
+	if task.TaskID != "" {
+		other.SetPublic("task_id", task.TaskID)
+	}
+	if task.PrivateData.ResultDiscarded {
+		// The result was delivered inline and the upstream snapshot was not
+		// persisted, so no artifact can be retrieved for this task.
+		other.SetPublic("result_discarded", true)
+	}
+	if task.PrivateData.Execution != nil {
+		AppendTaskPluginAuditInfo(other, task.PrivateData.Execution.TaskPlugin)
+	}
+	if task.PrivateData.UpstreamTaskID == "" && task.PrivateData.NodeName == "" {
+		return
+	}
+	if task.PrivateData.UpstreamTaskID != "" {
+		other.SetRoot("upstream_task_id", task.PrivateData.UpstreamTaskID)
+	}
+	if task.PrivateData.NodeName != "" {
+		other.SetRoot("node_name", task.PrivateData.NodeName)
+	}
+}
+
+func taskBillingContextPriceData(bc *model.TaskBillingContext) *types.PriceData {
+	if bc == nil || len(bc.OtherRatios) == 0 {
+		return nil
+	}
+	priceData := &types.PriceData{}
+	if !priceData.ReplaceOtherRatios(bc.OtherRatios) {
+		return nil
+	}
+	return priceData
 }
 
 // taskModelName 从 BillingContext 或 Properties 中获取模型名称。
@@ -464,8 +588,8 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool 
 
 	// 4. 记录日志
 	other := taskBillingOther(task)
-	other["task_id"] = task.TaskID
-	other["reason"] = reason
+	other.SetPublic("task_id", task.TaskID)
+	other.SetPublic("reason", reason)
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 		UserId:    task.UserId,
 		LogType:   model.LogTypeRefund,
@@ -531,7 +655,7 @@ func RefundZeroUsageTaskQuota(ctx context.Context, task *model.Task, promptToken
 // reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。
 // clamps 可选：若计算 actualQuota 时发生额度饱和，将其记入日志 admin_info（仅管理员可见）。
 func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason string, clamps ...*common.QuotaClamp) {
-	if actualQuota <= 0 {
+	if actualQuota < 0 {
 		return
 	}
 	recalculateTaskQuota(ctx, task, actualQuota, reason, "", clamps...)
@@ -640,9 +764,9 @@ func recalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 // RecalculateTaskQuotaByTokens 根据实际 token 消耗重新计费（异步差额结算）。
 // 当任务成功且返回了 totalTokens 时，根据模型倍率和分组倍率重新计算实际扣费额度，
 // 与预扣费的差额进行补扣或退还。支持钱包和订阅计费来源。
-func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) {
+func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) bool {
 	if totalTokens <= 0 {
-		return
+		return false
 	}
 
 	modelName := taskModelName(task)
@@ -651,7 +775,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	modelRatio, hasRatioSetting, _ := ratio_setting.GetModelRatio(modelName)
 	// 只有配置了倍率(非固定价格)时才按 token 重新计费
 	if !hasRatioSetting || modelRatio <= 0 {
-		return
+		return false
 	}
 
 	// 任务提交时已经根据「用户所在分组 × 实际使用分组」解析出最终倍率。
@@ -671,19 +795,15 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 			}
 		}
 		if group == "" {
-			return
+			return false
 		}
 		finalGroupRatio = ratio_setting.GetGroupRatio(group)
 	}
 
 	// 计算 OtherRatios 乘积（视频折扣、时长等）
 	otherMultiplier := 1.0
-	if bc := task.PrivateData.BillingContext; bc != nil {
-		for _, r := range bc.OtherRatios {
-			if r != 1.0 && r > 0 {
-				otherMultiplier *= r
-			}
-		}
+	if priceData := taskBillingContextPriceData(task.PrivateData.BillingContext); priceData != nil {
+		otherMultiplier = priceData.OtherRatioMultiplier()
 	}
 
 	// 计算实际应扣费额度: totalTokens * modelRatio * groupRatio * otherMultiplier（饱和转换，防止溢出成负数）
@@ -691,6 +811,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 
 	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f", totalTokens, modelRatio, finalGroupRatio, otherMultiplier)
 	RecalculateTaskQuota(ctx, task, actualQuota, reason, clamp)
+	return true
 }
 
 // SettleAsyncImageTaskBilling 异步生图任务完成后的统一差额结算入口。
@@ -808,8 +929,8 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 		fmt.Sprintf("tiered_expr重算 [%s档]：%s → %.3f计费单位 (%d额度)",
 			tr.MatchedTier, breakdown, finalAmount, tr.ActualQuotaAfterGroup), tr.MatchedTier, tr.Clamp)
 	if task.Quota == tr.ActualQuotaAfterGroup && task.PrivateData.SubmitLogID > 0 {
-		other := map[string]interface{}{}
+		other := model.NewLogOther()
 		InjectTieredBillingInfo(other, &relaycommon.RelayInfo{TieredBillingSnapshot: &snap}, &tr)
-		model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, tr.ActualQuotaAfterGroup, other)
+		model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, tr.ActualQuotaAfterGroup, other.Snapshot())
 	}
 }

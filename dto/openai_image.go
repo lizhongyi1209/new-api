@@ -9,7 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/types"
 
-	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 // MaxImageN caps the image generation count. Without this bound a huge or
@@ -207,7 +207,7 @@ func (i *ImageRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	}
 }
 
-func (i *ImageRequest) IsStream(c *gin.Context) bool {
+func (i *ImageRequest) IsStream(c *http.Request) bool {
 	return i.Stream != nil && *i.Stream
 }
 

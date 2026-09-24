@@ -45,11 +45,6 @@ const (
 	//     src/components/table/task-logs/TaskLogsColumnDefs.jsx
 )
 
-var SunoModel2Action = map[string]string{
-	"suno_music":  SunoActionMusic,
-	"suno_lyrics": SunoActionLyrics,
-}
-
 // NormalizeTaskAction gives plugin hooks canonical action names while keeping
 // persisted legacy task actions and their existing relay contracts intact.
 func NormalizeTaskAction(action string) string {

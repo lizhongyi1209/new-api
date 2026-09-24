@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -37,7 +38,7 @@ type passthroughImageAdaptor struct{}
 
 func (passthroughImageAdaptor) Init(*relaycommon.RelayInfo) {}
 
-func (passthroughImageAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
+func (passthroughImageAdaptor) ConvertImageRequest(_ *gin.Context, _ *relaycommon.RelayInfo, request kitdto.ImageRequest) (any, error) {
 	return request, nil
 }
 
@@ -1003,7 +1004,7 @@ func TestBuildGenerateImageRelayInfoPreservesChannelImageOutputStrategy(t *testi
 		Group:   "test",
 		Status:  common.ChannelStatusEnabled,
 	}
-	channel.SetOtherSettings(dto.ChannelOtherSettings{ImageOutputStrategy: dto.ImageOutputStrategyOSS})
+	channel.SetOtherSettings(kitdto.ChannelOtherSettings{ImageOutputStrategy: kitdto.ImageOutputStrategyOSS})
 	require.NoError(t, model.DB.Create(channel).Error)
 	t.Cleanup(func() {
 		require.NoError(t, model.DB.Delete(&model.Channel{}, channel.Id).Error)

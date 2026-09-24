@@ -15,9 +15,9 @@ type OllamaChatMessage struct {
 }
 
 type OllamaToolFunction struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description,omitempty"`
-	Parameters  interface{} `json:"parameters,omitempty"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Parameters  any    `json:"parameters,omitempty"`
 }
 
 type OllamaTool struct {
@@ -28,8 +28,8 @@ type OllamaTool struct {
 type OllamaToolCall struct {
 	ID       string `json:"id,omitempty"`
 	Function struct {
-		Name      string      `json:"name"`
-		Arguments interface{} `json:"arguments"`
+		Name      string `json:"name"`
+		Arguments any    `json:"arguments"`
 	} `json:"function"`
 }
 
@@ -40,7 +40,7 @@ type OllamaChatRequest struct {
 	Format    interface{}         `json:"format,omitempty"`
 	Stream    bool                `json:"stream"`
 	Options   map[string]any      `json:"options,omitempty"`
-	KeepAlive interface{}         `json:"keep_alive,omitempty"`
+	KeepAlive any                 `json:"keep_alive,omitempty"`
 	Think     json.RawMessage     `json:"think,omitempty"`
 }
 
@@ -52,13 +52,13 @@ type OllamaGenerateRequest struct {
 	Format    interface{}     `json:"format,omitempty"`
 	Stream    bool            `json:"stream"`
 	Options   map[string]any  `json:"options,omitempty"`
-	KeepAlive interface{}     `json:"keep_alive,omitempty"`
+	KeepAlive any             `json:"keep_alive,omitempty"`
 	Think     json.RawMessage `json:"think,omitempty"`
 }
 
 type OllamaEmbeddingRequest struct {
 	Model      string         `json:"model"`
-	Input      interface{}    `json:"input"`
+	Input      any            `json:"input"`
 	Options    map[string]any `json:"options,omitempty"`
 	Dimensions int            `json:"dimensions,omitempty"`
 }
@@ -79,7 +79,7 @@ type OllamaModel struct {
 	Size       int64             `json:"size"`
 	Digest     string            `json:"digest,omitempty"`
 	ModifiedAt string            `json:"modified_at"`
-	Details    OllamaModelDetail `json:"details,omitempty"`
+	Details    OllamaModelDetail `json:"details"`
 }
 
 type OllamaModelDetail struct {

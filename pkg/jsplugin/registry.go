@@ -97,6 +97,7 @@ type Meta struct {
 	Author               AuthorMeta                  `json:"author"`
 	BaseURL              string                      `json:"baseUrl,omitempty"`
 	ChannelTypes         []int                       `json:"channelTypes,omitempty"`
+	Upstreams            []string                    `json:"upstreams,omitempty"`
 	Models               []string                    `json:"models"`
 	FetchMode            string                      `json:"fetchMode"`
 	AllowedHosts         []string                    `json:"allowedHosts"`
@@ -106,6 +107,13 @@ type Meta struct {
 	UsageExamples        []UsageExample              `json:"usageExamples,omitempty"`
 	UsageProfiles        []UsageProfile              `json:"usageProfiles,omitempty"`
 	Auth                 AuthMeta                    `json:"auth"`
+}
+
+func (m Meta) SupportsUpstream(kind string) bool {
+	if len(m.Upstreams) == 0 {
+		return kind == "vendor"
+	}
+	return slices.Contains(m.Upstreams, kind)
 }
 
 // UsageProfile replaces the plugin's default usage metadata for its models.
@@ -119,11 +127,19 @@ type UsageProfile struct {
 // must be resolved by the host first; an unknown or ambiguous model uses the
 // plugin defaults. Profile examples never inherit the default examples.
 func (m Meta) UsageForModel(model string) (map[string]UsageFieldSchema, []UsageExample) {
-	folded := asciiFold(model)
-	for _, profile := range m.UsageProfiles {
-		for _, declared := range profile.Models {
-			if asciiFold(declared) == folded {
-				return profile.Schema, profile.Examples
+	return m.UsageForModels(model)
+}
+
+// UsageForModels selects the first profiled candidate, then the plugin default.
+// The upstream model is passed first to keep its declared usage profile.
+func (m Meta) UsageForModels(models ...string) (map[string]UsageFieldSchema, []UsageExample) {
+	for _, model := range models {
+		folded := asciiFold(model)
+		for _, profile := range m.UsageProfiles {
+			for _, declared := range profile.Models {
+				if asciiFold(declared) == folded {
+					return profile.Schema, profile.Examples
+				}
 			}
 		}
 	}
@@ -832,6 +848,7 @@ func cloneMeta(meta Meta) Meta {
 	meta.SubmitResponseTypes = slices.Clone(meta.SubmitResponseTypes)
 	meta.RequiredCapabilities = slices.Clone(meta.RequiredCapabilities)
 	meta.ChannelTypes = append([]int(nil), meta.ChannelTypes...)
+	meta.Upstreams = append([]string(nil), meta.Upstreams...)
 	meta.Models = append([]string(nil), meta.Models...)
 	meta.AllowedHosts = append([]string(nil), meta.AllowedHosts...)
 	meta.Routes = append([]Route(nil), meta.Routes...)
@@ -975,7 +992,7 @@ func decodeMeta(value any) (Meta, error) {
 	}
 	for field := range object {
 		switch field {
-		case "requiredCapabilities", "submitResponseTypes", "sortPriority", "website", "apiVersion", "key", "name", "icon", "description", "version", "author", "baseUrl", "channelTypes", "channelType", "compatibleChannelTypes", "models", "fetchMode", "allowedHosts", "routes", "protocols", "usageSchema", "usageExamples", "usageProfiles", "auth", "endpoints", "submitPaths", "actions":
+		case "requiredCapabilities", "submitResponseTypes", "sortPriority", "website", "apiVersion", "key", "name", "icon", "description", "version", "author", "baseUrl", "channelTypes", "upstreams", "channelType", "compatibleChannelTypes", "models", "fetchMode", "allowedHosts", "routes", "protocols", "usageSchema", "usageExamples", "usageProfiles", "auth", "endpoints", "submitPaths", "actions":
 		default:
 			return Meta{}, &UnknownMetaFieldError{Field: field}
 		}
@@ -1036,6 +1053,10 @@ func decodeMeta(value any) (Meta, error) {
 		return Meta{}, fmt.Errorf("plugin meta compatibleChannelTypes is no longer supported; declare channelTypes instead")
 	}
 	meta.ChannelTypes, err = integerSliceMetaField(object, "channelTypes")
+	if err != nil {
+		return Meta{}, err
+	}
+	meta.Upstreams, err = strictStringSlice(object, "upstreams")
 	if err != nil {
 		return Meta{}, err
 	}
@@ -1256,10 +1277,23 @@ func normalizeV1Meta(meta *Meta) error {
 		if channelType == constant.ChannelTypeTaskPlugin {
 			return fmt.Errorf("plugin meta channelTypes must not contain the task plugin channel type")
 		}
+		if channelType == constant.ChannelTypeNewAPI {
+			return fmt.Errorf("plugin meta channelTypes must not contain the New API channel type")
+		}
 		if _, duplicate := seenChannelTypes[channelType]; duplicate {
 			return fmt.Errorf("plugin meta channelTypes must be unique")
 		}
 		seenChannelTypes[channelType] = struct{}{}
+	}
+	seenUpstreams := make(map[string]struct{}, len(meta.Upstreams))
+	for _, upstream := range meta.Upstreams {
+		if upstream != "vendor" && upstream != "new_api" {
+			return fmt.Errorf("plugin meta upstreams must contain vendor or new_api")
+		}
+		if _, duplicate := seenUpstreams[upstream]; duplicate {
+			return fmt.Errorf("plugin meta upstreams must be unique")
+		}
+		seenUpstreams[upstream] = struct{}{}
 	}
 	models := make(map[string]struct{}, len(meta.Models))
 	seenFold := make(map[string]struct{}, len(meta.Models))
@@ -1724,7 +1758,7 @@ func decodeRoutes(value any) ([]Route, error) {
 		}
 		for key := range object {
 			switch key {
-			case "method", "path", "type", "action", "decode", "render", "taskIdParam", "models":
+			case "method", "path", "type", "action", "decode", "render", "taskIdParam", "models", "retainResult":
 			default:
 				return nil, fmt.Errorf("plugin meta route %d has unknown field %q", index, key)
 			}
@@ -1753,6 +1787,13 @@ func decodeRoutes(value any) ([]Route, error) {
 		}
 		if route.TaskIDParam, err = stringMetaField(object, "taskIdParam"); err != nil {
 			return nil, err
+		}
+		if value, exists := object["retainResult"]; exists {
+			retainResult, ok := value.(bool)
+			if !ok {
+				return nil, fmt.Errorf("plugin meta route %d retainResult must be a boolean", index)
+			}
+			route.RetainResult = &retainResult
 		}
 		if _, exists := object["models"]; exists {
 			if route.Models, err = strictStringSlice(object, "models"); err != nil {

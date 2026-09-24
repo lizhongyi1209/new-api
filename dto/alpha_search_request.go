@@ -5,7 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/types"
 
-	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 // AlphaSearchRequest is the Codex standalone web search request.
@@ -28,7 +28,7 @@ func (r *AlphaSearchRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	}
 }
 
-func (r *AlphaSearchRequest) IsStream(c *gin.Context) bool {
+func (r *AlphaSearchRequest) IsStream(c *http.Request) bool {
 	return false
 }
 

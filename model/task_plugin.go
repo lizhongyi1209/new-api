@@ -16,17 +16,18 @@ import (
 type TaskPluginChannelRef struct {
 	Id   int    `json:"id"`
 	Name string `json:"name"`
+	Type int    `json:"type"`
 }
 
 func GetTaskPluginUsage(key string) ([]TaskPluginChannelRef, int64, error) {
 	var channels []Channel
-	if err := DB.Where("type = ? AND status = ?", constant.ChannelTypeTaskPlugin, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
+	if err := DB.Where("type IN ? AND status = ?", []int{constant.ChannelTypeTaskPlugin, constant.ChannelTypeNewAPI}, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
 		return nil, 0, err
 	}
 	refs := make([]TaskPluginChannelRef, 0)
 	for _, channel := range channels {
-		if channel.GetSetting().TaskPluginKey == key {
-			refs = append(refs, TaskPluginChannelRef{Id: channel.Id, Name: channel.Name})
+		if channel.GetSetting().BindsTaskPlugin(key) {
+			refs = append(refs, TaskPluginChannelRef{Id: channel.Id, Name: channel.Name, Type: channel.Type})
 		}
 	}
 	var inFlight int64
@@ -39,7 +40,7 @@ type TaskPlugin struct {
 	Key        string `json:"key" gorm:"size:128;not null;uniqueIndex:uk_task_plugin_key_version,priority:1"`
 	APIVersion int    `json:"api_version" gorm:"not null"`
 	Version    string `json:"version" gorm:"size:64;not null;uniqueIndex:uk_task_plugin_key_version,priority:2"`
-	Source     string `json:"source" gorm:"type:text;not null"`
+	Source     string `json:"source" gorm:"size:8388608;not null"`
 	SourceHash string `json:"source_hash" gorm:"size:64;not null"`
 	// Icon is the plugin logo shipped as a sidecar icon.svg / icon.png next to
 	// plugin.js, stored as a data URI so one column carries both the media

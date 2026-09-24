@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -103,7 +104,7 @@ func AsyncImageSubmit(c *gin.Context) {
 			ModelPrice:      priceData.ModelPrice,
 			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
 			ModelRatio:      priceData.ModelRatio,
-			OtherRatios:     priceData.OtherRatios,
+			OtherRatios:     priceData.OtherRatios(),
 			OriginModelName: req.Model,
 			PerCallBilling:  priceData.UsePrice,
 		}
@@ -254,10 +255,10 @@ func AsyncGeminiSubmit(c *gin.Context) {
 	}
 	serviceTier, _ := req["serviceTier"].(string)
 	body, err := common.Marshal(struct {
-		Model            string                         `json:"model"`
-		N                int                            `json:"n"`
-		GenerationConfig dto.GeminiChatGenerationConfig `json:"generationConfig"`
-		ServiceTier      string                         `json:"serviceTier,omitempty"`
+		Model            string                            `json:"model"`
+		N                int                               `json:"n"`
+		GenerationConfig kitdto.GeminiChatGenerationConfig `json:"generationConfig"`
+		ServiceTier      string                            `json:"serviceTier,omitempty"`
 	}{modelName, count, config, serviceTier})
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
@@ -304,7 +305,7 @@ func AsyncGeminiSubmit(c *gin.Context) {
 			ModelPrice:      priceData.ModelPrice,
 			GroupRatio:      priceData.GroupRatioInfo.GroupRatio,
 			ModelRatio:      priceData.ModelRatio,
-			OtherRatios:     priceData.OtherRatios,
+			OtherRatios:     priceData.OtherRatios(),
 			OriginModelName: modelName,
 			PerCallBilling:  priceData.UsePrice,
 		}
@@ -410,7 +411,7 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 
 	// Populate user settings for billing preference
 	if userSetting, ok := common.GetContextKeyType[dto.UserSetting](c, constant.ContextKeyUserSetting); ok {
-		relayInfo.UserSetting = userSetting
+		relayInfo.UserSetting = kitdto.UserSetting(userSetting)
 	}
 
 	if service.CalculatePriceFunc == nil {

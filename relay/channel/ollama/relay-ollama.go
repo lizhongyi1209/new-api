@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/samber/lo"
@@ -110,12 +110,10 @@ func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*Ollam
 		case []string:
 			chatReq.Options["stop"] = v
 		case []any:
-			arr := make([]string, 0, len(v))
-			for _, i := range v {
-				if s, ok := i.(string); ok {
-					arr = append(arr, s)
-				}
-			}
+			arr := lo.FilterMap(v, func(item any, _ int) (string, bool) {
+				value, ok := item.(string)
+				return value, ok
+			})
 			if len(arr) > 0 {
 				chatReq.Options["stop"] = arr
 			}
@@ -123,11 +121,16 @@ func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*Ollam
 	}
 
 	if len(r.Tools) > 0 {
-		tools := make([]OllamaTool, 0, len(r.Tools))
-		for _, t := range r.Tools {
-			tools = append(tools, OllamaTool{Type: "function", Function: OllamaToolFunction{Name: t.Function.Name, Description: t.Function.Description, Parameters: t.Function.Parameters}})
-		}
-		chatReq.Tools = tools
+		chatReq.Tools = lo.Map(r.Tools, func(tool dto.ToolCallRequest, _ int) OllamaTool {
+			return OllamaTool{
+				Type: "function",
+				Function: OllamaToolFunction{
+					Name:        tool.Function.Name,
+					Description: tool.Function.Description,
+					Parameters:  tool.Function.Parameters,
+				},
+			}
+		})
 	}
 
 	chatReq.Messages = make([]OllamaChatMessage, 0, len(r.Messages))
@@ -178,7 +181,7 @@ func openAIChatToOllamaChat(c *gin.Context, r *dto.GeneralOpenAIRequest) (*Ollam
 			if len(parsed) > 0 {
 				calls := make([]OllamaToolCall, 0, len(parsed))
 				for _, tc := range parsed {
-					var args interface{}
+					var args any
 					if tc.Function.Arguments != "" {
 						_ = common.Unmarshal([]byte(tc.Function.Arguments), &args)
 					}
@@ -264,12 +267,10 @@ func openAIToGenerate(c *gin.Context, r *dto.GeneralOpenAIRequest) (*OllamaGener
 		case []string:
 			gen.Options["stop"] = v
 		case []any:
-			arr := make([]string, 0, len(v))
-			for _, i := range v {
-				if s, ok := i.(string); ok {
-					arr = append(arr, s)
-				}
-			}
+			arr := lo.FilterMap(v, func(item any, _ int) (string, bool) {
+				value, ok := item.(string)
+				return value, ok
+			})
 			if len(arr) > 0 {
 				gen.Options["stop"] = arr
 			}

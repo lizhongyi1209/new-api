@@ -8,7 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/types"
 
-	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 type GeminiChatRequest struct {
@@ -108,13 +108,16 @@ func (r *GeminiChatRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	}
 }
 
-func (r *GeminiChatRequest) IsStream(c *gin.Context) bool {
-	if c.Query("alt") == "sse" {
+func (r *GeminiChatRequest) IsStream(c *http.Request) bool {
+	if c == nil {
+		return false
+	}
+	if c.URL.Query().Get("alt") == "sse" {
 		return true
 	}
 	// Native Gemini API uses URL action to indicate streaming:
 	// /v1beta/models/{model}:streamGenerateContent
-	if strings.Contains(c.Request.URL.Path, "streamGenerateContent") {
+	if strings.Contains(c.URL.Path, "streamGenerateContent") {
 		return true
 	}
 	return false
@@ -514,7 +517,7 @@ type GeminiEmbeddingRequest struct {
 	OutputDimensionality int               `json:"outputDimensionality,omitempty"`
 }
 
-func (r *GeminiEmbeddingRequest) IsStream(c *gin.Context) bool {
+func (r *GeminiEmbeddingRequest) IsStream(c *http.Request) bool {
 	// Gemini embedding requests are not streamed
 	return false
 }
@@ -542,7 +545,7 @@ type GeminiBatchEmbeddingRequest struct {
 	Requests []*GeminiEmbeddingRequest `json:"requests"`
 }
 
-func (r *GeminiBatchEmbeddingRequest) IsStream(c *gin.Context) bool {
+func (r *GeminiBatchEmbeddingRequest) IsStream(c *http.Request) bool {
 	// Gemini batch embedding requests are not streamed
 	return false
 }

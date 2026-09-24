@@ -28,6 +28,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gabriel-vasile/mimetype"
@@ -1300,7 +1301,7 @@ func extractGeminiUsage(geminiResp map[string]interface{}) (promptTokens, comple
 	completionTokens = common.QuotaFromFloat(float64(counts["candidatesTokenCount"]) + float64(counts["thoughtsTokenCount"]))
 	details["total_tokens"] = counts["totalTokenCount"]
 	details["thought_tokens"] = counts["thoughtsTokenCount"]
-	input := dto.InputTokenDetails{CachedTokens: counts["cachedContentTokenCount"]}
+	input := kitdto.InputTokenDetails{CachedTokens: counts["cachedContentTokenCount"]}
 	for _, key := range []string{"promptTokensDetails", "cacheTokensDetails", "candidatesTokensDetails"} {
 		modalities := make(map[string]float64)
 		if entries, ok := usage[key].([]interface{}); ok {
@@ -1327,7 +1328,7 @@ func extractGeminiUsage(geminiResp map[string]interface{}) (promptTokens, comple
 				}
 			case "cacheTokensDetails":
 				if input.CachedTokensDetails == nil {
-					input.CachedTokensDetails = &dto.CachedTokenDetails{}
+					input.CachedTokensDetails = &kitdto.CachedTokenDetails{}
 				}
 				switch modality {
 				case "TEXT":
@@ -1798,9 +1799,24 @@ func extractOpenAIImageUsage(bodyBytes []byte) (promptTokens, completionTokens i
 	if resp.InputTokensDetails != nil {
 		inputDetails = resp.InputTokensDetails.Clone()
 	}
-	// Carry the typed, presence-preserving breakdown to the shared settlement.
-	// JSON serialization of task logs keeps this object usable after reload.
-	details["input_token_details"] = inputDetails
+	// The shared settlement reads relaykit DTOs, so preserve the token details
+	// and the distinction between missing and explicitly zero cache fields.
+	kitInputDetails := kitdto.InputTokenDetails{
+		CachedTokens:         inputDetails.CachedTokens,
+		CachedCreationTokens: inputDetails.CachedCreationTokens,
+		CacheWriteTokens:     inputDetails.CacheWriteTokens,
+		TextTokens:           inputDetails.TextTokens,
+		AudioTokens:          inputDetails.AudioTokens,
+		ImageTokens:          inputDetails.ImageTokens,
+	}
+	if cached := inputDetails.CachedTokensDetails; cached != nil {
+		kitInputDetails.CachedTokensDetails = &kitdto.CachedTokenDetails{
+			TextTokens:  cached.TextTokens,
+			ImageTokens: cached.ImageTokens,
+			AudioTokens: cached.AudioTokens,
+		}
+	}
+	details["input_token_details"] = kitInputDetails
 	if resp.InputTokensDetails != nil && resp.InputTokensDetails.ImageTokens > 0 {
 		details["image_tokens"] = resp.InputTokensDetails.ImageTokens
 	}

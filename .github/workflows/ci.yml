@@ -35,16 +35,21 @@ jobs:
           go-version-file: go.mod
           cache-dependency-path: |
             go.sum
+            relaykit/go.sum
 
       - name: Create frontend embed placeholder
         run: |
-          mkdir -p web/default/dist web/classic/dist
-          touch web/default/dist/index.html web/classic/dist/index.html
+          mkdir -p web/dist
+          touch web/dist/index.html
 
       - name: Vet root module
         run: go vet ./...
 
       - name: Build root module
+        run: go build ./...
+
+      - name: Build relaykit independently
+        working-directory: relaykit
         run: go build ./...
 
       - name: Test root module
@@ -57,7 +62,7 @@ jobs:
     timeout-minutes: 10
     defaults:
       run:
-        working-directory: web/default
+        working-directory: web
 
     steps:
       - name: Checkout
@@ -69,7 +74,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: '1.3.14'
+          bun-version: '1.4.0'
 
       - name: Install dependencies
         run: bun install --frozen-lockfile

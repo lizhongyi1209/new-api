@@ -23,7 +23,7 @@ import (
 
 func TestApplyUpstreamBodyMetadataAddsReplayableBody(t *testing.T) {
 	payload := []byte(`{"model":"test-model","messages":[{"role":"user","content":"hi"}]}`)
-	body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(payload)
+	body, _, _, closer, err := relaycommon.NewOutboundJSONBody(payload)
 	require.NoError(t, err)
 	defer closer.Close()
 
@@ -32,10 +32,7 @@ func TestApplyUpstreamBodyMetadataAddsReplayableBody(t *testing.T) {
 	assert.Nil(t, req.GetBody)
 	assert.Zero(t, req.ContentLength)
 
-	ApplyUpstreamBodyMetadata(req, &relaycommon.RelayInfo{
-		UpstreamRequestBodySize: size,
-		UpstreamRequestGetBody:  getBody,
-	})
+	ApplyUpstreamBodyMetadata(req, body)
 	assert.EqualValues(t, len(payload), req.ContentLength)
 	require.NotNil(t, req.GetBody)
 
@@ -67,12 +64,7 @@ func TestApplyUpstreamBodyMetadataKeepsNativeReplay(t *testing.T) {
 			req, err := http.NewRequest(http.MethodPost, "https://example.com", test.body())
 			require.NoError(t, err)
 			require.NotNil(t, req.GetBody)
-			ApplyUpstreamBodyMetadata(req, &relaycommon.RelayInfo{
-				UpstreamRequestBodySize: 99,
-				UpstreamRequestGetBody: func() (io.ReadCloser, error) {
-					return io.NopCloser(strings.NewReader("override")), nil
-				},
-			})
+			ApplyUpstreamBodyMetadata(req, req.Body)
 			replay, err := req.GetBody()
 			require.NoError(t, err)
 			got, err := io.ReadAll(replay)
@@ -243,14 +235,12 @@ func TestUpstreamBodyHTTP2RetryAfterRefusedStream(t *testing.T) {
 	client, transport := newH2ReplayClient(listener)
 	defer transport.CloseIdleConnections()
 
-	body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(payload)
+	body, _, _, closer, err := relaycommon.NewOutboundJSONBody(payload)
 	require.NoError(t, err)
 	defer closer.Close()
 	req, err := http.NewRequest(http.MethodPost, "http://upstream.test/v1/chat/completions", body)
 	require.NoError(t, err)
-	ApplyUpstreamBodyMetadata(req, &relaycommon.RelayInfo{
-		UpstreamRequestBodySize: size, UpstreamRequestGetBody: getBody,
-	})
+	ApplyUpstreamBodyMetadata(req, body)
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -279,7 +269,7 @@ func TestUpstreamBodyHTTP2CannotRetryWithoutGetBody(t *testing.T) {
 	defer closer.Close()
 	req, err := http.NewRequest(http.MethodPost, "http://upstream.test/v1/chat/completions", body)
 	require.NoError(t, err)
-	applyUpstreamContentLength(req, &relaycommon.RelayInfo{UpstreamRequestBodySize: size})
+	req.ContentLength = size
 	assert.Nil(t, req.GetBody)
 
 	resp, err := client.Do(req)

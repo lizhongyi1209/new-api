@@ -2,6 +2,7 @@ package model
 
 import (
 	"bytes"
+	"context"
 	"database/sql/driver"
 	"encoding/json"
 	"reflect"
@@ -10,8 +11,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 type TaskStatus string
@@ -19,7 +20,7 @@ type TaskStatus string
 func (t TaskStatus) ToVideoStatus() string {
 	var status string
 	switch t {
-	case TaskStatusQueued, TaskStatusSubmitted:
+	case TaskStatusNotStart, TaskStatusQueued, TaskStatusSubmitted:
 		status = dto.VideoStatusQueued
 	case TaskStatusInProgress:
 		status = dto.VideoStatusInProgress
@@ -70,6 +71,10 @@ type Task struct {
 	// 禁止返回给用户，内部可能包含key等隐私信息
 	PrivateData TaskPrivateData `json:"-" gorm:"column:private_data;type:json"`
 	Data        json.RawMessage `json:"data" gorm:"type:json"`
+}
+
+func (t *Task) ResultRetrievable() bool {
+	return t != nil && !t.PrivateData.ResultDiscarded
 }
 
 func (t *Task) SetData(data any) {
@@ -128,9 +133,11 @@ type TaskPrivateData struct {
 	UsedChannels   []string            `json:"used_channels,omitempty"`   // 每次真实上游尝试使用的渠道，保留重复项用于展示重试链路
 	// Plugin fields are additive to preserve historical task JSON and the
 	// local async-image/video billing and audit snapshots above.
-	Execution    *TaskExecutionSnapshot `json:"execution,omitempty"`
-	PluginState  json.RawMessage        `json:"plugin_state,omitempty"`
-	PollFailures int                    `json:"poll_failures,omitempty"`
+	Execution           *TaskExecutionSnapshot `json:"execution,omitempty"`
+	PluginState         json.RawMessage        `json:"plugin_state,omitempty"`
+	PollFailures        int                    `json:"poll_failures,omitempty"`
+	ResponsesBackground bool                   `json:"responses_background,omitempty"`
+	ResultDiscarded     bool                   `json:"result_discarded,omitempty"`
 }
 
 // TaskExecutionSnapshot contains only credential-free provenance. Plugin
@@ -374,8 +381,11 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 	properties := Properties{}
 	privateData := TaskPrivateData{}
 	if relayInfo != nil && relayInfo.ChannelMeta != nil {
+		// A New API channel may rotate between several gateway tokens, so the
+		// task keeps the key that submitted it and polls with the same identity.
 		if relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGemini ||
-			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeVertexAi {
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeVertexAi ||
+			relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeNewAPI {
 			privateData.Key = relayInfo.ChannelMeta.ApiKey
 		}
 		if relayInfo.UpstreamModelName != "" {
@@ -440,7 +450,9 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 	}
 
 	// 获取数据
-	err = query.Omit("channel_id").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
+	// Task lists never render the persisted upstream snapshot; the dashboard
+	// loads media through the artifacts endpoint instead.
+	err = query.Omit("channel_id", "data").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -488,7 +500,7 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	}
 
 	// 获取数据
-	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
+	err = query.Omit("data").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
 	}
@@ -604,9 +616,7 @@ func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 
 	// First query: fetch lightweight fields without the heavy 'data' column
 	// This is critical for polling performance when tasks contain large base64 images in data
-	err = DB.Select("id, created_at, updated_at, task_id, platform, user_id, "+
-		commonGroupCol+", channel_id, quota, action, status, fail_reason, "+
-		"submit_time, start_time, finish_time, progress, properties, private_data").
+	err = DB.Omit("data").
 		Where("user_id = ? and task_id = ?", userId, taskId).
 		First(&task).Error
 
@@ -635,24 +645,51 @@ func GetByTaskId(userId int, taskId string) (*Task, bool, error) {
 	return task, exist, err
 }
 
-func GetByTaskIds(userId int, taskIds []any) ([]*Task, error) {
-	if len(taskIds) == 0 {
+func GetByTaskIdsForPlatforms(userID int, platforms []constant.TaskPlatform, taskIDs []string) ([]*Task, error) {
+	if len(platforms) == 0 || len(taskIDs) == 0 {
 		return nil, nil
 	}
-	var task []*Task
-	var err error
-	err = DB.Where("user_id = ? and task_id in (?)", userId, taskIds).
-		Find(&task).Error
+	var tasks []*Task
+	err := DB.
+		Where("user_id = ? AND platform IN ? AND task_id IN ?", userID, platforms, taskIDs).
+		Find(&tasks).Error
 	if err != nil {
 		return nil, err
 	}
-	return task, nil
+	return tasks, nil
+}
+
+// GetTaskForProtocolObservation reloads one public task through the ownership
+// boundary used by long-lived plugin protocol observers. A missing task,
+// foreign user, and wrong plugin platform are deliberately indistinguishable.
+func GetTaskForProtocolObservation(ctx context.Context, userID int, platform constant.TaskPlatform, taskID string) (*Task, bool, error) {
+	if taskID == "" {
+		return nil, false, nil
+	}
+	var task Task
+	err := DB.WithContext(ctx).
+		Where("user_id = ? AND platform = ? AND task_id = ?", userID, platform, taskID).
+		First(&task).Error
+	exists, err := RecordExist(err)
+	if err != nil || !exists {
+		return nil, exists, err
+	}
+	return &task, true, nil
 }
 
 func (Task *Task) Insert() error {
-	var err error
-	err = DB.Create(Task).Error
-	return err
+	return Task.InsertWithContext(context.Background())
+}
+
+// InsertWithContext creates the row. omitColumns are left out of the INSERT
+// (for example "data" when the submit route discards the upstream snapshot)
+// while the in-memory task keeps its values for presentation.
+func (Task *Task) InsertWithContext(ctx context.Context, omitColumns ...string) error {
+	tx := DB.WithContext(ctx)
+	if len(omitColumns) > 0 {
+		tx = tx.Omit(omitColumns...)
+	}
+	return tx.Create(Task).Error
 }
 
 type taskSnapshot struct {
@@ -757,17 +794,6 @@ func (t *Task) UpdateWithStatus(fromStatus TaskStatus) (bool, error) {
 	return result.RowsAffected > 0, nil
 }
 
-// TaskBulkUpdate performs an unconditional bulk UPDATE by upstream task_id strings.
-// Same caveats as TaskBulkUpdateByID — no CAS guard.
-func TaskBulkUpdate(taskIds []string, params map[string]any) error {
-	if len(taskIds) == 0 {
-		return nil
-	}
-	return DB.Model(&Task{}).
-		Where("task_id in (?)", taskIds).
-		Updates(params).Error
-}
-
 // TaskBulkUpdateByID performs an unconditional bulk UPDATE by primary key IDs.
 // WARNING: This function has NO CAS (Compare-And-Swap) guard — it will overwrite
 // any concurrent status changes. DO NOT use in billing/quota lifecycle flows
@@ -860,8 +886,13 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.Model = t.Properties.OriginModelName
 	openAIVideo.SetProgressStr(t.Progress)
 	openAIVideo.CreatedAt = t.CreatedAt
-	openAIVideo.CompletedAt = t.UpdatedAt
-	openAIVideo.SetMetadata("url", t.GetResultURL())
+	if t.Status == TaskStatusSuccess {
+		if t.FinishTime != 0 {
+			openAIVideo.CompletedAt = t.FinishTime
+		} else {
+			openAIVideo.CompletedAt = t.UpdatedAt
+		}
+	}
 	return openAIVideo
 }
 

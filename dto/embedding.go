@@ -5,7 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/types"
 
-	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 type EmbeddingOptions struct {
@@ -45,7 +45,7 @@ func (r *EmbeddingRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	}
 }
 
-func (r *EmbeddingRequest) IsStream(c *gin.Context) bool {
+func (r *EmbeddingRequest) IsStream(c *http.Request) bool {
 	return false
 }
 

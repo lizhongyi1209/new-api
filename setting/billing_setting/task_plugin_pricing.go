@@ -18,10 +18,35 @@ var taskPluginPricing = struct {
 // Task plugin prices are scoped by plugin key and public model name. Ordinary
 // model prices remain keyed only by model name.
 func GetTaskPluginBillingExpr(pluginKey, modelName string) (string, bool) {
+	if expression, ok := GetPluginBillingExpr(pluginKey, modelName); ok {
+		return expression, true
+	}
 	taskPluginPricing.RLock()
 	defer taskPluginPricing.RUnlock()
 	expression, ok := taskPluginPricing.expressions[pluginKey][modelName]
 	return expression, ok
+}
+
+// ResolveTaskBillingExpr uses the executing plugin's price first, then the
+// public model's price, and finally the mapped model's price.
+func ResolveTaskBillingExpr(pluginKey, modelName, mappedModel string) (string, bool) {
+	if pluginKey != "" {
+		if expression, ok := GetTaskPluginBillingExpr(pluginKey, modelName); ok {
+			return expression, true
+		}
+		if mappedModel != "" && mappedModel != modelName {
+			if expression, ok := GetTaskPluginBillingExpr(pluginKey, mappedModel); ok {
+				return expression, true
+			}
+		}
+	}
+	if GetBillingMode(modelName) == BillingModeTieredExpr {
+		return GetBillingExpr(modelName)
+	}
+	if mappedModel != "" && mappedModel != modelName && GetBillingMode(mappedModel) == BillingModeTieredExpr {
+		return GetBillingExpr(mappedModel)
+	}
+	return "", false
 }
 
 func SetTaskPluginPricingFromJsonString(raw string) error {

@@ -2,6 +2,7 @@ package helper
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
 	"strconv"
@@ -10,9 +11,9 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/gin-gonic/gin"
 )
 
@@ -120,9 +121,7 @@ func ResolveIncomingBillingExprRequestInput(c *gin.Context, info *relaycommon.Re
 	if info != nil && info.BillingRequestInput != nil {
 		input := cloneRequestInput(*info.BillingRequestInput)
 		merged := cloneStringMap(info.RequestHeaders)
-		for k, v := range input.Headers {
-			merged[k] = v
-		}
+		maps.Copy(merged, input.Headers)
 		input.Headers = merged
 		return input, nil
 	}
@@ -215,6 +214,10 @@ func cloneRequestInput(src billingexpr.RequestInput) billingexpr.RequestInput {
 		for key, value := range src.Params {
 			input.Params[key] = value
 		}
+	}
+	if src.ImageCount != nil {
+		count := *src.ImageCount
+		input.ImageCount = &count
 	}
 	if src.ImageCount != nil {
 		count := *src.ImageCount

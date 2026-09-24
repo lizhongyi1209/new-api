@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	ktypes "github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ func TestRespondRelayErrorReturnsRawUpstreamResponse(t *testing.T) {
 	relayErr := types.NewOpenAIError(errors.New("normalized internal error"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
 	relayErr.SetRawUpstreamResponse(http.StatusBadRequest, "application/json", rawBody)
 
-	respondRelayError(c, types.RelayFormatOpenAI, nil, relayErr, "request-id-must-not-be-appended")
+	respondRelayError(c, ktypes.RelayFormatOpenAI, nil, relayErr, "request-id-must-not-be-appended")
 
 	result := recorder.Result()
 	defer result.Body.Close()

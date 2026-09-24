@@ -3,6 +3,7 @@ package dto
 import (
 	"strconv"
 	"strings"
+	relaydto "github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 const (
@@ -48,7 +49,4 @@ func NewOpenAIVideo() *OpenAIVideo {
 	}
 }
 
-type OpenAIVideoError struct {
-	Message string `json:"message"`
-	Code    string `json:"code"`
-}
+type OpenAIVideoError = relaydto.OpenAIVideoError

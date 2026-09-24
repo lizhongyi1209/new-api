@@ -4,9 +4,9 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -90,7 +90,13 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 		inputLen = p + cr + cc5m + cc1h
 	}
 
-	if !isClaudeUsageSemantic {
+	if isClaudeUsageSemantic {
+		// Anthropic input excludes cache reads. When cr has no separate
+		// price, merge those tokens into the input category instead.
+		if !usedVars["cr"] {
+			p += cr
+		}
+	} else {
 		if usedVars["cr"] {
 			p -= cr
 		}

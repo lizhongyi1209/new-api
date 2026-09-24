@@ -25,6 +25,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ import (
 
 type ImageAdaptor interface {
 	Init(info *relaycommon.RelayInfo)
-	ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error)
+	ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request kitdto.ImageRequest) (any, error)
 	DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error)
 }
 
@@ -218,7 +219,21 @@ func buildAsyncOpenAIImageRequestBody(c *gin.Context, adaptor ImageAdaptor, rela
 		return body, body.Len(), nil
 	}
 
-	convertedRequest, err := adaptor.ConvertImageRequest(c, relayInfo, *imageReq)
+	requestJSON, err := common.Marshal(imageReq)
+	if err != nil {
+		return nil, 0, err
+	}
+	var kitRequest kitdto.ImageRequest
+	if err := common.Unmarshal(requestJSON, &kitRequest); err != nil {
+		return nil, 0, err
+	}
+	if imageReq.BillingParameters != nil {
+		kitRequest.BillingParameters = &kitdto.ImageBillingParameters{
+			N:            imageReq.BillingParameters.N,
+			PromptExtend: imageReq.BillingParameters.PromptExtend,
+		}
+	}
+	convertedRequest, err := adaptor.ConvertImageRequest(c, relayInfo, kitRequest)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -539,7 +554,9 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
-	other["admin_info"] = adminInfo
+	logOther := model.NewLogOther()
+	logOther.MergePublic(other)
+	logOther.MergeAdmin(adminInfo)
 
 	tokenName := ""
 	if task.Properties.TokenId > 0 {
@@ -560,7 +577,7 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 		UseTimeSeconds:   0,
 		IsStream:         false,
 		Group:            task.Group,
-		Other:            other,
+		Other:            logOther,
 	})
 
 	task.PrivateData.SubmitLogID = logId
@@ -598,7 +615,9 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 
 	adminInfo := make(map[string]interface{})
 	adminInfo["use_channel"] = []string{fmt.Sprintf("%d", task.ChannelId)}
-	other["admin_info"] = adminInfo
+	logOther := model.NewLogOther()
+	logOther.MergePublic(other)
+	logOther.MergeAdmin(adminInfo)
 
 	tokenName := ""
 	if task.Properties.TokenId > 0 {
@@ -619,7 +638,7 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 		UseTimeSeconds:   0,
 		IsStream:         false,
 		Group:            task.Group,
-		Other:            other,
+		Other:            logOther,
 	})
 
 	task.PrivateData.SubmitLogID = logId

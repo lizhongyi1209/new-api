@@ -14,7 +14,7 @@ import (
 )
 
 // auditContentTemplates 将稳定的操作标识 action 映射为英文兜底模板，渲染后写入
-// Log.Content（供导出 / 经典前端等非本地化消费者使用）。占位符为 ${name}，由该
+// Log.Content（供导出等非本地化消费者使用）。占位符为 ${name}，由该
 // action 的 params 填充。本地化展示文案在前端 i18n 模板中维护，本表是语言中立的
 // 英文基线——调用方因此无需在每个埋点处手写句子（避免与 params 重复书写同一份值）。
 var auditContentTemplates = map[string]string{
@@ -68,7 +68,7 @@ var auditContentTemplates = map[string]string{
 }
 
 // auditContentEN 按 action 模板渲染英文兜底文本；未登记的 action 退回 action 本身。
-func auditContentEN(action string, params map[string]interface{}) string {
+func auditContentEN(action string, params map[string]any) string {
 	tmpl, ok := auditContentTemplates[action]
 	if !ok {
 		return action
@@ -106,15 +106,15 @@ func markAuditLogged(c *gin.Context) {
 
 // recordManageAudit 记录一条由操作者本人归属的管理/高危审计日志（资源类操作：
 // 渠道 / 系统设置 / 兑换码等）。content 由 action+params 自动渲染。
-func recordManageAudit(c *gin.Context, action string, params map[string]interface{}) {
+func recordManageAudit(c *gin.Context, action string, params map[string]any) {
 	recordManageAuditFor(c, c.GetInt("id"), action, params)
 }
 
 // recordManageAuditFor 记录一条管理审计日志，日志归属于操作者；targetUserId
 // 只表示被操作用户，用于在结构化参数中保留目标上下文。
-func recordManageAuditFor(c *gin.Context, targetUserId int, action string, params map[string]interface{}) {
+func recordManageAuditFor(c *gin.Context, targetUserId int, action string, params map[string]any) {
 	if params == nil {
-		params = map[string]interface{}{}
+		params = map[string]any{}
 	}
 	operatorUserId := c.GetInt("id")
 	if _, ok := params["target_user_id"]; !ok && targetUserId > 0 && targetUserId != operatorUserId {

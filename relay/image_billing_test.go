@@ -23,12 +23,12 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-type imageReservation struct {
+type aliImageReservation struct {
 	held  int
 	limit int
 }
 
-func (r *imageReservation) Reserve(quota int) error {
+func (r *aliImageReservation) Reserve(quota int) error {
 	if quota > r.limit {
 		return errors.New("insufficient image quota")
 	}
@@ -38,12 +38,12 @@ func (r *imageReservation) Reserve(quota int) error {
 	return nil
 }
 
-func (r *imageReservation) GetPreConsumedQuota() int { return r.held }
-func (*imageReservation) Settle(int) error           { return nil }
-func (*imageReservation) Refund(*gin.Context)        {}
-func (*imageReservation) NeedsRefund() bool          { return false }
+func (r *aliImageReservation) GetPreConsumedQuota() int { return r.held }
+func (*aliImageReservation) Settle(int) error           { return nil }
+func (*aliImageReservation) Refund(*gin.Context)        {}
+func (*aliImageReservation) NeedsRefund() bool          { return false }
 
-func TestImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
+func TestAliImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
 	service.InitHttpClient()
 	for _, tc := range []struct {
 		name, body                                       string
@@ -93,7 +93,7 @@ func TestImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
 
 			request, err := helper.GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesGenerations)
 			require.NoError(t, err)
-			reservation := &imageReservation{held: 20000, limit: 500000}
+			reservation := &aliImageReservation{held: 20000, limit: 500000}
 			if tc.insufficient {
 				reservation.limit = reservation.held
 			}

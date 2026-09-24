@@ -5,19 +5,20 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
 
-	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -158,48 +159,7 @@ func classifyDashboardCredential(c *gin.Context) (*model.UserBase, service.AuthI
 		return user, service.AuthIdentity{UserID: user.Id, UserAuthVersion: user.AuthVersion}, dashboardCredentialPAT, nil
 	}
 
-	// Compatibility path for web/classic. Existing pre-migration cookies do not
-	// carry auth_version and are intentionally rejected; a fresh login writes it.
-	sessionValue, exists := c.Get(sessions.DefaultKey)
-	if !exists {
-		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
-	}
-	session, ok := sessionValue.(sessions.Session)
-	if !ok || session == nil {
-		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
-	}
-	id, ok := session.Get("id").(int)
-	if !ok || id <= 0 {
-		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
-	}
-	authVersion, ok := sessionInt64(session.Get("auth_version"))
-	if !ok || authVersion <= 0 {
-		return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
-	}
-	user, err := model.GetUserCache(id)
-	if err != nil {
-		return nil, service.AuthIdentity{}, dashboardCredentialLegacy, err
-	}
-	if user.AuthVersion != authVersion {
-		return nil, service.AuthIdentity{}, dashboardCredentialLegacy, service.ErrLoginSessionRevoked
-	}
-	return user, service.AuthIdentity{UserID: id, UserAuthVersion: authVersion}, dashboardCredentialLegacy, nil
-}
-
-func sessionInt64(value interface{}) (int64, bool) {
-	switch typed := value.(type) {
-	case int64:
-		return typed, true
-	case int:
-		return int64(typed), true
-	case int32:
-		return int64(typed), true
-	case uint64:
-		if typed <= uint64(^uint64(0)>>1) {
-			return int64(typed), true
-		}
-	}
-	return 0, false
+	return nil, service.AuthIdentity{}, dashboardCredentialUnmatched, nil
 }
 
 func authorizationToken(header string) (string, bool) {
@@ -396,20 +356,7 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		// 先检测是否为ws
-		if c.Request.Header.Get("Sec-WebSocket-Protocol") != "" {
-			// Sec-WebSocket-Protocol: realtime, openai-insecure-api-key.sk-xxx, openai-beta.realtime-v1
-			// read sk from Sec-WebSocket-Protocol
-			key := c.Request.Header.Get("Sec-WebSocket-Protocol")
-			parts := strings.Split(key, ",")
-			for _, part := range parts {
-				part = strings.TrimSpace(part)
-				if strings.HasPrefix(part, "openai-insecure-api-key") {
-					key = strings.TrimPrefix(part, "openai-insecure-api-key.")
-					break
-				}
-			}
-			c.Request.Header.Set("Authorization", "Bearer "+key)
-		}
+		applyWebSocketSubprotocolAuthorization(c.Request.Header)
 		// 检查path包含/v1/messages 或 /v1/models
 		if strings.Contains(c.Request.URL.Path, "/v1/messages") || strings.Contains(c.Request.URL.Path, "/v1/models") {
 			anthropicKey := c.Request.Header.Get("x-api-key")
@@ -527,6 +474,30 @@ func TokenAuth() func(c *gin.Context) {
 	}
 }
 
+func applyWebSocketSubprotocolAuthorization(header http.Header) bool {
+	key, ok := apiKeyFromWebSocketSubprotocol(strings.Join(header.Values("Sec-WebSocket-Protocol"), ","))
+	if !ok {
+		return false
+	}
+	header.Set("Authorization", "Bearer "+key)
+	return true
+}
+
+func apiKeyFromWebSocketSubprotocol(protocols string) (string, bool) {
+	if protocols == "" {
+		return "", false
+	}
+	const insecureAPIKeyPrefix = "openai-insecure-api-key."
+	for part := range strings.SplitSeq(protocols, ",") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, insecureAPIKeyPrefix) {
+			key := strings.TrimPrefix(part, insecureAPIKeyPrefix)
+			return key, key != ""
+		}
+	}
+	return "", false
+}
+
 func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) error {
 	if token == nil {
 		return fmt.Errorf("token is nil")
@@ -558,7 +529,17 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 	}
 	if len(parts) > 1 {
 		if model.IsAdmin(token.UserId) {
-			c.Set("specific_channel_id", parts[1])
+			id, err := strconv.Atoi(parts[1])
+			if err != nil {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
+				return fmt.Errorf("invalid specific channel id")
+			}
+			service.GetChannelConstraints(c).AddPin(dto.ChannelPin{
+				ChannelId: id,
+				Source:    dto.PinSourceToken,
+				Rank:      dto.PinRankToken,
+				RetryMode: dto.PinRetrySingleAttempt,
+			})
 		} else {
 			c.Header("specific_channel_version", "701e3ae1dc3f7975556d354e0675168d004891c8")
 			abortWithOpenAiMessage(c, http.StatusForbidden, "普通用户不支持指定渠道")
