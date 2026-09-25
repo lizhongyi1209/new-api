@@ -30,10 +30,6 @@ func SetRelayRouter(router *gin.Engine) {
 	storageRouter.POST("/oss/presign", controller.GetOSSPresignedURL)
 	storageRouter.POST("/local/upload", controller.UploadLocalFile)
 
-	publicStorageRouter := router.Group("/v1/storage/public")
-	publicStorageRouter.Use(middleware.RouteTag("relay"))
-	publicStorageRouter.POST("/presign", controller.PublicR2Presign)
-
 	temporaryUploadRouter := router.Group("/v1/o1key")
 	temporaryUploadRouter.Use(middleware.RouteTag("relay"))
 	temporaryUploadRouter.Use(middleware.SystemPerformanceCheck())
