@@ -818,6 +818,13 @@ func executeTaskSubmissionWith(
 }
 
 func presentTaskSubmission(c *gin.Context, outcome *taskSubmissionOutcome) {
+	// Legacy task adaptors render their own submit response inside DoResponse
+	// (the OpenAI video contract, the grok request_id envelope). Those channels
+	// must keep their existing body: writing again would append a second JSON
+	// object and make the response unparseable for the client.
+	if c.Writer.Written() {
+		return
+	}
 	diagnostics := newTaskPluginSubmitDiagnostics(c)
 	otherRatios := outcome.RelayInfo.PriceData.OtherRatios()
 	if otherRatios == nil {

@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
@@ -758,4 +759,46 @@ func TestSelfTaskMediaURLGuard(t *testing.T) {
 	assert.False(t, isSelfTaskMediaURL(c, remoteURL))
 	assert.True(t, isTaskMediaFallbackLoop(remoteURL.String(), "task-1"))
 	assert.False(t, isTaskMediaFallbackLoop(remoteURL.String(), "task-2"))
+}
+
+// Legacy task adaptors render their own submit response inside DoResponse.
+// presentTaskSubmission must not append a second JSON object on top of it,
+// which would make the client-facing body unparseable.
+func TestPresentTaskSubmissionPreservesAdaptorResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	outcome := &taskSubmissionOutcome{
+		Task:      &model.Task{TaskID: "task_probe", CreatedAt: 1},
+		RelayInfo: &relaycommon.RelayInfo{},
+	}
+
+	t.Run("adaptor already wrote the response", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.JSON(http.StatusOK, map[string]any{
+			"id": "task_probe", "object": "video", "status": "queued",
+		})
+
+		presentTaskSubmission(c, outcome)
+
+		body := recorder.Body.String()
+		assert.Equal(t, `{"id":"task_probe","object":"video","status":"queued"}`, body)
+
+		// A trailing second object makes the whole body unparseable, which is
+		// exactly what the client reports as an invalid JSON response.
+		var decoded map[string]any
+		require.NoError(t, common.Unmarshal([]byte(body), &decoded))
+		assert.Equal(t, "task_probe", decoded["id"])
+	})
+
+	t.Run("adaptor wrote nothing", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+
+		presentTaskSubmission(c, outcome)
+
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		var response map[string]any
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+		assert.Equal(t, "task_probe", response["task_id"])
+	})
 }
