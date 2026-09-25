@@ -278,6 +278,16 @@ export const channelFormSchema = z
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
     azure_responses_version: z.string().optional(), // Azure specific
+    image_output_strategy: z
+      .enum([
+        'passthrough',
+        'oss',
+        'r2',
+        'local_temp',
+        'local_temp_cf',
+        'local_temp_esa',
+      ])
+      .optional(),
     // Field passthrough controls (stored in settings JSON)
     allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
     disable_store: z.boolean().optional(), // OpenAI only
@@ -449,6 +459,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   param_override: '',
   header_override: '',
   settings: '{}',
+  image_output_strategy: 'passthrough',
   other: '',
   multi_key_mode: 'single',
   multi_key_type: 'random',
@@ -540,6 +551,8 @@ export function transformChannelToFormDefaults(
   // Parse type-specific settings from settings field
   let vertexKeyType: 'json' | 'api_key' = 'json'
   let azureResponsesVersion = ''
+  let imageOutputStrategy: ChannelFormValues['image_output_strategy'] =
+    'passthrough'
   let isEnterpriseAccount = false
   let awsKeyType: 'ak_sk' | 'api_key' = 'ak_sk'
   let allowServiceTier = false
@@ -561,6 +574,13 @@ export function transformChannelToFormDefaults(
       const parsed = JSON.parse(channel.settings)
       vertexKeyType = parsed.vertex_key_type || 'json'
       azureResponsesVersion = parsed.azure_responses_version || ''
+      if (
+        ['oss', 'r2', 'local_temp', 'local_temp_cf', 'local_temp_esa'].includes(
+          parsed.image_output_strategy
+        )
+      ) {
+        imageOutputStrategy = parsed.image_output_strategy
+      }
       isEnterpriseAccount = parsed.openrouter_enterprise === true
       awsKeyType = parsed.aws_key_type || 'ak_sk'
       allowServiceTier = parsed.allow_service_tier === true
@@ -622,6 +642,7 @@ export function transformChannelToFormDefaults(
     is_enterprise_account: isEnterpriseAccount,
     vertex_key_type: vertexKeyType,
     azure_responses_version: azureResponsesVersion,
+    image_output_strategy: imageOutputStrategy,
     aws_key_type: awsKeyType,
     allow_service_tier: allowServiceTier,
     disable_store: disableStore,
@@ -710,6 +731,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.azure_responses_version = formData.azure_responses_version
   } else if ('azure_responses_version' in settingsObj) {
     delete settingsObj.azure_responses_version
+  }
+
+  if (
+    formData.image_output_strategy &&
+    formData.image_output_strategy !== 'passthrough'
+  ) {
+    settingsObj.image_output_strategy = formData.image_output_strategy
+  } else {
+    delete settingsObj.image_output_strategy
   }
 
   // Add enterprise account setting for OpenRouter (type 20)

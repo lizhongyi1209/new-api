@@ -288,6 +288,7 @@ const SENSITIVE_FORM_FIELDS = [
   'param_override',
   'header_override',
   'settings',
+  'image_output_strategy',
   'setting',
   'advanced_custom',
   'is_enterprise_account',
@@ -1812,6 +1813,46 @@ export function ChannelMutateDrawer({
           <FormMessage />
         </FormItem>
       )}
+    />
+  )
+
+  const imageOutputStrategyFields = (
+    <FormField
+      control={form.control}
+      name='image_output_strategy'
+      render={({ field }) => {
+        const legacyStrategy = field.value?.startsWith('local_temp') === true
+        return (
+          <FormItem>
+            <FormLabel>{t('Image Output Strategy')}</FormLabel>
+            <Select
+              disabled={sensitiveLocked}
+              value={legacyStrategy ? null : field.value || 'passthrough'}
+              onValueChange={field.onChange}
+            >
+              <FormControl>
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      legacyStrategy ? t('Local URL (legacy)') : undefined
+                    }
+                  />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  <SelectItem value='passthrough'>
+                    {t('Pass-through')}
+                  </SelectItem>
+                  <SelectItem value='oss'>{t('Store in OSS')}</SelectItem>
+                  <SelectItem value='r2'>{t('Store in R2')}</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )
+      }}
     />
   )
 
@@ -4687,6 +4728,7 @@ export function ChannelMutateDrawer({
                 className='space-y-4 disabled:opacity-60'
               >
                 {taskPollingFields}
+                {imageOutputStrategyFields}
                 {proxyFields}
                 {httpProtocolFields}
                 {httpShardsFields}

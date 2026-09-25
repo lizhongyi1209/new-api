@@ -249,17 +249,17 @@ Aliases: 图片输出策略, 媒体输出策略, 视频输出策略, image outpu
 
 ### Behavior contract
 
-- Channel setting key: `other.image_output_strategy` (legacy name; applies to generated images and completed videos).
+- Channel `settings` JSON key: `image_output_strategy` (legacy name; applies to generated images and completed videos).
 - Accepted values are `oss`, `r2`, legacy `local_temp`, `local_temp_cf`, `local_temp_esa`, and `passthrough`.
-- The channel editor defaults to `passthrough`. Explicit `oss` stores durable image/video outputs under the OSS bucket's `output/` prefix. Explicit `r2` also applies to both media types while preserving its provider-specific object prefixes; local temporary strategies remain image-only.
+- The channel editor offers `passthrough`, `oss`, and `r2`. It does not offer local URL strategies for new selection; existing local values remain visible as legacy settings and are retained until the administrator chooses another strategy. An unset value behaves like `passthrough`. Explicit `oss` stores durable image/video outputs under the OSS bucket's `output/` prefix. Explicit `r2` also applies to both media types while preserving its provider-specific object prefixes; local temporary strategies remain image-only for legacy configurations.
 - `local_temp_cf` stores the response image locally and returns `https://cf-api.o1key.com/tmp/output/<uuid>.<ext>`.
 - `local_temp_esa` stores the same way and returns `https://api.o1key.cn/tmp/output/<uuid>.<ext>`.
-- Legacy `local_temp` remains valid for compatibility. It uses `TEMP_STORAGE_PUBLIC_BASE_URL`, then `LOCAL_PUBLIC_BASE_URL`, then the Cloudflare domain. The default frontend maps this legacy value to `local_temp_cf` when editing a channel.
+- Legacy `local_temp` remains valid for compatibility. It uses `TEMP_STORAGE_PUBLIC_BASE_URL`, then `LOCAL_PUBLIC_BASE_URL`, then the Cloudflare domain.
 - An unset strategy and explicit `passthrough` both preserve upstream image/video output. The explicit synchronous image query `?image_format=url` retains its compatibility R2 rewrite.
 - Explicit CF/ESA strategies select their fixed public domain independently of the configurable legacy base URL.
 - Files live under `${TEMP_STORAGE_DIR:-tmp}/output`; production Compose defaults the root to `/data/tmp`. Each file is available for 24 hours, expired reads return not found, and the cleanup task removes expired files.
 - The strategy applies to OpenAI-compatible image JSON/stream responses, Gemini inline-image responses, and the unified asynchronous `POST /async/v1/generateImage` result path.
-- Plugin task artifact links use the separate `TaskPublicAddress` option (`setting/system_setting/system_setting_old.go`, `model/option.go`, `controller/option.go`, `service/task_artifact_access.go`, and the site settings form). It falls back to `ServerAddress` and does not override `other.image_output_strategy`. The task artifact serving route is still under development.
+- Plugin task artifact links use the separate `TaskPublicAddress` option (`setting/system_setting/system_setting_old.go`, `model/option.go`, `controller/option.go`, `service/task_artifact_access.go`, and the site settings form). It falls back to `ServerAddress` and does not override `settings.image_output_strategy`. The task artifact serving route is still under development.
 
 ### Entry points
 
@@ -279,9 +279,8 @@ Aliases: 图片输出策略, 媒体输出策略, 视频输出策略, image outpu
 | Unified async image route | `router/relay-router.go` |
 | Unified async image request controller | `controller/generate_image.go` |
 | Async result conversion and output-strategy application | `service/generate_image.go` |
-| Channel editor options | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx` |
-| Channel form schema and legacy-to-CF normalization | `web/src/features/channels/lib/channel-form.ts` |
-| Frontend settings type | `web/src/features/channels/types.ts` |
+| Channel editor strategy control | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx` |
+| Channel form parses and saves strategy in `settings` JSON | `web/src/features/channels/lib/channel-form.ts` |
 | Public base URL and persistent storage defaults | `docker-compose.yml` |
 
 ### Regression coverage

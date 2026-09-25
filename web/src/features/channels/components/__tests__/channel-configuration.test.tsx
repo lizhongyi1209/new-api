@@ -1646,6 +1646,21 @@ test('an invalid edit switches categories and replaces configured styling with t
   ).not.toBeInTheDocument()
 })
 
+test('image output strategy offers passthrough and object storage without local URL choices', async () => {
+  const user = userEvent.setup()
+  render(<ConfigurationHarness currentRow={editingChannel} />)
+  await screen.findByDisplayValue('Existing channel')
+  await user.click(screen.getByRole('tab', { name: /Other Settings/ }))
+  await user.click(
+    screen.getByRole('combobox', { name: 'Image Output Strategy' })
+  )
+
+  expect(screen.getByRole('option', { name: 'Pass-through' })).toBeVisible()
+  expect(screen.getByRole('option', { name: 'Store in OSS' })).toBeVisible()
+  expect(screen.getByRole('option', { name: 'Store in R2' })).toBeVisible()
+  expect(screen.queryByRole('option', { name: /Local URL/ })).toBeNull()
+})
+
 test('ordinary edits discover models with saved settings and keep removed draft models available for reselection', async () => {
   const user = userEvent.setup()
   const post = vi.spyOn(api, 'post')
