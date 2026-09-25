@@ -10,7 +10,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -115,13 +117,13 @@ func TestSelectImageStorageProviderDefaultHosts(t *testing.T) {
 		host string
 		want string
 	}{
-		{name: "api host uses local storage", host: "api.o1key.cn", want: ImageStorageProviderLocal},
-		{name: "api host with port", host: "api.o1key.cn:443", want: ImageStorageProviderLocal},
-		{name: "api URL", host: "https://api.o1key.cn/v1/images/generations", want: ImageStorageProviderLocal},
+		{name: "api host uses OSS", host: "api.o1key.cn", want: ImageStorageProviderAliyunOSS},
+		{name: "api host with port", host: "api.o1key.cn:443", want: ImageStorageProviderAliyunOSS},
+		{name: "api URL", host: "https://api.o1key.cn/v1/images/generations", want: ImageStorageProviderAliyunOSS},
 		{name: "cf api cn host", host: "cf-api.o1key.cn", want: ImageStorageProviderR2},
 		{name: "cf api com host", host: "cf-api.o1key.com", want: ImageStorageProviderR2},
-		{name: "unknown host defaults to local", host: "example.com", want: ImageStorageProviderLocal},
-		{name: "empty host defaults to local", host: "", want: ImageStorageProviderLocal},
+		{name: "unknown host defaults to OSS", host: "example.com", want: ImageStorageProviderAliyunOSS},
+		{name: "empty host defaults to OSS", host: "", want: ImageStorageProviderAliyunOSS},
 	}
 
 	for _, test := range tests {
@@ -139,8 +141,8 @@ func TestSelectImageStorageProviderCustomHosts(t *testing.T) {
 	t.Setenv("R2_STORAGE_HOSTS", "cf.example.com")
 	t.Setenv("DISABLE_ALIYUN_OSS", "")
 
-	if got := SelectImageStorageProvider("img-local.example.com"); got != ImageStorageProviderLocal {
-		t.Fatalf("custom local host selected %q, want %q", got, ImageStorageProviderLocal)
+	if got := SelectImageStorageProvider("img-local.example.com"); got != ImageStorageProviderAliyunOSS {
+		t.Fatalf("former local host selected %q, want %q", got, ImageStorageProviderAliyunOSS)
 	}
 	if got := SelectImageStorageProvider("img-api.example.com:8443"); got != ImageStorageProviderAliyunOSS {
 		t.Fatalf("custom OSS host selected %q, want %q", got, ImageStorageProviderAliyunOSS)
@@ -150,7 +152,7 @@ func TestSelectImageStorageProviderCustomHosts(t *testing.T) {
 	}
 }
 
-// DISABLE_ALIYUN_OSS 只把 OSS 分支改写为 R2，不得影响本地存储路由（2e7292635 回归）。
+// DISABLE_ALIYUN_OSS redirects persistent uploads to R2, including former local hosts.
 func TestSelectImageStorageProviderOSSKillSwitch(t *testing.T) {
 	t.Setenv("LOCAL_STORAGE_HOSTS", "")
 	t.Setenv("ALIYUN_OSS_STORAGE_HOSTS", "oss-api.example.com")
@@ -160,7 +162,75 @@ func TestSelectImageStorageProviderOSSKillSwitch(t *testing.T) {
 	if got := SelectImageStorageProvider("oss-api.example.com"); got != ImageStorageProviderR2 {
 		t.Fatalf("kill-switch should redirect OSS host to R2, got %q", got)
 	}
-	if got := SelectImageStorageProvider("api.o1key.cn"); got != ImageStorageProviderLocal {
-		t.Fatalf("kill-switch must not affect local storage routing, got %q", got)
+	if got := SelectImageStorageProvider("api.o1key.cn"); got != ImageStorageProviderR2 {
+		t.Fatalf("kill-switch must redirect former local storage to R2, got %q", got)
 	}
+}
+
+func TestPersistentUploadWritesToOSSWithoutLocalFile(t *testing.T) {
+	var requestPath, requestContentType string
+	var requestBody []byte
+	var requestMu sync.Mutex
+	failUpload := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestMu.Lock()
+		defer requestMu.Unlock()
+		if failUpload {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		requestPath = r.URL.Path
+		requestContentType = r.Header.Get("Content-Type")
+		requestBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	previousClient, previousPresignClient := ossClient, ossPresignClient
+	ossClient, ossPresignClient = nil, nil
+	t.Cleanup(func() { ossClient, ossPresignClient = previousClient, previousPresignClient })
+	t.Setenv("ALIYUN_OSS_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("ALIYUN_OSS_ACCESS_KEY_SECRET", "test-secret-key")
+	t.Setenv("ALIYUN_OSS_REGION", "test-region")
+	t.Setenv("ALIYUN_OSS_ENDPOINT", server.URL)
+	t.Setenv("ALIYUN_OSS_FORCE_PATH_STYLE", "true")
+	t.Setenv("ALIYUN_OSS_BUCKET", "test-bucket")
+	t.Setenv("ALIYUN_OSS_PUBLIC_BASE_URL", "https://images.example.com")
+	localDir := t.TempDir()
+	t.Setenv("LOCAL_UPLOAD_DIR", localDir)
+	t.Setenv("DISABLE_ALIYUN_OSS", "false")
+
+	publicURL, key, err := UploadPersistentFile(context.Background(), "example.png", "image/png", []byte("image bytes"))
+	require.NoError(t, err)
+	requestMu.Lock()
+	uploadPath, uploadContentType, uploadedBody := requestPath, requestContentType, requestBody
+	requestMu.Unlock()
+	assert.True(t, strings.HasPrefix(key, "uploads/oss/"), key)
+	assert.True(t, strings.HasSuffix(key, "_example.png"), key)
+	assert.Equal(t, "/test-bucket/"+key, uploadPath)
+	assert.Equal(t, "image/png", uploadContentType)
+	assert.Equal(t, []byte("image bytes"), uploadedBody)
+	assert.Equal(t, "https://images.example.com/"+key, publicURL)
+	presigned, err := GeneratePresignedUploadURLForHost("unmapped.example.com", "example.png", "image/png", 11)
+	require.NoError(t, err)
+	ossPresigned, ok := presigned.(*OSSPresignResult)
+	require.True(t, ok)
+	assert.Equal(t, ImageStorageProviderAliyunOSS, ossPresigned.Provider)
+	assert.Equal(t, http.MethodPut, ossPresigned.Method)
+	assert.True(t, strings.HasPrefix(ossPresigned.ObjectKey, "uploads/oss/"))
+	assert.Equal(t, "https://images.example.com/"+ossPresigned.ObjectKey, ossPresigned.PublicURL)
+
+	entries, err := os.ReadDir(localDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+
+	requestMu.Lock()
+	failUpload = true
+	requestMu.Unlock()
+	failedURL, failedKey, err := UploadPersistentFile(context.Background(), "failed.png", "image/png", []byte("image bytes"))
+	require.Error(t, err)
+	assert.Empty(t, failedURL)
+	assert.Empty(t, failedKey)
+	entries, err = os.ReadDir(localDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
 }

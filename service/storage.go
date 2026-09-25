@@ -99,16 +99,13 @@ func GeneratePresignedUploadURLForHost(requestHost, filename, contentType string
 	switch provider {
 	case ImageStorageProviderAliyunOSS:
 		return GenerateOSSPresignedUploadURL(filename, contentType, maxSize)
-	case ImageStorageProviderLocal:
-		return GenerateLocalPresignedUploadURL(filename, contentType, maxSize)
 	default:
 		return GeneratePresignedUploadURL(filename, contentType, maxSize)
 	}
 }
 
 // IsAliyunOSSBlocked reports whether Aliyun OSS uploads are administratively
-// disabled. When true, every storage path that would otherwise target OSS is
-// transparently redirected to R2. Toggle via the DISABLE_ALIYUN_OSS env var.
+// disabled. When true, persistent uploads use R2. Toggle via DISABLE_ALIYUN_OSS.
 func IsAliyunOSSBlocked() bool {
 	return common.GetEnvOrDefaultBool("DISABLE_ALIYUN_OSS", false)
 }
@@ -116,20 +113,16 @@ func IsAliyunOSSBlocked() bool {
 func SelectImageStorageProvider(requestHost string) string {
 	host := normalizeRequestHost(requestHost)
 
-	// Check local storage first (api.o1key.cn)
+	// Hosts formerly backed by persistent local files now use OSS.
 	localHosts := firstNonEmptyString(os.Getenv("LOCAL_STORAGE_HOSTS"), defaultLocalStorageHosts)
 	if hostMatchesCSV(host, localHosts) {
-		return ImageStorageProviderLocal
+		return persistentUploadProvider()
 	}
 
 	ossHosts := firstNonEmptyString(os.Getenv("ALIYUN_OSS_STORAGE_HOSTS"), defaultAliyunOSSStorageHosts)
 	if ossHosts != "" && hostMatchesCSV(host, ossHosts) {
-		// Kill-switch: redirect would-be OSS uploads to R2, but leave local
-		// and R2 host routing untouched. Toggle via DISABLE_ALIYUN_OSS.
-		if IsAliyunOSSBlocked() {
-			return ImageStorageProviderR2
-		}
-		return ImageStorageProviderAliyunOSS
+		// The administrative switch redirects OSS uploads to R2.
+		return persistentUploadProvider()
 	}
 
 	r2Hosts := firstNonEmptyString(os.Getenv("R2_STORAGE_HOSTS"), defaultR2StorageHosts)
@@ -137,15 +130,20 @@ func SelectImageStorageProvider(requestHost string) string {
 		return ImageStorageProviderR2
 	}
 
-	return ImageStorageProviderLocal
+	return persistentUploadProvider()
+}
+
+func persistentUploadProvider() string {
+	if IsAliyunOSSBlocked() {
+		return ImageStorageProviderR2
+	}
+	return ImageStorageProviderAliyunOSS
 }
 
 func UploadBase64ImageToHostStorage(mimeType, base64Data, requestHost string) (string, error) {
 	switch SelectImageStorageProvider(requestHost) {
 	case ImageStorageProviderAliyunOSS:
 		return UploadBase64ImageToOSS(mimeType, base64Data)
-	case ImageStorageProviderLocal:
-		return UploadBase64ImageToLocal(mimeType, base64Data)
 	default:
 		return UploadBase64ImageToR2(mimeType, base64Data)
 	}
@@ -432,65 +430,65 @@ func UploadImageBytesToOSSContext(ctx context.Context, uploadBytes []byte) (stri
 	return fmt.Sprintf("%s/%s", publicBase, key), nil
 }
 
-// GenerateLocalPresignedUploadURL generates a direct upload URL for local storage.
-// For local storage, we return a direct POST endpoint that accepts multipart/form-data.
-func GenerateLocalPresignedUploadURL(filename, contentType string, maxSize int64) (*OSSPresignResult, error) {
-	localPublicBase := normalizeHTTPBaseURL(firstNonEmptyString(os.Getenv("LOCAL_PUBLIC_BASE_URL"), "https://api.o1key.cn"))
-
-	id := uuid.New().String()
-	objectKey := fmt.Sprintf("uploads/%s_%s", id, sanitizeUploadFilename(filename))
-
-	uploadURL := fmt.Sprintf("%s/v1/storage/local/upload?object_key=%s", localPublicBase, objectKey)
-	publicURL := fmt.Sprintf("%s/upload/%s", localPublicBase, objectKey)
-
-	expiresIn := 15 * time.Minute
-	headers := make(map[string]string)
-	if contentType != "" {
-		headers["Content-Type"] = contentType
+// UploadPersistentFile stores a legacy direct upload in the configured remote
+// provider. The caller supplies a filename only; the object key is generated
+// here so a client cannot overwrite an existing object.
+func UploadPersistentFile(ctx context.Context, filename, contentType string, uploadBytes []byte) (string, string, error) {
+	if IsAliyunOSSBlocked() {
+		client, _ := getR2Client()
+		bucket := strings.TrimSpace(os.Getenv("R2_BUCKET"))
+		publicBase := normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
+		if bucket == "" || publicBase == "" {
+			return "", "", fmt.Errorf("missing R2_BUCKET or R2_PUBLIC_BASE_URL")
+		}
+		key := fmt.Sprintf("uploads/%s_%s", uuid.New().String(), sanitizeUploadFilename(filename))
+		_, err := client.PutObject(ctx, &s3.PutObjectInput{
+			Bucket: aws.String(bucket), Key: aws.String(key), Body: bytes.NewReader(uploadBytes),
+			ContentType: aws.String(contentType),
+		})
+		if err != nil {
+			return "", "", fmt.Errorf("R2 upload failed: %w", err)
+		}
+		return publicBase + "/" + key, key, nil
 	}
 
-	return &OSSPresignResult{
-		Method:    "POST",
-		UploadURL: uploadURL,
-		Headers:   headers,
-		PublicURL: publicURL,
-		ObjectKey: objectKey,
-		ExpiresAt: time.Now().Add(expiresIn).Unix(),
-		Provider:  ImageStorageProviderLocal,
-	}, nil
+	client, _, err := getAliyunOSSClient()
+	if err != nil {
+		return "", "", err
+	}
+	bucket := firstNonEmptyEnv("ALIYUN_OSS_BUCKET", "OSS_BUCKET")
+	publicBase := normalizeHTTPBaseURL(firstNonEmptyEnv("ALIYUN_OSS_PUBLIC_BASE_URL", "OSS_PUBLIC_BASE_URL"))
+	if bucket == "" || publicBase == "" {
+		return "", "", fmt.Errorf("missing Aliyun OSS config: require ALIYUN_OSS_BUCKET and ALIYUN_OSS_PUBLIC_BASE_URL")
+	}
+	key := fmt.Sprintf("uploads/oss/%s_%s", uuid.New().String(), sanitizeUploadFilename(filename))
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(bucket), Key: aws.String(key), Body: bytes.NewReader(uploadBytes),
+		ContentType: aws.String(contentType),
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("Aliyun OSS upload failed: %w", err)
+	}
+	return publicBase + "/" + key, key, nil
 }
 
-// UploadBase64ImageToLocal uploads a base64 image to local storage without re-encoding it.
+// GenerateLocalPresignedUploadURL preserves the legacy entry point while
+// issuing a remote presigned upload instead of a local file write.
+func GenerateLocalPresignedUploadURL(filename, contentType string, maxSize int64) (*OSSPresignResult, error) {
+	return GenerateOSSPresignedUploadURL(filename, contentType, maxSize)
+}
+
+// UploadBase64ImageToLocal is kept for callers of the legacy API name.
 func UploadBase64ImageToLocal(mimeType, base64Data string) (string, error) {
 	return UploadBase64ImageToLocalWithCategory(mimeType, base64Data, UploadDirGeneral)
 }
 
-// UploadBase64ImageToLocalWithCategory uploads a base64 image to local storage with category.
-// category should be one of: UploadDirGeneral, UploadDirElements, UploadDirTemp
-func UploadBase64ImageToLocalWithCategory(mimeType, base64Data, category string) (string, error) {
-	localPublicBase := normalizeHTTPBaseURL(firstNonEmptyString(os.Getenv("LOCAL_PUBLIC_BASE_URL"), "https://api.o1key.cn"))
-	uploadDir := firstNonEmptyString(os.Getenv("LOCAL_UPLOAD_DIR"), "uploads")
-
-	uploadBytes, ext, contentType, err := prepareImageUpload(mimeType, base64Data)
-	if err != nil {
-		return "", err
+// UploadBase64ImageToLocalWithCategory is kept for callers of the legacy API name.
+func UploadBase64ImageToLocalWithCategory(mimeType, base64Data, _ string) (string, error) {
+	if IsAliyunOSSBlocked() {
+		return UploadBase64ImageToR2(mimeType, base64Data)
 	}
-
-	objectKey := fmt.Sprintf("%s/%s.%s", category, uuid.New().String(), ext)
-	filePath := fmt.Sprintf("%s/%s", uploadDir, objectKey)
-
-	// Ensure directory exists
-	if err := os.MkdirAll(fmt.Sprintf("%s/%s", uploadDir, category), 0755); err != nil {
-		return "", fmt.Errorf("create upload directory failed: %w", err)
-	}
-
-	// Write file
-	if err := os.WriteFile(filePath, uploadBytes, 0644); err != nil {
-		return "", fmt.Errorf("local storage write failed: %w", err)
-	}
-
-	_ = contentType // contentType is determined but not stored as metadata for local files
-	return fmt.Sprintf("%s/upload/%s", localPublicBase, objectKey), nil
+	return UploadBase64ImageToOSS(mimeType, base64Data)
 }
 
 func firstNonEmptyEnv(keys ...string) string {

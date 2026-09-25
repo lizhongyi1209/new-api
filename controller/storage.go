@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/QuantumNous/new-api/service"
@@ -87,7 +87,7 @@ func bindAndValidatePresignRequest(c *gin.Context, req *presignRequest) bool {
 	return true
 }
 
-// UploadLocalFile handles direct file upload to local storage
+// UploadLocalFile keeps the legacy direct-upload endpoint but stores files remotely.
 func UploadLocalFile(c *gin.Context) {
 	objectKey := c.Query("object_key")
 	if objectKey == "" {
@@ -101,29 +101,21 @@ func UploadLocalFile(c *gin.Context) {
 		return
 	}
 
-	uploadDir := getUploadDir()
-	filePath := filepath.Join(uploadDir, objectKey)
-
-	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create directory"})
+	contentType := strings.ToLower(strings.TrimSpace(c.GetHeader("Content-Type")))
+	if !strings.HasPrefix(contentType, "image/") && !strings.HasPrefix(contentType, "audio/") && !strings.HasPrefix(contentType, "video/") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported content type"})
 		return
 	}
-
-	// Read request body
-	body, err := io.ReadAll(c.Request.Body)
+	maxSizeMB := maxImageAudioUploadSizeMB
+	if strings.HasPrefix(contentType, "video/") {
+		maxSizeMB = maxVideoUploadSizeMB
+	}
+	maxSize := int64(maxSizeMB * 1024 * 1024)
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxSize+1))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
 		return
 	}
-
-	// Check file size
-	contentType := c.GetHeader("Content-Type")
-	maxSizeMB := maxImageAudioUploadSizeMB
-	if strings.HasPrefix(strings.ToLower(contentType), "video/") {
-		maxSizeMB = maxVideoUploadSizeMB
-	}
-	maxSize := int64(maxSizeMB * 1024 * 1024)
 	if int64(len(body)) > maxSize {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": fmt.Sprintf("文件大小 %.2f MB 超过限制 %d MB",
@@ -132,18 +124,15 @@ func UploadLocalFile(c *gin.Context) {
 		return
 	}
 
-	// Write file
-	if err := os.WriteFile(filePath, body, 0644); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
+	publicURL, storedKey, err := service.UploadPersistentFile(c.Request.Context(), path.Base(objectKey), contentType, body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to upload file"})
 		return
 	}
 
-	localPublicBase := strings.TrimRight(getLocalPublicBase(), "/")
-	publicURL := fmt.Sprintf("%s/upload/%s", localPublicBase, objectKey)
-
 	c.JSON(http.StatusOK, gin.H{
 		"public_url":   publicURL,
-		"object_key":   objectKey,
+		"object_key":   storedKey,
 		"size":         len(body),
 		"content_type": contentType,
 	})
