@@ -21,6 +21,8 @@ import { getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 
+import { Button } from '@/components/ui/button'
+
 import { LogsFilterToolbar } from '../logs-filter-toolbar'
 import { UsageLogsActions } from '../usage-logs-actions'
 
@@ -36,14 +38,11 @@ function FilterFixture(props: { showExport: boolean }) {
       table={table}
       primaryFilters={<span>Date Range</span>}
       mobilePinnedFilters={<span>Date Range</span>}
-      actionEnd={
-        <UsageLogsActions
-          autoRefreshMs={0}
-          onAutoRefreshChange={() => {}}
-          isAdmin={false}
-          showExport={props.showExport}
-          searchParams={{}}
-        />
+      actionStart={<Button>Hide</Button>}
+      leadingAction={
+        props.showExport ? (
+          <UsageLogsActions isAdmin={false} searchParams={{}} />
+        ) : null
       }
       hasActiveFilters={false}
       onReset={() => {}}
@@ -76,13 +75,15 @@ it.each([
     const panel = container.firstElementChild
     expect(panel).not.toBeNull()
     expect(panel).toHaveClass('w-full')
-    expect(panel).toContainElement(
-      screen.getByRole('combobox', { name: /Auto refresh/ })
-    )
+    expect(screen.queryByRole('combobox', { name: /Auto refresh/ })).toBeNull()
+    const hide = screen.getByRole('button', { name: 'Hide' })
     if (showExport) {
-      expect(panel).toContainElement(
-        screen.getByRole('button', { name: 'Export logs' })
-      )
+      const exportButton = screen.getByRole('button', { name: 'Export logs' })
+      expect(panel).toContainElement(exportButton)
+      expect(
+        exportButton.compareDocumentPosition(hide) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
     } else {
       expect(screen.queryByRole('button', { name: 'Export logs' })).toBeNull()
     }

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { DownloadIcon, Loader2Icon, RefreshCcwIcon } from 'lucide-react'
+import { DownloadIcon, Loader2Icon } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -9,14 +9,6 @@ import { ComboboxInput } from '@/components/ui/combobox-input'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Sheet,
   SheetContent,
@@ -51,21 +43,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { handleServerError } from '@/lib/handle-server-error'
-import { cn } from '@/lib/utils'
 
 import { exportUsageLogs, getUsageLogExportOptions } from '../api'
 import { buildApiParams, getDefaultTimeRange } from '../lib/utils'
 import type { UsageLogExportFormat } from '../types'
 import { CompactDateTimeRangePicker } from './compact-date-time-range-picker'
-
-const refreshOptions = [
-  { value: '0', label: 'Off' },
-  { value: '5000', label: '5s' },
-  { value: '10000', label: '10s' },
-  { value: '30000', label: '30s' },
-  { value: '60000', label: '1m' },
-  { value: '300000', label: '5m' },
-] as const
 
 const exportFormats: Array<{
   value: UsageLogExportFormat
@@ -90,10 +72,7 @@ const exportFormats: Array<{
 ]
 
 interface UsageLogsActionsProps {
-  autoRefreshMs: number
-  onAutoRefreshChange: (interval: number) => void
   isAdmin: boolean
-  showExport: boolean
   searchParams: Record<string, unknown>
 }
 
@@ -168,20 +147,6 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
     [exportOptionsQuery.data?.tokens]
   )
 
-  const refreshItems = useMemo(
-    () =>
-      refreshOptions.map((option) => ({
-        value: option.value,
-        label: option.value === '0' ? t(option.label) : option.label,
-      })),
-    [t]
-  )
-  const activeRefreshLabel =
-    refreshItems.find((option) => option.value === String(props.autoRefreshMs))
-      ?.label || t('Off')
-  const compactRefreshLabel =
-    props.autoRefreshMs === 0 ? '—' : activeRefreshLabel
-
   const handleExport = useCallback(async () => {
     if (end.getTime() < start.getTime()) {
       toast.error(t('End time must be after start time'))
@@ -233,190 +198,148 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
   }, [end, format, group, model, props.isAdmin, start, t, token, username])
 
   return (
-    <div className='flex items-center gap-1'>
-      <Select
-        items={refreshItems}
-        value={String(props.autoRefreshMs)}
-        onValueChange={(value) => props.onAutoRefreshChange(Number(value || 0))}
-      >
-        <SelectTrigger
-          size='sm'
-          className='border-border/70 bg-background/70 hover:bg-muted/50 h-7 min-w-0 gap-1 rounded-lg px-1.5 text-xs shadow-none'
-          aria-label={`${t('Auto refresh')}: ${activeRefreshLabel}`}
-          title={`${t('Auto refresh')}: ${activeRefreshLabel}`}
-        >
-          <RefreshCcwIcon
-            className={cn(
-              'size-3.5',
-              props.autoRefreshMs > 0 ? 'text-primary' : 'text-muted-foreground'
-            )}
-          />
-          <SelectValue className='flex-none font-medium tabular-nums'>
-            {compactRefreshLabel}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent alignItemWithTrigger={false}>
-          <SelectGroup>
-            {refreshItems.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-
-      {props.showExport && (
-        <Sheet open={open} onOpenChange={setOpen}>
-          <Tooltip>
-            <TooltipTrigger
+    <Sheet open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <SheetTrigger
               render={
-                <SheetTrigger
-                  render={
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='icon'
-                      className='text-muted-foreground hover:text-foreground size-7'
-                      aria-label={t('Export logs')}
-                    />
-                  }
+                <Button
+                  type='button'
+                  variant='ghost'
+                  size='icon'
+                  className='text-muted-foreground hover:text-foreground size-7'
+                  aria-label={t('Export logs')}
                 />
               }
-            >
-              <DownloadIcon className='size-4' />
-            </TooltipTrigger>
-            <TooltipContent>{t('Export logs')}</TooltipContent>
-          </Tooltip>
+            />
+          }
+        >
+          <DownloadIcon className='size-4' />
+        </TooltipTrigger>
+        <TooltipContent>{t('Export logs')}</TooltipContent>
+      </Tooltip>
 
-          <SheetContent side='right' className='w-full sm:max-w-md'>
-            <SheetHeader className='border-b px-5 py-4'>
-              <SheetTitle>{t('Export usage logs')}</SheetTitle>
-              <SheetDescription>
-                {t(
-                  'Export filtered records for analysis or billing reconciliation.'
-                )}
-              </SheetDescription>
-            </SheetHeader>
+      <SheetContent side='right' className='w-full sm:max-w-md'>
+        <SheetHeader className='border-b px-5 py-4'>
+          <SheetTitle>{t('Export usage logs')}</SheetTitle>
+          <SheetDescription>
+            {t(
+              'Export filtered records for analysis or billing reconciliation.'
+            )}
+          </SheetDescription>
+        </SheetHeader>
 
-            <div className='flex-1 space-y-6 overflow-y-auto px-5 py-2'>
+        <div className='flex-1 space-y-6 overflow-y-auto px-5 py-2'>
+          <div className='space-y-2'>
+            <Label>{t('Time Range')}</Label>
+            <CompactDateTimeRangePicker
+              start={start}
+              end={end}
+              onChange={(range) => {
+                if (range.start) setStart(range.start)
+                if (range.end) setEnd(range.end)
+              }}
+            />
+            <p className='text-muted-foreground text-xs'>
+              {t('A single export can cover up to 31 days and 50,000 records.')}
+            </p>
+          </div>
+
+          <div className='grid gap-4 sm:grid-cols-2'>
+            <div className='space-y-2'>
+              <Label htmlFor='usage-log-export-group'>{t('Group')}</Label>
+              <Input
+                id='usage-log-export-group'
+                value={group}
+                onChange={(event) => setGroup(event.target.value)}
+                placeholder={t('All groups')}
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='usage-log-export-model'>{t('Model Name')}</Label>
+              <Input
+                id='usage-log-export-model'
+                value={model}
+                onChange={(event) => setModel(event.target.value)}
+                placeholder={t('All models')}
+              />
+            </div>
+          </div>
+
+          {props.isAdmin && (
+            <div className='grid gap-4 sm:grid-cols-2'>
               <div className='space-y-2'>
-                <Label>{t('Time Range')}</Label>
-                <CompactDateTimeRangePicker
-                  start={start}
-                  end={end}
-                  onChange={(range) => {
-                    if (range.start) setStart(range.start)
-                    if (range.end) setEnd(range.end)
+                <Label htmlFor='usage-log-export-username'>
+                  {t('Username')}
+                </Label>
+                <ComboboxInput
+                  id='usage-log-export-username'
+                  options={usernameOptions}
+                  value={username}
+                  onValueChange={(value) => {
+                    setUsername(value)
+                    setToken('')
                   }}
+                  placeholder={t('All users')}
+                  emptyText={t('No data')}
+                  allowCustomValue
                 />
-                <p className='text-muted-foreground text-xs'>
-                  {t(
-                    'A single export can cover up to 31 days and 50,000 records.'
-                  )}
-                </p>
               </div>
-
-              <div className='grid gap-4 sm:grid-cols-2'>
-                <div className='space-y-2'>
-                  <Label htmlFor='usage-log-export-group'>{t('Group')}</Label>
-                  <Input
-                    id='usage-log-export-group'
-                    value={group}
-                    onChange={(event) => setGroup(event.target.value)}
-                    placeholder={t('All groups')}
-                  />
-                </div>
-                <div className='space-y-2'>
-                  <Label htmlFor='usage-log-export-model'>
-                    {t('Model Name')}
-                  </Label>
-                  <Input
-                    id='usage-log-export-model'
-                    value={model}
-                    onChange={(event) => setModel(event.target.value)}
-                    placeholder={t('All models')}
-                  />
-                </div>
-              </div>
-
-              {props.isAdmin && (
-                <div className='grid gap-4 sm:grid-cols-2'>
-                  <div className='space-y-2'>
-                    <Label htmlFor='usage-log-export-username'>
-                      {t('Username')}
-                    </Label>
-                    <ComboboxInput
-                      id='usage-log-export-username'
-                      options={usernameOptions}
-                      value={username}
-                      onValueChange={(value) => {
-                        setUsername(value)
-                        setToken('')
-                      }}
-                      placeholder={t('All users')}
-                      emptyText={t('No data')}
-                      allowCustomValue
-                    />
-                  </div>
-                  <div className='space-y-2'>
-                    <Label htmlFor='usage-log-export-token'>
-                      {t('Token Name')}
-                    </Label>
-                    <ComboboxInput
-                      id='usage-log-export-token'
-                      options={tokenOptions}
-                      value={token}
-                      onValueChange={setToken}
-                      placeholder={t('Token Name')}
-                      emptyText={t('No data')}
-                      allowCustomValue
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className='space-y-3'>
-                <Label>{t('Export Format')}</Label>
-                <RadioGroup
-                  value={format}
-                  onValueChange={(value) =>
-                    setFormat(value as UsageLogExportFormat)
-                  }
-                >
-                  {exportFormats.map((option) => (
-                    <Label
-                      key={option.value}
-                      className='hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors'
-                    >
-                      <RadioGroupItem value={option.value} className='mt-0.5' />
-                      <span className='space-y-1'>
-                        <span className='block font-medium'>
-                          {t(option.label)}
-                        </span>
-                        <span className='text-muted-foreground block text-xs leading-4 font-normal'>
-                          {t(option.description)}
-                        </span>
-                      </span>
-                    </Label>
-                  ))}
-                </RadioGroup>
+              <div className='space-y-2'>
+                <Label htmlFor='usage-log-export-token'>
+                  {t('Token Name')}
+                </Label>
+                <ComboboxInput
+                  id='usage-log-export-token'
+                  options={tokenOptions}
+                  value={token}
+                  onValueChange={setToken}
+                  placeholder={t('Token Name')}
+                  emptyText={t('No data')}
+                  allowCustomValue
+                />
               </div>
             </div>
+          )}
 
-            <SheetFooter className='border-t px-5 py-4'>
-              <Button onClick={handleExport} disabled={exporting}>
-                {exporting ? (
-                  <Loader2Icon className='size-4 animate-spin' />
-                ) : (
-                  <DownloadIcon className='size-4' />
-                )}
-                {exporting ? t('Exporting...') : t('Export')}
-              </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
-      )}
-    </div>
+          <div className='space-y-3'>
+            <Label>{t('Export Format')}</Label>
+            <RadioGroup
+              value={format}
+              onValueChange={(value) =>
+                setFormat(value as UsageLogExportFormat)
+              }
+            >
+              {exportFormats.map((option) => (
+                <Label
+                  key={option.value}
+                  className='hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors'
+                >
+                  <RadioGroupItem value={option.value} className='mt-0.5' />
+                  <span className='space-y-1'>
+                    <span className='block font-medium'>{t(option.label)}</span>
+                    <span className='text-muted-foreground block text-xs leading-4 font-normal'>
+                      {t(option.description)}
+                    </span>
+                  </span>
+                </Label>
+              ))}
+            </RadioGroup>
+          </div>
+        </div>
+
+        <SheetFooter className='border-t px-5 py-4'>
+          <Button onClick={handleExport} disabled={exporting}>
+            {exporting ? (
+              <Loader2Icon className='size-4 animate-spin' />
+            ) : (
+              <DownloadIcon className='size-4' />
+            )}
+            {exporting ? t('Exporting...') : t('Export')}
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

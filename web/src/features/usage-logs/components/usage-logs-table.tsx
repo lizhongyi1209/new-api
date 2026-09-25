@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -87,7 +87,6 @@ interface UsageLogsTableProps {
 
 export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
-  const [autoRefreshMs, setAutoRefreshMs] = useState(0)
   const getColumnClassName = useCallback(
     () => (logCategory === 'common' ? 'py-2' : 'py-3.5'),
     [logCategory]
@@ -198,8 +197,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       return undefined
     },
-    refetchInterval: autoRefreshMs || false,
-    refetchIntervalInBackground: false,
   })
 
   const logs = data?.items || []
@@ -230,15 +227,9 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   })
 
   const isCommon = logCategory === 'common'
-  const toolbarActions = (
-    <UsageLogsActions
-      autoRefreshMs={autoRefreshMs}
-      onAutoRefreshChange={setAutoRefreshMs}
-      isAdmin={isAdmin}
-      showExport={isCommon}
-      searchParams={searchParams}
-    />
-  )
+  const exportAction = isCommon ? (
+    <UsageLogsActions isAdmin={isAdmin} searchParams={searchParams} />
+  ) : null
 
   return (
     <DataTablePage
@@ -265,13 +256,9 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       toolbar={
         isCommon ? (
-          <CommonLogsFilterBar table={table} actionEnd={toolbarActions} />
+          <CommonLogsFilterBar table={table} leadingAction={exportAction} />
         ) : (
-          <TaskLogsFilterBar
-            table={table}
-            logCategory={logCategory}
-            actionEnd={toolbarActions}
-          />
+          <TaskLogsFilterBar table={table} logCategory={logCategory} />
         )
       }
       renderRow={(row) => {

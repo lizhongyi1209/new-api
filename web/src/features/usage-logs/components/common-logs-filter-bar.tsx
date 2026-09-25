@@ -113,7 +113,7 @@ function buildSearchSourceKey(values: {
 
 interface CommonLogsFilterBarProps<TData> {
   table: Table<TData>
-  actionEnd?: ReactNode
+  leadingAction?: ReactNode
 }
 
 export function CommonLogsFilterBar<TData>(
@@ -489,8 +489,8 @@ export function CommonLogsFilterBar<TData>(
       table={props.table}
       compactMobile
       stats={statsBar}
+      leadingAction={props.leadingAction}
       actionStart={sensitiveToggle}
-      actionEnd={props.actionEnd}
       primaryFilters={
         <>
           {dateRangeFilter}
