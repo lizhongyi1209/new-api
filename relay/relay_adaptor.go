@@ -242,6 +242,12 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 		return jspluginadaptor.New(plugin)
 	}
 	if _, migrated := taskPluginKeys[platform]; migrated {
+		// An operator who disables the plugin system expects every channel to
+		// fall back to its legacy implementation. Only a channel whose plugin is
+		// expected to be running keeps the strict nil result.
+		if !pluginruntime.DefaultRegistry.Enabled() {
+			return getLegacyTaskAdaptor(platform)
+		}
 		return nil
 	}
 	return getLegacyTaskAdaptor(platform)

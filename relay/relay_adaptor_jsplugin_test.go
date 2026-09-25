@@ -96,3 +96,20 @@ func TestGetTaskAdaptorForRequestPinsLegacyMappedPlugin(t *testing.T) {
 	assert.Equal(t, "sora", pinned.Plugin.Meta.Key)
 	assert.Same(t, pinned.Generation, pluginruntime.DefaultRegistry.Generation())
 }
+
+// Disabling the plugin system is an operator escape hatch: every migrated
+// channel must fall back to its legacy adaptor instead of failing with
+// task_plugin_system_disabled. See the Kling/MiniMax video regression.
+func TestGetTaskAdaptorFallsBackToLegacyWhenPluginSystemDisabled(t *testing.T) {
+	registry := pluginruntime.DefaultRegistry
+	wasEnabled := registry.Enabled()
+	t.Cleanup(func() { registry.SetEnabled(wasEnabled) })
+	registry.SetEnabled(false)
+
+	platform := constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeKling))
+	adaptor := GetTaskAdaptor(platform)
+	require.NotNil(t, adaptor, "a migrated platform must fall back to legacy while the plugin system is off")
+	_, isJS := adaptor.(*jspluginadaptor.TaskAdaptor)
+	assert.False(t, isJS, "the plugin system is off, so a plugin adaptor must not be returned")
+	assert.Equal(t, "kling", adaptor.GetChannelName())
+}
