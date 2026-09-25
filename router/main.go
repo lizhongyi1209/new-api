@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,7 +18,13 @@ func SetRouter(router *gin.Engine, assets WebAssets) {
 	SetApiRouter(router)
 	SetDashboardRouter(router)
 	SetRelayRouter(router)
-	SetTaskPluginProtocolRouter(router)
+	// The host-protocol routes are the plugin system's own entry points. With
+	// the plugin system off, the legacy handlers registered by SetRelayRouter
+	// and SetVideoRouter own these paths instead, and registering both would
+	// collide on the same gin route.
+	if pluginruntime.DefaultRegistry.Enabled() {
+		SetTaskPluginProtocolRouter(router)
+	}
 	SetVideoRouter(router)
 	SetTaskRouter(router)
 	SetStaticUploadRouter(router) // Serve uploaded files

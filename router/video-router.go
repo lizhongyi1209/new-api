@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,6 +20,19 @@ func SetVideoRouter(router *gin.Engine) {
 	doubaoVideoFetchRouter.Use(middleware.RouteTag("relay"), middleware.TokenAuth())
 	doubaoVideoFetchRouter.GET("/:task_id", controller.RelayDoubaoVideoTaskFetch)
 
+	// Legacy video routes. The plugin host-protocol router owns these paths
+	// while the plugin system is enabled; with it off, these keep serving them
+	// exactly as they did before the protocol routes existed.
+	if !pluginruntime.DefaultRegistry.Enabled() {
+		// Video proxy: accepts either session auth (dashboard) or token auth (API clients)
+		videoProxyRouter := router.Group("/v1")
+		videoProxyRouter.Use(middleware.RouteTag("relay"))
+		videoProxyRouter.Use(middleware.TokenOrUserAuth())
+		{
+			videoProxyRouter.GET("/videos/:task_id/content", controller.VideoProxy)
+		}
+	}
+
 	videoV1Router := router.Group("/v1")
 	videoV1Router.Use(middleware.RouteTag("relay"))
 	videoV1Router.Use(middleware.TokenAuth(), middleware.Distribute())
@@ -29,6 +43,12 @@ func SetVideoRouter(router *gin.Engine) {
 		videoV1Router.POST("/video/generations", controller.RelayTask)
 		videoV1Router.GET("/video/generations/:task_id", controller.RelayTaskFetch)
 		videoV1Router.POST("/videos/:video_id/remix", controller.RelayTask)
+		if !pluginruntime.DefaultRegistry.Enabled() {
+			// openai compatible API video routes
+			// docs: https://platform.openai.com/docs/api-reference/videos/create
+			videoV1Router.POST("/videos", controller.RelayTask)
+			videoV1Router.GET("/videos/:task_id", controller.RelayTaskFetch)
+		}
 	}
 
 	// xAI Grok video API compatibility. The /grok prefix keeps xAI's response

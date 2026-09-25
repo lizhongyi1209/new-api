@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relaykit/types"
 
@@ -129,6 +130,16 @@ func SetRelayRouter(router *gin.Engine) {
 			controller.Relay(c, types.RelayFormatOpenAIResponsesCompaction)
 		})
 
+		// With the task plugin system off these paths have no protocol router
+		// owner, so the legacy handlers keep serving them. When the plugin
+		// system is on, SetTaskPluginProtocolRouter registers them instead and
+		// claiming them here would be a duplicate route.
+		if !pluginruntime.DefaultRegistry.Enabled() {
+			httpRouter.POST("/responses", func(c *gin.Context) {
+				controller.Relay(c, types.RelayFormatOpenAIResponses)
+			})
+		}
+
 		// alpha search route
 		httpRouter.POST("/alpha/search", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatAlphaSearch)
@@ -138,6 +149,14 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.POST("/edits", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIImage)
 		})
+		if !pluginruntime.DefaultRegistry.Enabled() {
+			httpRouter.POST("/images/generations", func(c *gin.Context) {
+				controller.Relay(c, types.RelayFormatOpenAIImage)
+			})
+			httpRouter.POST("/images/edits", func(c *gin.Context) {
+				controller.Relay(c, types.RelayFormatOpenAIImage)
+			})
+		}
 
 		// embedding related routes
 		httpRouter.POST("/embeddings", func(c *gin.Context) {

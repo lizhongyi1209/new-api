@@ -438,3 +438,40 @@ ls -lh /home/ubuntu/backup_*.sql
 4. **Bump the `VERSION` file on every upstream sync** to the synced official `v1.0.0-rc.*` tag — it is not auto-updated and otherwise `/api/status` keeps showing the old version.
 5. First `docker compose up --build` takes 5–15 min; subsequent builds are faster due to cache.
 6. This manual may be updated over time — Claude should update it in-place when the user provides new information, rather than keeping stale data.
+
+### Upstream Sync Checklist — Task Plugin System
+
+The task plugin system (`pkg/jsplugin`, host-protocol routes) is **deliberately disabled** in
+production: `TaskPluginEnabled=false` and all ten factory keys listed in
+`TaskPluginDisabledFactoryKeys`. That switch is the operator's escape hatch: with it off, every
+task channel must run its legacy adaptor and legacy routes, never the plugin protocol layer.
+
+The rc.40 sync (2026-09-24, commit `c9cc381d3`) broke video delivery in three independent ways,
+all of them "new plugin system assumed to be active". After any upstream sync, verify each of
+these before deploying:
+
+1. **Route coverage** — `router/main.go` only calls `SetTaskPluginProtocolRouter` while the plugin
+   system is enabled, and `router/relay-router.go` / `router/video-router.go` register the legacy
+   handlers for `/v1/responses`, `/v1/videos`, `/v1/videos/:task_id`,
+   `/v1/videos/:task_id/content`, `/v1/images/generations`, `/v1/images/edits` when it is off.
+   The protocol table in `pkg/jsplugin/routing.go` is the only other owner of those paths, so
+   losing one side silently drops the route (a 404 with `Invalid URL (POST <path>)`).
+   `POST /v1/video/generations` is **not** in the protocol table and always needs its own
+   registration in `router/video-router.go`.
+   Guards: `router/task_plugin_gate_test.go`.
+
+2. **Adaptor resolution** — `GetTaskAdaptor` in `relay/relay_adaptor.go` must resolve a legacy
+   adaptor for every key in `taskPluginKeys` while the plugin system is off. Returning `nil`
+   surfaces as `task_plugin_system_disabled` and takes down kling, gemini, ali, jimeng, vidu,
+   doubao, volcengine, vertex, suno, sora and openai video at once.
+   Guard: `TestGetTaskAdaptorFallsBackToLegacyWhenPluginSystemDisabled`.
+
+3. **Single response write** — `presentTaskSubmission` in `controller/relay.go` must return early
+   when `c.Writer.Written()` is true. The legacy adaptors still render their own submit body
+   inside `DoResponse` (14 of them do), so an unconditional second write appends a second JSON
+   object and the client reports an unparseable response.
+   Guard: `TestPresentTaskSubmissionPreservesAdaptorResponse`.
+
+Also note `GetTaskAdaptor` returns `nil` for a migrated platform whose plugin is expected to be
+running but fails to load. That strict behavior is intentional and must not be relaxed.
+
