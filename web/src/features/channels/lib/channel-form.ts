@@ -460,7 +460,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   param_override: '',
   header_override: '',
   settings: '{}',
-  image_output_strategy: 'passthrough',
+  image_output_strategy: 'oss',
   gemini_file_data_enabled: false,
   other: '',
   multi_key_mode: 'single',

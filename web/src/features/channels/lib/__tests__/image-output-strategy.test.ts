@@ -8,26 +8,55 @@ import {
   transformFormDataToUpdatePayload,
 } from '../channel-form'
 
-test('new channels save OSS and R2 while passthrough omits the strategy key', () => {
-  for (const strategy of ['oss', 'r2'] as const) {
-    const form = {
-      ...CHANNEL_FORM_DEFAULT_VALUES,
-      name: 'Image channel',
-      models: 'image-model',
-      image_output_strategy: strategy,
-    }
-    const payload = transformFormDataToCreatePayload(form).channel
-    expect(JSON.parse(payload.settings || '{}').image_output_strategy).toBe(
-      strategy
-    )
-  }
-
-  const passthrough = transformFormDataToCreatePayload({
+test('new channels default to OSS while explicit passthrough omits the strategy key', () => {
+  expect(CHANNEL_FORM_DEFAULT_VALUES.image_output_strategy).toBe('oss')
+  const form = {
     ...CHANNEL_FORM_DEFAULT_VALUES,
     name: 'Image channel',
     models: 'image-model',
+  }
+  const defaultPayload = transformFormDataToCreatePayload(form).channel
+  expect(
+    JSON.parse(defaultPayload.settings || '{}').image_output_strategy
+  ).toBe('oss')
+
+  const r2Payload = transformFormDataToCreatePayload({
+    ...form,
+    image_output_strategy: 'r2',
+  }).channel
+  expect(JSON.parse(r2Payload.settings || '{}').image_output_strategy).toBe(
+    'r2'
+  )
+
+  const passthrough = transformFormDataToCreatePayload({
+    ...form,
+    image_output_strategy: 'passthrough',
   }).channel
   expect(JSON.parse(passthrough.settings || '{}')).not.toHaveProperty(
+    'image_output_strategy'
+  )
+})
+
+test('editing a channel without an output strategy keeps passthrough', () => {
+  const channel = channelSchema.parse({
+    id: 41,
+    name: 'Existing image channel',
+    type: 1,
+    key: '',
+    status: 1,
+    created_time: 1,
+    test_time: 0,
+    response_time: 0,
+    balance_updated_time: 0,
+    models: 'image-model',
+    group: 'default',
+    settings: '{}',
+  })
+  const form = transformChannelToFormDefaults(channel)
+  expect(form.image_output_strategy).toBe('passthrough')
+
+  const payload = transformFormDataToUpdatePayload(form, channel.id)
+  expect(JSON.parse(payload.settings || '{}')).not.toHaveProperty(
     'image_output_strategy'
   )
 })
