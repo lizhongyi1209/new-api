@@ -49,8 +49,8 @@ import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
-import { UsageLogsMobileList } from './usage-logs-mobile-card'
 import { UsageLogsActions } from './usage-logs-actions'
+import { UsageLogsMobileList } from './usage-logs-mobile-card'
 import { useLogsViewScope, type LogsViewAccess } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
@@ -230,6 +230,15 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   })
 
   const isCommon = logCategory === 'common'
+  const toolbarActions = (
+    <UsageLogsActions
+      autoRefreshMs={autoRefreshMs}
+      onAutoRefreshChange={setAutoRefreshMs}
+      isAdmin={isAdmin}
+      showExport={isCommon}
+      searchParams={searchParams}
+    />
+  )
 
   return (
     <DataTablePage
@@ -255,20 +264,15 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         />
       }
       toolbar={
-        <div className='flex flex-wrap items-center justify-between gap-2'>
-          {isCommon ? (
-            <CommonLogsFilterBar table={table} />
-          ) : (
-            <TaskLogsFilterBar table={table} logCategory={logCategory} />
-          )}
-          <UsageLogsActions
-            autoRefreshMs={autoRefreshMs}
-            onAutoRefreshChange={setAutoRefreshMs}
-            isAdmin={isAdmin}
-            showExport={isCommon}
-            searchParams={searchParams}
+        isCommon ? (
+          <CommonLogsFilterBar table={table} actionEnd={toolbarActions} />
+        ) : (
+          <TaskLogsFilterBar
+            table={table}
+            logCategory={logCategory}
+            actionEnd={toolbarActions}
           />
-        </div>
+        )
       }
       renderRow={(row) => {
         const logType = (row.original as Record<string, unknown>).type as

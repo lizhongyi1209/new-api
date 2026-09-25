@@ -50,6 +50,7 @@ interface LogsFilterToolbarProps<TData> {
   mobileFilterCount?: number
   stats?: ReactNode
   actionStart?: ReactNode
+  actionEnd?: ReactNode
   hasActiveFilters: boolean
   hasAdvancedActiveFilters?: boolean
   advancedFilterCount?: number
@@ -143,7 +144,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
       <Drawer open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
         <DataTableMobileFilterPanel
           compact={props.compactMobile}
-          className={props.className}
+          className={cn('w-full', props.className)}
           actions={
             <>
               {props.actionStart}
@@ -182,6 +183,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
                 {t('Search')}
               </Button>
               <DataTableViewOptions table={props.table} />
+              {props.actionEnd}
             </>
           }
         >
@@ -243,7 +245,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
   return (
     <div
       className={cn(
-        'bg-card/50 rounded-lg border p-2.5 sm:p-3',
+        'bg-card/50 w-full min-w-0 rounded-lg border p-2.5 sm:p-3',
         props.className
       )}
     >
@@ -285,6 +287,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
             {t('Search')}
           </Button>
           <DataTableViewOptions table={props.table} />
+          {props.actionEnd}
         </div>
       </div>
     </div>
