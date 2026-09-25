@@ -2,14 +2,19 @@ package service
 
 import (
 	"archive/zip"
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/google/uuid"
 )
@@ -17,7 +22,7 @@ import (
 const (
 	TemporaryInputCategory     = "input"
 	TemporaryInputRetention    = TemporaryImageRetention
-	TemporaryInputMaxFileBytes = int64(48 * 1024 * 1024)
+	TemporaryInputMaxFileBytes = int64(20 * 1024 * 1024)
 )
 
 var (
@@ -97,7 +102,7 @@ var temporaryInputFormats = map[string]temporaryInputFormat{
 	".odp":  {Extension: ".odp", ContentType: "application/vnd.oasis.opendocument.presentation", AcceptedMIMEs: []string{"application/vnd.oasis.opendocument.presentation", "application/zip"}},
 }
 
-func StoreTemporaryInputAttachment(reader io.Reader, originalFilename, requestHost string) (*TemporaryInputAttachment, error) {
+func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
 	originalExtension := strings.ToLower(filepath.Ext(strings.TrimSpace(originalFilename)))
 	if originalExtension != "" {
 		if _, ok := temporaryInputFormats[originalExtension]; !ok {
@@ -105,30 +110,10 @@ func StoreTemporaryInputAttachment(reader io.Reader, originalFilename, requestHo
 		}
 	}
 
-	inputDir := temporaryInputDir()
-	if err := os.MkdirAll(inputDir, 0755); err != nil {
-		return nil, fmt.Errorf("create temporary input directory: %w", err)
-	}
-
-	stagingFile, err := os.CreateTemp(inputDir, ".input-*.part")
+	var body bytes.Buffer
+	size, err := io.Copy(&body, io.LimitReader(reader, TemporaryInputMaxFileBytes+1))
 	if err != nil {
-		return nil, fmt.Errorf("create temporary input staging file: %w", err)
-	}
-	stagingPath := stagingFile.Name()
-	committed := false
-	defer func() {
-		_ = stagingFile.Close()
-		if !committed {
-			_ = os.Remove(stagingPath)
-		}
-	}()
-
-	if err := stagingFile.Chmod(0644); err != nil {
-		return nil, fmt.Errorf("set temporary input permissions: %w", err)
-	}
-	size, err := io.Copy(stagingFile, io.LimitReader(reader, TemporaryInputMaxFileBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("write temporary input attachment: %w", err)
+		return nil, fmt.Errorf("read temporary input attachment: %w", err)
 	}
 	if size == 0 {
 		return nil, ErrTemporaryInputEmpty
@@ -136,10 +121,7 @@ func StoreTemporaryInputAttachment(reader io.Reader, originalFilename, requestHo
 	if size > TemporaryInputMaxFileBytes {
 		return nil, ErrTemporaryInputTooLarge
 	}
-	if _, err := stagingFile.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("rewind temporary input attachment: %w", err)
-	}
-	detected, err := mimetype.DetectReader(stagingFile)
+	detected, err := mimetype.DetectReader(bytes.NewReader(body.Bytes()))
 	if err != nil {
 		return nil, fmt.Errorf("detect temporary input attachment type: %w", err)
 	}
@@ -162,10 +144,7 @@ func StoreTemporaryInputAttachment(reader io.Reader, originalFilename, requestHo
 		return nil, ErrTemporaryInputUnsupportedType
 	}
 
-	if err := stagingFile.Close(); err != nil {
-		return nil, fmt.Errorf("close temporary input attachment: %w", err)
-	}
-	if !validateTemporaryInputArchive(stagingPath, originalExtension) {
+	if !validateTemporaryInputArchive(body.Bytes(), originalExtension) {
 		return nil, ErrTemporaryInputUnsupportedType
 	}
 
@@ -189,23 +168,50 @@ func StoreTemporaryInputAttachment(reader io.Reader, originalFilename, requestHo
 	}
 
 	filename := uuid.New().String() + finalExtension
-	finalPath := filepath.Join(inputDir, filename)
-	if err := os.Rename(stagingPath, finalPath); err != nil {
-		return nil, fmt.Errorf("commit temporary input attachment: %w", err)
+	var client *s3.Client
+	var bucket, publicBase string
+	if IsAliyunOSSBlocked() {
+		client, _ = getR2Client()
+		bucket = strings.TrimSpace(os.Getenv("R2_BUCKET"))
+		publicBase = normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
+	} else {
+		client, _, err = getAliyunOSSClient()
+		if err != nil {
+			return nil, err
+		}
+		bucket = strings.TrimSpace(firstNonEmptyEnv("ALIYUN_OSS_BUCKET", "OSS_BUCKET"))
+		publicBase = normalizeHTTPBaseURL(firstNonEmptyEnv("ALIYUN_OSS_PUBLIC_BASE_URL", "OSS_PUBLIC_BASE_URL"))
 	}
-	committed = true
-
-	info, err := os.Stat(finalPath)
+	if bucket == "" || publicBase == "" {
+		return nil, fmt.Errorf("missing object storage bucket or public base URL for temporary input attachment")
+	}
+	parsedBase, err := url.Parse(publicBase)
+	if err != nil || parsedBase.Scheme != "https" || parsedBase.Host == "" || parsedBase.User != nil || parsedBase.RawQuery != "" || parsedBase.Fragment != "" {
+		return nil, fmt.Errorf("temporary input public base URL must be an HTTPS origin")
+	}
+	objectKey := "tmp/input/" + filename
+	putInput := &s3.PutObjectInput{
+		Bucket:        aws.String(bucket),
+		Key:           aws.String(objectKey),
+		Body:          bytes.NewReader(body.Bytes()),
+		ContentLength: aws.Int64(size),
+		ContentType:   aws.String(contentType),
+		CacheControl:  aws.String("public, max-age=3600, must-revalidate"),
+	}
+	if !strings.HasPrefix(contentType, "image/") && !strings.HasPrefix(contentType, "audio/") && !strings.HasPrefix(contentType, "video/") {
+		putInput.ContentDisposition = aws.String("attachment")
+	}
+	_, err = client.PutObject(ctx, putInput)
 	if err != nil {
-		return nil, fmt.Errorf("stat temporary input attachment: %w", err)
+		return nil, fmt.Errorf("upload temporary input attachment to object storage: %w", err)
 	}
-	publicBase := temporaryInputPublicBaseURL(requestHost)
+	expiresAt := time.Now().Add(TemporaryInputRetention)
 	return &TemporaryInputAttachment{
-		URL:         fmt.Sprintf("%s/tmp/%s/%s", publicBase, TemporaryInputCategory, filename),
+		URL:         publicBase + "/" + objectKey,
 		Filename:    filename,
 		ContentType: contentType,
 		Size:        size,
-		ExpiresAt:   info.ModTime().Add(TemporaryInputRetention),
+		ExpiresAt:   expiresAt,
 	}, nil
 }
 
@@ -282,27 +288,70 @@ func CleanupExpiredTemporaryInputAttachments(now time.Time) (TemporaryInputClean
 	return stats, errors.Join(cleanupErrors...)
 }
 
+// CleanupExpiredTemporaryInputObjects removes uploaded inputs from the dedicated
+// object prefix. Public object URLs can remain cached after deletion, so the
+// response expiry is the scheduled cleanup time rather than a hard access gate.
+func CleanupExpiredTemporaryInputObjects(ctx context.Context, now time.Time) (TemporaryInputCleanupStats, error) {
+	var stats TemporaryInputCleanupStats
+	var cleanupErrors []error
+	type objectStore struct {
+		name   string
+		client *s3.Client
+		bucket string
+	}
+	stores := make([]objectStore, 0, 2)
+
+	if bucket := strings.TrimSpace(firstNonEmptyEnv("ALIYUN_OSS_BUCKET", "OSS_BUCKET")); bucket != "" {
+		client, _, err := getAliyunOSSClient()
+		if err != nil {
+			cleanupErrors = append(cleanupErrors, err)
+		} else {
+			stores = append(stores, objectStore{"Aliyun OSS", client, bucket})
+		}
+	}
+	if bucket := strings.TrimSpace(os.Getenv("R2_BUCKET")); bucket != "" && os.Getenv("R2_SECRET_ACCESS_KEY") != "" {
+		client, _ := getR2Client()
+		stores = append(stores, objectStore{"R2", client, bucket})
+	}
+
+	cutoff := now.Add(-TemporaryInputRetention)
+	for _, store := range stores {
+		pages := s3.NewListObjectsV2Paginator(store.client, &s3.ListObjectsV2Input{
+			Bucket: aws.String(store.bucket),
+			Prefix: aws.String("tmp/input/"),
+		})
+		for pages.HasMorePages() {
+			page, err := pages.NextPage(ctx)
+			if err != nil {
+				cleanupErrors = append(cleanupErrors, fmt.Errorf("list %s temporary input objects: %w", store.name, err))
+				break
+			}
+			for _, object := range page.Contents {
+				if object.Key == nil || object.LastModified == nil || object.LastModified.After(cutoff) {
+					continue
+				}
+				_, err = store.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+					Bucket: aws.String(store.bucket),
+					Key:    object.Key,
+				})
+				if err != nil {
+					cleanupErrors = append(cleanupErrors, fmt.Errorf("delete %s temporary input object: %w", store.name, err))
+					continue
+				}
+				stats.Deleted++
+				stats.Bytes += aws.ToInt64(object.Size)
+			}
+		}
+	}
+	return stats, errors.Join(cleanupErrors...)
+}
+
 func temporaryInputDir() string {
 	root := strings.TrimSpace(os.Getenv("TEMP_STORAGE_DIR"))
 	if root == "" {
 		root = "tmp"
 	}
 	return filepath.Join(root, TemporaryInputCategory)
-}
-
-func temporaryInputPublicBaseURL(requestHost string) string {
-	switch normalizeRequestHost(requestHost) {
-	case "api.o1key.cn":
-		return "https://api.o1key.cn"
-	case "api.o1key.com", "cf-api.o1key.cn", "cf-api.o1key.com":
-		return "https://cf-api.o1key.com"
-	default:
-		return normalizeHTTPBaseURL(firstNonEmptyString(
-			os.Getenv("TEMP_STORAGE_PUBLIC_BASE_URL"),
-			os.Getenv("LOCAL_PUBLIC_BASE_URL"),
-			"https://cf-api.o1key.com",
-		))
-	}
 }
 
 func isTemporaryInputFilename(filename string) bool {
@@ -317,7 +366,7 @@ func isTemporaryInputFilename(filename string) bool {
 	return err == nil
 }
 
-func validateTemporaryInputArchive(filePath, extension string) bool {
+func validateTemporaryInputArchive(data []byte, extension string) bool {
 	var requiredPath string
 	var requiredMIME string
 	switch extension {
@@ -337,11 +386,10 @@ func validateTemporaryInputArchive(filePath, extension string) bool {
 		return true
 	}
 
-	archive, err := zip.OpenReader(filePath)
+	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return false
 	}
-	defer archive.Close()
 	for _, entry := range archive.File {
 		if requiredPath != "" && entry.Name == requiredPath {
 			return true

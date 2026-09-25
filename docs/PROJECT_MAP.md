@@ -306,8 +306,8 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 - `/async/v1/generateImage`, `/v1/images/generations`, and `/v1/images/edits` accept the optional `moderation` values `auto` and `low` only for model names starting with `gpt-image`; the field is forwarded through OpenAI image generation JSON and edit multipart requests.
 - Channel `settings` JSON key `gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration. Gemini and Vertex channel editors expose it under Other Settings.
 - With the setting disabled, Gemini reference URLs are downloaded and sent as `inlineData`, preserving the legacy behavior.
-- With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are atomically stored under `${TEMP_STORAGE_DIR:-tmp}/input` and exposed through the CF `/tmp/input` URL.
-- Unknown URL MIME types fall back to the legacy download-to-inline path. Local storage failures fall back to `inlineData` only when the resulting Gemini request remains within the 20 MiB upstream limit.
+- With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are validated and uploaded to OSS under `tmp/input/`, then exposed through the configured object-storage public URL.
+- Unknown URL MIME types fall back to the legacy download-to-inline path. Object-storage failures fall back to `inlineData` only when the resulting Gemini request remains within the 20 MiB upstream limit.
 - Input preparation logs contain only format/timing/size summaries and never include Base64 payloads or signed URL query parameters.
 
 ### Entry points
@@ -319,7 +319,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Gemini `inlineData`/`fileData` preparation and timing summary | `service/async_image.go` |
 | Submission-time channel capability selection and input preparation log | `controller/generate_image.go` |
 | Channel capability setting | `dto/channel_settings.go` |
-| Reused atomic `/tmp/input` storage | `service/temporary_upload.go` |
+| Reused validated OSS `tmp/input/` storage | `service/temporary_upload.go`, `service/storage.go` |
 | Channel editor option and form persistence | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/src/features/channels/lib/channel-form.ts` |
 | Public API documentation | Source: `docs/api-doc.html`; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
 | Operations and troubleshooting | `docs/operations/generate-image-filedata.md`, `docs/operations/generate-image-observability.md` |
@@ -376,7 +376,7 @@ There are several distinct upload flows. Identify the required contract before e
 
 | Flow | HTTP/UI entry | Backend and frontend source entries |
 | --- | --- | --- |
-| Authenticated temporary attachment upload | `POST /v1/o1key/uploads`; public file: `GET`/`HEAD /tmp/input/:filename` | Route: `router/relay-router.go`; multipart controller and public response: `controller/temporary_upload.go`; content validation, atomic local storage, CF/ESA URL mapping, 24-hour expiry and cleanup: `service/temporary_upload.go`, `service/temporary_image_cleanup_task.go`; downstream integration guide: `docs/api-doc.html#temporary-upload`; contract tests: `service/temporary_upload_test.go`, `controller/temporary_upload_test.go`, `router/temporary_upload_router_test.go` |
+| Authenticated temporary attachment upload | `POST /v1/o1key/uploads`; legacy local files: `GET`/`HEAD /tmp/input/:filename` | Route: `router/relay-router.go`; multipart controller and public response: `controller/temporary_upload.go`; content validation, 20 MiB bound, OSS/R2 upload, object cleanup, and legacy local reads: `service/temporary_upload.go`, `service/temporary_image_cleanup_task.go`, `service/storage.go`; downstream integration guide: `docs/api-doc.html#temporary-upload`; contract tests: `service/temporary_upload_test.go`, `controller/temporary_upload_test.go`, `router/temporary_upload_router_test.go` |
 | Authenticated object-storage upload | `POST /v1/storage/presign` | Route: `router/relay-router.go`; validation/controller: `controller/storage.go`; host-based R2/OSS presign selection: `service/storage.go` |
 | Explicit OSS-compatible presign | `POST /v1/storage/oss/presign` | `router/relay-router.go`, `controller/storage.go`, `service/storage.go` |
 | Legacy direct object upload | `POST /v1/storage/local/upload?object_key=uploads/...` | `router/relay-router.go`, `controller/storage.go`, `service/storage.go`; new files are written to OSS under `uploads/oss/` (R2 when OSS is administratively disabled). Existing local files remain served by `router/main.go` at `/upload/*` until removed. |
@@ -387,8 +387,8 @@ There are several distinct upload flows. Identify the required contract before e
 
 Important boundaries:
 
-- `POST /v1/o1key/uploads` accepts one `multipart/form-data` field named `file`, supports validated image/audio/video/document formats up to 48 MiB, and stores it under `${TEMP_STORAGE_DIR:-tmp}/input` for 24 hours. Requests sent through the CF or ESA API hostname receive the matching fixed public hostname; unknown hosts use the configured temporary-storage base and are never reflected into the response URL.
-- Temporary attachments use UUID filenames and content-based type checks. Executable, archive-only, HTML, SVG, and extension/content mismatches are rejected. Non-media responses are forced to download with `nosniff` and a restrictive content security policy.
+- `POST /v1/o1key/uploads` accepts one `multipart/form-data` field named `file`, supports validated image/audio/video/document formats up to 20 MiB, and stores new inputs under the object-storage `tmp/input/` prefix. The response URL uses the configured Aliyun OSS public base (R2 when OSS is administratively disabled), independent of the request host. Object cleanup is scheduled after 24 hours; public caches may outlive that time. Existing local `/tmp/input/` files retain their legacy read and cleanup path during the transition.
+- Temporary attachments use UUID filenames and content-based type checks. Executable, archive-only, HTML, SVG, and extension/content mismatches are rejected. New non-media objects use `Content-Disposition: attachment`; legacy local non-media responses retain `nosniff` and a restrictive content security policy.
 - Presign endpoints create short-lived upload authorization; the client still uploads the bytes to the returned upload URL.
 - Browser uploads to Aliyun OSS require bucket CORS to allow `PUT` and the signed request headers. The `o1key-client` bucket uses `AllowedOrigins=*`, `AllowedMethods=PUT,GET,HEAD`, `AllowedHeaders=*`, and a 300-second preflight cache; presigned URLs remain required for writes.
 - `UploadAigcElementImage` is a multipart convenience endpoint for element reference images and is not the generic presign API.

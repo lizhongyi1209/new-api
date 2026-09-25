@@ -3,7 +3,8 @@ package service
 import (
 	"context"
 	"encoding/base64"
-	"os"
+	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -197,9 +198,19 @@ func TestPrepareGenerateImageGeminiNativeKeepsChannelCapabilityIsolated(t *testi
 	assert.Equal(t, "download_to_inline", disabledPreparation.Conversion)
 }
 
-func TestPrepareGenerateImageGeminiNativeStoresBase64AsTemporaryFile(t *testing.T) {
+func TestPrepareGenerateImageGeminiNativeUploadsBase64ToOSS(t *testing.T) {
 	temporaryRoot := t.TempDir()
 	t.Setenv("TEMP_STORAGE_DIR", temporaryRoot)
+	uploaded := make(chan []byte, 1)
+	configureTemporaryInputOSSTest(t, func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		uploaded <- body
+		w.WriteHeader(http.StatusOK)
+	})
 	input := dto.GenerateImageInput{InlineData: &dto.GenerateImageInlineData{
 		MimeType: "image/png",
 		Data:     onePixelPNGBase64,
@@ -216,22 +227,24 @@ func TestPrepareGenerateImageGeminiNativeStoresBase64AsTemporaryFile(t *testing.
 	fileData := preparedGeminiImagePayload(t, nativeRequest, 1, "fileData")
 	fileURI, ok := fileData["fileUri"].(string)
 	require.True(t, ok)
-	assert.True(t, strings.HasPrefix(fileURI, "https://cf-api.o1key.com/tmp/input/"))
+	assert.True(t, strings.HasPrefix(fileURI, "https://media.example.com/tmp/input/"))
 	assert.Equal(t, "image/png", fileData["mimeType"])
-	assert.Equal(t, "local_cf_to_file_data", preparation.Conversion)
+	assert.Equal(t, "oss_to_file_data", preparation.Conversion)
 	assert.Equal(t, "file_data", preparation.UpstreamFormat)
 	assert.Greater(t, preparation.InputBytes, int64(0))
-
-	entries, err := os.ReadDir(filepath.Join(temporaryRoot, TemporaryInputCategory))
+	pngBytes, err := base64.StdEncoding.DecodeString(onePixelPNGBase64)
 	require.NoError(t, err)
-	require.Len(t, entries, 1)
-	assert.True(t, strings.HasSuffix(entries[0].Name(), ".png"))
+	assert.Equal(t, pngBytes, <-uploaded)
+	assert.NoDirExists(t, filepath.Join(temporaryRoot, TemporaryInputCategory))
 }
 
 func TestPrepareGenerateImageGeminiNativeFallsBackOnStorageFailure(t *testing.T) {
-	temporaryRoot := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(temporaryRoot, TemporaryInputCategory), []byte("blocked"), 0600))
-	t.Setenv("TEMP_STORAGE_DIR", temporaryRoot)
+	previousClient, previousPresignClient := ossClient, ossPresignClient
+	ossClient, ossPresignClient = nil, nil
+	t.Cleanup(func() { ossClient, ossPresignClient = previousClient, previousPresignClient })
+	t.Setenv("ALIYUN_OSS_ACCESS_KEY_ID", "")
+	t.Setenv("OSS_ACCESS_KEY_ID", "")
+	t.Setenv("DISABLE_ALIYUN_OSS", "false")
 	input := dto.GenerateImageInput{InlineData: &dto.GenerateImageInlineData{
 		MimeType: "image/png",
 		Data:     onePixelPNGBase64,

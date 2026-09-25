@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
@@ -38,7 +40,7 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 		}
 
 		originalFilename := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
-		attachment, storeErr := service.StoreTemporaryInputAttachment(part, originalFilename, c.Request.Host)
+		attachment, storeErr := service.StoreTemporaryInputAttachment(c.Request.Context(), part, originalFilename)
 		_ = part.Close()
 		if storeErr != nil {
 			switch {
@@ -51,6 +53,7 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 			case errors.Is(storeErr, service.ErrTemporaryInputUnsupportedType):
 				c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported attachment type"})
 			default:
+				logger.LogError(c, "temporary input upload failed: "+common.MaskSensitiveInfo(storeErr.Error()))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store attachment"})
 			}
 			return

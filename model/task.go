@@ -170,11 +170,12 @@ type GenerateImageTimingAudit struct {
 	ClientBodyReceiveMs float64 `json:"client_body_receive_ms,omitempty"`
 	LocalRequestMs      float64 `json:"local_request_ms,omitempty"`
 
-	InputBytes        int64   `json:"input_bytes,omitempty"`
-	InputPrepareMs    float64 `json:"input_prepare_ms,omitempty"`
-	InputDownloadMs   float64 `json:"input_download_ms,omitempty"`
-	InputDecodeMs     float64 `json:"input_decode_ms,omitempty"`
-	InputLocalWriteMs float64 `json:"input_local_write_ms,omitempty"`
+	InputBytes          int64   `json:"input_bytes,omitempty"`
+	InputPrepareMs      float64 `json:"input_prepare_ms,omitempty"`
+	InputDownloadMs     float64 `json:"input_download_ms,omitempty"`
+	InputDecodeMs       float64 `json:"input_decode_ms,omitempty"`
+	InputLocalWriteMs   float64 `json:"input_local_write_ms,omitempty"`
+	InputStorageWriteMs float64 `json:"input_storage_write_ms,omitempty"`
 
 	UpstreamRequestBytes     int64   `json:"upstream_request_bytes,omitempty"`
 	UpstreamTotalMs          float64 `json:"upstream_total_ms,omitempty"`

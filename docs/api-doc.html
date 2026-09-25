@@ -185,12 +185,12 @@
       <article class="reference-panel">
         <h2 id="temporary-upload-title">上传单个附件</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
-        <p>请求使用 <code>multipart/form-data</code>，每次上传一个文件。成功后返回一个有效期为 24 小时的公开 URL，可用于后续图片、音频、视频或文档模型请求。</p>
+        <p>请求使用 <code>multipart/form-data</code>，每次上传一个文件。服务端校验后将文件上传至对象存储，并返回可用于后续模型请求的公开 HTTPS URL。文件计划在上传 24 小时后清理。</p>
 
         <h3>请求参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>file</code></td><td class="req">是</td><td>binary</td><td>待上传附件；单文件最大 48 MiB</td></tr>
+          <tr><td><code>file</code></td><td class="req">是</td><td>binary</td><td>待上传附件；图片、音频、视频和文档均为单文件最大 20 MiB</td></tr>
         </table>
         <div class="callout warn"><b>Multipart 请求</b>：浏览器、SDK 或命令行工具应自动生成包含 boundary 的 <code>Content-Type</code>，不要手动填写固定的 <code>multipart/form-data</code> 请求头。</div>
 
@@ -207,22 +207,21 @@
         <h3>响应字段</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>url</code></td><td>string</td><td>临时公开 HTTPS URL，直接用于后续模型请求</td></tr>
+          <tr><td><code>url</code></td><td>string</td><td>对象存储公开 HTTPS URL，直接用于后续模型请求</td></tr>
           <tr><td><code>filename</code></td><td>string</td><td>上传时的原始文件名</td></tr>
           <tr><td><code>content_type</code></td><td>string</td><td>服务端确认后的 MIME 类型</td></tr>
           <tr><td><code>size</code></td><td>integer</td><td>文件大小，单位为字节</td></tr>
-          <tr><td><code>expires_at</code></td><td>integer</td><td>URL 失效时间，Unix 秒级时间戳</td></tr>
+          <tr><td><code>expires_at</code></td><td>integer</td><td>计划清理时间，Unix 秒级时间戳；实际不可访问时间受对象清理和缓存影响</td></tr>
         </table>
 
         <h3>URL 使用规则</h3>
         <ul>
-          <li>通过 <code>https://cf-api.o1key.com</code> 上传时，返回 Cloudflare 域名 URL。</li>
-          <li>通过 <code>https://api.o1key.cn</code> 上传时，返回国内加速域名 URL。</li>
+          <li>默认返回阿里云 OSS 的公开 URL；若服务端启用 OSS 停用开关，则返回 R2 的公开 URL。上传所用 API 域名不影响存储域名。</li>
           <li>返回的 URL 支持直接 <code>GET</code> 或 <code>HEAD</code>，读取时不需要再次携带 API Key。</li>
-          <li>URL 过期后返回 <code>404</code>。客户端应保存 <code>expires_at</code>，需要继续使用时重新上传。</li>
+          <li>服务端计划在 <code>expires_at</code> 后清理对象；对象存储和 CDN 缓存可能影响实际失效时间。需要继续使用时请重新上传。</li>
           <li>客户端展示文件名时应使用响应中的 <code>filename</code>，不要从临时 URL 推断原始文件名。</li>
         </ul>
-        <div class="callout danger"><b>安全提示</b>：临时 URL 在有效期内可公开访问，请勿上传 API Key、密码、身份证件或其他高敏感信息。</div>
+        <div class="callout danger"><b>安全提示</b>：返回的对象存储 URL 可公开访问，缓存也可能延长可访问时间；请勿上传 API Key、密码、身份证件或其他高敏感信息。</div>
 
         <h3>错误处理</h3>
         <table>
@@ -281,7 +280,7 @@ const upload = await response.json();</code></pre>
 
         <h3>成功响应</h3>
         <pre><code>{
-  "url": "https://cf-api.o1key.com/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png",
+  "url": "https://oss.o1key.cn/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png",
   "filename": "reference.png",
   "content_type": "image/png",
   "size": 11630,
@@ -291,7 +290,7 @@ const upload = await response.json();</code></pre>
         <h3>在后续请求中使用</h3>
         <pre><code>{
   "images": [
-    "https://cf-api.o1key.com/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png"
+    "https://oss.o1key.cn/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png"
   ]
 }</code></pre>
         <p>不同模型的附件字段名称可能不同，请将响应中的 <code>url</code> 填入对应模型要求的 URL 字段。</p>

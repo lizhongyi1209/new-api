@@ -1375,7 +1375,7 @@ type GenerateImageInputPreparation struct {
 	InputBytes     int64
 	Download       time.Duration
 	Decode         time.Duration
-	LocalWrite     time.Duration
+	StorageWrite   time.Duration
 	Total          time.Duration
 }
 
@@ -1388,7 +1388,7 @@ type geminiPreparedImagePart struct {
 	inputBytes     int64
 	download       time.Duration
 	decode         time.Duration
-	localWrite     time.Duration
+	storageWrite   time.Duration
 }
 
 // ConvertAsyncImageToGeminiNative preserves the legacy converter contract: URLs
@@ -1422,7 +1422,7 @@ func ConvertAsyncImageToGeminiNative(ctx context.Context, asyncReq *dto.AsyncIma
 // PrepareGenerateImageGeminiNative converts the unified image inputs according
 // to the selected channel's declared fileData capability.
 func PrepareGenerateImageGeminiNative(
-	_ context.Context,
+	ctx context.Context,
 	asyncReq *dto.AsyncImageRequest,
 	inputs []dto.GenerateImageInput,
 	options GeminiFileDataOptions,
@@ -1442,7 +1442,7 @@ func PrepareGenerateImageGeminiNative(
 	fallbacks := make(map[string]struct{})
 
 	for i, input := range inputs {
-		prepared, err := prepareGeminiImageInput(input, options)
+		prepared, err := prepareGeminiImageInput(ctx, input, options)
 		if err != nil {
 			preparation.Total = time.Since(startedAt)
 			return nil, preparation, fmt.Errorf("images[%d]: %w", i, err)
@@ -1457,7 +1457,7 @@ func PrepareGenerateImageGeminiNative(
 		preparation.InputBytes += prepared.inputBytes
 		preparation.Download += prepared.download
 		preparation.Decode += prepared.decode
-		preparation.LocalWrite += prepared.localWrite
+		preparation.StorageWrite += prepared.storageWrite
 	}
 
 	preparation.ClientFormat = summarizeGenerateImageInputValues(clientFormats, "none")
@@ -1472,7 +1472,7 @@ func PrepareGenerateImageGeminiNative(
 	return nativeReq, preparation, nil
 }
 
-func prepareGeminiImageInput(input dto.GenerateImageInput, options GeminiFileDataOptions) (geminiPreparedImagePart, error) {
+func prepareGeminiImageInput(ctx context.Context, input dto.GenerateImageInput, options GeminiFileDataOptions) (geminiPreparedImagePart, error) {
 	if input.FileData != nil {
 		mimeType := normalizeGenerateImageMIMEType(input.FileData.MimeType)
 		fileURI := strings.TrimSpace(input.FileData.FileURI)
@@ -1513,11 +1513,12 @@ func prepareGeminiImageInput(input dto.GenerateImageInput, options GeminiFileDat
 				return geminiPreparedImagePart{}, fmt.Errorf("invalid data URL")
 			}
 		}
-		return prepareGeminiBase64Input(mimeType, base64Data, "legacy_base64", options)
+		return prepareGeminiBase64Input(ctx, mimeType, base64Data, "legacy_base64", options)
 	}
 
 	if input.InlineData != nil {
 		return prepareGeminiBase64Input(
+			ctx,
 			normalizeGenerateImageMIMEType(input.InlineData.MimeType),
 			strings.TrimSpace(input.InlineData.Data),
 			"inline_data",
@@ -1527,7 +1528,7 @@ func prepareGeminiImageInput(input dto.GenerateImageInput, options GeminiFileDat
 	return geminiPreparedImagePart{}, fmt.Errorf("image input is empty")
 }
 
-func prepareGeminiBase64Input(mimeType, base64Data, clientFormat string, options GeminiFileDataOptions) (geminiPreparedImagePart, error) {
+func prepareGeminiBase64Input(ctx context.Context, mimeType, base64Data, clientFormat string, options GeminiFileDataOptions) (geminiPreparedImagePart, error) {
 	if !options.Enabled {
 		return geminiPreparedImagePart{
 			part:           geminiInlineDataPart(mimeType, base64Data),
@@ -1548,9 +1549,9 @@ func prepareGeminiBase64Input(mimeType, base64Data, clientFormat string, options
 
 	writeStartedAt := time.Now()
 	attachment, storeErr := StoreTemporaryInputAttachment(
+		ctx,
 		bytes.NewReader(raw),
 		"image."+temporaryInputExtensionForMIME(mimeType),
-		"cf-api.o1key.com",
 	)
 	writeDuration := time.Since(writeStartedAt)
 	if storeErr == nil {
@@ -1558,11 +1559,11 @@ func prepareGeminiBase64Input(mimeType, base64Data, clientFormat string, options
 			part:           geminiFileDataPart(attachment.ContentType, attachment.URL),
 			clientFormat:   clientFormat,
 			upstreamFormat: "file_data",
-			conversion:     "local_cf_to_file_data",
+			conversion:     "oss_to_file_data",
 			fallback:       "none",
 			inputBytes:     int64(len(raw)),
 			decode:         decodeDuration,
-			localWrite:     writeDuration,
+			storageWrite:   writeDuration,
 		}, nil
 	}
 
@@ -1577,7 +1578,7 @@ func prepareGeminiBase64Input(mimeType, base64Data, clientFormat string, options
 		fallback:       "storage_error",
 		inputBytes:     int64(len(raw)),
 		decode:         decodeDuration,
-		localWrite:     writeDuration,
+		storageWrite:   writeDuration,
 	}, nil
 }
 

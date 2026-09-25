@@ -1,6 +1,6 @@
 # `/async/v1/generateImage` fileData 输入优化方案
 
-> 状态：代码已部署生产，已完成自动化测试与单次本地实链路验证，等待人工实测
+> 状态：原本地输入版本已部署生产；输入上传改为 OSS 的代码待部署与实链路验证
 > 记录日期：2026-08-29
 > 目标：在不影响现有 Base64/URL 客户端的前提下，为支持 Gemini `fileData` 的上游降低服务器上传请求体的耗时。
 
@@ -25,7 +25,7 @@
 4. 老客户端继续使用 `images: []string`，不要求修改。
 5. 新客户端可以显式传入 `inlineData` 或 `fileData`，用于准确指定 MIME 类型和输入类型。
 6. 初期仅在确认支持 URL 拉取的 Gemini 渠道启用，例如 `gaorui.cc`。
-7. 输入临时文件使用现有 `/tmp/input` 体系，不与生成结果 `/tmp/output` 混用。
+7. 输入对象使用 OSS `tmp/input/` 前缀，不与本地生成结果 `/tmp/output` 混用。
 
 ## 3. 推荐请求协议
 
@@ -145,8 +145,8 @@ Base64/data URL：
 
 | 客户端输入 | 开关关闭：上游仅支持 Base64 | 开关打开：上游支持 fileData |
 | --- | --- | --- |
-| 老格式 Base64 | 直接构造 `inlineData` | Base64 解码并写入本机临时文件，构造 CF `fileData` |
-| 显式 `inlineData` | 直接构造 `inlineData` | 解码并写入本机临时文件，构造 CF `fileData` |
+| 老格式 Base64 | 直接构造 `inlineData` | Base64 解码并上传 OSS，构造 OSS `fileData` |
+| 显式 `inlineData` | 直接构造 `inlineData` | 解码并上传 OSS，构造 OSS `fileData` |
 | 老格式 URL | 本服务器下载后转换为 `inlineData` | 不下载图片正文，直接构造 `fileData` |
 | 显式 `fileData` | 本服务器下载后转换为 `inlineData` | 校验后原样转发 `fileData` |
 
@@ -181,10 +181,10 @@ Base64/data URL：
     │   解码 Base64    服务器下载    │
     │         │           │         │
     │         ▼           ▼         │
-    │ 写入 /data/tmp/input 转 Base64 │
+    │ 上传 OSS tmp/input 转 Base64 │
     │         │           │         │
     │         ▼           ▼         │
-    │ 生成 CF 公共 URL  inlineData   │
+    │ 生成 OSS 公共 URL inlineData   │
     │         │                     │
     ▼         ▼                     ▼
 inlineData  fileData             fileData
@@ -222,8 +222,8 @@ inlineData  fileData             fileData
 渠道开启 `gemini_file_data_enabled` 后，本服务器：
 
 1. 校验并解码 Base64。
-2. 写入 `${TEMP_STORAGE_DIR}/input/<uuid>.jpg`。
-3. 生成 `https://cf-api.o1key.com/tmp/input/<uuid>.jpg`。
+2. 上传到 OSS 的 `tmp/input/<uuid>.jpg`。
+3. 生成 `${ALIYUN_OSS_PUBLIC_BASE_URL}/tmp/input/<uuid>.jpg`。
 4. 发给上游：
 
 ```json
@@ -238,7 +238,7 @@ inlineData  fileData             fileData
         {
           "fileData": {
             "mimeType": "image/jpeg",
-            "fileUri": "https://cf-api.o1key.com/tmp/input/00000000-0000-0000-0000-000000000000.jpg"
+            "fileUri": "https://oss.o1key.cn/tmp/input/00000000-0000-0000-0000-000000000000.jpg"
           }
         }
       ]
@@ -247,20 +247,20 @@ inlineData  fileData             fileData
 }
 ```
 
-## 8. 临时 CF 输入文件
+## 8. 临时 OSS 输入对象
 
-应复用现有临时附件能力：
+应复用现有素材上传的校验和对象存储能力：
 
-- 本机目录：`${TEMP_STORAGE_DIR:-tmp}/input`
-- 生产默认目录：`/data/tmp/input`
-- 公共 URL：`https://cf-api.o1key.com/tmp/input/<uuid>.<ext>`
+- 对象键前缀：`tmp/input/`
+- 公共 URL：`${ALIYUN_OSS_PUBLIC_BASE_URL}/tmp/input/<uuid>.<ext>`；停用 OSS 时走 R2 公网域名
 - 文件名：随机 UUID
-- 支持：`GET`、`HEAD`、Range
-- 缓存：公开缓存，缓存时间随剩余有效期递减
-- 有效期：24 小时
-- 过期后：返回 404，并由清理任务删除
+- 单文件限制：20 MiB
+- 支持：对象存储公开 `GET`、`HEAD`、Range
+- 缓存：对象设置一小时公开缓存，CDN 可能另有缓存规则
+- 计划清理时间：上传后 24 小时；服务端周期性删除，缓存可能延后实际不可访问时间
 
-必须先完成文件原子落盘，再把公共 URL 发送给上游，避免上游拉取时文件尚未就绪。
+必须先确认对象上传成功，再把公共 URL 发送给上游，避免上游拉取时文件尚未就绪。
+部署时需确认公开域名指向存储桶，服务端凭证可对 `tmp/input/` 执行 `PutObject`、`ListObjectsV2` 和 `DeleteObject`。建议给该前缀额外配置 OSS 生命周期规则，作为服务端清理任务停止时的兜底；生命周期规则按日执行，不能替代响应中的计划清理时间。
 
 ## 9. 校验规则
 
@@ -291,7 +291,7 @@ inlineData  fileData             fileData
 
 ## 10. 异常与回退策略
 
-### 本机临时文件写入失败
+### OSS 上传失败
 
 初期建议优先保证老客户可用性：
 
@@ -325,12 +325,12 @@ request_id=<request_id>
 channel=<channel_id>
 client_format=legacy_url|legacy_base64|file_data|inline_data
 upstream_format=file_data|inline_data
-conversion=passthrough|download_to_inline|local_cf_to_file_data
+conversion=passthrough|download_to_inline|oss_to_file_data
 image_count=<n>
 input_bytes=<bytes>
 download_ms=<ms>
 decode_ms=<ms>
-local_write_ms=<ms>
+storage_write_ms=<ms>
 prepare_ms=<ms>
 fallback=none|storage_error|mime_unknown
 ```
@@ -374,7 +374,7 @@ input_prepare_ms + request_write_ms + upstream_wait_ms
 1. [x] 增加兼容字符串和对象的图片输入 DTO。
 2. [x] 增加输入校验和标准化逻辑。
 3. [x] 增加渠道 `gemini_file_data_enabled` 设置，默认关闭。
-4. [x] 复用 `/tmp/input`，实现 Base64 → 本机临时 CF URL。
+4. [x] 复用临时素材校验和 OSS `tmp/input/` 前缀，实现 Base64 → OSS 公共 URL。
 5. [x] 按兼容矩阵生成 `inlineData` 或 `fileData`。
 6. [x] 增加 `input_prepare` 分阶段日志。
 7. [x] 增加确定性的 DTO、转换、回退和渠道隔离测试。
@@ -393,7 +393,7 @@ input_prepare_ms + request_write_ms + upstream_wait_ms
 - 渠道其他设置：`dto/channel_settings.go`
 - 临时输入存储：`service/temporary_upload.go`
 - 临时输入公开响应：`controller/temporary_upload.go`
-- 临时文件清理：`service/temporary_image_cleanup_task.go`
+- OSS 输入对象清理与旧本地文件清理：`service/temporary_image_cleanup_task.go`
 - 渠道编辑表单：`web/default/src/features/channels/`
 
 ## 15. 保持不变的事项
@@ -403,4 +403,4 @@ input_prepare_ms + request_write_ms + upstream_wait_ms
 - 不改变图片输出策略。
 - 不自动重试上游生成请求。
 
-代码实现采用本文协议、`gemini_file_data_enabled` 开关、未知 MIME 下载回退和本机存储失败时的受限 `inlineData` 回退。目标渠道开启后由人工完成真实请求验证。
+代码实现采用本文协议、`gemini_file_data_enabled` 开关、未知 MIME 下载回退和对象存储失败时的受限 `inlineData` 回退。OSS 改造部署后仍需在目标渠道完成人工实链路验证。

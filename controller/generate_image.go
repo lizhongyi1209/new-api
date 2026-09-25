@@ -151,7 +151,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			service.GeminiFileDataOptions{Enabled: relayInfo.ChannelOtherSettings.GeminiFileDataEnabled},
 		)
 		logger.LogInfo(c, fmt.Sprintf(
-			"generate_image_timing: phase=input_prepare task=%s request_id=%s channel=%d client_format=%s upstream_format=%s conversion=%s image_count=%d input_bytes=%d download_ms=%.3f decode_ms=%.3f local_write_ms=%.3f prepare_ms=%.3f fallback=%s error=%t",
+			"generate_image_timing: phase=input_prepare task=%s request_id=%s channel=%d client_format=%s upstream_format=%s conversion=%s image_count=%d input_bytes=%d download_ms=%.3f decode_ms=%.3f storage_write_ms=%.3f prepare_ms=%.3f fallback=%s error=%t",
 			task.TaskID,
 			task.PrivateData.RequestID,
 			task.ChannelId,
@@ -162,7 +162,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			inputPreparation.InputBytes,
 			inputPreparation.Download.Seconds()*1000,
 			inputPreparation.Decode.Seconds()*1000,
-			inputPreparation.LocalWrite.Seconds()*1000,
+			inputPreparation.StorageWrite.Seconds()*1000,
 			inputPreparation.Total.Seconds()*1000,
 			inputPreparation.Fallback,
 			convertErr != nil,
@@ -184,7 +184,7 @@ func GenerateImageSubmit(c *gin.Context) {
 		task.PrivateData.GenerateImageTiming.InputPrepareMs = inputPreparation.Total.Seconds() * 1000
 		task.PrivateData.GenerateImageTiming.InputDownloadMs = inputPreparation.Download.Seconds() * 1000
 		task.PrivateData.GenerateImageTiming.InputDecodeMs = inputPreparation.Decode.Seconds() * 1000
-		task.PrivateData.GenerateImageTiming.InputLocalWriteMs = inputPreparation.LocalWrite.Seconds() * 1000
+		task.PrivateData.GenerateImageTiming.InputStorageWriteMs = inputPreparation.StorageWrite.Seconds() * 1000
 		applyGenerateImageGoogleSearchTool(nativeReq, req.GoogleSearch)
 		if validateErr := service.ValidateGeminiGenerateContentRequestSize(nativeReq); validateErr != nil {
 			if relayInfo.Billing != nil {
