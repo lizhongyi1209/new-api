@@ -23,6 +23,10 @@ func SetVideoRouter(router *gin.Engine) {
 	videoV1Router.Use(middleware.RouteTag("relay"))
 	videoV1Router.Use(middleware.TokenAuth(), middleware.Distribute())
 	{
+		// Legacy MiniMax/Hailuo submit path. It predates the plugin host-protocol
+		// routes and has no entry in the host-protocol table, so it must stay
+		// registered here.
+		videoV1Router.POST("/video/generations", controller.RelayTask)
 		videoV1Router.GET("/video/generations/:task_id", controller.RelayTaskFetch)
 		videoV1Router.POST("/videos/:video_id/remix", controller.RelayTask)
 	}
