@@ -85,6 +85,8 @@ const CONFIGURATION_BLOCKS = {
       'http_protocol',
       'http2_connection_shards',
       'disable_task_polling_sleep',
+      'image_output_strategy',
+      'gemini_file_data_enabled',
     ],
   },
   upstreamModelDetection: {
@@ -175,7 +177,11 @@ export function getChannelConfigurationState(
       values.proxy?.trim() ||
       (values.http_protocol && values.http_protocol !== 'auto') ||
       (values.http2_connection_shards ?? 1) > 1 ||
-      values.disable_task_polling_sleep
+      values.disable_task_polling_sleep ||
+      (values.image_output_strategy &&
+        values.image_output_strategy !== 'passthrough') ||
+      ((values.type === 24 || values.type === 41) &&
+        values.gemini_file_data_enabled)
     ),
     upstreamModelDetection:
       MODEL_FETCHABLE_TYPES.has(values.type) &&

@@ -289,6 +289,7 @@ const SENSITIVE_FORM_FIELDS = [
   'header_override',
   'settings',
   'image_output_strategy',
+  'gemini_file_data_enabled',
   'setting',
   'advanced_custom',
   'is_enterprise_account',
@@ -1823,15 +1824,24 @@ export function ChannelMutateDrawer({
       render={({ field }) => {
         const legacyStrategy = field.value?.startsWith('local_temp') === true
         return (
-          <FormItem>
-            <FormLabel>{t('Image Output Strategy')}</FormLabel>
+          <FormItem className='border-border/70 bg-muted/20 rounded-lg border p-4'>
+            <div className='space-y-1'>
+              <FormLabel className='text-sm font-semibold'>
+                {t('Image Output Strategy')}
+              </FormLabel>
+              <FormDescription className='text-xs leading-relaxed'>
+                {t(
+                  'Choose how generated images and completed videos are returned.'
+                )}
+              </FormDescription>
+            </div>
             <Select
               disabled={sensitiveLocked}
               value={legacyStrategy ? null : field.value || 'passthrough'}
               onValueChange={field.onChange}
             >
               <FormControl>
-                <SelectTrigger>
+                <SelectTrigger className='w-full sm:max-w-xs'>
                   <SelectValue
                     placeholder={
                       legacyStrategy ? t('Local URL (legacy)') : undefined
@@ -1842,17 +1852,55 @@ export function ChannelMutateDrawer({
               <SelectContent alignItemWithTrigger={false}>
                 <SelectGroup>
                   <SelectItem value='passthrough'>
-                    {t('Pass-through')}
+                    {t('Keep upstream result')}
                   </SelectItem>
                   <SelectItem value='oss'>{t('Store in OSS')}</SelectItem>
                   <SelectItem value='r2'>{t('Store in R2')}</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
+            {legacyStrategy && (
+              <p className='text-muted-foreground text-xs leading-relaxed'>
+                {t(
+                  'Legacy local URL is active. Select another output strategy to replace it.'
+                )}
+              </p>
+            )}
             <FormMessage />
           </FormItem>
         )
       }}
+    />
+  )
+
+  const geminiFileDataFields = (currentType === 24 || currentType === 41) && (
+    <FormField
+      control={form.control}
+      name='gemini_file_data_enabled'
+      render={({ field }) => (
+        <FormItem className='border-border/70 bg-muted/20 rounded-lg border p-4'>
+          <div className='flex items-start justify-between gap-4'>
+            <div className='space-y-1'>
+              <FormLabel className='text-sm font-semibold'>
+                {t('Send Gemini input images as URLs')}
+              </FormLabel>
+              <FormDescription className='text-xs leading-relaxed'>
+                {t(
+                  'When enabled, supported reference images are sent to Gemini or Vertex as URLs. Base64 inputs use temporary URLs; unsupported URLs fall back to Base64.'
+                )}
+              </FormDescription>
+            </div>
+            <FormControl>
+              <Switch
+                disabled={sensitiveLocked}
+                checked={field.value === true}
+                onCheckedChange={field.onChange}
+              />
+            </FormControl>
+          </div>
+          <FormMessage />
+        </FormItem>
+      )}
     />
   )
 
@@ -4729,6 +4777,7 @@ export function ChannelMutateDrawer({
               >
                 {taskPollingFields}
                 {imageOutputStrategyFields}
+                {geminiFileDataFields}
                 {proxyFields}
                 {httpProtocolFields}
                 {httpShardsFields}

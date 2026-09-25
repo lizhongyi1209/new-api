@@ -288,6 +288,7 @@ export const channelFormSchema = z
         'local_temp_esa',
       ])
       .optional(),
+    gemini_file_data_enabled: z.boolean().optional(),
     // Field passthrough controls (stored in settings JSON)
     allow_service_tier: z.boolean().optional(), // OpenAI/Anthropic
     disable_store: z.boolean().optional(), // OpenAI only
@@ -460,6 +461,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   header_override: '',
   settings: '{}',
   image_output_strategy: 'passthrough',
+  gemini_file_data_enabled: false,
   other: '',
   multi_key_mode: 'single',
   multi_key_type: 'random',
@@ -553,6 +555,7 @@ export function transformChannelToFormDefaults(
   let azureResponsesVersion = ''
   let imageOutputStrategy: ChannelFormValues['image_output_strategy'] =
     'passthrough'
+  let geminiFileDataEnabled = false
   let isEnterpriseAccount = false
   let awsKeyType: 'ak_sk' | 'api_key' = 'ak_sk'
   let allowServiceTier = false
@@ -581,6 +584,7 @@ export function transformChannelToFormDefaults(
       ) {
         imageOutputStrategy = parsed.image_output_strategy
       }
+      geminiFileDataEnabled = parsed.gemini_file_data_enabled === true
       isEnterpriseAccount = parsed.openrouter_enterprise === true
       awsKeyType = parsed.aws_key_type || 'ak_sk'
       allowServiceTier = parsed.allow_service_tier === true
@@ -643,6 +647,7 @@ export function transformChannelToFormDefaults(
     vertex_key_type: vertexKeyType,
     azure_responses_version: azureResponsesVersion,
     image_output_strategy: imageOutputStrategy,
+    gemini_file_data_enabled: geminiFileDataEnabled,
     aws_key_type: awsKeyType,
     allow_service_tier: allowServiceTier,
     disable_store: disableStore,
@@ -740,6 +745,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.image_output_strategy = formData.image_output_strategy
   } else {
     delete settingsObj.image_output_strategy
+  }
+
+  if (
+    (formData.type === 24 || formData.type === 41) &&
+    formData.gemini_file_data_enabled === true
+  ) {
+    settingsObj.gemini_file_data_enabled = true
+  } else {
+    delete settingsObj.gemini_file_data_enabled
   }
 
   // Add enterprise account setting for OpenRouter (type 20)

@@ -304,7 +304,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 - `/async/v1/generateImage` accepts legacy string items plus explicit `inlineData` and `fileData` objects in `images`.
 - Models whose names start with `gpt-image` accept optional `background` values `auto` and `transparent`; Banana/Gemini image models reject the parameter. Transparent output requires `png` or `webp`, and the option is forwarded through both OpenAI image generations and edits requests.
 - `/async/v1/generateImage`, `/v1/images/generations`, and `/v1/images/edits` accept the optional `moderation` values `auto` and `low` only for model names starting with `gpt-image`; the field is forwarded through OpenAI image generation JSON and edit multipart requests.
-- Channel setting `other.gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration.
+- Channel `settings` JSON key `gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration. Gemini and Vertex channel editors expose it under Other Settings.
 - With the setting disabled, Gemini reference URLs are downloaded and sent as `inlineData`, preserving the legacy behavior.
 - With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are atomically stored under `${TEMP_STORAGE_DIR:-tmp}/input` and exposed through the CF `/tmp/input` URL.
 - Unknown URL MIME types fall back to the legacy download-to-inline path. Local storage failures fall back to `inlineData` only when the resulting Gemini request remains within the 20 MiB upstream limit.
@@ -320,7 +320,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Submission-time channel capability selection and input preparation log | `controller/generate_image.go` |
 | Channel capability setting | `dto/channel_settings.go` |
 | Reused atomic `/tmp/input` storage | `service/temporary_upload.go` |
-| Channel editor setting | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/src/features/channels/lib/channel-form.ts` |
+| Channel editor option and form persistence | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/src/features/channels/lib/channel-form.ts` |
 | Public API documentation | Source: `docs/api-doc.html`; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
 | Operations and troubleshooting | `docs/operations/generate-image-filedata.md`, `docs/operations/generate-image-observability.md` |
 

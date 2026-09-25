@@ -1655,10 +1655,37 @@ test('image output strategy offers passthrough and object storage without local 
     screen.getByRole('combobox', { name: 'Image Output Strategy' })
   )
 
-  expect(screen.getByRole('option', { name: 'Pass-through' })).toBeVisible()
+  expect(
+    screen.getByRole('option', { name: 'Keep upstream result' })
+  ).toBeVisible()
   expect(screen.getByRole('option', { name: 'Store in OSS' })).toBeVisible()
   expect(screen.getByRole('option', { name: 'Store in R2' })).toBeVisible()
   expect(screen.queryByRole('option', { name: /Local URL/ })).toBeNull()
+  expect(
+    screen.queryByRole('switch', { name: 'Send Gemini input images as URLs' })
+  ).toBeNull()
+})
+
+test('Gemini image URL input option appears in Other Settings and saves the upstream capability', async () => {
+  editingChannel = channelSchema.parse({ ...editingChannel, type: 24 })
+  const put = vi
+    .spyOn(api, 'put')
+    .mockResolvedValue({ data: { success: true } })
+  const user = userEvent.setup()
+  render(<ConfigurationHarness currentRow={editingChannel} />)
+  await screen.findByDisplayValue('Existing channel')
+  await user.click(screen.getByRole('tab', { name: /Other Settings/ }))
+
+  const toggle = screen.getByRole('switch', {
+    name: 'Send Gemini input images as URLs',
+  })
+  expect(toggle).not.toBeChecked()
+  await user.click(toggle)
+  expect(toggle).toBeChecked()
+  await user.click(screen.getByRole('button', { name: 'Update Channel' }))
+  await waitFor(() => expect(put).toHaveBeenCalled())
+  const payload = put.mock.calls[0]?.[1] as { settings: string }
+  expect(JSON.parse(payload.settings).gemini_file_data_enabled).toBe(true)
 })
 
 test('ordinary edits discover models with saved settings and keep removed draft models available for reselection', async () => {

@@ -60,3 +60,33 @@ test('editing a channel keeps an existing local URL strategy until another optio
   )
   expect(JSON.parse(replaced.settings || '{}').image_output_strategy).toBe('r2')
 })
+
+test('Gemini URL input capability persists for Gemini and Vertex channels only', () => {
+  for (const type of [24, 41]) {
+    const payload = transformFormDataToCreatePayload({
+      ...CHANNEL_FORM_DEFAULT_VALUES,
+      name: 'Gemini image channel',
+      models: 'gemini-image',
+      type,
+      gemini_file_data_enabled: true,
+    }).channel
+    expect(JSON.parse(payload.settings || '{}').gemini_file_data_enabled).toBe(
+      true
+    )
+  }
+
+  const payload = transformFormDataToUpdatePayload(
+    {
+      ...CHANNEL_FORM_DEFAULT_VALUES,
+      name: 'OpenAI image channel',
+      models: 'gpt-image-1',
+      type: 1,
+      settings: '{"gemini_file_data_enabled":true}',
+      gemini_file_data_enabled: true,
+    },
+    42
+  )
+  expect(JSON.parse(payload.settings || '{}')).not.toHaveProperty(
+    'gemini_file_data_enabled'
+  )
+})
