@@ -956,3 +956,90 @@ func ClearGenerateImageDataWindow(since, cutoff int64, batchSize int) (int64, er
 	}
 	return total, nil
 }
+
+// asyncImageDataCandidate narrows the SELECT to the two columns the async_image
+// cleanup needs: the id cursor and the private_data blob (read to decide whether
+// the row owns a durable result URL). Selecting the full Task would drag the
+// multi-megabyte `data` column into memory for every candidate row.
+type asyncImageDataCandidate struct {
+	ID          int64
+	PrivateData TaskPrivateData `gorm:"column:private_data"`
+}
+
+// ClearAsyncImageDataWindow blanks the heavy `data` column for terminal
+// async_image generateContent tasks whose finish_time falls in the window
+// (since, cutoff]. Rows are kept for billing/audit; only the consumed base64 is
+// dropped.
+//
+// async_image stores the upstream Gemini response verbatim, including the
+// returned image as inline base64 (`candidates[0].content.parts[0].inlineData`).
+// The platform never stores URLs there, so the payload is pure dead weight once
+// the client has polled the task: measured at ~11GB of TOAST across ~823k rows.
+// The serving path (controller/async_image.go) answers a completed async_image
+// task from PrivateData.ResultURL, so blanking `data` does not change what the
+// client receives.
+//
+// Unlike ClearGenerateImageDataWindow, this function refuses to touch rows that
+// have no persisted result URL. For those the base64 in `data` is the only
+// surviving copy of the image (the storage upload failed and the base64 was
+// handed straight back to the client), so blanking it would destroy data rather
+// than reclaim it.
+//
+// The window is driven off the indexed finish_time bigint and an id cursor, and
+// the result-URL test runs in Go rather than SQL. That is deliberate and
+// load-bearing for cross-DB safety: PostgreSQL's json type has no equality
+// operator, and SQLite stores json.RawMessage as a BLOB whose storage class
+// differs from a TEXT literal, so `private_data LIKE '%result_url%'` is
+// unusable on those backends. Callers must advance `since` to the previous
+// `cutoff` between runs (see the cleanup task watermark) so each row is blanked
+// at most once, avoiding MVCC dead-tuple churn from repeated rewrites.
+//
+// Returns the number of rows blanked across all internal batches.
+func ClearAsyncImageDataWindow(since, cutoff int64, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = 500
+	}
+	var total int64
+	lastID := int64(0)
+	for {
+		var candidates []asyncImageDataCandidate
+		err := DB.Model(&Task{}).
+			Select("id", "private_data").
+			Where("platform = ?", constant.TaskPlatformAsyncImage).
+			Where("action = ?", "generateContent").
+			Where("status IN ?", []string{TaskStatusSuccess, TaskStatusFailure}).
+			Where("finish_time > ? AND finish_time <= ?", since, cutoff).
+			Where("id > ?", lastID).
+			Order("id").
+			Limit(batchSize).
+			Scan(&candidates).Error
+		if err != nil {
+			return total, err
+		}
+		if len(candidates) == 0 {
+			break
+		}
+
+		ids := make([]int64, 0, len(candidates))
+		for _, candidate := range candidates {
+			if candidate.PrivateData.ResultURL != "" {
+				ids = append(ids, candidate.ID)
+			}
+		}
+		if len(ids) > 0 {
+			result := DB.Model(&Task{}).
+				Where("id IN ?", ids).
+				Update("data", json.RawMessage("{}"))
+			if result.Error != nil {
+				return total, result.Error
+			}
+			total += result.RowsAffected
+		}
+
+		lastID = candidates[len(candidates)-1].ID
+		if len(candidates) < batchSize {
+			break
+		}
+	}
+	return total, nil
+}
