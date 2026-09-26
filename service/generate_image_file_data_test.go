@@ -145,28 +145,19 @@ func TestValidateGenerateImageRequestValidatesExplicitImageInputs(t *testing.T) 
 	}
 }
 
-func TestPrepareGenerateImageGeminiNativeCopiesURLsToR2(t *testing.T) {
-	ossUploads := make(chan struct{}, 1)
+func TestPrepareGenerateImageGeminiNativePassesThroughSupportedURLs(t *testing.T) {
+	ossUploads := make(chan struct{}, 3)
 	configureTemporaryInputOSSTest(t, func(w http.ResponseWriter, r *http.Request) {
 		ossUploads <- struct{}{}
 		w.WriteHeader(http.StatusOK)
 	})
-	type uploadedObject struct {
-		path string
-		body []byte
-	}
-	r2Uploads := make(chan uploadedObject, 3)
+	r2Uploads := make(chan struct{}, 3)
 	configureTemporaryInputR2Test(t, func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		r2Uploads <- uploadedObject{path: r.URL.Path, body: body}
+		r2Uploads <- struct{}{}
 		w.WriteHeader(http.StatusOK)
 	})
 	legacyURL := "https://oss.o1key.cn/tmp/input/reference.png?signature=secret"
-	fileDataURL := "https://oss.o1key.cn/tmp/input/second.png"
+	fileDataURL := "https://oss.o1key.cn/image?id=second"
 	unknownExtensionURL := "https://oss.o1key.cn/image?id=third"
 	inputs := []dto.GenerateImageInput{
 		{Value: &legacyURL},
@@ -187,25 +178,21 @@ func TestPrepareGenerateImageGeminiNativeCopiesURLsToR2(t *testing.T) {
 		GeminiFileDataOptions{Enabled: true, downloadImage: downloadImage},
 	)
 	require.NoError(t, err)
-	assert.Equal(t, []string{legacyURL, fileDataURL, unknownExtensionURL}, downloaded)
-	assert.Equal(t, "file_data", preparation.UpstreamFormat)
-	assert.Equal(t, "url_to_r2_file_data", preparation.Conversion)
-	assert.Equal(t, "none", preparation.Fallback)
+	assert.Equal(t, []string{unknownExtensionURL}, downloaded)
+	assert.Equal(t, "mixed", preparation.UpstreamFormat)
+	assert.Equal(t, "mixed", preparation.Conversion)
+	assert.Equal(t, "mime_unknown", preparation.Fallback)
 	assert.Equal(t, 3, preparation.ImageCount)
 	assert.Empty(t, ossUploads)
-	require.Len(t, r2Uploads, len(inputs))
-	pngBytes, err := base64.StdEncoding.DecodeString(onePixelPNGBase64)
-	require.NoError(t, err)
-	for i := range inputs {
-		fileData := preparedGeminiImagePayload(t, nativeRequest, i+1, "fileData")
-		fileURI, ok := fileData["fileUri"].(string)
-		require.True(t, ok)
-		assert.True(t, strings.HasPrefix(fileURI, "https://r2.example.com/tmp/input/"))
-		assert.Equal(t, "image/png", fileData["mimeType"])
-		uploaded := <-r2Uploads
-		assert.Equal(t, "/r2-bucket/tmp/input/"+filepath.Base(fileURI), uploaded.path)
-		assert.Equal(t, pngBytes, uploaded.body)
-	}
+	assert.Empty(t, r2Uploads)
+	legacyFileData := preparedGeminiImagePayload(t, nativeRequest, 1, "fileData")
+	assert.Equal(t, legacyURL, legacyFileData["fileUri"])
+	assert.Equal(t, "image/png", legacyFileData["mimeType"])
+	explicitFileData := preparedGeminiImagePayload(t, nativeRequest, 2, "fileData")
+	assert.Equal(t, fileDataURL, explicitFileData["fileUri"])
+	assert.Equal(t, "image/png", explicitFileData["mimeType"])
+	inlineData := preparedGeminiImagePayload(t, nativeRequest, 3, "inlineData")
+	assert.Equal(t, onePixelPNGBase64, inlineData["data"])
 }
 
 func TestPrepareGenerateImageGeminiNativeKeepsURLInlineWhenDisabled(t *testing.T) {
@@ -231,13 +218,13 @@ func TestPrepareGenerateImageGeminiNativeKeepsURLInlineWhenDisabled(t *testing.T
 	assert.Equal(t, "download_to_inline", disabledPreparation.Conversion)
 }
 
-func TestPrepareGenerateImageGeminiNativeRejectsDownloadedFileDataMIMEMismatch(t *testing.T) {
+func TestPrepareGenerateImageGeminiNativeRejectsDownloadedFileDataMIMEMismatchWhenDisabled(t *testing.T) {
 	fileDataURL := "https://oss.o1key.cn/tmp/input/reference.png"
 	_, _, err := PrepareGenerateImageGeminiNative(
 		context.Background(),
 		&dto.AsyncImageRequest{Prompt: "draw"},
 		[]dto.GenerateImageInput{{FileData: &dto.GenerateImageFileData{MimeType: "image/png", FileURI: fileDataURL}}},
-		GeminiFileDataOptions{Enabled: true, downloadImage: func(_ string, _ int) (string, string, error) {
+		GeminiFileDataOptions{downloadImage: func(_ string, _ int) (string, string, error) {
 			return "image/jpeg", onePixelPNGBase64, nil
 		}},
 	)
@@ -325,14 +312,15 @@ func TestPrepareGenerateImageGeminiNativeFallsBackOnStorageFailure(t *testing.T)
 		&dto.AsyncImageRequest{Prompt: "draw"},
 		[]dto.GenerateImageInput{{Value: &imageURL}},
 		GeminiFileDataOptions{Enabled: true, downloadImage: func(_ string, _ int) (string, string, error) {
-			return "image/png", onePixelPNGBase64, nil
+			t.Fatal("supported URL should not be downloaded")
+			return "", "", nil
 		}},
 	)
 	require.NoError(t, err)
-	urlInlineData := preparedGeminiImagePayload(t, urlRequest, 1, "inlineData")
-	assert.Equal(t, onePixelPNGBase64, urlInlineData["data"])
-	assert.Equal(t, "storage_error", urlPreparation.Fallback)
-	assert.Equal(t, "download_to_inline", urlPreparation.Conversion)
+	urlFileData := preparedGeminiImagePayload(t, urlRequest, 1, "fileData")
+	assert.Equal(t, imageURL, urlFileData["fileUri"])
+	assert.Equal(t, "none", urlPreparation.Fallback)
+	assert.Equal(t, "passthrough", urlPreparation.Conversion)
 }
 
 func preparedGeminiImagePayload(

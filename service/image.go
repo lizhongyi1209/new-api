@@ -85,12 +85,21 @@ func GetImageBytesFromUrl(url string) (mimeType string, data []byte, err error) 
 	return GetImageBytesFromUrlWithLimit(url, 0)
 }
 
-// GetImageBytesFromUrlWithLimit downloads an image once without Base64-encoding
-// it, allowing object-storage upload paths to preserve the original byte stream.
+// GetImageBytesFromUrlWithLimit downloads an image without Base64-encoding it,
+// allowing object-storage upload paths to preserve the original byte stream.
 func GetImageBytesFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data []byte, err error) {
-	resp, err := DoDownloadRequest(url)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to download image: %w", err)
+	// The initial request is followed by at most three immediate HTTP 525 retries.
+	const maxHTTP525Retries = 3
+	var resp *http.Response
+	for retry := 0; retry <= maxHTTP525Retries; retry++ {
+		resp, err = DoDownloadRequest(url)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to download image: %w", err)
+		}
+		if resp.StatusCode != 525 || retry == maxHTTP525Retries {
+			break
+		}
+		_ = resp.Body.Close()
 	}
 	defer resp.Body.Close()
 

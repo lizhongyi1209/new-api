@@ -1,17 +1,17 @@
 # `/async/v1/generateImage` fileData 输入优化方案
 
-> 状态：Gemini fileData 开启时参考图经 R2 发送；目标渠道实链路验证待完成
+> 状态：Gemini fileData 开启时可识别的 URL 原样发送，Base64/inlineData 经 R2 发送；目标渠道实链路验证待完成
 > 记录日期：2026-08-29
 > 目标：在不影响现有 Base64/URL 客户端的前提下，为支持 Gemini `fileData` 的上游降低服务器上传请求体的耗时。
 
 ## 1. 背景与结论
 
-现有 `/async/v1/generateImage` 的 `images` 参数只接受字符串：
+在引入 `fileData` 输入前，`/async/v1/generateImage` 的 `images` 参数只接受字符串：
 
 - URL：本服务器先下载图片，再转换成 Base64 `inlineData` 发送给上游。
 - Base64/data URL：本服务器直接构造 `inlineData` 发送给上游。
 
-因此，即使客户端传入 URL，当前 Gemini 原生生图链路仍然会把图片内容放进上游 JSON 请求体。Base64 还会产生约 33% 的体积膨胀。
+渠道开关关闭时，即使客户端传入 URL，Gemini 原生生图链路仍然会把图片内容放进上游 JSON 请求体。Base64 还会产生约 33% 的体积膨胀。
 
 已观测到 `gaorui.cc` 的服务器上传速度稳定在约 3.8 Mbps，典型请求会额外产生 10～20 秒上传耗时，较大请求可达到约 37 秒。该上游支持 `fileData.fileUri` 后，可以将图片内容传输改为“上游主动拉取 URL”，使本服务器发给上游的 JSON 降至几 KB。
 
@@ -25,7 +25,7 @@
 4. 老客户端继续使用 `images: []string`，不要求修改。
 5. 新客户端可以显式传入 `inlineData` 或 `fileData`，用于准确指定 MIME 类型和输入类型。
 6. 初期仅在确认支持 URL 拉取的 Gemini 渠道启用，例如 `gaorui.cc`。
-7. Gemini fileData 开启后，所有参考图都经 R2 `tmp/input/` 发送上游；客户端 URL 需先下载并转存。该路径与图片输出策略及普通临时上传的存储选择无关。
+7. Gemini fileData 开启后，显式 `fileData` 和可识别图片扩展名的 URL 原样发送上游；Base64/inlineData 经 R2 `tmp/input/` 转换。该路径与图片输出策略及普通临时上传的存储选择无关。
 
 ## 3. 推荐请求协议
 
@@ -147,8 +147,8 @@ Base64/data URL：
 | --- | --- | --- |
 | 老格式 Base64 | 直接构造 `inlineData` | Base64 解码并上传 R2，构造 R2 `fileData` |
 | 显式 `inlineData` | 直接构造 `inlineData` | 解码并上传 R2，构造 R2 `fileData` |
-| 老格式 URL | 本服务器下载后转换为 `inlineData` | 本服务器下载并上传 R2，构造 R2 `fileData` |
-| 显式 `fileData` | 本服务器下载后转换为 `inlineData` | 校验 MIME 后上传 R2，构造 R2 `fileData` |
+| 老格式 URL | 本服务器下载后转换为 `inlineData` | 可识别图片扩展名时原样构造 `fileData`；否则下载并构造 `inlineData` |
+| 显式 `fileData` | 本服务器下载后转换为 `inlineData` | 校验 URL 和声明的 MIME 类型后原样转发 `fileData` |
 
 这样可以保证：
 
@@ -171,24 +171,11 @@ Base64/data URL：
  Base64 / inlineData       URL / fileData
          │                     │
          ▼                     ▼
- 读取渠道能力开关         读取渠道能力开关
+ 关闭：inlineData       关闭：下载后 inlineData
+ 打开：上传 R2 后       打开：可识别 URL 原样 fileData
+       R2 fileData            未知扩展名下载后 inlineData
          │                     │
-    ┌────┴────┐           ┌────┴────┐
-    │         │           │         │
- 关闭        打开       关闭        打开
-    │         │           │         │
-    │         ▼           ▼         │
-    │   解码 Base64    服务器下载    │
-    │         │           │         ▼
-    │         │           │      服务器下载
-    │         │           │         │
-    │         ▼           ▼         ▼
-    │    上传 R2       inlineData  上传 R2
-    │         │                     │
-    ▼         ▼                     ▼
-inlineData  R2 fileData         R2 fileData
-    │         │                     │
-    └─────────┴──────────┬──────────┘
+         └──────────┬──────────┘
                         ▼
               序列化 Gemini JSON
                         │
@@ -251,7 +238,7 @@ inlineData  R2 fileData         R2 fileData
 应复用现有素材上传的校验和对象存储能力：
 
 - 对象键前缀：`tmp/input/`
-- 公共 URL：`${R2_PUBLIC_BASE_URL}/tmp/input/<uuid>.<ext>`；Gemini fileData 开启时 URL、Base64 和 inlineData 输入均使用 R2
+- 公共 URL：`${R2_PUBLIC_BASE_URL}/tmp/input/<uuid>.<ext>`；Gemini fileData 开启时仅 Base64 和 inlineData 输入需要转存 R2
 - 文件名：随机 UUID
 - 单文件限制：20 MiB
 - 支持：对象存储公开 `GET`、`HEAD`、Range
@@ -276,8 +263,8 @@ inlineData  R2 fileData         R2 fileData
 - `fileUri` 必须是完整的 HTTP/HTTPS URL。
 - 不接受 `file://`、本地路径或其他协议。
 - `mimeType` 必须以 `image/` 开头。
-- 继续执行 URL 长度和可选 `Content-Length` 校验。
-- 开关打开时下载原图并转存 R2，校验下载内容的 MIME 类型；显式声明的 MIME 必须匹配。
+- 继续执行 URL 格式、长度和 SSRF 校验。
+- 开关打开时显式 `fileData` 原样转发；老格式 URL 仅在扩展名无法识别时下载并转换为 `inlineData`。开关关闭时下载并校验内容 MIME；显式声明的 MIME 必须匹配。
 - 公共 URL 不能依赖 Cookie 或客户端登录状态。
 - 签名 URL 必须在上游完成读取前持续有效，建议至少 30～60 分钟。
 
@@ -305,11 +292,11 @@ inlineData  R2 fileData         R2 fileData
 - 将其视为渠道能力或 URL 可达性故障。
 - 连续出现时关闭该渠道 `gemini_file_data_enabled`。
 
-### URL 下载失败或 MIME 不匹配
+### 需要下载的 URL 失败或 MIME 不匹配
 
-- URL 下载失败时拒绝请求，不将原始 URL 直接交给上游。
-- 按实际下载内容识别 MIME 类型；显式 `fileData.mimeType` 不匹配时拒绝请求。
-- R2 上传失败时按前述大小限制回退到 `inlineData`，不回退到原始 URL。
+- 开关关闭或 URL 扩展名无法识别时，下载失败将拒绝请求；HTTP 525 最多即时重试三次。
+- 按实际下载内容识别 MIME 类型；开关关闭时显式 `fileData.mimeType` 不匹配将拒绝请求。
+- Base64/inlineData 转存 R2 失败时按前述大小限制回退到 `inlineData`。
 
 ## 11. 分阶段监控
 
@@ -323,14 +310,14 @@ request_id=<request_id>
 channel=<channel_id>
 client_format=legacy_url|legacy_base64|file_data|inline_data
 upstream_format=file_data|inline_data
-conversion=passthrough|download_to_inline|r2_to_file_data|url_to_r2_file_data
+conversion=passthrough|download_to_inline|r2_to_file_data
 image_count=<n>
 input_bytes=<bytes>
 download_ms=<ms>
 decode_ms=<ms>
 storage_write_ms=<ms>
 prepare_ms=<ms>
-fallback=none|storage_error
+fallback=none|storage_error|mime_unknown
 ```
 
 不要记录完整 Base64、完整签名 URL或鉴权查询参数。
@@ -372,7 +359,7 @@ input_prepare_ms + request_write_ms + upstream_wait_ms
 1. [x] 增加兼容字符串和对象的图片输入 DTO。
 2. [x] 增加输入校验和标准化逻辑。
 3. [x] 增加渠道 `gemini_file_data_enabled` 设置，默认关闭。
-4. [x] 复用临时素材校验和 R2 `tmp/input/` 前缀，实现 Base64 和 URL 参考图 → R2 公共 URL。
+4. [x] 复用临时素材校验和 R2 `tmp/input/` 前缀，实现 Base64/inlineData 参考图 → R2 公共 URL。
 5. [x] 按兼容矩阵生成 `inlineData` 或 `fileData`。
 6. [x] 增加 `input_prepare` 分阶段日志。
 7. [x] 增加确定性的 DTO、转换、回退和渠道隔离测试。
@@ -401,4 +388,4 @@ input_prepare_ms + request_write_ms + upstream_wait_ms
 - 不改变图片输出策略。
 - 不自动重试上游生成请求。
 
-代码实现采用本文协议、`gemini_file_data_enabled` 开关、URL 下载与 MIME 校验，以及 R2 上传失败时的受限 `inlineData` 回退。目标渠道仍需完成人工实链路验证。
+代码实现采用本文协议、`gemini_file_data_enabled` 开关、URL 直传与未知扩展名回退，以及 R2 上传失败时的受限 `inlineData` 回退。目标渠道仍需完成人工实链路验证。

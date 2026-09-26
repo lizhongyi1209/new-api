@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -1475,13 +1476,34 @@ func prepareGeminiImageInput(ctx context.Context, input dto.GenerateImageInput, 
 	if input.FileData != nil {
 		mimeType := normalizeGenerateImageMIMEType(input.FileData.MimeType)
 		fileURI := strings.TrimSpace(input.FileData.FileURI)
-		return prepareGeminiURLInput(ctx, fileURI, mimeType, "file_data", options)
+		if options.Enabled {
+			return geminiPreparedImagePart{
+				part:           geminiFileDataPart(mimeType, fileURI),
+				clientFormat:   "file_data",
+				upstreamFormat: "file_data",
+				conversion:     "passthrough",
+				fallback:       "none",
+			}, nil
+		}
+		return downloadGeminiImageToInline(fileURI, mimeType, "file_data", "none", options.downloadImage)
 	}
 
 	if input.Value != nil {
 		value := strings.TrimSpace(*input.Value)
 		if isHTTPImageURL(value) {
-			return prepareGeminiURLInput(ctx, value, "", "legacy_url", options)
+			if options.Enabled {
+				if mimeType := inferImageMIMETypeFromURL(value); mimeType != "" {
+					return geminiPreparedImagePart{
+						part:           geminiFileDataPart(mimeType, value),
+						clientFormat:   "legacy_url",
+						upstreamFormat: "file_data",
+						conversion:     "passthrough",
+						fallback:       "none",
+					}, nil
+				}
+				return downloadGeminiImageToInline(value, "", "legacy_url", "mime_unknown", options.downloadImage)
+			}
+			return downloadGeminiImageToInline(value, "", "legacy_url", "none", options.downloadImage)
 		}
 		mimeType := "image/png"
 		base64Data := value
@@ -1560,8 +1582,10 @@ func prepareGeminiBase64Input(ctx context.Context, mimeType, base64Data, clientF
 	}, nil
 }
 
-func prepareGeminiURLInput(ctx context.Context, fileURI, declaredMIMEType, clientFormat string, options GeminiFileDataOptions) (geminiPreparedImagePart, error) {
-	downloadImage := options.downloadImage
+func downloadGeminiImageToInline(
+	fileURI, declaredMIMEType, clientFormat, fallback string,
+	downloadImage func(string, int) (string, string, error),
+) (geminiPreparedImagePart, error) {
 	if downloadImage == nil {
 		downloadImage = GetImageFromUrlWithLimit
 	}
@@ -1579,17 +1603,15 @@ func prepareGeminiURLInput(ctx context.Context, fileURI, declaredMIMEType, clien
 	if declaredMIMEType != "" && !sameGenerateImageMIMEType(declaredMIMEType, mimeType) {
 		return geminiPreparedImagePart{}, fmt.Errorf("downloaded image MIME type %s does not match declared MIME type %s", mimeType, declaredMIMEType)
 	}
-	prepared, err := prepareGeminiBase64Input(ctx, mimeType, base64Data, clientFormat, options)
-	if err != nil {
-		return geminiPreparedImagePart{}, err
-	}
-	prepared.download = downloadDuration
-	if prepared.upstreamFormat == "file_data" {
-		prepared.conversion = "url_to_r2_file_data"
-	} else {
-		prepared.conversion = "download_to_inline"
-	}
-	return prepared, nil
+	return geminiPreparedImagePart{
+		part:           geminiInlineDataPart(mimeType, base64Data),
+		clientFormat:   clientFormat,
+		upstreamFormat: "inline_data",
+		conversion:     "download_to_inline",
+		fallback:       fallback,
+		inputBytes:     int64(base64.StdEncoding.DecodedLen(len(base64Data))),
+		download:       downloadDuration,
+	}, nil
 }
 
 func geminiInlineDataPart(mimeType, data string) map[string]interface{} {
@@ -1607,6 +1629,35 @@ func geminiFileDataPart(mimeType, fileURI string) map[string]interface{} {
 			"mimeType": mimeType,
 			"fileUri":  fileURI,
 		},
+	}
+}
+
+func inferImageMIMETypeFromURL(value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return ""
+	}
+	switch strings.ToLower(path.Ext(parsed.Path)) {
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	case ".bmp":
+		return "image/bmp"
+	case ".tif", ".tiff":
+		return "image/tiff"
+	case ".heic":
+		return "image/heic"
+	case ".heif":
+		return "image/heif"
+	case ".avif":
+		return "image/avif"
+	default:
+		return ""
 	}
 }
 

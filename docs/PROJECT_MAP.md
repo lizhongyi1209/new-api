@@ -307,8 +307,8 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 - `/async/v1/generateImage` accepts `quality=xhigh|max` for GPT Image 2.5 Sunburst and Flare model names, including their `-sp` and `-sd` aliases; earlier models reject those values.
 - Channel `settings` JSON key `gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration. Gemini and Vertex channel editors expose it under Other Settings.
 - With the setting disabled, Gemini reference URLs are downloaded and sent as `inlineData`, preserving the legacy behavior.
-- With the setting enabled, explicit `fileData` and legacy image URLs are downloaded and copied to R2 under `tmp/input/` before the R2 public URL is sent as `fileData`. Inline/Base64 images use the same R2 destination. This is independent of the channel's image output strategy and the default temporary-upload provider.
-- URL content MIME types are checked after download; explicit `fileData.mimeType` must match. R2 upload failures fall back to `inlineData` only when the resulting Gemini request remains within the 20 MiB upstream limit. URL download failures reject the request.
+- With the setting enabled, explicit `fileData` URLs and legacy image URLs with a recognized image extension are sent upstream unchanged as `fileData`; legacy URLs without a recognized image extension are downloaded and sent as `inlineData`. Inline/Base64 images are uploaded to R2 under `tmp/input/` before their R2 public URL is sent as `fileData`. This is independent of the channel's image output strategy and the default temporary-upload provider.
+- Downloaded URL content is MIME-checked, including explicit `fileData` when the setting is disabled. R2 upload failures for inline/Base64 inputs fall back to `inlineData` only when the resulting Gemini request remains within the 20 MiB upstream limit. Local image URL downloads retry HTTP 525 at most three times without waiting.
 - Input preparation logs contain only format/timing/size summaries and never include Base64 payloads or signed URL query parameters.
 
 ### Entry points
