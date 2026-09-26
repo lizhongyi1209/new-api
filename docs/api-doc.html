@@ -178,14 +178,14 @@
     </section>
 
     <div class="section-heading" id="temporary-upload">
-      <div><h2>临时素材上传</h2><p>上传图片、音频、视频或文档，获取可供模型读取的临时公开 HTTPS URL。</p></div>
+      <div><h2>临时素材上传</h2><p>上传图片、音频、视频或文档，获取临时公开 HTTPS URL。</p></div>
     </div>
 
     <section class="endpoint-doc" id="temporary-upload-endpoint" aria-labelledby="temporary-upload-title">
       <article class="reference-panel">
         <h2 id="temporary-upload-title">上传单个附件</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
-        <p>请求使用 <code>multipart/form-data</code>，每次上传一个文件。服务端校验后将文件上传至对象存储，并返回可用于后续模型请求的公开 HTTPS URL。文件计划在上传 24 小时后清理。</p>
+        <p>请求使用 <code>multipart/form-data</code>，每次上传一个文件。服务端校验后将文件上传至对象存储，并返回公开 HTTPS URL。文件计划在上传 24 小时后清理。</p>
 
         <h3>请求参数</h3>
         <table>
@@ -197,31 +197,22 @@
         <h3>支持的文件格式</h3>
         <table>
           <tr><th>类别</th><th>扩展名</th></tr>
-          <tr><td>图片</td><td><code>png</code>、<code>jpg</code>、<code>jpeg</code>、<code>webp</code>、<code>gif</code>、<code>bmp</code>、<code>tif</code>、<code>tiff</code>、<code>heic</code>、<code>heif</code>、<code>avif</code></td></tr>
-          <tr><td>音频</td><td><code>mp3</code>、<code>wav</code>、<code>flac</code>、<code>aac</code>、<code>m4a</code>、<code>oga</code>、<code>ogg</code></td></tr>
-          <tr><td>视频</td><td><code>mp4</code>、<code>mov</code>、<code>m4v</code>、<code>webm</code>、<code>avi</code>、<code>mkv</code>、<code>mpeg</code>、<code>mpg</code>、<code>ogv</code>、<code>3gp</code>、<code>3g2</code></td></tr>
-          <tr><td>文档</td><td><code>pdf</code>、<code>txt</code>、<code>md</code>、<code>csv</code>、<code>json</code>、<code>rtf</code>、<code>doc</code>、<code>xls</code>、<code>ppt</code>、<code>docx</code>、<code>xlsx</code>、<code>pptx</code>、<code>odt</code>、<code>ods</code>、<code>odp</code></td></tr>
+          <tr><td>图片</td><td><code>png</code>、<code>jpg</code>、<code>jpeg</code>、<code>webp</code></td></tr>
+          <tr><td>音频</td><td><code>mp3</code>、<code>wav</code>、<code>m4a</code></td></tr>
+          <tr><td>视频</td><td><code>mp4</code>、<code>mov</code></td></tr>
+          <tr><td>文档</td><td><code>pdf</code>、<code>txt</code>、<code>md</code></td></tr>
         </table>
         <p>服务端会校验文件扩展名与实际内容类型。扩展名与内容不一致、可执行内容以及未列出的格式会被拒绝。</p>
 
         <h3>响应字段</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>url</code></td><td>string</td><td>对象存储公开 HTTPS URL，直接用于后续模型请求</td></tr>
+          <tr><td><code>url</code></td><td>string</td><td>对象存储公开 HTTPS URL</td></tr>
           <tr><td><code>filename</code></td><td>string</td><td>上传时的原始文件名</td></tr>
           <tr><td><code>content_type</code></td><td>string</td><td>服务端确认后的 MIME 类型</td></tr>
           <tr><td><code>size</code></td><td>integer</td><td>文件大小，单位为字节</td></tr>
           <tr><td><code>expires_at</code></td><td>integer</td><td>计划清理时间，Unix 秒级时间戳；实际不可访问时间受对象清理和缓存影响</td></tr>
         </table>
-
-        <h3>URL 使用规则</h3>
-        <ul>
-          <li>默认返回阿里云 OSS 的公开 URL；若服务端启用 OSS 停用开关，则返回 R2 的公开 URL。上传所用 API 域名不影响存储域名。</li>
-          <li>返回的 URL 支持直接 <code>GET</code> 或 <code>HEAD</code>，读取时不需要再次携带 API Key。</li>
-          <li>服务端计划在 <code>expires_at</code> 后清理对象；对象存储和 CDN 缓存可能影响实际失效时间。需要继续使用时请重新上传。</li>
-          <li>客户端展示文件名时应使用响应中的 <code>filename</code>，不要从临时 URL 推断原始文件名。</li>
-        </ul>
-        <div class="callout danger"><b>安全提示</b>：返回的对象存储 URL 可公开访问，缓存也可能延长可访问时间；请勿上传 API Key、密码、身份证件或其他高敏感信息。</div>
 
         <h3>错误处理</h3>
         <table>

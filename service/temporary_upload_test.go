@@ -53,18 +53,32 @@ func TestStoreTemporaryInputAttachmentSupportsMainstreamAttachments(t *testing.T
 		0, 0, 0, 24, 'f', 't', 'y', 'p', 'i', 's', 'o', 'm',
 		0, 0, 2, 0, 'i', 's', 'o', 'm', 'i', 's', 'o', '2',
 	}
+	jpegBytes := []byte{0xff, 0xd8, 0xff, 0xe0, 0, 0x10, 'J', 'F', 'I', 'F', 0}
+	webpBytes := []byte{'R', 'I', 'F', 'F', 12, 0, 0, 0, 'W', 'E', 'B', 'P', 'V', 'P', '8', ' '}
+	mp3Bytes := []byte{'I', 'D', '3', 3, 0, 0, 0, 0, 0, 0}
+	m4aBytes := []byte{0, 0, 0, 20, 'f', 't', 'y', 'p', 'M', '4', 'A', ' ', 0, 0, 0, 0, 'M', '4', 'A', ' '}
+	movBytes := []byte{0, 0, 0, 20, 'f', 't', 'y', 'p', 'q', 't', ' ', ' ', 0, 0, 0, 0, 'q', 't', ' ', ' '}
 
 	tests := []struct {
-		name        string
-		filename    string
-		contents    []byte
-		contentType string
-		extension   string
+		name            string
+		filename        string
+		contents        []byte
+		contentType     string
+		extension       string
+		wantsAttachment bool
 	}{
-		{name: "image", filename: "reference.png", contents: pngBytes, contentType: "image/png", extension: ".png"},
-		{name: "audio", filename: "sample.wav", contents: wavBytes, contentType: "audio/wav", extension: ".wav"},
-		{name: "video", filename: "clip.mp4", contents: mp4Bytes, contentType: "video/mp4", extension: ".mp4"},
-		{name: "document", filename: "brief.pdf", contents: []byte("%PDF-1.7\n% temporary upload\n"), contentType: "application/pdf", extension: ".pdf"},
+		{name: "png", filename: "reference.png", contents: pngBytes, contentType: "image/png", extension: ".png"},
+		{name: "jpg", filename: "reference.jpg", contents: jpegBytes, contentType: "image/jpeg", extension: ".jpg"},
+		{name: "jpeg", filename: "reference.jpeg", contents: jpegBytes, contentType: "image/jpeg", extension: ".jpg"},
+		{name: "webp", filename: "reference.webp", contents: webpBytes, contentType: "image/webp", extension: ".webp"},
+		{name: "mp3", filename: "sample.mp3", contents: mp3Bytes, contentType: "audio/mpeg", extension: ".mp3"},
+		{name: "wav", filename: "sample.wav", contents: wavBytes, contentType: "audio/wav", extension: ".wav"},
+		{name: "m4a", filename: "sample.m4a", contents: m4aBytes, contentType: "audio/mp4", extension: ".m4a"},
+		{name: "mp4", filename: "clip.mp4", contents: mp4Bytes, contentType: "video/mp4", extension: ".mp4"},
+		{name: "mov", filename: "clip.mov", contents: movBytes, contentType: "video/quicktime", extension: ".mov"},
+		{name: "pdf", filename: "brief.pdf", contents: []byte("%PDF-1.7\n% temporary upload\n"), contentType: "application/pdf", extension: ".pdf", wantsAttachment: true},
+		{name: "txt", filename: "brief.txt", contents: []byte("A plain text document.\n"), contentType: "text/plain; charset=utf-8", extension: ".txt", wantsAttachment: true},
+		{name: "md", filename: "brief.md", contents: []byte("# A Markdown document\n"), contentType: "text/markdown; charset=utf-8", extension: ".md", wantsAttachment: true},
 	}
 
 	type storedObject struct {
@@ -106,7 +120,7 @@ func TestStoreTemporaryInputAttachmentSupportsMainstreamAttachments(t *testing.T
 			assert.Equal(t, "/test-bucket/tmp/input/"+attachment.Filename, upload.path)
 			assert.Equal(t, test.contentType, upload.contentType)
 			assert.Equal(t, test.contents, upload.body)
-			if test.name == "document" {
+			if test.wantsAttachment {
 				assert.Equal(t, "attachment", upload.contentDisposition)
 			}
 			assert.NoDirExists(t, filepath.Join(storageDir, TemporaryInputCategory))
@@ -114,11 +128,7 @@ func TestStoreTemporaryInputAttachmentSupportsMainstreamAttachments(t *testing.T
 	}
 }
 
-func TestStoreTemporaryInputAttachmentValidatesOfficeArchive(t *testing.T) {
-	configureTemporaryInputOSSTest(t, func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-
+func TestStoreTemporaryInputAttachmentRejectsFormerlySupportedFormats(t *testing.T) {
 	var document bytes.Buffer
 	archive := zip.NewWriter(&document)
 	contentTypes, err := archive.Create("[Content_Types].xml")
@@ -131,10 +141,21 @@ func TestStoreTemporaryInputAttachmentValidatesOfficeArchive(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, archive.Close())
 
-	attachment, err := StoreTemporaryInputAttachment(context.Background(), bytes.NewReader(document.Bytes()), "brief.docx")
-	require.NoError(t, err)
-	assert.Equal(t, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", attachment.ContentType)
-	assert.True(t, strings.HasPrefix(attachment.URL, "https://media.example.com/tmp/input/"))
+	for _, test := range []struct {
+		filename string
+		contents []byte
+	}{
+		{filename: "animation.gif", contents: []byte("GIF89a")},
+		{filename: "sound.flac", contents: []byte("fLaC")},
+		{filename: "audio.mp4", contents: []byte{0, 0, 0, 20, 'f', 't', 'y', 'p', 'M', '4', 'A', ' ', 0, 0, 0, 0, 'M', '4', 'A', ' '}},
+		{filename: "clip.webm", contents: []byte{0x1a, 0x45, 0xdf, 0xa3}},
+		{filename: "brief.docx", contents: document.Bytes()},
+	} {
+		t.Run(test.filename, func(t *testing.T) {
+			_, err := StoreTemporaryInputAttachment(context.Background(), bytes.NewReader(test.contents), test.filename)
+			assert.ErrorIs(t, err, ErrTemporaryInputUnsupportedType)
+		})
+	}
 }
 
 func TestStoreTemporaryInputAttachmentRejectsDisguisedAndActiveContent(t *testing.T) {
@@ -239,6 +260,20 @@ func TestOpenTemporaryInputAttachmentRejectsExpiredFile(t *testing.T) {
 	assert.ErrorIs(t, err, ErrTemporaryInputExpired)
 	_, statErr := os.Stat(path)
 	assert.True(t, errors.Is(statErr, os.ErrNotExist))
+}
+
+func TestOpenTemporaryInputAttachmentPreservesLegacyFormat(t *testing.T) {
+	storageDir := t.TempDir()
+	t.Setenv("TEMP_STORAGE_DIR", storageDir)
+	filename := "8045b62c-39b6-4a7d-a75e-15fdb83420c2.gif"
+	path := filepath.Join(storageDir, TemporaryInputCategory, filename)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0755))
+	require.NoError(t, os.WriteFile(path, []byte("GIF89a"), 0644))
+
+	file, _, contentType, err := OpenTemporaryInputAttachment(filename, time.Now())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = file.Close() })
+	assert.Equal(t, "image/gif", contentType)
 }
 
 func TestCleanupExpiredTemporaryInputAttachmentsPreservesFreshFiles(t *testing.T) {

@@ -1,15 +1,14 @@
 package service
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
-	"net/url"
 	"strings"
 	"time"
 
@@ -53,53 +52,40 @@ type temporaryInputFormat struct {
 }
 
 var temporaryInputFormats = map[string]temporaryInputFormat{
-	".png":  {Extension: ".png", ContentType: "image/png", AcceptedMIMEs: []string{"image/png", "image/vnd.mozilla.apng"}},
+	".png":  {Extension: ".png", ContentType: "image/png", AcceptedMIMEs: []string{"image/png"}},
 	".jpg":  {Extension: ".jpg", ContentType: "image/jpeg", AcceptedMIMEs: []string{"image/jpeg"}},
 	".jpeg": {Extension: ".jpg", ContentType: "image/jpeg", AcceptedMIMEs: []string{"image/jpeg"}},
 	".webp": {Extension: ".webp", ContentType: "image/webp", AcceptedMIMEs: []string{"image/webp"}},
-	".gif":  {Extension: ".gif", ContentType: "image/gif", AcceptedMIMEs: []string{"image/gif"}},
-	".bmp":  {Extension: ".bmp", ContentType: "image/bmp", AcceptedMIMEs: []string{"image/bmp"}},
-	".tif":  {Extension: ".tiff", ContentType: "image/tiff", AcceptedMIMEs: []string{"image/tiff"}},
-	".tiff": {Extension: ".tiff", ContentType: "image/tiff", AcceptedMIMEs: []string{"image/tiff"}},
-	".heic": {Extension: ".heic", ContentType: "image/heic", AcceptedMIMEs: []string{"image/heic", "image/heic-sequence"}},
-	".heif": {Extension: ".heif", ContentType: "image/heif", AcceptedMIMEs: []string{"image/heif", "image/heif-sequence"}},
-	".avif": {Extension: ".avif", ContentType: "image/avif", AcceptedMIMEs: []string{"image/avif"}},
 
-	".mp3":  {Extension: ".mp3", ContentType: "audio/mpeg", AcceptedMIMEs: []string{"audio/mpeg"}},
-	".wav":  {Extension: ".wav", ContentType: "audio/wav", AcceptedMIMEs: []string{"audio/wav"}},
-	".flac": {Extension: ".flac", ContentType: "audio/flac", AcceptedMIMEs: []string{"audio/flac"}},
-	".aac":  {Extension: ".aac", ContentType: "audio/aac", AcceptedMIMEs: []string{"audio/aac"}},
-	".m4a":  {Extension: ".m4a", ContentType: "audio/mp4", AcceptedMIMEs: []string{"audio/mp4", "audio/x-m4a"}},
-	".oga":  {Extension: ".oga", ContentType: "audio/ogg", AcceptedMIMEs: []string{"audio/ogg", "application/ogg"}},
-	".ogg":  {Extension: ".ogg", ContentType: "application/ogg", AcceptedMIMEs: []string{"application/ogg", "audio/ogg", "video/ogg"}},
+	".mp3": {Extension: ".mp3", ContentType: "audio/mpeg", AcceptedMIMEs: []string{"audio/mpeg"}},
+	".wav": {Extension: ".wav", ContentType: "audio/wav", AcceptedMIMEs: []string{"audio/wav"}},
+	".m4a": {Extension: ".m4a", ContentType: "audio/mp4", AcceptedMIMEs: []string{"audio/mp4", "audio/x-m4a"}},
 
-	".mp4":  {Extension: ".mp4", ContentType: "video/mp4", AcceptedMIMEs: []string{"video/mp4", "audio/mp4"}},
-	".mov":  {Extension: ".mov", ContentType: "video/quicktime", AcceptedMIMEs: []string{"video/quicktime"}},
-	".m4v":  {Extension: ".m4v", ContentType: "video/x-m4v", AcceptedMIMEs: []string{"video/x-m4v", "video/mp4"}},
-	".webm": {Extension: ".webm", ContentType: "video/webm", AcceptedMIMEs: []string{"video/webm", "audio/webm"}},
-	".avi":  {Extension: ".avi", ContentType: "video/x-msvideo", AcceptedMIMEs: []string{"video/x-msvideo"}},
-	".mkv":  {Extension: ".mkv", ContentType: "video/x-matroska", AcceptedMIMEs: []string{"video/x-matroska"}},
-	".mpeg": {Extension: ".mpeg", ContentType: "video/mpeg", AcceptedMIMEs: []string{"video/mpeg"}},
-	".mpg":  {Extension: ".mpeg", ContentType: "video/mpeg", AcceptedMIMEs: []string{"video/mpeg"}},
-	".ogv":  {Extension: ".ogv", ContentType: "video/ogg", AcceptedMIMEs: []string{"video/ogg", "application/ogg"}},
-	".3gp":  {Extension: ".3gp", ContentType: "video/3gpp", AcceptedMIMEs: []string{"video/3gpp"}},
-	".3g2":  {Extension: ".3g2", ContentType: "video/3gpp2", AcceptedMIMEs: []string{"video/3gpp2"}},
+	".mp4": {Extension: ".mp4", ContentType: "video/mp4", AcceptedMIMEs: []string{"video/mp4"}},
+	".mov": {Extension: ".mov", ContentType: "video/quicktime", AcceptedMIMEs: []string{"video/quicktime"}},
 
-	".pdf":  {Extension: ".pdf", ContentType: "application/pdf", AcceptedMIMEs: []string{"application/pdf"}},
-	".txt":  {Extension: ".txt", ContentType: "text/plain; charset=utf-8", AcceptedMIMEs: []string{"text/plain"}},
-	".md":   {Extension: ".md", ContentType: "text/markdown; charset=utf-8", AcceptedMIMEs: []string{"text/plain"}},
-	".csv":  {Extension: ".csv", ContentType: "text/csv; charset=utf-8", AcceptedMIMEs: []string{"text/csv", "text/plain"}},
-	".json": {Extension: ".json", ContentType: "application/json", AcceptedMIMEs: []string{"application/json"}},
-	".rtf":  {Extension: ".rtf", ContentType: "application/rtf", AcceptedMIMEs: []string{"text/rtf", "application/rtf"}},
-	".doc":  {Extension: ".doc", ContentType: "application/msword", AcceptedMIMEs: []string{"application/msword", "application/x-ole-storage"}},
-	".xls":  {Extension: ".xls", ContentType: "application/vnd.ms-excel", AcceptedMIMEs: []string{"application/vnd.ms-excel", "application/x-ole-storage"}},
-	".ppt":  {Extension: ".ppt", ContentType: "application/vnd.ms-powerpoint", AcceptedMIMEs: []string{"application/vnd.ms-powerpoint", "application/x-ole-storage"}},
-	".docx": {Extension: ".docx", ContentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", AcceptedMIMEs: []string{"application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/zip"}},
-	".xlsx": {Extension: ".xlsx", ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", AcceptedMIMEs: []string{"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip"}},
-	".pptx": {Extension: ".pptx", ContentType: "application/vnd.openxmlformats-officedocument.presentationml.presentation", AcceptedMIMEs: []string{"application/vnd.openxmlformats-officedocument.presentationml.presentation", "application/zip"}},
-	".odt":  {Extension: ".odt", ContentType: "application/vnd.oasis.opendocument.text", AcceptedMIMEs: []string{"application/vnd.oasis.opendocument.text", "application/zip"}},
-	".ods":  {Extension: ".ods", ContentType: "application/vnd.oasis.opendocument.spreadsheet", AcceptedMIMEs: []string{"application/vnd.oasis.opendocument.spreadsheet", "application/zip"}},
-	".odp":  {Extension: ".odp", ContentType: "application/vnd.oasis.opendocument.presentation", AcceptedMIMEs: []string{"application/vnd.oasis.opendocument.presentation", "application/zip"}},
+	".pdf": {Extension: ".pdf", ContentType: "application/pdf", AcceptedMIMEs: []string{"application/pdf"}},
+	".txt": {Extension: ".txt", ContentType: "text/plain; charset=utf-8", AcceptedMIMEs: []string{"text/plain"}},
+	".md":  {Extension: ".md", ContentType: "text/markdown; charset=utf-8", AcceptedMIMEs: []string{"text/plain"}},
+}
+
+// Old local URLs remain readable until their scheduled expiry. These types
+// are never accepted by StoreTemporaryInputAttachment for new uploads.
+var legacyTemporaryInputContentTypes = map[string]string{
+	".gif": "image/gif", ".bmp": "image/bmp", ".tif": "image/tiff", ".tiff": "image/tiff",
+	".heic": "image/heic", ".heif": "image/heif", ".avif": "image/avif",
+	".flac": "audio/flac", ".aac": "audio/aac", ".oga": "audio/ogg", ".ogg": "application/ogg",
+	".m4v": "video/x-m4v", ".webm": "video/webm", ".avi": "video/x-msvideo",
+	".mkv": "video/x-matroska", ".mpeg": "video/mpeg", ".mpg": "video/mpeg",
+	".ogv": "video/ogg", ".3gp": "video/3gpp", ".3g2": "video/3gpp2",
+	".csv": "text/csv; charset=utf-8", ".json": "application/json", ".rtf": "application/rtf",
+	".doc": "application/msword", ".xls": "application/vnd.ms-excel", ".ppt": "application/vnd.ms-powerpoint",
+	".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+	".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+	".odt":  "application/vnd.oasis.opendocument.text",
+	".ods":  "application/vnd.oasis.opendocument.spreadsheet",
+	".odp":  "application/vnd.oasis.opendocument.presentation",
 }
 
 func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
@@ -144,30 +130,8 @@ func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, origin
 		return nil, ErrTemporaryInputUnsupportedType
 	}
 
-	if !validateTemporaryInputArchive(body.Bytes(), originalExtension) {
-		return nil, ErrTemporaryInputUnsupportedType
-	}
-
 	contentType := format.ContentType
-	finalExtension := format.Extension
-	if originalExtension == ".mp4" && detected.Is("audio/mp4") {
-		contentType = "audio/mp4"
-		finalExtension = ".m4a"
-	}
-	if originalExtension == ".ogg" {
-		switch {
-		case detected.Is("audio/ogg"):
-			contentType = "audio/ogg"
-			finalExtension = ".oga"
-		case detected.Is("video/ogg"):
-			contentType = "video/ogg"
-			finalExtension = ".ogv"
-		default:
-			contentType = "application/ogg"
-		}
-	}
-
-	filename := uuid.New().String() + finalExtension
+	filename := uuid.New().String() + format.Extension
 	var client *s3.Client
 	var bucket, publicBase string
 	if IsAliyunOSSBlocked() {
@@ -247,8 +211,11 @@ func OpenTemporaryInputAttachment(filename string, now time.Time) (*os.File, os.
 		_ = os.Remove(filePath)
 		return nil, nil, "", ErrTemporaryInputExpired
 	}
-	format := temporaryInputFormats[strings.ToLower(filepath.Ext(filename))]
-	return file, info, format.ContentType, nil
+	extension := strings.ToLower(filepath.Ext(filename))
+	if format, ok := temporaryInputFormats[extension]; ok {
+		return file, info, format.ContentType, nil
+	}
+	return file, info, legacyTemporaryInputContentTypes[extension], nil
 }
 
 func CleanupExpiredTemporaryInputAttachments(now time.Time) (TemporaryInputCleanupStats, error) {
@@ -360,50 +327,10 @@ func isTemporaryInputFilename(filename string) bool {
 	}
 	extension := strings.ToLower(filepath.Ext(filename))
 	if _, ok := temporaryInputFormats[extension]; !ok {
-		return false
+		if _, legacy := legacyTemporaryInputContentTypes[extension]; !legacy {
+			return false
+		}
 	}
 	_, err := uuid.Parse(strings.TrimSuffix(filename, filepath.Ext(filename)))
 	return err == nil
-}
-
-func validateTemporaryInputArchive(data []byte, extension string) bool {
-	var requiredPath string
-	var requiredMIME string
-	switch extension {
-	case ".docx":
-		requiredPath = "word/document.xml"
-	case ".xlsx":
-		requiredPath = "xl/workbook.xml"
-	case ".pptx":
-		requiredPath = "ppt/presentation.xml"
-	case ".odt":
-		requiredMIME = "application/vnd.oasis.opendocument.text"
-	case ".ods":
-		requiredMIME = "application/vnd.oasis.opendocument.spreadsheet"
-	case ".odp":
-		requiredMIME = "application/vnd.oasis.opendocument.presentation"
-	default:
-		return true
-	}
-
-	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
-	if err != nil {
-		return false
-	}
-	for _, entry := range archive.File {
-		if requiredPath != "" && entry.Name == requiredPath {
-			return true
-		}
-		if requiredMIME == "" || entry.Name != "mimetype" || entry.UncompressedSize64 > 256 {
-			continue
-		}
-		reader, err := entry.Open()
-		if err != nil {
-			return false
-		}
-		content, readErr := io.ReadAll(io.LimitReader(reader, 257))
-		closeErr := reader.Close()
-		return readErr == nil && closeErr == nil && string(content) == requiredMIME
-	}
-	return false
 }
