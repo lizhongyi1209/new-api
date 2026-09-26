@@ -198,17 +198,26 @@ func TestPrepareGenerateImageGeminiNativeKeepsChannelCapabilityIsolated(t *testi
 	assert.Equal(t, "download_to_inline", disabledPreparation.Conversion)
 }
 
-func TestPrepareGenerateImageGeminiNativeUploadsBase64ToOSS(t *testing.T) {
+func TestPrepareGenerateImageGeminiNativeUploadsBase64ToR2(t *testing.T) {
 	temporaryRoot := t.TempDir()
 	t.Setenv("TEMP_STORAGE_DIR", temporaryRoot)
-	uploaded := make(chan []byte, 1)
+	ossUploads := make(chan struct{}, 1)
 	configureTemporaryInputOSSTest(t, func(w http.ResponseWriter, r *http.Request) {
+		ossUploads <- struct{}{}
+		w.WriteHeader(http.StatusOK)
+	})
+	type uploadedObject struct {
+		path string
+		body []byte
+	}
+	r2Uploads := make(chan uploadedObject, 1)
+	configureTemporaryInputR2Test(t, func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		uploaded <- body
+		r2Uploads <- uploadedObject{path: r.URL.Path, body: body}
 		w.WriteHeader(http.StatusOK)
 	})
 	input := dto.GenerateImageInput{InlineData: &dto.GenerateImageInlineData{
@@ -227,24 +236,24 @@ func TestPrepareGenerateImageGeminiNativeUploadsBase64ToOSS(t *testing.T) {
 	fileData := preparedGeminiImagePayload(t, nativeRequest, 1, "fileData")
 	fileURI, ok := fileData["fileUri"].(string)
 	require.True(t, ok)
-	assert.True(t, strings.HasPrefix(fileURI, "https://media.example.com/tmp/input/"))
+	assert.True(t, strings.HasPrefix(fileURI, "https://r2.example.com/tmp/input/"))
 	assert.Equal(t, "image/png", fileData["mimeType"])
-	assert.Equal(t, "oss_to_file_data", preparation.Conversion)
+	assert.Equal(t, "r2_to_file_data", preparation.Conversion)
 	assert.Equal(t, "file_data", preparation.UpstreamFormat)
 	assert.Greater(t, preparation.InputBytes, int64(0))
 	pngBytes, err := base64.StdEncoding.DecodeString(onePixelPNGBase64)
 	require.NoError(t, err)
-	assert.Equal(t, pngBytes, <-uploaded)
+	require.Len(t, r2Uploads, 1)
+	uploaded := <-r2Uploads
+	assert.Equal(t, "/r2-bucket/tmp/input/"+filepath.Base(fileURI), uploaded.path)
+	assert.Equal(t, pngBytes, uploaded.body)
+	assert.Empty(t, ossUploads)
 	assert.NoDirExists(t, filepath.Join(temporaryRoot, TemporaryInputCategory))
 }
 
 func TestPrepareGenerateImageGeminiNativeFallsBackOnStorageFailure(t *testing.T) {
-	previousClient, previousPresignClient := ossClient, ossPresignClient
-	ossClient, ossPresignClient = nil, nil
-	t.Cleanup(func() { ossClient, ossPresignClient = previousClient, previousPresignClient })
-	t.Setenv("ALIYUN_OSS_ACCESS_KEY_ID", "")
-	t.Setenv("OSS_ACCESS_KEY_ID", "")
-	t.Setenv("DISABLE_ALIYUN_OSS", "false")
+	t.Setenv("R2_BUCKET", "")
+	t.Setenv("R2_PUBLIC_BASE_URL", "")
 	input := dto.GenerateImageInput{InlineData: &dto.GenerateImageInlineData{
 		MimeType: "image/png",
 		Data:     onePixelPNGBase64,

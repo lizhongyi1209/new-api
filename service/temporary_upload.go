@@ -89,6 +89,16 @@ var legacyTemporaryInputContentTypes = map[string]string{
 }
 
 func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, false)
+}
+
+// StoreTemporaryInputAttachmentToR2 stores a temporary input on R2 regardless
+// of the default temporary-upload provider.
+func StoreTemporaryInputAttachmentToR2(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, true)
+}
+
+func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string, forceR2 bool) (*TemporaryInputAttachment, error) {
 	originalExtension := strings.ToLower(filepath.Ext(strings.TrimSpace(originalFilename)))
 	if originalExtension != "" {
 		if _, ok := temporaryInputFormats[originalExtension]; !ok {
@@ -134,7 +144,7 @@ func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, origin
 	filename := uuid.New().String() + format.Extension
 	var client *s3.Client
 	var bucket, publicBase string
-	if IsAliyunOSSBlocked() {
+	if forceR2 || IsAliyunOSSBlocked() {
 		client, _ = getR2Client()
 		bucket = strings.TrimSpace(os.Getenv("R2_BUCKET"))
 		publicBase = normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))

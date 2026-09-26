@@ -307,7 +307,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 - `/async/v1/generateImage` accepts `quality=xhigh|max` for GPT Image 2.5 Sunburst and Flare model names, including their `-sp` and `-sd` aliases; earlier models reject those values.
 - Channel `settings` JSON key `gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration. Gemini and Vertex channel editors expose it under Other Settings.
 - With the setting disabled, Gemini reference URLs are downloaded and sent as `inlineData`, preserving the legacy behavior.
-- With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are validated and uploaded to OSS under `tmp/input/`, then exposed through the configured object-storage public URL.
+- With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are validated and uploaded to R2 under `tmp/input/`, then sent as the configured R2 public URL independently of the channel's image output strategy and the default temporary-upload provider.
 - Unknown URL MIME types fall back to the legacy download-to-inline path. Object-storage failures fall back to `inlineData` only when the resulting Gemini request remains within the 20 MiB upstream limit.
 - Input preparation logs contain only format/timing/size summaries and never include Base64 payloads or signed URL query parameters.
 
@@ -320,7 +320,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Gemini `inlineData`/`fileData` preparation and timing summary | `service/async_image.go` |
 | Submission-time channel capability selection and input preparation log | `controller/generate_image.go` |
 | Channel capability setting | `dto/channel_settings.go` |
-| Reused validated OSS `tmp/input/` storage | `service/temporary_upload.go`, `service/storage.go` |
+| Validated R2 `tmp/input/` storage for Gemini fileData; default temporary uploads retain their own provider selection | `service/temporary_upload.go`, `service/storage.go` |
 | Channel editor option and form persistence | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/src/features/channels/lib/channel-form.ts` |
 | Public API documentation | Source: `docs/api-doc.html`; independent Nano Banana, GPT Image, and Seedream sections at `#image-nano-banana`, `#image-gpt-image`, and `#image-seedream`, above Seedance; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
 | Operations and troubleshooting | `docs/operations/generate-image-filedata.md`, `docs/operations/generate-image-observability.md` |

@@ -40,6 +40,24 @@ func configureTemporaryInputOSSTest(t *testing.T, handler http.HandlerFunc) {
 	t.Setenv("DISABLE_ALIYUN_OSS", "false")
 }
 
+func configureTemporaryInputR2Test(t *testing.T, handler http.HandlerFunc) {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	previousClient, previousPresignClient := r2Client, r2PresignClient
+	r2Client = s3.NewFromConfig(aws.Config{
+		Region:      "auto",
+		Credentials: credentials.NewStaticCredentialsProvider("test-access-key", "test-secret-key", ""),
+	}, func(options *s3.Options) {
+		options.BaseEndpoint = aws.String(server.URL)
+		options.UsePathStyle = true
+	})
+	r2PresignClient = nil
+	t.Cleanup(func() { r2Client, r2PresignClient = previousClient, previousPresignClient })
+	t.Setenv("R2_BUCKET", "r2-bucket")
+	t.Setenv("R2_PUBLIC_BASE_URL", "https://r2.example.com")
+}
+
 func TestStoreTemporaryInputAttachmentSupportsMainstreamAttachments(t *testing.T) {
 	pngBytes, err := base64.StdEncoding.DecodeString(temporaryImageTestPNG)
 	require.NoError(t, err)
@@ -213,24 +231,11 @@ func TestStoreTemporaryInputAttachmentFailsWhenOSSUnavailable(t *testing.T) {
 
 func TestStoreTemporaryInputAttachmentUsesR2WhenOSSDisabled(t *testing.T) {
 	uploaded := make(chan string, 1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	configureTemporaryInputR2Test(t, func(w http.ResponseWriter, r *http.Request) {
 		uploaded <- r.URL.Path
 		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(server.Close)
-	previousClient, previousPresignClient := r2Client, r2PresignClient
-	r2Client = s3.NewFromConfig(aws.Config{
-		Region:      "auto",
-		Credentials: credentials.NewStaticCredentialsProvider("test-access-key", "test-secret-key", ""),
-	}, func(options *s3.Options) {
-		options.BaseEndpoint = aws.String(server.URL)
-		options.UsePathStyle = true
 	})
-	r2PresignClient = nil
-	t.Cleanup(func() { r2Client, r2PresignClient = previousClient, previousPresignClient })
 	t.Setenv("DISABLE_ALIYUN_OSS", "true")
-	t.Setenv("R2_BUCKET", "r2-bucket")
-	t.Setenv("R2_PUBLIC_BASE_URL", "https://r2.example.com")
 	pngBytes, err := base64.StdEncoding.DecodeString(temporaryImageTestPNG)
 	require.NoError(t, err)
 

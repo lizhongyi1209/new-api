@@ -1548,7 +1548,7 @@ func prepareGeminiBase64Input(ctx context.Context, mimeType, base64Data, clientF
 	}
 
 	writeStartedAt := time.Now()
-	attachment, storeErr := StoreTemporaryInputAttachment(
+	attachment, storeErr := StoreTemporaryInputAttachmentToR2(
 		ctx,
 		bytes.NewReader(raw),
 		"image."+temporaryInputExtensionForMIME(mimeType),
@@ -1559,7 +1559,7 @@ func prepareGeminiBase64Input(ctx context.Context, mimeType, base64Data, clientF
 			part:           geminiFileDataPart(attachment.ContentType, attachment.URL),
 			clientFormat:   clientFormat,
 			upstreamFormat: "file_data",
-			conversion:     "oss_to_file_data",
+			conversion:     "r2_to_file_data",
 			fallback:       "none",
 			inputBytes:     int64(len(raw)),
 			decode:         decodeDuration,
