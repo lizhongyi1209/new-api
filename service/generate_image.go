@@ -146,6 +146,8 @@ var generateImageQualityValues = map[string]struct{}{
 	"low":      {},
 	"medium":   {},
 	"high":     {},
+	"xhigh":    {},
+	"max":      {},
 	"auto":     {},
 	"standard": {},
 	"hd":       {},
@@ -190,7 +192,15 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	req.Quality = strings.ToLower(strings.TrimSpace(req.Quality))
 	if req.Quality != "" {
 		if _, ok := generateImageQualityValues[req.Quality]; !ok {
-			return fmt.Errorf("quality must be one of low, medium, high, auto")
+			return fmt.Errorf("quality must be one of low, medium, high, xhigh, max, auto, standard, hd")
+		}
+		if req.Quality == "xhigh" || req.Quality == "max" {
+			modelName := strings.ToLower(strings.TrimSpace(req.Model))
+			sunburst := modelName == "gpt-image-2.5-sunburst" || strings.HasPrefix(modelName, "gpt-image-2.5-sunburst-")
+			flare := modelName == "gpt-image-2.5-flare" || strings.HasPrefix(modelName, "gpt-image-2.5-flare-")
+			if !sunburst && !flare {
+				return fmt.Errorf("quality %s is only supported by GPT Image 2.5 Sunburst and Flare", req.Quality)
+			}
 		}
 	}
 

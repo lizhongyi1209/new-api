@@ -248,6 +248,36 @@ func TestValidateGenerateImageRequestNormalizesGPTImageParameters(t *testing.T) 
 	assert.Equal(t, "low", *req.Moderation)
 }
 
+func TestValidateGenerateImageRequestGPTImage25Quality(t *testing.T) {
+	models := []struct {
+		name    string
+		quality string
+	}{
+		{name: "gpt-image-2.5-sunburst-sp", quality: " XHIGH "},
+		{name: "gpt-image-2.5-sunburst-sd", quality: " MAX "},
+		{name: "gpt-image-2.5-sunburst", quality: "max"},
+		{name: "gpt-image-2.5-flare-sp", quality: "xhigh"},
+		{name: "gpt-image-2.5-flare-sd", quality: "max"},
+		{name: "gpt-image-2.5-flare", quality: "xhigh"},
+	}
+	for _, model := range models {
+		t.Run(model.name, func(t *testing.T) {
+			req := &dto.GenerateImageRequest{Model: model.name, Prompt: "draw a cat", Quality: model.quality}
+			require.NoError(t, ValidateGenerateImageRequest(req))
+			assert.Equal(t, strings.ToLower(strings.TrimSpace(model.quality)), req.Quality)
+		})
+	}
+
+	for _, model := range []string{"gpt-image-2", "nano-banana-pro"} {
+		t.Run("reject on "+model, func(t *testing.T) {
+			req := &dto.GenerateImageRequest{Model: model, Prompt: "draw a cat", Quality: "max"}
+			err := ValidateGenerateImageRequest(req)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "only supported by GPT Image 2.5 Sunburst and Flare")
+		})
+	}
+}
+
 func TestValidateGenerateImageRequestEnforcesSeedreamContract(t *testing.T) {
 	two := uint(2)
 	enabled := true
@@ -586,8 +616,9 @@ func TestNewAsyncOpenAIImageRequestPreservesGPTImageParameters(t *testing.T) {
 	moderation := "low"
 	outputFormat := "png"
 	imageReq := newAsyncOpenAIImageRequest(&dto.AsyncImageRequest{
-		Model:        "gpt-image-2",
+		Model:        "gpt-image-2.5-sunburst-sp",
 		Prompt:       "draw a cat",
+		Quality:      "max",
 		Background:   &background,
 		Moderation:   &moderation,
 		OutputFormat: &outputFormat,
@@ -602,6 +633,26 @@ func TestNewAsyncOpenAIImageRequestPreservesGPTImageParameters(t *testing.T) {
 	var gotOutputFormat string
 	require.NoError(t, common.Unmarshal(imageReq.OutputFormat, &gotOutputFormat))
 	assert.Equal(t, "png", gotOutputFormat)
+
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/async/v1/generateImage", nil)
+	c.Request.Header.Set("Content-Type", "application/json")
+	relayInfo := &relaycommon.RelayInfo{
+		RelayMode:   relayconstant.RelayModeImagesGenerations,
+		ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "gpt-image-2.5-sunburst"},
+	}
+	upstreamReq := prepareAsyncOpenAIImageRequest(imageReq, relayInfo)
+	body, _, err := buildAsyncOpenAIImageRequestBody(c, passthroughImageAdaptor{}, relayInfo, upstreamReq)
+	require.NoError(t, err)
+	encoded, err := io.ReadAll(body)
+	require.NoError(t, err)
+	var upstreamBody struct {
+		Model   string `json:"model"`
+		Quality string `json:"quality"`
+	}
+	require.NoError(t, common.Unmarshal(encoded, &upstreamBody))
+	assert.Equal(t, "gpt-image-2.5-sunburst", upstreamBody.Model)
+	assert.Equal(t, "max", upstreamBody.Quality)
 }
 
 func TestSeedreamRouteUsesSynchronousGenerationsWorker(t *testing.T) {

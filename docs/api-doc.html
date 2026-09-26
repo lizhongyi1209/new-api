@@ -137,8 +137,9 @@
       <select class="copy-scope" id="copy-scope" title="选择复制范围">
         <option value="all">全文</option>
         <option value="temporary-upload">临时素材上传</option>
-        <option value="image-generation">图片生成</option>
         <option value="image-nano-banana">Nano Banana</option>
+        <option value="image-gpt-image">GPT Image</option>
+        <option value="image-seedream">Seedream</option>
         <option value="seedance">Seedance</option>
         <option value="minimax-h3">MiniMax H3 / H3 Max</option>
         <option value="gemini-omni">Gemini Omni</option>
@@ -156,8 +157,9 @@
     <p class="sidebar-title">目录</p>
     <nav>
       <a href="#temporary-upload" data-section="temporary-upload" aria-current="true">素材上传</a>
-      <a href="#image-generation" data-section="image-generation">图片生成</a>
       <a href="#image-nano-banana" data-section="image-nano-banana">Nano Banana</a>
+      <a href="#image-gpt-image" data-section="image-gpt-image">GPT Image</a>
+      <a href="#image-seedream" data-section="image-seedream">Seedream</a>
       <a href="#seedance" data-section="seedance">Seedance</a>
       <a href="#minimax-h3" data-section="minimax-h3">MiniMax H3 / H3 Max</a>
       <a href="#gemini-omni" data-section="gemini-omni">Gemini Omni</a>
@@ -368,506 +370,7 @@
       </aside>
     </section>
 
-    <div class="section-heading" id="image-generation">
-      <div><h2>统一异步图片生成</h2><p>GPT Image 和 Seedream 的提交与查询接口；Nano Banana 见独立章节。</p></div>
-    </div>
-
-    <section class="endpoint-doc" id="legacy-unified-image-doc" aria-labelledby="generate-image-title" hidden>
-      <article class="reference-panel">
-        <h2 id="generate-image-title">提交异步生图任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
-        <p>返回 <code>task_id</code>。参考图统一使用 <code>images</code> 数组，单图也使用数组。</p>
-        <h3>支持的图片模型</h3>
-        <table>
-          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
-          <tr><td>Gemini 3 Pro Image</td><td><code>gemini-3-pro-image-c-sp</code></td><td><code>gemini-3-pro-image-c-sd</code></td><td><code>gemini-3-pro-image</code></td></tr>
-          <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
-          <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
-          <tr><td>Seedream 5.0 Pro</td><td colspan="3"><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
-        </table>
-        <div class="callout info"><b>Seedream 执行方式</b>：网关立即返回本地任务 ID，后台调用上游同步 <code>/v1/images/generations</code>，生成完成后将同步响应保存为统一任务结果。文生图和图生图都走同一上游接口。</div>
-        <h3>Gemini 宽高比参数</h3>
-        <p><code>aspect_ratio</code> 传下表值，输出分辨率通过 <code>size</code> 单独指定。</p>
-        <table>
-          <tr><th><code>aspect_ratio</code> 传值</th><th>方向</th><th>Gemini 3 Pro</th><th>Gemini 3.1 Flash</th></tr>
-          <tr><td><code>1:1</code></td><td>正方形</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>2:3</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>3:2</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>3:4</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>4:3</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>4:5</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>5:4</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>9:16</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>16:9</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>21:9</code></td><td>超宽横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>1:4</code></td><td>长竖版</td><td>不支持</td><td>支持</td></tr>
-          <tr><td><code>1:8</code></td><td>超长竖版</td><td>不支持</td><td>支持</td></tr>
-          <tr><td><code>4:1</code></td><td>长横版</td><td>不支持</td><td>支持</td></tr>
-          <tr><td><code>8:1</code></td><td>超长横版</td><td>不支持</td><td>支持</td></tr>
-        </table>
-        <div class="callout info"><b>省略时</b>：有参考图会尽量沿用输入比例，纯文生图通常为 <code>1:1</code>。</div>
-        <h3>GPT Image 2 尺寸参数</h3>
-        <p><code>size</code> 传具体像素尺寸或 <code>auto</code>。分辨率与宽高比无需额外传参。</p>
-        <table>
-          <tr><th><code>size</code> 传值</th><th>分辨率</th><th>方向</th><th>宽高比</th></tr>
-          <tr><td><code>auto</code></td><td>自动</td><td>自动</td><td>自动</td></tr>
-          <tr><td><code>1024x1024</code></td><td>1K</td><td>正方形</td><td><code>1:1</code></td></tr>
-          <tr><td><code>1536x1024</code></td><td>1K</td><td>横版</td><td><code>3:2</code></td></tr>
-          <tr><td><code>1024x1536</code></td><td>1K</td><td>竖版</td><td><code>2:3</code></td></tr>
-          <tr><td><code>1360x1024</code></td><td>1K</td><td>横版</td><td><code>4:3</code></td></tr>
-          <tr><td><code>1024x1360</code></td><td>1K</td><td>竖版</td><td><code>3:4</code></td></tr>
-          <tr><td><code>1824x1024</code></td><td>1K</td><td>横版</td><td><code>16:9</code></td></tr>
-          <tr><td><code>1024x1824</code></td><td>1K</td><td>竖版</td><td><code>9:16</code></td></tr>
-          <tr><td><code>2048x2048</code></td><td>2K</td><td>正方形</td><td><code>1:1</code></td></tr>
-          <tr><td><code>3072x2048</code></td><td>2K</td><td>横版</td><td><code>3:2</code></td></tr>
-          <tr><td><code>2048x3072</code></td><td>2K</td><td>竖版</td><td><code>2:3</code></td></tr>
-          <tr><td><code>2736x2048</code></td><td>2K</td><td>横版</td><td><code>4:3</code></td></tr>
-          <tr><td><code>2048x2736</code></td><td>2K</td><td>竖版</td><td><code>3:4</code></td></tr>
-          <tr><td><code>3648x2048</code></td><td>2K</td><td>横版</td><td><code>16:9</code></td></tr>
-          <tr><td><code>2048x3648</code></td><td>2K</td><td>竖版</td><td><code>9:16</code></td></tr>
-          <tr><td><code>2880x2880</code></td><td>4K</td><td>正方形</td><td><code>1:1</code></td></tr>
-          <tr><td><code>3504x2336</code></td><td>4K</td><td>横版</td><td><code>3:2</code></td></tr>
-          <tr><td><code>2336x3504</code></td><td>4K</td><td>竖版</td><td><code>2:3</code></td></tr>
-          <tr><td><code>3264x2448</code></td><td>4K</td><td>横版</td><td><code>4:3</code></td></tr>
-          <tr><td><code>2448x3264</code></td><td>4K</td><td>竖版</td><td><code>3:4</code></td></tr>
-          <tr><td><code>3840x2160</code></td><td>4K</td><td>横版</td><td><code>16:9</code></td></tr>
-          <tr><td><code>2160x3840</code></td><td>4K</td><td>竖版</td><td><code>9:16</code></td></tr>
-        </table>
-        <div class="callout warn"><b>格式</b>：使用字符串，例如 <code>"size": "3840x2160"</code>。只接受小写 <code>x</code>。</div>
-        <h3>请求参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>图片模型名称，填写上方模型表中的完整值。</td></tr>
-          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。Seedream 图层拆分模式可省略，由模型自动识别待拆分元素。</td></tr>
-          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。建议显式使用 <code>fileData</code> 或 <code>inlineData</code>；也兼容 URL、Data URI 和原始 Base64 字符串。单张参考图仍放入数组，不要使用 <code>image</code> 字段。</td></tr>
-          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>GPT Image 的生成数量；Gemini 模型无需传入；Seedream 仅支持单图输出，省略或传 <code>1</code>。</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>Gemini 3 Pro / 3.1 Flash 可选 <code>1K</code>、<code>2K</code>、<code>4K</code>；GPT Image 2 可选 <code>auto</code> 或上方尺寸表中的具体像素值；Seedream 推荐显式传 <code>1K</code>、<code>2K</code> 或合法的 <code>WIDTHxHEIGHT</code>。</td></tr>
-          <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>Gemini 模型的输出宽高比，取值见上方兼容表。GPT Image 2 的宽高比由 <code>size</code> 决定，无需传入。</td></tr>
-          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的生成质量，可选 <code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>。</td></tr>
-          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的背景模式，仅适用于名称以 <code>gpt-image</code> 开头的模型。可选 <code>auto</code>（自动选择背景）或 <code>transparent</code>（透明背景）；使用透明背景时，<code>output_format</code> 必须为 <code>png</code> 或 <code>webp</code>。Banana/Gemini 模型不要传入此字段。</td></tr>
-          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td>GPT Image 的内容审核强度，仅适用于名称以 <code>gpt-image</code> 开头的模型。可选 <code>auto</code>（标准过滤，默认）或 <code>low</code>（限制较少的过滤）。Banana/Gemini 模型不要传入此字段。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>GPT Image 可选 <code>png</code>、<code>jpeg</code>、<code>webp</code>；Seedream 可选 <code>png</code>、<code>jpeg</code>。透明背景仅支持 <code>png</code> 或 <code>webp</code>；Banana/Gemini 模型无需传入。</td></tr>
-          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>Seedream 是否添加“AI 生成”水印；显式传 <code>false</code> 时会原样发送给上游。</td></tr>
-          <tr><td><code>layer_decomposition</code></td><td class="opt">否</td><td>boolean</td><td>仅 Seedream 5.0 Pro 支持。<code>true</code> 时将单张输入图拆分为底图和最多 16 个透明 PNG 图层；默认 <code>false</code>。</td></tr>
-          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>Gemini 3.1 Flash 的思考级别，可选小写 <code>minimal</code> 或 <code>high</code>；Gemini 3 Pro 不要传入。</td></tr>
-          <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td>Gemini 模型的响应模态。<code>["IMAGE"]</code> 仅生成图片；<code>["TEXT","IMAGE"]</code> 同时生成文字和图片，默认为此值。不要单独传入 <code>["TEXT"]</code>；任务查询结果仅返回图片。</td></tr>
-        </table>
-        <h3>参考图格式</h3>
-        <p>新接入使用以下两种显式格式；同一数组内可以混用：</p>
-        <table>
-          <tr><th>格式</th><th>写法</th><th>说明</th></tr>
-          <tr><td><code>fileData</code></td><td><code>{"fileData":{"mimeType":"image/jpeg","fileUri":"https://.../reference.jpg"}}</code></td><td>URL 图片。必须声明图片 MIME 类型和公网 HTTP(S) 地址。</td></tr>
-          <tr><td><code>inlineData</code></td><td><code>{"inlineData":{"mimeType":"image/png","data":"..."}}</code></td><td>Base64 图片。必须声明图片 MIME 类型；<code>data</code> 不含 Data URI 前缀。</td></tr>
-        </table>
-        <div class="callout info"><b>兼容格式</b>：仍接受 URL、Data URI 和原始 Base64 字符串，但新接入应显式声明 <code>fileData</code> 或 <code>inlineData</code>。</div>
-        <div class="callout warn"><b>大小限制</b>：使用 <code>inlineData</code> 时，Base64 数据、提示词、系统指令和其他参数组成的最终 Gemini JSON 请求体不得超过 20MiB；服务以完成 Base64 编码和 JSON 序列化后的实际字节数为准。使用 <code>fileData</code> 时，图片文件本身不计入该请求体大小；如果 URL 因渠道能力回退为 <code>inlineData</code>，则仍按最终 20MiB 请求体限制校验。URL 必须公网可访问，并要求地址在任务完成前保持有效。</div>
-      </article>
-      <aside class="example-panel" aria-label="异步生图请求和响应示例">
-        <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="异步生图请求格式">
-            <button type="button" class="example-tab" id="image-request-file-tab" role="tab" aria-selected="true" aria-controls="image-request-file">fileData · URL</button>
-            <button type="button" class="example-tab" id="image-request-inline-tab" role="tab" aria-selected="false" aria-controls="image-request-inline">inlineData · Base64</button>
-            <button type="button" class="example-tab" id="image-request-gpt-tab" role="tab" aria-selected="false" aria-controls="image-request-gpt">GPT Image</button>
-            <button type="button" class="example-tab" id="image-request-seedream-tab" role="tab" aria-selected="false" aria-controls="image-request-seedream">Seedream</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="image-request-file" role="tabpanel" aria-labelledby="image-request-file-tab" aria-hidden="false">
-              <pre><code>curl -X POST https://cf-api.o1key.com/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gemini-3.1-flash-image-c-sp",
-    "prompt": "以第一张图的人物为主体，参考第二张图的色彩与构图，生成电影感横幅",
-    "images": [
-      {
-        "fileData": {
-          "mimeType": "image/png",
-          "fileUri": "https://upload.o1key.com/uploads/subject.png"
-        }
-      },
-      {
-        "fileData": {
-          "mimeType": "image/png",
-          "fileUri": "https://upload.o1key.com/uploads/style.png"
-        }
-      }
-    ],
-    "size": "2K",
-    "aspect_ratio": "16:9",
-    "thinking_level": "high",
-    "response_modalities": ["TEXT", "IMAGE"]
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="image-request-inline" role="tabpanel" aria-labelledby="image-request-inline-tab" aria-hidden="true">
-              <p class="compact-note"><code>inlineData.data</code> 中的 <code>BASE64_DATA</code> 请替换为不含 data URI 前缀的完整 Base64。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gemini-3.1-flash-image-c-sp",
-    "prompt": "保留参考图主体，改为电影海报风格",
-    "images": [
-      {
-        "inlineData": {
-          "mimeType": "image/png",
-          "data": "BASE64_DATA"
-        }
-      }
-    ],
-    "size": "2K",
-    "aspect_ratio": "16:9",
-    "response_modalities": ["IMAGE"]
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="image-request-gpt" role="tabpanel" aria-labelledby="image-request-gpt-tab" aria-hidden="true">
-              <pre><code>curl -X POST https://cf-api.o1key.com/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2-c-sp",
-    "prompt": "生成一枚透明背景的蓝色玻璃徽章",
-    "size": "1024x1024",
-    "background": "transparent",
-    "output_format": "png",
-    "moderation": "low"
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="image-request-seedream" role="tabpanel" aria-labelledby="image-request-seedream-tab" aria-hidden="true">
-              <p class="compact-note">统一异步接口始终使用 <code>images</code>；网关会在后台转换为 Seedream 上游的 <code>image</code> 数组。</p>
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dola-seedream-5-0-pro-260628-ep",
-    "prompt": "保留图一人物的姿势，将服装替换为图二的套装",
-    "images": [
-      "https://upload.o1key.com/uploads/subject.png",
-      "https://upload.o1key.com/uploads/outfit.png"
-    ],
-    "size": "2K",
-    "output_format": "png",
-    "watermark": false
-  }'</code></pre>
-            </div>
-          </div>
-        </div>
-
-        <h3>响应示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="异步生图响应状态">
-            <button type="button" class="example-tab" id="image-response-success-tab" role="tab" aria-selected="true" aria-controls="image-response-success">成功 · 200</button>
-            <button type="button" class="example-tab" id="image-response-error-tab" role="tab" aria-selected="false" aria-controls="image-response-error">失败 · 400</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="image-response-success" role="tabpanel" aria-labelledby="image-response-success-tab" aria-hidden="false">
-              <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUBMITTED"
-}</code></pre>
-            </div>
-            <div class="example-tab-panel" id="image-response-error" role="tabpanel" aria-labelledby="image-response-error-tab" aria-hidden="true">
-              <pre><code>{
-  "error": {
-    "message": "image 参数已废弃，请统一使用 images 字段；单张图也传入 images 数组",
-    "type": "invalid_request_error"
-  }
-}</code></pre>
-            </div>
-          </div>
-        </div>
-      </aside>
-    </section>
-
-    <div class="model-heading" id="image-gpt-image">
-      <h2>GPT Image</h2>
-      <p>适用于图片生成、透明背景输出和参考图编辑。</p>
-    </div>
-
-    <section class="endpoint-doc" id="async-generate-image-gpt" aria-labelledby="gpt-image-title">
-      <article class="reference-panel">
-        <h2 id="gpt-image-title">提交 GPT Image 任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
-
-        <h3>模型名称</h3>
-        <table>
-          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
-          <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
-        </table>
-
-        <h3>请求参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
-          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
-          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。支持 URL、Data URI、原始 Base64、<code>fileData</code> 和 <code>inlineData</code>。</td></tr>
-          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>生成图片数量。</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或下表中的具体像素尺寸。</td></tr>
-          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td><code>low</code>、<code>medium</code>、<code>high</code> 或 <code>auto</code>。</td></tr>
-          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>transparent</code>。透明背景要求 PNG 或 WebP。</td></tr>
-          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>low</code>。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code>、<code>jpeg</code> 或 <code>webp</code>。</td></tr>
-        </table>
-
-        <h3>尺寸</h3>
-        <table>
-          <tr><th>分辨率</th><th>正方形</th><th>横版</th><th>竖版</th></tr>
-          <tr><td>自动</td><td colspan="3"><code>auto</code></td></tr>
-          <tr><td>1K</td><td><code>1024x1024</code></td><td><code>1536x1024</code>、<code>1360x1024</code>、<code>1824x1024</code></td><td><code>1024x1536</code>、<code>1024x1360</code>、<code>1024x1824</code></td></tr>
-          <tr><td>2K</td><td><code>2048x2048</code></td><td><code>3072x2048</code>、<code>2736x2048</code>、<code>3648x2048</code></td><td><code>2048x3072</code>、<code>2048x2736</code>、<code>2048x3648</code></td></tr>
-          <tr><td>4K</td><td><code>2880x2880</code></td><td><code>3504x2336</code>、<code>3264x2448</code>、<code>3840x2160</code></td><td><code>2336x3504</code>、<code>2448x3264</code>、<code>2160x3840</code></td></tr>
-        </table>
-        <div class="callout warn"><b>尺寸格式</b>：必须使用小写 <code>x</code>，例如 <code>1536x1024</code>。</div>
-      </article>
-
-      <aside class="example-panel" aria-label="GPT Image 请求示例">
-        <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="GPT Image 请求类型">
-            <button type="button" class="example-tab" id="gpt-text-tab" role="tab" aria-selected="true" aria-controls="gpt-text">文生图</button>
-            <button type="button" class="example-tab" id="gpt-image-tab" role="tab" aria-selected="false" aria-controls="gpt-image">参考图编辑</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="gpt-text" role="tabpanel" aria-labelledby="gpt-text-tab" aria-hidden="false">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2-c-sp",
-    "prompt": "生成一枚蓝色玻璃徽章",
-    "size": "1024x1024",
-    "background": "transparent",
-    "output_format": "png",
-    "moderation": "low"
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="gpt-image" role="tabpanel" aria-labelledby="gpt-image-tab" aria-hidden="true">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2-c-sp",
-    "prompt": "保留主体结构，将材质改为磨砂金属",
-    "images": ["https://upload.o1key.com/uploads/product.png"],
-    "size": "1536x1024",
-    "quality": "high",
-    "output_format": "png"
-  }'</code></pre>
-            </div>
-          </div>
-        </div>
-        <h3>提交响应</h3>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUBMITTED"
-}</code></pre>
-      </aside>
-    </section>
-
-    <div class="model-heading" id="image-seedream">
-      <h2>Seedream</h2>
-      <p>适用于单图生成、参考图编辑、多图融合和图层拆分。</p>
-    </div>
-
-    <section class="endpoint-doc" id="async-generate-image-seedream" aria-labelledby="seedream-async-title">
-      <article class="reference-panel">
-        <h2 id="seedream-async-title">提交 Seedream 任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
-
-        <h3>模型名称</h3>
-        <table>
-          <tr><th>模型系列</th><th>模型名称</th></tr>
-          <tr><td>Seedream 5.0 Pro</td><td><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
-        </table>
-
-        <h3>请求参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>固定使用 <code>dola-seedream-5-0-pro-260628-ep</code>。</td></tr>
-          <tr><td><code>prompt</code></td><td class="opt">否*</td><td>string</td><td>图片生成、编辑或多图融合时必填；图层拆分时可省略，由模型自动识别待拆分元素。</td></tr>
-          <tr><td><code>images</code></td><td class="opt">否</td><td>string[]</td><td>公网图片 URL 数组，最多 10 张。单张参考图也必须放入数组；图层拆分模式必须且只能传 1 张。</td></tr>
-          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>仅支持单图输出，省略或传 <code>1</code>。</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>图片生成模式支持 <code>1K</code>、<code>2K</code> 或合法的 <code>WIDTHxHEIGHT</code>；图层拆分模式仅支持 <code>auto</code>、<code>1K</code>、<code>1.5K</code>、<code>2K</code>，省略时按 <code>auto</code> 处理。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code> 或 <code>jpeg</code>。</td></tr>
-          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td><code>true</code> 添加“AI 生成”水印，<code>false</code> 不添加。</td></tr>
-          <tr><td><code>layer_decomposition</code></td><td class="opt">否</td><td>boolean</td><td>图层拆分开关，默认 <code>false</code>。设为 <code>true</code> 时，将输入图拆解为 1 张底图和最多 16 个带透明通道的 PNG 图层。</td></tr>
-        </table>
-
-        <h3>图层拆分</h3>
-        <table>
-          <tr><th>规则</th><th>说明</th></tr>
-          <tr><td>输入</td><td><code>images</code> 必须且只能包含 1 张待拆分图片。</td></tr>
-          <tr><td>输出</td><td><code>data.images</code> 返回 1 张底图和最多 16 个图层，按 <code>z_index</code> 表示图层顺序。</td></tr>
-          <tr><td>图层信息</td><td>每项可包含 <code>bounding_box</code>、<code>name</code> 和 <code>description</code>；<code>bounding_box.absolute</code> 为绝对像素坐标，<code>bounding_box.normalized</code> 为 0–1000 归一化坐标。</td></tr>
-          <tr><td>失败处理</td><td>任一图层生成失败时，整个任务返回 <code>FAILURE</code>，不返回部分结果。</td></tr>
-          <tr><td>数量上限</td><td>提示词要求的图层数量超过上限时，超出部分可能不会返回。</td></tr>
-        </table>
-
-        <h3>尺寸</h3>
-        <table>
-          <tr><th>宽高比</th><th><code>1K</code></th><th><code>2K</code></th></tr>
-          <tr><td><code>1:1</code></td><td><code>1024x1024</code></td><td><code>2048x2048</code></td></tr>
-          <tr><td><code>4:3</code></td><td><code>1152x864</code></td><td><code>2368x1776</code></td></tr>
-          <tr><td><code>3:4</code></td><td><code>864x1152</code></td><td><code>1776x2368</code></td></tr>
-          <tr><td><code>16:9</code></td><td><code>1424x800</code></td><td><code>2816x1584</code></td></tr>
-          <tr><td><code>9:16</code></td><td><code>800x1424</code></td><td><code>1584x2816</code></td></tr>
-          <tr><td><code>3:2</code></td><td><code>1248x832</code></td><td><code>2496x1664</code></td></tr>
-          <tr><td><code>2:3</code></td><td><code>832x1248</code></td><td><code>1664x2496</code></td></tr>
-          <tr><td><code>21:9</code></td><td><code>1568x672</code></td><td><code>3136x1344</code></td></tr>
-        </table>
-        <div class="callout warn"><b>自定义尺寸</b>：总像素必须在 921,600 至 4,624,220 之间，宽高比必须在 <code>1:16</code> 至 <code>16:1</code> 之间。尺寸只接受小写 <code>x</code>。</div>
-
-        <h3>参考图限制</h3>
-        <table>
-          <tr><th>项目</th><th>限制</th></tr>
-          <tr><td>数量</td><td>最多 10 张</td></tr>
-          <tr><td>格式</td><td>JPEG、PNG、WebP、BMP、TIFF、GIF、HEIC、HEIF</td></tr>
-          <tr><td>文件大小</td><td>每张不超过 30MB</td></tr>
-          <tr><td>尺寸</td><td>宽和高均大于 14px，单张总像素不超过 36,000,000</td></tr>
-          <tr><td>宽高比</td><td><code>1:16</code> 至 <code>16:1</code></td></tr>
-        </table>
-
-        <h3>计费</h3>
-        <p>基础价格按火山引擎中国区官方价格及实际输出结算：图片生成模式不超过 261 万像素为 <code>¥0.30 / 张</code>，超过 261 万像素为 <code>¥0.60 / 张</code>；图层拆分模式按每张实际返回图片计费，底图计入数量，不超过 261 万像素为 <code>¥0.15 / 张</code>，超过 261 万像素为 <code>¥0.30 / 张</code>。图片生成模式首张参考图免费，从第 2 张起每张增加 <code>¥0.02</code>。最终价格乘以调用密钥所属分组的倍率。</p>
-      </article>
-
-      <aside class="example-panel" aria-label="Seedream 请求示例">
-        <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Seedream 请求类型">
-            <button type="button" class="example-tab" id="seedream-async-text-tab" role="tab" aria-selected="true" aria-controls="seedream-async-text">文生图</button>
-            <button type="button" class="example-tab" id="seedream-async-image-tab" role="tab" aria-selected="false" aria-controls="seedream-async-image">多图融合</button>
-            <button type="button" class="example-tab" id="seedream-async-layer-tab" role="tab" aria-selected="false" aria-controls="seedream-async-layer">图层拆分</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="seedream-async-text" role="tabpanel" aria-labelledby="seedream-async-text-tab" aria-hidden="false">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dola-seedream-5-0-pro-260628-ep",
-    "prompt": "生成一张 16:9 横版科技产品海报",
-    "size": "1K",
-    "output_format": "png",
-    "watermark": false
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="seedream-async-image" role="tabpanel" aria-labelledby="seedream-async-image-tab" aria-hidden="true">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dola-seedream-5-0-pro-260628-ep",
-    "prompt": "保留图一人物的姿势，将服装替换为图二的套装",
-    "images": [
-      "https://upload.o1key.com/uploads/subject.png",
-      "https://upload.o1key.com/uploads/outfit.png"
-    ],
-    "size": "2K",
-    "output_format": "png",
-    "watermark": false
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="seedream-async-layer" role="tabpanel" aria-labelledby="seedream-async-layer-tab" aria-hidden="true">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "dola-seedream-5-0-pro-260628-ep",
-    "prompt": "将主体、背景和文字拆分为可独立编辑的图层",
-    "images": [
-      "https://upload.o1key.com/uploads/poster.png"
-    ],
-    "layer_decomposition": true,
-    "output_format": "png",
-    "watermark": false
-  }'</code></pre>
-            </div>
-          </div>
-        </div>
-        <h3>提交响应</h3>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUBMITTED"
-}</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="/async/v1/tasks/{task_id}" aria-labelledby="image-task-title">
-      <article class="reference-panel">
-        <h2 id="image-task-title">查询生图任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
-        <p>GPT Image 和 Seedream 共用此查询接口。</p>
-        <h3>路径参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>task_id</code></td><td class="req">是</td><td>path</td><td>提交接口返回的任务 ID</td></tr>
-        </table>
-        <h3>任务状态</h3>
-        <ul><li><code>SUBMITTED</code>：已提交</li><li><code>IN_PROGRESS</code>：处理中</li><li><code>SUCCESS</code>：成功，读取 <code>data.images</code></li><li><code>FAILURE</code>：失败，读取 <code>error</code></li></ul>
-      </article>
-      <aside class="example-panel" aria-label="生图任务查询示例">
-        <h3>请求示例</h3>
-        <pre><code>curl https://cf-api.o1key.com/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
-  -H "Authorization: Bearer $API_KEY"</code></pre>
-        <h3>响应示例</h3>
-        <h4>生成成功 <span class="pill success">200</span></h4>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUCCESS",
-  "progress": "100%",
-  "data": {
-    "model": "gpt-image-2-c-sp",
-    "created": 1786350000,
-    "images": [
-      {
-        "url": "https://assetcache.o1key.com/images/example.png",
-        "mime_type": "image/png"
-      }
-    ]
-  }
-}</code></pre>
-        <h4>图层拆分成功 <span class="pill success">200</span></h4>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUCCESS",
-  "progress": "100%",
-  "data": {
-    "model": "dola-seedream-5-0-pro-260628-ep",
-    "created": 1786350000,
-    "images": [
-      {
-        "url": "https://assetcache.o1key.com/images/base.png",
-        "mime_type": "image/png",
-        "z_index": 0,
-        "size": "2048x2048",
-        "output_format": "png"
-      },
-      {
-        "url": "https://assetcache.o1key.com/images/subject.png",
-        "mime_type": "image/png",
-        "z_index": 1,
-        "size": "1408x1780",
-        "output_format": "png",
-        "bounding_box": {
-          "absolute": [320, 180, 1728, 1960],
-          "normalized": [156, 88, 844, 957]
-        },
-        "name": "主体",
-        "description": "画面中的主要人物"
-      }
-    ]
-  }
-}</code></pre>
-        <h4>生成失败 <span class="pill danger">200</span></h4>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "FAILURE",
-  "progress": "100%",
-  "error": "upstream image generation failed"
-}</code></pre>
-      </aside>
-    </section>
+    <div id="image-generation" aria-hidden="true"></div>
 
     <div class="section-heading" id="image-nano-banana">
       <div><h2>Nano Banana</h2><p>原生 Gemini 图片生成、参考图编辑和多图融合。</p></div>
@@ -1014,6 +517,339 @@
   "status": "FAILURE",
   "progress": "100%",
   "error": "上游未返回图片数据"
+}</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="image-gpt-image">
+      <div><h2>GPT Image</h2><p>图片生成、透明背景输出和参考图编辑。</p></div>
+    </div>
+
+    <section class="endpoint-doc" id="async-generate-image-gpt" aria-labelledby="gpt-image-title">
+      <article class="reference-panel">
+        <h2 id="gpt-image-title">提交 GPT Image 任务</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
+
+        <h3>模型名称</h3>
+        <table>
+          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
+          <tr><td>GPT Image 2.5 Sunburst</td><td><code>gpt-image-2.5-sunburst-sp</code></td><td><code>gpt-image-2.5-sunburst-sd</code></td><td><code>gpt-image-2.5-sunburst</code></td></tr>
+          <tr><td>GPT Image 2.5 Flare</td><td><code>gpt-image-2.5-flare-sp</code></td><td><code>gpt-image-2.5-flare-sd</code></td><td><code>gpt-image-2.5-flare</code></td></tr>
+          <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
+        </table>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。支持 URL、Data URI、原始 Base64、<code>fileData</code> 和 <code>inlineData</code>。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>生成图片数量。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>WIDTHxHEIGHT</code>；常用尺寸见下表。</td></tr>
+          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>2.5：<code>low</code>、<code>medium</code>、<code>high</code>、<code>xhigh</code>、<code>max</code>、<code>auto</code>；GPT Image 2：<code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>。</td></tr>
+          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>transparent</code>。透明背景要求 PNG 或 WebP。</td></tr>
+          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>low</code>。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code>、<code>jpeg</code> 或 <code>webp</code>。</td></tr>
+        </table>
+
+        <h3>常用尺寸</h3>
+        <table>
+          <tr><th>分辨率</th><th>正方形</th><th>横版</th><th>竖版</th></tr>
+          <tr><td>自动</td><td colspan="3"><code>auto</code></td></tr>
+          <tr><td>1K</td><td><code>1024x1024</code></td><td><code>1536x1024</code>、<code>1360x1024</code>、<code>1824x1024</code></td><td><code>1024x1536</code>、<code>1024x1360</code>、<code>1024x1824</code></td></tr>
+          <tr><td>2K</td><td><code>2048x2048</code></td><td><code>3072x2048</code>、<code>2736x2048</code>、<code>3648x2048</code></td><td><code>2048x3072</code>、<code>2048x2736</code>、<code>2048x3648</code></td></tr>
+          <tr><td>4K</td><td><code>2880x2880</code></td><td><code>3504x2336</code>、<code>3264x2448</code>、<code>3840x2160</code></td><td><code>2336x3504</code>、<code>2448x3264</code>、<code>2160x3840</code></td></tr>
+        </table>
+        <div class="callout warn"><b>自定义尺寸</b>：使用小写 <code>x</code>；宽高均须为 16 的倍数，比例不超过 <code>3:1</code>，单边不超过 3840 像素，总像素为 655,360–8,294,400。</div>
+      </article>
+
+      <aside class="example-panel" aria-label="GPT Image 提交请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="GPT Image 请求类型">
+            <button type="button" class="example-tab" id="gpt-text-tab" role="tab" aria-selected="true" aria-controls="gpt-text">文生图</button>
+            <button type="button" class="example-tab" id="gpt-image-tab" role="tab" aria-selected="false" aria-controls="gpt-image">参考图编辑</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="gpt-text" role="tabpanel" aria-labelledby="gpt-text-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.5-sunburst-sp",
+    "prompt": "生成一枚蓝色玻璃徽章",
+    "size": "1024x1024",
+    "quality": "max",
+    "background": "transparent",
+    "output_format": "png",
+    "moderation": "low"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="gpt-image" role="tabpanel" aria-labelledby="gpt-image-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.5-flare-sd",
+    "prompt": "保留主体结构，将材质改为磨砂金属",
+    "images": ["https://upload.o1key.com/uploads/product.png"],
+    "size": "1536x1024",
+    "quality": "xhigh",
+    "output_format": "png"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+        <h3>提交成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+        <h3>提交失败 <span class="pill danger">400</span></h3>
+        <pre><code>{
+  "error": {
+    "message": "output_format must be png or webp when background is transparent",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="async-task-gpt-image" aria-labelledby="gpt-image-task-title">
+      <article class="reference-panel">
+        <h2 id="gpt-image-task-title">查询 GPT Image 任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
+        <p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+      </article>
+      <aside class="example-panel" aria-label="GPT Image 任务查询和结果示例">
+        <h3>请求示例</h3>
+        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>生成成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "gpt-image-2.5-sunburst-sp",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/example.png",
+        "mime_type": "image/png"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>生成失败 <span class="pill danger">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "上游未返回图片数据"
+}</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="image-seedream">
+      <div><h2>Seedream</h2><p>单图生成、参考图编辑、多图融合和图层拆分。</p></div>
+    </div>
+
+    <section class="endpoint-doc" id="async-generate-image-seedream" aria-labelledby="seedream-async-title">
+      <article class="reference-panel">
+        <h2 id="seedream-async-title">提交 Seedream 任务</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
+
+        <h3>模型名称</h3>
+        <table>
+          <tr><th>模型系列</th><th>模型名称</th></tr>
+          <tr><td>Seedream 5.0 Pro</td><td><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
+        </table>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>固定使用 <code>dola-seedream-5-0-pro-260628-ep</code>。</td></tr>
+          <tr><td><code>prompt</code></td><td class="opt">否*</td><td>string</td><td>图片生成、编辑或多图融合时必填；图层拆分时可省略，由模型自动识别待拆分元素。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>string[]</td><td>公网图片 URL 数组，最多 10 张。单张参考图也必须放入数组；图层拆分模式必须且只能传 1 张。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>仅支持单图输出，省略或传 <code>1</code>。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>图片生成模式支持 <code>1K</code>、<code>2K</code> 或合法的 <code>WIDTHxHEIGHT</code>；图层拆分模式仅支持 <code>auto</code>、<code>1K</code>、<code>1.5K</code>、<code>2K</code>，省略时按 <code>auto</code> 处理。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code> 或 <code>jpeg</code>。</td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td><code>true</code> 添加“AI 生成”水印，<code>false</code> 不添加。</td></tr>
+          <tr><td><code>layer_decomposition</code></td><td class="opt">否</td><td>boolean</td><td>图层拆分开关，默认 <code>false</code>。设为 <code>true</code> 时，将输入图拆解为 1 张底图和最多 16 个带透明通道的 PNG 图层。</td></tr>
+        </table>
+
+        <h3>图层拆分</h3>
+        <table>
+          <tr><th>规则</th><th>说明</th></tr>
+          <tr><td>输入</td><td><code>images</code> 必须且只能包含 1 张待拆分图片。</td></tr>
+          <tr><td>输出</td><td><code>data.images</code> 返回 1 张底图和最多 16 个图层，按 <code>z_index</code> 表示图层顺序。</td></tr>
+          <tr><td>图层信息</td><td>每项可包含 <code>bounding_box</code>、<code>name</code> 和 <code>description</code>；<code>bounding_box.absolute</code> 为绝对像素坐标，<code>bounding_box.normalized</code> 为 0–1000 归一化坐标。</td></tr>
+          <tr><td>失败处理</td><td>任一图层生成失败时，整个任务返回 <code>FAILURE</code>，不返回部分结果。</td></tr>
+          <tr><td>数量上限</td><td>提示词要求的图层数量超过上限时，超出部分可能不会返回。</td></tr>
+        </table>
+
+        <h3>尺寸</h3>
+        <table>
+          <tr><th>宽高比</th><th><code>1K</code></th><th><code>2K</code></th></tr>
+          <tr><td><code>1:1</code></td><td><code>1024x1024</code></td><td><code>2048x2048</code></td></tr>
+          <tr><td><code>4:3</code></td><td><code>1152x864</code></td><td><code>2368x1776</code></td></tr>
+          <tr><td><code>3:4</code></td><td><code>864x1152</code></td><td><code>1776x2368</code></td></tr>
+          <tr><td><code>16:9</code></td><td><code>1424x800</code></td><td><code>2816x1584</code></td></tr>
+          <tr><td><code>9:16</code></td><td><code>800x1424</code></td><td><code>1584x2816</code></td></tr>
+          <tr><td><code>3:2</code></td><td><code>1248x832</code></td><td><code>2496x1664</code></td></tr>
+          <tr><td><code>2:3</code></td><td><code>832x1248</code></td><td><code>1664x2496</code></td></tr>
+          <tr><td><code>21:9</code></td><td><code>1568x672</code></td><td><code>3136x1344</code></td></tr>
+        </table>
+        <div class="callout warn"><b>自定义尺寸</b>：总像素必须在 921,600 至 4,624,220 之间，宽高比必须在 <code>1:16</code> 至 <code>16:1</code> 之间。尺寸只接受小写 <code>x</code>。</div>
+
+        <h3>参考图限制</h3>
+        <table>
+          <tr><th>项目</th><th>限制</th></tr>
+          <tr><td>数量</td><td>最多 10 张</td></tr>
+          <tr><td>格式</td><td>JPEG、PNG、WebP、BMP、TIFF、GIF、HEIC、HEIF</td></tr>
+          <tr><td>文件大小</td><td>每张不超过 30MB</td></tr>
+          <tr><td>尺寸</td><td>宽和高均大于 14px，单张总像素不超过 36,000,000</td></tr>
+          <tr><td>宽高比</td><td><code>1:16</code> 至 <code>16:1</code></td></tr>
+        </table>
+
+        <h3>计费</h3>
+        <p>基础价格按火山引擎中国区官方价格及实际输出结算：图片生成模式不超过 261 万像素为 <code>¥0.30 / 张</code>，超过 261 万像素为 <code>¥0.60 / 张</code>；图层拆分模式按每张实际返回图片计费，底图计入数量，不超过 261 万像素为 <code>¥0.15 / 张</code>，超过 261 万像素为 <code>¥0.30 / 张</code>。图片生成模式首张参考图免费，从第 2 张起每张增加 <code>¥0.02</code>。最终价格乘以调用密钥所属分组的倍率。</p>
+      </article>
+
+      <aside class="example-panel" aria-label="Seedream 提交请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedream 请求类型">
+            <button type="button" class="example-tab" id="seedream-async-text-tab" role="tab" aria-selected="true" aria-controls="seedream-async-text">文生图</button>
+            <button type="button" class="example-tab" id="seedream-async-image-tab" role="tab" aria-selected="false" aria-controls="seedream-async-image">多图融合</button>
+            <button type="button" class="example-tab" id="seedream-async-layer-tab" role="tab" aria-selected="false" aria-controls="seedream-async-layer">图层拆分</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="seedream-async-text" role="tabpanel" aria-labelledby="seedream-async-text-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "生成一张 16:9 横版科技产品海报",
+    "size": "1K",
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedream-async-image" role="tabpanel" aria-labelledby="seedream-async-image-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "保留图一人物的姿势，将服装替换为图二的套装",
+    "images": [
+      "https://upload.o1key.com/uploads/subject.png",
+      "https://upload.o1key.com/uploads/outfit.png"
+    ],
+    "size": "2K",
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedream-async-layer" role="tabpanel" aria-labelledby="seedream-async-layer-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "将主体、背景和文字拆分为可独立编辑的图层",
+    "images": [
+      "https://upload.o1key.com/uploads/poster.png"
+    ],
+    "layer_decomposition": true,
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+        <h3>提交成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+        <h3>提交失败 <span class="pill danger">400</span></h3>
+        <pre><code>{
+  "error": {
+    "message": "n must be 1 for Seedream 5.0 Pro",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/async/v1/tasks/{task_id}" aria-labelledby="image-task-title">
+      <article class="reference-panel">
+        <h2 id="image-task-title">查询 Seedream 任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
+        <p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+      </article>
+      <aside class="example-panel" aria-label="Seedream 任务查询和结果示例">
+        <h3>请求示例</h3>
+        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>生成成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/example.png",
+        "mime_type": "image/png"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>图层拆分成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/base.png",
+        "mime_type": "image/png",
+        "z_index": 0,
+        "size": "2048x2048",
+        "output_format": "png"
+      },
+      {
+        "url": "https://assetcache.o1key.com/images/subject.png",
+        "mime_type": "image/png",
+        "z_index": 1,
+        "size": "1408x1780",
+        "output_format": "png",
+        "bounding_box": {
+          "absolute": [320, 180, 1728, 1960],
+          "normalized": [156, 88, 844, 957]
+        },
+        "name": "主体",
+        "description": "画面中的主要人物"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>生成失败 <span class="pill danger">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "upstream image generation failed"
 }</code></pre>
       </aside>
     </section>

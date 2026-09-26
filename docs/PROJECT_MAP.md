@@ -297,13 +297,14 @@ When changing this feature, preserve legacy `local_temp`, verify both explicit d
 
 ## Unified image `fileData` input
 
-Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 URL, `/async/v1/generateImage` 参考图.
+Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 URL, `/async/v1/generateImage` 参考图, GPT Image 2.5, Sunburst, Flare.
 
 ### Behavior contract
 
 - `/async/v1/generateImage` accepts legacy string items plus explicit `inlineData` and `fileData` objects in `images`.
 - Models whose names start with `gpt-image` accept optional `background` values `auto` and `transparent`; Banana/Gemini image models reject the parameter. Transparent output requires `png` or `webp`, and the option is forwarded through both OpenAI image generations and edits requests.
 - `/async/v1/generateImage`, `/v1/images/generations`, and `/v1/images/edits` accept the optional `moderation` values `auto` and `low` only for model names starting with `gpt-image`; the field is forwarded through OpenAI image generation JSON and edit multipart requests.
+- `/async/v1/generateImage` accepts `quality=xhigh|max` for GPT Image 2.5 Sunburst and Flare model names, including their `-sp` and `-sd` aliases; earlier models reject those values.
 - Channel `settings` JSON key `gemini_file_data_enabled` defaults to `false` and is only an upstream capability declaration. Gemini and Vertex channel editors expose it under Other Settings.
 - With the setting disabled, Gemini reference URLs are downloaded and sent as `inlineData`, preserving the legacy behavior.
 - With the setting enabled, explicit `fileData` and legacy URLs with a known image extension are sent as `fileData` without downloading the image body. Inline/Base64 images are validated and uploaded to OSS under `tmp/input/`, then exposed through the configured object-storage public URL.
@@ -321,7 +322,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Channel capability setting | `dto/channel_settings.go` |
 | Reused validated OSS `tmp/input/` storage | `service/temporary_upload.go`, `service/storage.go` |
 | Channel editor option and form persistence | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/src/features/channels/lib/channel-form.ts` |
-| Public API documentation | Source: `docs/api-doc.html`; Nano Banana has its own section at `#image-nano-banana` above Seedance, while GPT Image and Seedream remain under `#image-generation`; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
+| Public API documentation | Source: `docs/api-doc.html`; independent Nano Banana, GPT Image, and Seedream sections at `#image-nano-banana`, `#image-gpt-image`, and `#image-seedream`, above Seedance; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
 | Operations and troubleshooting | `docs/operations/generate-image-filedata.md`, `docs/operations/generate-image-observability.md` |
 
 ### Regression coverage

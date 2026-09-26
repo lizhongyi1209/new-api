@@ -18,7 +18,7 @@ type GenerateImageRequest struct {
 
 	Size        string  `json:"size,omitempty"`         // 如 "auto" / "1024x1024" / "1K" / "2K" / "4K"
 	AspectRatio string  `json:"aspect_ratio,omitempty"` // 如 "16:9"
-	Quality     string  `json:"quality,omitempty"`      // "low" / "medium" / "high" / "auto"
+	Quality     string  `json:"quality,omitempty"`      // GPT Image 2.5 also supports "xhigh" and "max"
 	Background  *string `json:"background,omitempty"`   // gpt-image*: "auto" / "transparent"
 	Moderation  *string `json:"moderation,omitempty"`   // gpt-image*: "auto" / "low"
 
