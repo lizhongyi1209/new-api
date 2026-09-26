@@ -178,96 +178,32 @@
     </section>
 
     <div class="section-heading" id="temporary-upload">
-      <div><h2>临时素材上传</h2><p>上传图片、音频、视频或文档，获取临时公开 HTTPS URL。</p></div>
+      <div><h2>临时素材上传</h2></div>
     </div>
 
     <section class="endpoint-doc" id="temporary-upload-endpoint" aria-labelledby="temporary-upload-title">
       <article class="reference-panel">
-        <h2 id="temporary-upload-title">上传单个附件</h2>
+        <h2 id="temporary-upload-title">上传文件</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
-        <p>请求使用 <code>multipart/form-data</code>，每次上传一个文件。服务端校验后将文件上传至对象存储，并返回公开 HTTPS URL。文件计划在上传 24 小时后清理。</p>
-
-        <h3>请求参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>file</code></td><td class="req">是</td><td>binary</td><td>待上传附件；图片、音频、视频和文档均为单文件最大 20 MiB</td></tr>
-        </table>
-        <div class="callout warn"><b>Multipart 请求</b>：浏览器、SDK 或命令行工具应自动生成包含 boundary 的 <code>Content-Type</code>，不要手动填写固定的 <code>multipart/form-data</code> 请求头。</div>
+        <p><code>Authorization: Bearer &lt;API Key&gt;</code> · <code>multipart/form-data</code></p>
+        <p><strong>参数</strong>：<code>file</code>（必填，每次 1 个文件，最大 20 MiB）</p>
 
         <h3>支持的文件格式</h3>
         <table>
-          <tr><th>类别</th><th>扩展名</th></tr>
+          <tr><th>类型</th><th>扩展名</th></tr>
           <tr><td>图片</td><td><code>png</code>、<code>jpg</code>、<code>jpeg</code>、<code>webp</code></td></tr>
           <tr><td>音频</td><td><code>mp3</code>、<code>wav</code>、<code>m4a</code></td></tr>
           <tr><td>视频</td><td><code>mp4</code>、<code>mov</code></td></tr>
           <tr><td>文档</td><td><code>pdf</code>、<code>txt</code>、<code>md</code></td></tr>
         </table>
-        <p>服务端会校验文件扩展名与实际内容类型。扩展名与内容不一致、可执行内容以及未列出的格式会被拒绝。</p>
-
-        <h3>响应字段</h3>
-        <table>
-          <tr><th>字段</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>url</code></td><td>string</td><td>对象存储公开 HTTPS URL</td></tr>
-          <tr><td><code>filename</code></td><td>string</td><td>上传时的原始文件名</td></tr>
-          <tr><td><code>content_type</code></td><td>string</td><td>服务端确认后的 MIME 类型</td></tr>
-          <tr><td><code>size</code></td><td>integer</td><td>文件大小，单位为字节</td></tr>
-          <tr><td><code>expires_at</code></td><td>integer</td><td>计划清理时间，Unix 秒级时间戳；实际不可访问时间受对象清理和缓存影响</td></tr>
-        </table>
-
-        <h3>错误处理</h3>
-        <table>
-          <tr><th>HTTP 状态码</th><th>含义</th><th>客户端处理建议</th></tr>
-          <tr><td><code>400</code></td><td>请求格式错误、缺少文件、空文件或格式不支持</td><td>修正请求或提示用户更换文件，不要自动重试</td></tr>
-          <tr><td><code>401</code></td><td>API Key 缺失或无效</td><td>检查鉴权配置</td></tr>
-          <tr><td><code>403</code></td><td>当前凭证无权访问</td><td>检查账号、凭证或访问策略</td></tr>
-          <tr><td><code>413</code></td><td>文件超过大小限制</td><td>压缩文件或选择更小的附件</td></tr>
-          <tr><td><code>429</code></td><td>请求过于频繁</td><td>读取 <code>Retry-After</code> 响应头并延迟重试</td></tr>
-          <tr><td><code>500</code></td><td>服务暂时不可用</td><td>使用退避策略进行有限次数重试</td></tr>
-        </table>
-        <div class="callout info"><b>重试</b>：上传接口不接受幂等键。网络超时后重试可能生成新的 URL，客户端应以最后一次成功响应为准。</div>
+        <p><strong>常见错误</strong>：<code>400</code> 文件无效或格式不支持 · <code>401</code> 鉴权失败 · <code>413</code> 超过大小限制</p>
       </article>
 
       <aside class="example-panel" aria-label="临时素材上传请求和响应示例">
-        <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="临时素材上传请求格式">
-            <button type="button" class="example-tab" id="temporary-upload-curl-tab" role="tab" aria-selected="true" aria-controls="temporary-upload-curl">cURL</button>
-            <button type="button" class="example-tab" id="temporary-upload-js-tab" role="tab" aria-selected="false" aria-controls="temporary-upload-js">JavaScript</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="temporary-upload-curl" role="tabpanel" aria-labelledby="temporary-upload-curl-tab">
-              <pre><code>curl --fail-with-body \
-  -X POST "$BASE_URL/v1/o1key/uploads" \
+        <h3>请求</h3>
+        <pre><code>curl -X POST "$BASE_URL/v1/o1key/uploads" \
   -H "Authorization: Bearer $API_KEY" \
   -F "file=@./reference.png"</code></pre>
-            </div>
-            <div class="example-tab-panel" id="temporary-upload-js" role="tabpanel" aria-labelledby="temporary-upload-js-tab" aria-hidden="true">
-              <pre><code>const form = new FormData();
-form.append("file", file, file.name);
-
-const response = await fetch(
-  `${BASE_URL}/v1/o1key/uploads`,
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: form,
-  },
-);
-
-if (!response.ok) {
-  const retryAfter = response.headers.get("Retry-After");
-  throw new Error(
-    `上传失败：HTTP ${response.status}` +
-      (retryAfter ? `，${retryAfter} 秒后重试` : ""),
-  );
-}
-
-const upload = await response.json();</code></pre>
-            </div>
-          </div>
-        </div>
 
         <h3>成功响应</h3>
         <pre><code>{
@@ -278,15 +214,7 @@ const upload = await response.json();</code></pre>
   "expires_at": 1787495062
 }</code></pre>
 
-        <h3>在后续请求中使用</h3>
-        <pre><code>{
-  "images": [
-    "https://oss.o1key.cn/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png"
-  ]
-}</code></pre>
-        <p>不同模型的附件字段名称可能不同，请将响应中的 <code>url</code> 填入对应模型要求的 URL 字段。</p>
-
-        <h3>常见错误响应</h3>
+        <h3>错误响应（HTTP 400 示例）</h3>
         <pre><code>{
   "error": "unsupported attachment type"
 }</code></pre>
