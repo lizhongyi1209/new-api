@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +17,32 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+var (
+	errMultipleTemporaryInputFiles = errors.New("multiple files are not supported")
+	errInvalidTemporaryInputParts  = errors.New("invalid multipart request")
+)
+
+type remainingTemporaryUploadParts struct {
+	reader *multipart.Reader
+}
+
+func (parts *remainingTemporaryUploadParts) Read(_ []byte) (int, error) {
+	for {
+		part, err := parts.reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			return 0, io.EOF
+		}
+		if err != nil {
+			return 0, errInvalidTemporaryInputParts
+		}
+		isFile := part.FormName() == "file" || part.FileName() != ""
+		_ = part.Close()
+		if isFile {
+			return 0, errMultipleTemporaryInputFiles
+		}
+	}
+}
 
 func UploadTemporaryInputAttachment(c *gin.Context) {
 	multipartReader, err := c.Request.MultipartReader()
@@ -40,7 +67,7 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 		}
 
 		originalFilename := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
-		attachment, storeErr := service.StoreTemporaryInputAttachment(c.Request.Context(), part, originalFilename)
+		attachment, storeErr := service.StoreTemporaryInputAttachment(c.Request.Context(), io.MultiReader(part, &remainingTemporaryUploadParts{reader: multipartReader}), originalFilename)
 		_ = part.Close()
 		if storeErr != nil {
 			switch {
@@ -52,6 +79,10 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 				})
 			case errors.Is(storeErr, service.ErrTemporaryInputUnsupportedType):
 				c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported attachment type"})
+			case errors.Is(storeErr, errMultipleTemporaryInputFiles):
+				c.JSON(http.StatusBadRequest, gin.H{"error": "multiple files are not supported"})
+			case errors.Is(storeErr, errInvalidTemporaryInputParts):
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid multipart request"})
 			default:
 				logger.LogError(c, "temporary input upload failed: "+common.MaskSensitiveInfo(storeErr.Error()))
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store attachment"})

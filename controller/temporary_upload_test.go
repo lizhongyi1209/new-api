@@ -103,6 +103,32 @@ func TestUploadTemporaryInputAttachmentRejectsUnsupportedType(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "unsupported attachment type")
 }
 
+func TestUploadTemporaryInputAttachmentRejectsMultipleFiles(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
+	require.NoError(t, err)
+
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+	for _, name := range []string{"first.png", "second.png"} {
+		filePart, err := writer.CreateFormFile("file", name)
+		require.NoError(t, err)
+		_, err = filePart.Write(pngBytes)
+		require.NoError(t, err)
+	}
+	require.NoError(t, writer.Close())
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/o1key/uploads", &requestBody)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = request
+	UploadTemporaryInputAttachment(context)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.JSONEq(t, `{"error":"multiple files are not supported"}`, recorder.Body.String())
+}
+
 func TestUploadTemporaryInputAttachmentRejectsFileOver20MiB(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	var requestBody bytes.Buffer

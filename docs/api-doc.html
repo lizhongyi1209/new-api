@@ -186,7 +186,7 @@
         <h2 id="temporary-upload-title">上传文件</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
         <p><code>Authorization: Bearer &lt;API Key&gt;</code> · <code>multipart/form-data</code></p>
-        <p><strong>参数</strong>：<code>file</code>（必填，每次 1 个文件，最大 20 MiB）</p>
+        <p><strong>参数</strong>：<code>file</code>（必填，每次 1 个文件，最大 20 MiB）。多个文件请分别上传。</p>
 
         <h3>支持的文件格式</h3>
         <table>
@@ -196,7 +196,7 @@
           <tr><td>视频</td><td><code>mp4</code>、<code>mov</code></td></tr>
           <tr><td>文档</td><td><code>pdf</code>、<code>txt</code>、<code>md</code></td></tr>
         </table>
-        <p><strong>常见错误</strong>：<code>400</code> 文件无效或格式不支持 · <code>401</code> 鉴权失败 · <code>413</code> 超过大小限制</p>
+        <p><strong>常见错误</strong>：<code>400</code> 文件无效、格式不支持或传入多个文件 · <code>401</code> 鉴权失败 · <code>413</code> 超过大小限制</p>
       </article>
 
       <aside class="example-panel" aria-label="临时素材上传请求和响应示例">
