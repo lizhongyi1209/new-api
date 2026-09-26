@@ -138,6 +138,7 @@
         <option value="all">全文</option>
         <option value="temporary-upload">临时素材上传</option>
         <option value="image-generation">图片生成</option>
+        <option value="image-nano-banana">Nano Banana</option>
         <option value="seedance">Seedance</option>
         <option value="minimax-h3">MiniMax H3 / H3 Max</option>
         <option value="gemini-omni">Gemini Omni</option>
@@ -156,6 +157,7 @@
     <nav>
       <a href="#temporary-upload" data-section="temporary-upload" aria-current="true">素材上传</a>
       <a href="#image-generation" data-section="image-generation">图片生成</a>
+      <a href="#image-nano-banana" data-section="image-nano-banana">Nano Banana</a>
       <a href="#seedance" data-section="seedance">Seedance</a>
       <a href="#minimax-h3" data-section="minimax-h3">MiniMax H3 / H3 Max</a>
       <a href="#gemini-omni" data-section="gemini-omni">Gemini Omni</a>
@@ -170,7 +172,7 @@
       <h3>Base URL</h3>
       <table>
         <tr><th>入口</th><th>Base URL</th><th>说明</th></tr>
-        <tr><td>国内加速</td><td><code>https://api.o1key.cn</code></td><td>流式请求最长 300 秒</td></tr>
+        <tr><td>国内加速 <span class="pill success">推荐</span></td><td><code>https://api.o1key.cn</code></td><td>流式请求最长 300 秒</td></tr>
         <tr><td>Cloudflare</td><td><code>https://cf-api.o1key.com</code></td><td>单次连接最长 100 秒</td></tr>
         <tr><td>美国直连</td><td><code>https://api.o1key.com</code></td><td>适合长连接</td></tr>
       </table>
@@ -367,7 +369,7 @@
     </section>
 
     <div class="section-heading" id="image-generation">
-      <div><h2>统一异步图片生成</h2><p>使用同一组提交与查询接口接入 Nano Banana、GPT Image 和 Seedream。</p></div>
+      <div><h2>统一异步图片生成</h2><p>GPT Image 和 Seedream 的提交与查询接口；Nano Banana 见独立章节。</p></div>
     </div>
 
     <section class="endpoint-doc" id="legacy-unified-image-doc" aria-labelledby="generate-image-title" hidden>
@@ -574,113 +576,6 @@
             </div>
           </div>
         </div>
-      </aside>
-    </section>
-
-    <div class="model-heading" id="image-nano-banana">
-      <h2>Nano Banana</h2>
-      <p>适用于原生 Gemini 图片生成、参考图编辑和多图融合。</p>
-    </div>
-
-    <section class="endpoint-doc" id="async-generate-image-nano-banana" aria-labelledby="nano-banana-title">
-      <article class="reference-panel">
-        <h2 id="nano-banana-title">提交 Nano Banana 任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
-
-        <h3>模型名称</h3>
-        <table>
-          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
-          <tr><td>Gemini 3 Pro Image</td><td><code>gemini-3-pro-image-c-sp</code></td><td><code>gemini-3-pro-image-c-sd</code></td><td><code>gemini-3-pro-image</code></td></tr>
-          <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
-        </table>
-
-        <h3>请求参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
-          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
-          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。单张参考图也必须放入数组，不要使用 <code>image</code>。</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>1K</code>、<code>2K</code> 或 <code>4K</code>，必须使用大写 <code>K</code>。默认 <code>1K</code>。</td></tr>
-          <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>输出宽高比，支持范围见下表。</td></tr>
-          <tr><td><code>media_resolution</code></td><td class="opt">否</td><td>string</td><td>媒体解析级别，例如 <code>MEDIA_RESOLUTION_HIGH</code>。</td></tr>
-          <tr><td><code>google_search</code></td><td class="opt">否</td><td>boolean</td><td>传 <code>true</code> 时启用 Google Search grounding。</td></tr>
-          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini 3.1 Flash Image 支持，可选 <code>minimal</code> 或 <code>high</code>。</td></tr>
-          <tr><td><code>include_thoughts</code></td><td class="opt">否</td><td>boolean</td><td>是否请求返回思考内容。任务查询结果仅返回图片。</td></tr>
-          <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td><code>["IMAGE"]</code> 或 <code>["TEXT","IMAGE"]</code>。不要仅传 <code>["TEXT"]</code>。</td></tr>
-        </table>
-
-        <h3>宽高比</h3>
-        <table>
-          <tr><th><code>aspect_ratio</code></th><th>方向</th><th>Gemini 3 Pro</th><th>Gemini 3.1 Flash</th></tr>
-          <tr><td><code>1:1</code></td><td>正方形</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>2:3</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>3:2</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>3:4</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>4:3</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>4:5</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>5:4</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>9:16</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>16:9</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>21:9</code></td><td>超宽横版</td><td>支持</td><td>支持</td></tr>
-          <tr><td><code>1:4</code>、<code>1:8</code></td><td>长竖版</td><td>不支持</td><td>支持</td></tr>
-          <tr><td><code>4:1</code>、<code>8:1</code></td><td>长横版</td><td>不支持</td><td>支持</td></tr>
-        </table>
-        <div class="callout info"><b>省略宽高比</b>：有参考图时优先沿用输入比例，纯文生图通常使用 <code>1:1</code>。</div>
-
-        <h3>参考图格式</h3>
-        <table>
-          <tr><th>格式</th><th>写法</th><th>说明</th></tr>
-          <tr><td><code>fileData</code></td><td><code>{"fileData":{"mimeType":"image/jpeg","fileUri":"https://..."}}</code></td><td>公网 HTTP(S) 图片地址。</td></tr>
-          <tr><td><code>inlineData</code></td><td><code>{"inlineData":{"mimeType":"image/png","data":"..."}}</code></td><td>不含 Data URI 前缀的 Base64。</td></tr>
-          <tr><td>兼容字符串</td><td><code>https://...</code> 或 Data URI</td><td>已有客户端可继续使用，新接入建议显式声明格式。</td></tr>
-        </table>
-        <div class="callout warn"><b>请求大小</b>：使用 <code>inlineData</code> 时，最终 Gemini JSON 请求体不得超过 20MiB。URL 必须保持公网可访问，直至任务完成。</div>
-      </article>
-
-      <aside class="example-panel" aria-label="Nano Banana 请求示例">
-        <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Nano Banana 请求类型">
-            <button type="button" class="example-tab" id="nano-text-tab" role="tab" aria-selected="true" aria-controls="nano-text">文生图</button>
-            <button type="button" class="example-tab" id="nano-image-tab" role="tab" aria-selected="false" aria-controls="nano-image">参考图生成</button>
-          </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="nano-text" role="tabpanel" aria-labelledby="nano-text-tab" aria-hidden="false">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gemini-3.1-flash-image-c-sp",
-    "prompt": "生成一张 16:9 的极简科技产品海报",
-    "size": "2K",
-    "aspect_ratio": "16:9",
-    "response_modalities": ["IMAGE"]
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="nano-image" role="tabpanel" aria-labelledby="nano-image-tab" aria-hidden="true">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gemini-3.1-flash-image-c-sp",
-    "prompt": "保留人物主体，参考第二张图的色彩和构图",
-    "images": [
-      {"fileData":{"mimeType":"image/png","fileUri":"https://upload.o1key.com/uploads/subject.png"}},
-      {"fileData":{"mimeType":"image/png","fileUri":"https://upload.o1key.com/uploads/style.png"}}
-    ],
-    "size": "2K",
-    "aspect_ratio": "16:9",
-    "thinking_level": "high",
-    "response_modalities": ["IMAGE"]
-  }'</code></pre>
-            </div>
-          </div>
-        </div>
-        <h3>提交响应</h3>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUBMITTED"
-}</code></pre>
       </aside>
     </section>
 
@@ -902,7 +797,7 @@
       <article class="reference-panel">
         <h2 id="image-task-title">查询生图任务</h2>
         <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
-        <p>Nano Banana、GPT Image 和 Seedream 共用此查询接口。</p>
+        <p>GPT Image 和 Seedream 共用此查询接口。</p>
         <h3>路径参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
@@ -922,7 +817,7 @@
   "status": "SUCCESS",
   "progress": "100%",
   "data": {
-    "model": "gemini-3.1-flash-image-c-sp",
+    "model": "gpt-image-2-c-sp",
     "created": 1786350000,
     "images": [
       {
@@ -970,6 +865,155 @@
   "status": "FAILURE",
   "progress": "100%",
   "error": "upstream image generation failed"
+}</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="image-nano-banana">
+      <div><h2>Nano Banana</h2><p>原生 Gemini 图片生成、参考图编辑和多图融合。</p></div>
+    </div>
+
+    <section class="endpoint-doc" id="async-generate-image-nano-banana" aria-labelledby="nano-banana-title">
+      <article class="reference-panel">
+        <h2 id="nano-banana-title">提交 Nano Banana 任务</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
+
+        <h3>模型名称</h3>
+        <table>
+          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
+          <tr><td>Gemini 3 Pro Image</td><td><code>gemini-3-pro-image-c-sp</code></td><td><code>gemini-3-pro-image-c-sd</code></td><td><code>gemini-3-pro-image</code></td></tr>
+          <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
+        </table>
+
+        <h3>请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。单张参考图也必须放入数组，不要使用 <code>image</code>。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>1K</code>、<code>2K</code> 或 <code>4K</code>，必须使用大写 <code>K</code>。默认 <code>1K</code>。</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>输出宽高比，支持范围见下表。</td></tr>
+          <tr><td><code>media_resolution</code></td><td class="opt">否</td><td>string</td><td>媒体解析级别，例如 <code>MEDIA_RESOLUTION_HIGH</code>。</td></tr>
+          <tr><td><code>google_search</code></td><td class="opt">否</td><td>boolean</td><td>传 <code>true</code> 时启用 Google Search grounding。</td></tr>
+          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini 3.1 Flash Image 支持，可选 <code>minimal</code> 或 <code>high</code>。</td></tr>
+          <tr><td><code>include_thoughts</code></td><td class="opt">否</td><td>boolean</td><td>是否请求返回思考内容。任务查询结果仅返回图片。</td></tr>
+          <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td><code>["IMAGE"]</code> 或 <code>["TEXT","IMAGE"]</code>。不要仅传 <code>["TEXT"]</code>。</td></tr>
+        </table>
+
+        <h3>宽高比</h3>
+        <table>
+          <tr><th><code>aspect_ratio</code></th><th>方向</th><th>Gemini 3 Pro</th><th>Gemini 3.1 Flash</th></tr>
+          <tr><td><code>1:1</code></td><td>正方形</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>2:3</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>3:2</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>3:4</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>4:3</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>4:5</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>5:4</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>9:16</code></td><td>竖版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>16:9</code></td><td>横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>21:9</code></td><td>超宽横版</td><td>支持</td><td>支持</td></tr>
+          <tr><td><code>1:4</code>、<code>1:8</code></td><td>长竖版</td><td>不支持</td><td>支持</td></tr>
+          <tr><td><code>4:1</code>、<code>8:1</code></td><td>长横版</td><td>不支持</td><td>支持</td></tr>
+        </table>
+        <div class="callout info"><b>省略宽高比</b>：有参考图时优先沿用输入比例，纯文生图通常使用 <code>1:1</code>。</div>
+
+        <h3>参考图格式</h3>
+        <table>
+          <tr><th>格式</th><th>写法</th><th>说明</th></tr>
+          <tr><td><code>fileData</code></td><td><code>{"fileData":{"mimeType":"image/jpeg","fileUri":"https://..."}}</code></td><td>公网 HTTP(S) 图片地址。</td></tr>
+          <tr><td><code>inlineData</code></td><td><code>{"inlineData":{"mimeType":"image/png","data":"..."}}</code></td><td>不含 Data URI 前缀的 Base64。</td></tr>
+          <tr><td>兼容字符串</td><td><code>https://...</code> 或 Data URI</td><td>已有客户端可继续使用，新接入建议显式声明格式。</td></tr>
+        </table>
+        <div class="callout warn"><b>请求大小</b>：使用 <code>inlineData</code> 时，最终 Gemini JSON 请求体不得超过 20MiB。URL 必须保持公网可访问，直至任务完成。</div>
+      </article>
+
+      <aside class="example-panel" aria-label="Nano Banana 提交请求和响应示例">
+        <h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Nano Banana 请求类型">
+            <button type="button" class="example-tab" id="nano-text-tab" role="tab" aria-selected="true" aria-controls="nano-text">文生图</button>
+            <button type="button" class="example-tab" id="nano-image-tab" role="tab" aria-selected="false" aria-controls="nano-image">参考图生成</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="nano-text" role="tabpanel" aria-labelledby="nano-text-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-3.1-flash-image-c-sp",
+    "prompt": "生成一张 16:9 的极简科技产品海报",
+    "size": "2K",
+    "aspect_ratio": "16:9",
+    "response_modalities": ["IMAGE"]
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="nano-image" role="tabpanel" aria-labelledby="nano-image-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gemini-3.1-flash-image-c-sp",
+    "prompt": "保留人物主体，参考第二张图的色彩和构图",
+    "images": [
+      {"fileData":{"mimeType":"image/png","fileUri":"https://upload.o1key.com/uploads/subject.png"}},
+      {"fileData":{"mimeType":"image/png","fileUri":"https://upload.o1key.com/uploads/style.png"}}
+    ],
+    "size": "2K",
+    "aspect_ratio": "16:9",
+    "thinking_level": "high",
+    "response_modalities": ["IMAGE"]
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+        <h3>提交成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+        <h3>提交失败 <span class="pill danger">400</span></h3>
+        <pre><code>{
+  "error": {
+    "message": "image 参数已废弃，请统一使用 images 字段；单张图也传入 images 数组",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="async-task-nano-banana" aria-labelledby="nano-banana-task-title">
+      <article class="reference-panel">
+        <h2 id="nano-banana-task-title">查询 Nano Banana 任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
+        <p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+      </article>
+      <aside class="example-panel" aria-label="Nano Banana 任务查询和结果示例">
+        <h3>请求示例</h3>
+        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>生成成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "gemini-3.1-flash-image-c-sp",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/example.png",
+        "mime_type": "image/png"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>生成失败 <span class="pill danger">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "上游未返回图片数据"
 }</code></pre>
       </aside>
     </section>

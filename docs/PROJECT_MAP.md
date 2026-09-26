@@ -321,7 +321,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Channel capability setting | `dto/channel_settings.go` |
 | Reused validated OSS `tmp/input/` storage | `service/temporary_upload.go`, `service/storage.go` |
 | Channel editor option and form persistence | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/src/features/channels/lib/channel-form.ts` |
-| Public API documentation | Source: `docs/api-doc.html`; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
+| Public API documentation | Source: `docs/api-doc.html`; Nano Banana has its own section at `#image-nano-banana` above Seedance, while GPT Image and Seedream remain under `#image-generation`; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
 | Operations and troubleshooting | `docs/operations/generate-image-filedata.md`, `docs/operations/generate-image-observability.md` |
 
 ### Regression coverage
