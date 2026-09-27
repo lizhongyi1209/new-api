@@ -191,6 +191,7 @@
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
         <p><code>Authorization: Bearer &lt;API Key&gt;</code> · <code>multipart/form-data</code></p>
         <p><strong>参数</strong>：<code>file</code>（必填，每次 1 个文件，最大 20 MiB）。多个文件请分别上传。</p>
+        <p>新上传的素材保存在 R2，返回的图片 URL 可作为生图参考图。本机读取自己签发的 R2 临时图片时直接通过 R2 SDK 获取。</p>
 
         <h3>支持的文件格式</h3>
         <table>
@@ -211,7 +212,7 @@
 
         <h3>成功响应</h3>
         <pre><code>{
-  "url": "https://oss.o1key.cn/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png",
+  "url": "https://upload.o1key.com/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png",
   "filename": "reference.png",
   "content_type": "image/png",
   "size": 11630,

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -144,6 +146,29 @@ func GenerateImageSubmit(c *gin.Context) {
 	// - 通用 OpenAI image：存扁平的 AsyncImageRequest
 	var processData any
 	if isGeminiNative {
+		referenceSources := make([]string, 0, len(req.Images))
+		r2InputPrefix := strings.TrimRight(os.Getenv("R2_PUBLIC_BASE_URL"), "/") + "/tmp/input/"
+		for _, input := range req.Images {
+			imageURL := ""
+			if input.FileData != nil {
+				imageURL = strings.TrimSpace(input.FileData.FileURI)
+			} else if input.Value != nil {
+				value := strings.TrimSpace(*input.Value)
+				if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
+					imageURL = value
+				}
+			}
+			switch {
+			case imageURL == "":
+				referenceSources = append(referenceSources, "inline")
+			case strings.HasPrefix(imageURL, r2InputPrefix):
+				referenceSources = append(referenceSources, "r2_tmp")
+			case strings.HasPrefix(imageURL, "https://oss.o1key.cn/tmp/input/"):
+				referenceSources = append(referenceSources, "oss_tmp")
+			default:
+				referenceSources = append(referenceSources, "other_url")
+			}
+		}
 		nativeReq, inputPreparation, convertErr := service.PrepareGenerateImageGeminiNative(
 			context.Background(),
 			asyncReq,
@@ -151,7 +176,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			service.GeminiFileDataOptions{Enabled: relayInfo.ChannelOtherSettings.GeminiFileDataEnabled},
 		)
 		logger.LogInfo(c, fmt.Sprintf(
-			"generate_image_timing: phase=input_prepare task=%s request_id=%s channel=%d client_format=%s upstream_format=%s conversion=%s image_count=%d input_bytes=%d download_ms=%.3f decode_ms=%.3f storage_write_ms=%.3f prepare_ms=%.3f fallback=%s error=%t",
+			"generate_image_timing: phase=input_prepare task=%s request_id=%s channel=%d client_format=%s upstream_format=%s conversion=%s image_count=%d reference_sources=%s input_bytes=%d download_ms=%.3f decode_ms=%.3f storage_write_ms=%.3f prepare_ms=%.3f fallback=%s error=%t",
 			task.TaskID,
 			task.PrivateData.RequestID,
 			task.ChannelId,
@@ -159,6 +184,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			inputPreparation.UpstreamFormat,
 			inputPreparation.Conversion,
 			inputPreparation.ImageCount,
+			strings.Join(referenceSources, ","),
 			inputPreparation.InputBytes,
 			inputPreparation.Download.Seconds()*1000,
 			inputPreparation.Decode.Seconds()*1000,

@@ -25,7 +25,7 @@
 4. 老客户端继续使用 `images: []string`，不要求修改。
 5. 新客户端可以显式传入 `inlineData` 或 `fileData`，用于准确指定 MIME 类型和输入类型。
 6. 初期仅在确认支持 URL 拉取的 Gemini 渠道启用，例如 `gaorui.cc`。
-7. Gemini fileData 开启后，显式 `fileData` 和可识别图片扩展名的 URL 原样发送上游；Base64/inlineData 经 R2 `tmp/input/` 转换。该路径与图片输出策略及普通临时上传的存储选择无关。
+7. Gemini fileData 开启后，显式 `fileData` 和可识别图片扩展名的 URL 原样发送上游；Base64/inlineData 经 R2 `tmp/input/` 转换。普通临时上传也使用 R2，但仍独立于图片输出策略。
 
 ## 3. 推荐请求协议
 
@@ -246,7 +246,7 @@ Base64/data URL：
 - 计划清理时间：上传后 24 小时；服务端周期性删除，缓存可能延后实际不可访问时间
 
 必须先确认对象上传成功，再把公共 URL 发送给上游，避免上游拉取时文件尚未就绪。
-部署时需确认 R2 公开域名指向存储桶，服务端凭证可对 `tmp/input/` 执行 `PutObject`、`ListObjectsV2` 和 `DeleteObject`。建议给该前缀额外配置 R2 生命周期规则，作为服务端清理任务停止时的兜底；生命周期规则不能替代响应中的计划清理时间。普通临时上传仍按自身存储配置选择 OSS 或 R2。
+部署时需确认 R2 公开域名指向存储桶，服务端凭证可对 `tmp/input/` 执行 `PutObject`、`GetObject`、`ListObjectsV2` 和 `DeleteObject`。建议给该前缀额外配置 R2 生命周期规则，作为服务端清理任务停止时的兜底；生命周期规则不能替代响应中的计划清理时间。普通临时上传也使用 R2；本机读取自己签发的 R2 临时图片 URL 时通过 SDK 直取。
 
 ## 9. 校验规则
 

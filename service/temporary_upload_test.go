@@ -106,7 +106,7 @@ func TestStoreTemporaryInputAttachmentSupportsMainstreamAttachments(t *testing.T
 		body               []byte
 	}
 	uploads := make(chan storedObject, len(tests))
-	configureTemporaryInputOSSTest(t, func(w http.ResponseWriter, r *http.Request) {
+	configureTemporaryInputR2Test(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -130,12 +130,12 @@ func TestStoreTemporaryInputAttachmentSupportsMainstreamAttachments(t *testing.T
 			require.NoError(t, err)
 			assert.Equal(t, test.contentType, attachment.ContentType)
 			assert.Equal(t, int64(len(test.contents)), attachment.Size)
-			assert.True(t, strings.HasPrefix(attachment.URL, "https://media.example.com/tmp/input/"))
+			assert.True(t, strings.HasPrefix(attachment.URL, "https://r2.example.com/tmp/input/"))
 			assert.Equal(t, test.extension, filepath.Ext(attachment.Filename))
 			assert.WithinDuration(t, before.Add(TemporaryInputRetention), attachment.ExpiresAt, 2*time.Second)
 
 			upload := <-uploads
-			assert.Equal(t, "/test-bucket/tmp/input/"+attachment.Filename, upload.path)
+			assert.Equal(t, "/r2-bucket/tmp/input/"+attachment.Filename, upload.path)
 			assert.Equal(t, test.contentType, upload.contentType)
 			assert.Equal(t, test.contents, upload.body)
 			if test.wantsAttachment {
@@ -213,13 +213,9 @@ func TestStoreTemporaryInputAttachmentRejectsFilesOver20MiB(t *testing.T) {
 	}
 }
 
-func TestStoreTemporaryInputAttachmentFailsWhenOSSUnavailable(t *testing.T) {
-	previousClient, previousPresignClient := ossClient, ossPresignClient
-	ossClient, ossPresignClient = nil, nil
-	t.Cleanup(func() { ossClient, ossPresignClient = previousClient, previousPresignClient })
-	t.Setenv("ALIYUN_OSS_ACCESS_KEY_ID", "")
-	t.Setenv("OSS_ACCESS_KEY_ID", "")
-	t.Setenv("DISABLE_ALIYUN_OSS", "false")
+func TestStoreTemporaryInputAttachmentFailsWhenR2Unavailable(t *testing.T) {
+	t.Setenv("R2_BUCKET", "")
+	t.Setenv("R2_PUBLIC_BASE_URL", "")
 	storageDir := t.TempDir()
 	t.Setenv("TEMP_STORAGE_DIR", storageDir)
 	pngBytes, err := base64.StdEncoding.DecodeString(temporaryImageTestPNG)
@@ -229,13 +225,14 @@ func TestStoreTemporaryInputAttachmentFailsWhenOSSUnavailable(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(storageDir, TemporaryInputCategory))
 }
 
-func TestStoreTemporaryInputAttachmentUsesR2WhenOSSDisabled(t *testing.T) {
+func TestStoreTemporaryInputAttachmentUsesR2WithOSSConfigured(t *testing.T) {
 	uploaded := make(chan string, 1)
 	configureTemporaryInputR2Test(t, func(w http.ResponseWriter, r *http.Request) {
 		uploaded <- r.URL.Path
 		w.WriteHeader(http.StatusOK)
 	})
-	t.Setenv("DISABLE_ALIYUN_OSS", "true")
+	t.Setenv("DISABLE_ALIYUN_OSS", "false")
+	t.Setenv("ALIYUN_OSS_PUBLIC_BASE_URL", "https://oss.example.com")
 	pngBytes, err := base64.StdEncoding.DecodeString(temporaryImageTestPNG)
 	require.NoError(t, err)
 

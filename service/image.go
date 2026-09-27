@@ -2,16 +2,23 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"image"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"golang.org/x/image/webp"
 )
@@ -88,27 +95,58 @@ func GetImageBytesFromUrl(url string) (mimeType string, data []byte, err error) 
 // GetImageBytesFromUrlWithLimit downloads an image without Base64-encoding it,
 // allowing object-storage upload paths to preserve the original byte stream.
 func GetImageBytesFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, data []byte, err error) {
-	// The initial request is followed by at most three immediate HTTP 525 retries.
-	const maxHTTP525Retries = 3
-	var resp *http.Response
-	for retry := 0; retry <= maxHTTP525Retries; retry++ {
-		resp, err = DoDownloadRequest(url)
-		if err != nil {
-			return "", nil, fmt.Errorf("failed to download image: %w", err)
+	var body io.ReadCloser
+	var contentType string
+	var contentLength int64 = -1
+	if objectKey, ownR2Input := r2TemporaryInputImageKey(url); ownR2Input {
+		startedAt := time.Now()
+		client, _ := getR2Client()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		object, getErr := client.GetObject(ctx, &s3.GetObjectInput{
+			Bucket: aws.String(strings.TrimSpace(os.Getenv("R2_BUCKET"))),
+			Key:    aws.String(objectKey),
+		})
+		if getErr != nil {
+			common.SysLog(fmt.Sprintf("image_reference_fetch source=r2_sdk result=error duration_ms=%.3f", time.Since(startedAt).Seconds()*1000))
+			return "", nil, fmt.Errorf("failed to download image from R2: %w", getErr)
 		}
-		if resp.StatusCode != 525 || retry == maxHTTP525Retries {
-			break
+		body = object.Body
+		contentType = aws.ToString(object.ContentType)
+		if object.ContentLength != nil {
+			contentLength = *object.ContentLength
 		}
-		_ = resp.Body.Close()
+		defer func() {
+			result := "ok"
+			if err != nil {
+				result = "error"
+			}
+			common.SysLog(fmt.Sprintf("image_reference_fetch source=r2_sdk result=%s duration_ms=%.3f", result, time.Since(startedAt).Seconds()*1000))
+		}()
+	} else {
+		// The initial request is followed by at most three immediate HTTP 522/525 retries.
+		const maxHTTPRetries = 3
+		var resp *http.Response
+		for retry := 0; retry <= maxHTTPRetries; retry++ {
+			resp, err = DoDownloadRequest(url)
+			if err != nil {
+				return "", nil, fmt.Errorf("failed to download image: %w", err)
+			}
+			if (resp.StatusCode != 522 && resp.StatusCode != 525) || retry == maxHTTPRetries {
+				break
+			}
+			_ = resp.Body.Close()
+		}
+		if resp.StatusCode != http.StatusOK {
+			_ = resp.Body.Close()
+			return "", nil, fmt.Errorf("failed to download image: HTTP %d", resp.StatusCode)
+		}
+		body = resp.Body
+		contentType = resp.Header.Get("Content-Type")
+		contentLength = resp.ContentLength
 	}
-	defer resp.Body.Close()
+	defer body.Close()
 
-	// Check HTTP status code
-	if resp.StatusCode != http.StatusOK {
-		return "", nil, fmt.Errorf("failed to download image: HTTP %d", resp.StatusCode)
-	}
-
-	contentType := resp.Header.Get("Content-Type")
 	if contentType != "application/octet-stream" && !strings.HasPrefix(contentType, "image/") {
 		return "", nil, fmt.Errorf("invalid content type: %s, required image/*", contentType)
 	}
@@ -122,12 +160,12 @@ func GetImageBytesFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, 
 	}
 
 	// Check Content-Length if available
-	if resp.ContentLength > maxImageSize {
-		return "", nil, fmt.Errorf("image size %d exceeds maximum allowed size of %d bytes", resp.ContentLength, maxImageSize)
+	if contentLength > maxImageSize {
+		return "", nil, fmt.Errorf("image size %d exceeds maximum allowed size of %d bytes", contentLength, maxImageSize)
 	}
 
 	// Read one byte beyond the limit so an image exactly at the limit remains valid.
-	limitReader := io.LimitReader(resp.Body, maxImageSize+1)
+	limitReader := io.LimitReader(body, maxImageSize+1)
 	buffer := &bytes.Buffer{}
 
 	written, err := io.Copy(buffer, limitReader)
@@ -151,6 +189,34 @@ func GetImageBytesFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, 
 	}
 
 	return mimeType, data, nil
+}
+
+func r2TemporaryInputImageKey(rawURL string) (string, bool) {
+	baseURL := normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
+	if baseURL == "" || strings.TrimSpace(os.Getenv("R2_BUCKET")) == "" {
+		return "", false
+	}
+	base, baseErr := url.Parse(baseURL)
+	imageURL, imageErr := url.Parse(rawURL)
+	if baseErr != nil || imageErr != nil || base.Scheme != "https" || base.Host == "" ||
+		imageURL.Scheme != base.Scheme || !strings.EqualFold(imageURL.Host, base.Host) ||
+		imageURL.User != nil || imageURL.RawQuery != "" || imageURL.ForceQuery || imageURL.Fragment != "" ||
+		imageURL.EscapedPath() != imageURL.Path {
+		return "", false
+	}
+	prefix := strings.TrimSuffix(base.Path, "/") + "/tmp/input/"
+	if !strings.HasPrefix(imageURL.Path, prefix) {
+		return "", false
+	}
+	filename := strings.TrimPrefix(imageURL.Path, prefix)
+	if !isTemporaryInputFilename(filename) {
+		return "", false
+	}
+	format := temporaryInputFormats[strings.ToLower(filepath.Ext(filename))]
+	if !strings.HasPrefix(format.ContentType, "image/") {
+		return "", false
+	}
+	return "tmp/input/" + filename, true
 }
 
 func DecodeUrlImageData(imageUrl string) (image.Config, string, error) {

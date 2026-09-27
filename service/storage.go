@@ -68,7 +68,10 @@ func getR2Client() (*s3.Client, *s3.PresignClient) {
 		Credentials: credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, ""),
 		Region:      "auto",
 	}
-	endpoint := fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID)
+	endpoint := strings.TrimSpace(os.Getenv("R2_ENDPOINT"))
+	if endpoint == "" {
+		endpoint = fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountID)
+	}
 	r2Client = s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 		o.BaseEndpoint = aws.String(endpoint)

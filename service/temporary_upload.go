@@ -89,16 +89,16 @@ var legacyTemporaryInputContentTypes = map[string]string{
 }
 
 func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
-	return storeTemporaryInputAttachment(ctx, reader, originalFilename, false)
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename)
 }
 
-// StoreTemporaryInputAttachmentToR2 stores a temporary input on R2 regardless
-// of the default temporary-upload provider.
+// StoreTemporaryInputAttachmentToR2 preserves the explicit R2 entry point used
+// by Gemini fileData conversion.
 func StoreTemporaryInputAttachmentToR2(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
-	return storeTemporaryInputAttachment(ctx, reader, originalFilename, true)
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename)
 }
 
-func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string, forceR2 bool) (*TemporaryInputAttachment, error) {
+func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
 	originalExtension := strings.ToLower(filepath.Ext(strings.TrimSpace(originalFilename)))
 	if originalExtension != "" {
 		if _, ok := temporaryInputFormats[originalExtension]; !ok {
@@ -142,22 +142,11 @@ func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, origin
 
 	contentType := format.ContentType
 	filename := uuid.New().String() + format.Extension
-	var client *s3.Client
-	var bucket, publicBase string
-	if forceR2 || IsAliyunOSSBlocked() {
-		client, _ = getR2Client()
-		bucket = strings.TrimSpace(os.Getenv("R2_BUCKET"))
-		publicBase = normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
-	} else {
-		client, _, err = getAliyunOSSClient()
-		if err != nil {
-			return nil, err
-		}
-		bucket = strings.TrimSpace(firstNonEmptyEnv("ALIYUN_OSS_BUCKET", "OSS_BUCKET"))
-		publicBase = normalizeHTTPBaseURL(firstNonEmptyEnv("ALIYUN_OSS_PUBLIC_BASE_URL", "OSS_PUBLIC_BASE_URL"))
-	}
+	client, _ := getR2Client()
+	bucket := strings.TrimSpace(os.Getenv("R2_BUCKET"))
+	publicBase := normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
 	if bucket == "" || publicBase == "" {
-		return nil, fmt.Errorf("missing object storage bucket or public base URL for temporary input attachment")
+		return nil, fmt.Errorf("missing R2 bucket or public base URL for temporary input attachment")
 	}
 	parsedBase, err := url.Parse(publicBase)
 	if err != nil || parsedBase.Scheme != "https" || parsedBase.Host == "" || parsedBase.User != nil || parsedBase.RawQuery != "" || parsedBase.Fragment != "" {

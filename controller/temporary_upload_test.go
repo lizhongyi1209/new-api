@@ -20,12 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUploadTemporaryInputAttachmentReturnsOSSURL(t *testing.T) {
+func TestUploadTemporaryInputAttachmentReturnsR2URL(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	storageDir := t.TempDir()
 	t.Setenv("TEMP_STORAGE_DIR", storageDir)
 	uploaded := make(chan []byte, 1)
-	ossServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	r2Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut || !strings.HasPrefix(r.URL.Path, "/test-bucket/tmp/input/") {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -38,14 +38,13 @@ func TestUploadTemporaryInputAttachmentReturnsOSSURL(t *testing.T) {
 		uploaded <- body
 		w.WriteHeader(http.StatusOK)
 	}))
-	t.Cleanup(ossServer.Close)
-	t.Setenv("ALIYUN_OSS_ACCESS_KEY_ID", "test-access-key")
-	t.Setenv("ALIYUN_OSS_ACCESS_KEY_SECRET", "test-secret-key")
-	t.Setenv("ALIYUN_OSS_REGION", "test-region")
-	t.Setenv("ALIYUN_OSS_ENDPOINT", ossServer.URL)
-	t.Setenv("ALIYUN_OSS_FORCE_PATH_STYLE", "true")
-	t.Setenv("ALIYUN_OSS_BUCKET", "test-bucket")
-	t.Setenv("ALIYUN_OSS_PUBLIC_BASE_URL", "https://media.example.com")
+	t.Cleanup(r2Server.Close)
+	t.Setenv("R2_ACCOUNT_ID", "test-account")
+	t.Setenv("R2_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("R2_SECRET_ACCESS_KEY", "test-secret-key")
+	t.Setenv("R2_BUCKET", "test-bucket")
+	t.Setenv("R2_PUBLIC_BASE_URL", "https://r2.example.com")
+	t.Setenv("R2_ENDPOINT", r2Server.URL)
 	t.Setenv("DISABLE_ALIYUN_OSS", "false")
 	pngBytes, err := base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=")
 	require.NoError(t, err)
@@ -71,7 +70,7 @@ func TestUploadTemporaryInputAttachmentReturnsOSSURL(t *testing.T) {
 	require.NoError(t, common.Unmarshal(uploadRecorder.Body.Bytes(), &payload))
 	publicURL, ok := payload["url"].(string)
 	require.True(t, ok)
-	assert.True(t, strings.HasPrefix(publicURL, "https://media.example.com/tmp/input/"))
+	assert.True(t, strings.HasPrefix(publicURL, "https://r2.example.com/tmp/input/"))
 	assert.Equal(t, "reference.png", payload["filename"])
 	assert.Equal(t, "image/png", payload["content_type"])
 	assert.Equal(t, float64(len(pngBytes)), payload["size"])

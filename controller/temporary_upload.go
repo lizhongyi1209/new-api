@@ -89,6 +89,7 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 			}
 			return
 		}
+		logger.LogInfo(c, fmt.Sprintf("temporary_input_upload provider=r2 content_type=%s bytes=%d", attachment.ContentType, attachment.Size))
 
 		c.JSON(http.StatusOK, gin.H{
 			"url":          attachment.URL,
