@@ -186,7 +186,13 @@ func hasJSONRawValue(raw json.RawMessage) bool {
 
 func prepareAsyncOpenAIImageRequest(imageReq *dto.ImageRequest, relayInfo *relaycommon.RelayInfo) *dto.ImageRequest {
 	upstreamReq := mappedAsyncImageRequest(imageReq, relayInfo)
-	if upstreamReq == nil || relayInfo == nil || relayInfo.RelayMode != relayconstant.RelayModeImagesEdits {
+	if upstreamReq == nil {
+		return nil
+	}
+	if relaycommon.IsGPTImage(relayInfo) {
+		upstreamReq.ResponseFormat = ""
+	}
+	if relayInfo == nil || relayInfo.RelayMode != relayconstant.RelayModeImagesEdits {
 		return upstreamReq
 	}
 	normalizeAsyncImageEditRequest(upstreamReq)

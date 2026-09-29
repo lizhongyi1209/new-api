@@ -145,12 +145,12 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		c := newMultipartContext(t, "gpt-image-1", prompt)
 		require.NoError(t, c.Request.ParseMultipartForm(32<<20))
 
-		convertAndReplay(t, c, "gpt-image-1", prompt, true)
+		convertAndReplay(t, c, "gpt-image-1", prompt, false)
 	})
 
 	t.Run("re-parses reusable body when form is missing", func(t *testing.T) {
 		prompt := "edit without pre-parsed form"
-		c := newMultipartContext(t, "gpt-image-1", prompt)
+		c := newMultipartContext(t, "dall-e-3", prompt)
 
 		storage, err := common.GetBodyStorage(c)
 		require.NoError(t, err)
@@ -158,40 +158,56 @@ func TestConvertImageEditRequestMultipart(t *testing.T) {
 		c.Request.MultipartForm = nil
 		c.Request.PostForm = nil
 
-		convertAndReplay(t, c, "gpt-image-1", prompt, true)
+		convertAndReplay(t, c, "dall-e-3", prompt, true)
 	})
 
-	t.Run("drops response format for gpt image 2", func(t *testing.T) {
+	t.Run("drops response format for gpt image 2.5", func(t *testing.T) {
 		prompt := "edit with ignored response format"
-		c := newMultipartContext(t, "gpt-image-2-c", prompt)
+		c := newMultipartContext(t, "gpt-image-2.5-sunburst", prompt)
 		require.NoError(t, c.Request.ParseMultipartForm(32<<20))
 
-		convertAndReplay(t, c, "gpt-image-2-c", prompt, false)
+		convertAndReplay(t, c, "gpt-image-2.5-sunburst", prompt, false)
 	})
 }
 
-func TestConvertImageJSONDropsResponseFormatForGPTImage2(t *testing.T) {
+func TestConvertImageJSONResponseFormatForGPTImage(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{}`))
 	c.Request.Header.Set("Content-Type", "application/json")
-	info := &relaycommon.RelayInfo{
-		RelayMode:       relayconstant.RelayModeImagesGenerations,
-		OriginModelName: "gpt-image-2-c",
-		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-image-2"},
-	}
 	moderation, err := common.Marshal("low")
 	require.NoError(t, err)
-	request := dto.ImageRequest{
-		Model:          "gpt-image-2",
-		Prompt:         "draw a test image",
-		ResponseFormat: "invalid-client-value",
-		Moderation:     moderation,
-	}
+	for _, tc := range []struct {
+		name, origin, upstream string
+		wantResponseFormat     bool
+	}{
+		{name: "gpt image 1", origin: "gpt-image-1", upstream: "gpt-image-1"},
+		{name: "gpt image 2.5", origin: "gpt-image-2.5-sunburst-sp", upstream: "gpt-image-2.5-sunburst"},
+		{name: "mapped gpt image", origin: "custom-image", upstream: "gpt-image-2.5-sunburst"},
+		{name: "other model", origin: "dall-e-3", upstream: "dall-e-3", wantResponseFormat: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				RelayMode:       relayconstant.RelayModeImagesGenerations,
+				OriginModelName: tc.origin,
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: tc.upstream},
+			}
+			request := dto.ImageRequest{
+				Model:          tc.upstream,
+				Prompt:         "draw a test image",
+				ResponseFormat: "b64_json",
+				Moderation:     moderation,
+			}
 
-	converted, err := (&Adaptor{}).ConvertImageRequest(c, info, request)
-	require.NoError(t, err)
-	convertedRequest, ok := converted.(dto.ImageRequest)
-	require.True(t, ok)
-	assert.Empty(t, convertedRequest.ResponseFormat)
-	assert.JSONEq(t, `"low"`, string(convertedRequest.Moderation))
+			converted, err := (&Adaptor{}).ConvertImageRequest(c, info, request)
+			require.NoError(t, err)
+			convertedRequest, ok := converted.(dto.ImageRequest)
+			require.True(t, ok)
+			if tc.wantResponseFormat {
+				assert.Equal(t, "b64_json", convertedRequest.ResponseFormat)
+			} else {
+				assert.Empty(t, convertedRequest.ResponseFormat)
+			}
+			assert.JSONEq(t, `"low"`, string(convertedRequest.Moderation))
+		})
+	}
 }

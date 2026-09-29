@@ -143,3 +143,56 @@ func TestAliImageRequestReservesFinalQuantityBeforeUpstream(t *testing.T) {
 		})
 	}
 }
+
+func TestGPTImageRequestOmitsResponseFormatBeforeUpstream(t *testing.T) {
+	service.InitHttpClient()
+	for _, tc := range []struct {
+		name, model string
+		passThrough bool
+		override    bool
+	}{
+		{name: "gpt image 2.5 with pass through", model: "gpt-image-2.5-sunburst", passThrough: true},
+		{name: "gpt image 1 with channel override", model: "gpt-image-1", override: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			received := make(chan []byte, 1)
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err == nil {
+					received <- body
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadGateway)
+				_, _ = io.WriteString(w, `{"error":{"message":"fixture upstream failure","type":"upstream_error"}}`)
+			}))
+			t.Cleanup(upstream.Close)
+
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(`{"model":"`+tc.model+`","prompt":"draw a cat","response_format":"b64_json"}`))
+			c.Request.Header.Set("Content-Type", "application/json")
+			common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+			common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, upstream.URL)
+			common.SetContextKey(c, constant.ContextKeyOriginalModel, tc.model)
+			common.SetContextKey(c, constant.ContextKeyChannelSetting, dto.ChannelSettings{PassThroughBodyEnabled: tc.passThrough})
+			if tc.override {
+				common.SetContextKey(c, constant.ContextKeyChannelParamOverride, map[string]any{
+					"operations": []any{map[string]any{"path": "response_format", "mode": "set", "value": "url"}},
+				})
+			}
+			request, err := helper.GetAndValidOpenAIImageRequest(c, relayconstant.RelayModeImagesGenerations)
+			require.NoError(t, err)
+			info := &relaycommon.RelayInfo{
+				Request: request, OriginModelName: tc.model, RelayMode: relayconstant.RelayModeImagesGenerations,
+				RequestURLPath: c.Request.URL.Path, Billing: &aliImageReservation{held: 20000, limit: 500000},
+				PriceData: types.PriceData{UsePrice: true, ModelPrice: 0.04, GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1}},
+			}
+
+			apiErr := ImageHelper(c, info)
+			require.NotNil(t, apiErr)
+			assert.Equal(t, http.StatusBadGateway, apiErr.StatusCode)
+			require.Len(t, received, 1)
+			body := <-received
+			assert.False(t, gjson.GetBytes(body, "response_format").Exists())
+		})
+	}
+}

@@ -42,7 +42,7 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
-	ignoreResponseFormat := relaycommon.IsGPTImage2(info)
+	ignoreResponseFormat := relaycommon.IsGPTImage(info)
 	if ignoreResponseFormat {
 		request.ResponseFormat = ""
 	}
@@ -105,6 +105,12 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 				jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
 				if err != nil {
 					return newAPIErrorFromParamOverride(err)
+				}
+			}
+			if ignoreResponseFormat {
+				jsonData, err = sjson.DeleteBytes(jsonData, "response_format")
+				if err != nil {
+					return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 				}
 			}
 

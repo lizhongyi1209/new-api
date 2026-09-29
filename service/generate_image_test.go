@@ -616,12 +616,13 @@ func TestNewAsyncOpenAIImageRequestPreservesGPTImageParameters(t *testing.T) {
 	moderation := "low"
 	outputFormat := "png"
 	imageReq := newAsyncOpenAIImageRequest(&dto.AsyncImageRequest{
-		Model:        "gpt-image-2.5-sunburst-sp",
-		Prompt:       "draw a cat",
-		Quality:      "max",
-		Background:   &background,
-		Moderation:   &moderation,
-		OutputFormat: &outputFormat,
+		Model:          "gpt-image-2.5-sunburst-sp",
+		Prompt:         "draw a cat",
+		Quality:        "max",
+		Background:     &background,
+		Moderation:     &moderation,
+		ResponseFormat: "b64_json",
+		OutputFormat:   &outputFormat,
 	}, nil, nil)
 
 	var gotBackground string
@@ -653,6 +654,48 @@ func TestNewAsyncOpenAIImageRequestPreservesGPTImageParameters(t *testing.T) {
 	require.NoError(t, common.Unmarshal(encoded, &upstreamBody))
 	assert.Equal(t, "gpt-image-2.5-sunburst", upstreamBody.Model)
 	assert.Equal(t, "max", upstreamBody.Quality)
+	assert.NotContains(t, string(encoded), `"response_format"`)
+}
+
+func TestAsyncOpenAIImageEditResponseFormat(t *testing.T) {
+	image, err := common.Marshal("data:image/png;base64,AQID")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, origin, upstream string
+		wantResponseFormat     bool
+	}{
+		{name: "gpt image 1", origin: "gpt-image-1", upstream: "gpt-image-1"},
+		{name: "gpt image 2.5", origin: "gpt-image-2.5-sunburst-sp", upstream: "gpt-image-2.5-sunburst"},
+		{name: "mapped gpt image", origin: "custom-image", upstream: "gpt-image-2.5-sunburst"},
+		{name: "other image model", origin: "other-image", upstream: "other-image", wantResponseFormat: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				RelayMode:       relayconstant.RelayModeImagesEdits,
+				OriginModelName: tc.origin,
+				ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: tc.upstream},
+			}
+			request := &dto.ImageRequest{
+				Model: tc.origin, Prompt: "edit this image", Image: image, ResponseFormat: "b64_json",
+			}
+			upstreamReq := prepareAsyncOpenAIImageRequest(request, info)
+			assert.Equal(t, "b64_json", request.ResponseFormat)
+
+			c := &gin.Context{Request: &http.Request{Header: make(http.Header)}}
+			body, _, err := buildAsyncOpenAIImageRequestBody(c, passthroughImageAdaptor{}, info, upstreamReq)
+			require.NoError(t, err)
+			_, params, err := mime.ParseMediaType(c.Request.Header.Get("Content-Type"))
+			require.NoError(t, err)
+			form := readMultipartForm(t, body.(*bytes.Buffer), params["boundary"])
+			if tc.wantResponseFormat {
+				assert.Equal(t, []string{"b64_json"}, form.Value["response_format"])
+			} else {
+				assert.NotContains(t, form.Value, "response_format")
+			}
+			assert.Equal(t, []string{tc.upstream}, form.Value["model"])
+			require.Len(t, form.File["image"], 1)
+		})
+	}
 }
 
 func TestSeedreamRouteUsesSynchronousGenerationsWorker(t *testing.T) {

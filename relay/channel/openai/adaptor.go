@@ -492,7 +492,7 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
-	if relaycommon.IsGPTImage2(info) {
+	if relaycommon.IsGPTImage(info) {
 		request.ResponseFormat = ""
 	}
 
@@ -525,7 +525,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		// 写入所有非文件字段
 		if mf != nil {
 			for key, values := range mf.Value {
-				if key == "model" || (key == "response_format" && relaycommon.IsGPTImage2(info)) {
+				if key == "model" || (key == "response_format" && relaycommon.IsGPTImage(info)) {
 					continue
 				}
 				for _, value := range values {

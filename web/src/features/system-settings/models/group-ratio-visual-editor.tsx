@@ -16,6 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { ZapIcon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import {
   AlertTriangle,
   ChevronDown,
@@ -83,6 +85,7 @@ import { toIntlLocale } from '@/i18n/languages'
 import { formatNumber } from '@/lib/format'
 
 import { safeJsonParse } from '../utils/json-parser'
+import { QuickAddOverrideDialog } from './group-quick-add-dialog'
 import { GroupSpecialUsableRulesEditor } from './group-special-usable-editor'
 
 export type GroupSettingsSection =
@@ -378,6 +381,7 @@ export const GroupRatioVisualEditor = memo(function GroupRatioVisualEditor({
         <GroupOverrideRules
           registry={registry}
           groupGroupRatio={groupGroupRatio}
+          userUsableGroups={userUsableGroups}
           onChange={onChange}
         />
       </TabsContent>
@@ -790,12 +794,14 @@ type GroupOverride = {
 type GroupOverrideRulesProps = {
   registry: RegistryEntry[]
   groupGroupRatio: string
+  userUsableGroups: string
   onChange: (field: string, value: string) => void
 }
 
 function GroupOverrideRules({
   registry,
   groupGroupRatio,
+  userUsableGroups,
   onChange,
 }: GroupOverrideRulesProps) {
   const { t } = useTranslation()
@@ -807,10 +813,17 @@ function GroupOverrideRules({
   )
   const [overrideEditData, setOverrideEditData] =
     useState<GroupOverride | null>(null)
+  const [quickAddUserGroup, setQuickAddUserGroup] = useState<string | null>(
+    null
+  )
 
   const registryNames = useMemo(
     () => registry.map((entry) => entry.name),
     [registry]
+  )
+  const selectableGroupNames = useMemo(
+    () => Object.keys(parseUsableMap(userUsableGroups)),
+    [userUsableGroups]
   )
 
   const baseRatioByName = useMemo(() => {
@@ -903,6 +916,22 @@ function GroupOverrideRules({
     [groupGroupRatio, emitMap]
   )
 
+  const handleQuickAddSave = useCallback(
+    (
+      userGroup: string,
+      overrides: Array<{ targetGroup: string; ratio: number }>
+    ) => {
+      const map = parseNestedRatioMap(groupGroupRatio)
+      if (!map[userGroup]) map[userGroup] = {}
+      for (const override of overrides) {
+        map[userGroup][override.targetGroup] = override.ratio
+      }
+      emitMap(map)
+      setQuickAddUserGroup(null)
+    },
+    [groupGroupRatio, emitMap]
+  )
+
   return (
     <Card className={sectionCardClassName}>
       <CardHeader className={sectionHeaderClassName}>
@@ -971,6 +1000,17 @@ function GroupOverrideRules({
                         </span>
                       </CollapsibleTrigger>
                       <div className='flex shrink-0 gap-1'>
+                        <Button
+                          variant='ghost'
+                          size='icon-sm'
+                          aria-label={t('Quick add from selectable groups')}
+                          title={t('Quick add from selectable groups')}
+                          onClick={() =>
+                            setQuickAddUserGroup(userGroupData.userGroup)
+                          }
+                        >
+                          <HugeiconsIcon icon={ZapIcon} strokeWidth={2} />
+                        </Button>
                         <Button
                           variant='ghost'
                           size='sm'
@@ -1133,6 +1173,20 @@ function GroupOverrideRules({
         groupOptions={registryNames}
         baseRatioByName={baseRatioByName}
       />
+      {quickAddUserGroup && (
+        <QuickAddOverrideDialog
+          userGroup={quickAddUserGroup}
+          registry={registry}
+          selectableGroupNames={selectableGroupNames}
+          existingOverrides={
+            groupGroupRatioList.find(
+              (entry) => entry.userGroup === quickAddUserGroup
+            )?.overrides ?? []
+          }
+          onSave={handleQuickAddSave}
+          onClose={() => setQuickAddUserGroup(null)}
+        />
+      )}
     </Card>
   )
 }

@@ -41,6 +41,14 @@ Aliases: 渠道自动检测, 仅检测自动禁用渠道, 检测并发, auto_ban
 - Scheduled/manual task dispatch, channel selection, bounded worker pool and health-result handling: `controller/channel-test.go`; existing task runner: `controller/system_task_handlers.go` and `service/system_task.go`.
 - Settings UI: `web/src/features/system-settings/models/routing-reliability-section.tsx`, with page defaults in `features/system-settings/models/index.tsx` and registry mapping in `features/system-settings/models/section-registry.tsx`.
 
+## Global channel retry policy
+
+Aliases: 最大重试, 重试设置, RetryTimes, Max Retries, `/api/channel/ops`, `/api/option/request_policy`.
+
+- Channel-list badge: `web/src/features/channels/index.tsx`; editable routing policy: `web/src/features/system-settings/request-policies/routing-section.tsx`, `routing-form.ts`, `api.ts`.
+- Read routes and handlers: `router/channel-router.go` / `controller/channel.go` for the badge, `router/api-router.go` / `controller/request_policy.go` for the settings page.
+- Persisted option, runtime snapshot, and database reload: `model/request_policy.go`, `model/option.go`; relay retry loop: `controller/relay.go`. Regression: `model/request_policy_test.go`.
+
 ## Model-name exclusions and affinity templates
 
 Aliases: 模型名排除, thinking 后缀白名单, re: 模型规则, Codex 亲和性模板.
@@ -122,6 +130,13 @@ Aliases: 模型管理, 厂商管理, 模型可见性, 元数据同步, 定价冲
 - Routes and controllers: `router/api-router.go`, `controller/model_meta.go`, `controller/model_sync.go`, `controller/model_pricing_config.go`, `controller/vendor_meta.go`, `controller/ratio_sync.go`.
 - Storage, optimistic versions, and cross-database mutations: `model/model_meta.go`, `model/model_metadata_sync.go`, `model/model_pricing_config.go`, `model/vendor_management.go`.
 - Frontend model/vendor workflows: `web/src/features/models/`, `web/src/features/model-pricing/`, `web/src/features/system-settings/models/upstream-ratio-sync.tsx`.
+
+## Group pricing and special ratio rules
+
+Aliases: 分组定价, 特殊倍率, 闪电快速设置, GroupGroupRatio, GroupRatio, UserUsableGroups.
+
+- Active frontend form and visual editor: `web/src/features/system-settings/models/group-ratio-form.tsx`, `web/src/features/system-settings/models/group-ratio-visual-editor.tsx`; the lightning quick-add dialog is `web/src/features/system-settings/models/group-quick-add-dialog.tsx` and batches selectable target groups into `GroupGroupRatio` overrides. Focused UI coverage: `web/src/features/system-settings/models/__tests__/group-ratio-quick-add.test.tsx`.
+- Option persistence and effective ratios: `model/option.go`, `setting/ratio_setting/group_ratio.go`.
 
 ## Pricing input currency and readonly time conditions
 
