@@ -38,6 +38,8 @@ services:
       - REDIS_CONN_STRING=redis://:${REDIS_PASSWORD}@redis:6379
       - TZ=Asia/Shanghai
       - ERROR_LOG_ENABLED=true
+      # Temporary GPT Image edit 400 diagnostics; capture stops at the UTC deadline.
+      - GPT_IMAGE_EDIT_400_CAPTURE_UNTIL=${GPT_IMAGE_EDIT_400_CAPTURE_UNTIL:-2026-09-30T04:15:00Z}
       - NODE_NAME=new-api-node-1
       # 异步任务(含统一生图 generate_image)超时兜底：超时后由清扫机制标记失败并退款。
       # 生图任务通常秒级完成，30 分钟足够覆盖重试/上游慢；默认 1440(24h)对生图过长。
