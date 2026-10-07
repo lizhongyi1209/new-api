@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -108,8 +109,10 @@ func TestIsGeminiImageModelName(t *testing.T) {
 		{model: "gemini-3.1-flash-image-c-sp", want: true},
 		{model: "gemini-3-pro-image-neil", want: true},
 		{model: " GEMINI-3.1-FLASH-IMAGE-C-SP ", want: true},
-		{model: "gemini-3.5-flash", want: false},
-		{model: "gemini-omni-flash-preview", want: false},
+		{model: "gemini-nano-banana-2.1-sp", want: true},
+		{model: " GEMINI-NANO-BANANA-2.1-SP ", want: true},
+		{model: "gemini-3.5-flash", want: true},
+		{model: "gemini-omni-flash-preview", want: true},
 		{model: "x-gemini-3.1-flash-image", want: false},
 		{model: "gpt-image-1", want: false},
 	}
@@ -117,6 +120,27 @@ func TestIsGeminiImageModelName(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.model, func(t *testing.T) {
 			assert.Equal(t, test.want, isGeminiImageModelName(test.model))
+		})
+	}
+}
+
+func TestResolveImageRouteGeminiAlias(t *testing.T) {
+	tests := []struct {
+		name        string
+		channelType int
+		wantAction  string
+		wantNative  bool
+	}{
+		{name: "Gemini", channelType: constant.ChannelTypeGemini, wantAction: "generateContent", wantNative: true},
+		{name: "Vertex", channelType: constant.ChannelTypeVertexAi, wantAction: "generateContent", wantNative: true},
+		{name: "OpenAI", channelType: constant.ChannelTypeOpenAI, wantAction: "generate", wantNative: false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			action, native := ResolveImageRoute("gemini-nano-banana-2.1-sp", test.channelType)
+			assert.Equal(t, test.wantAction, action)
+			assert.Equal(t, test.wantNative, native)
 		})
 	}
 }

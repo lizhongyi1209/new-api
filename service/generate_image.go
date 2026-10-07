@@ -92,9 +92,9 @@ var imageRoutes = []imageRoute{
 }
 
 // isGeminiImageModelName 判定模型是否走 Gemini 原生生图路径。
-// 规则与 controller/async_image.go 中既有的 isGeminiImageModel 保持一致。
+// 以 gemini 或 nano-banana 开头的模型使用 Gemini 原生请求格式。
 //
-// 客户端参数规则（nano-banana* / Gemini image preview 模型）：
+// 客户端参数规则（nano-banana* / gemini* 模型）：
 //   - response_modalities 可选，默认不传；
 //   - media_resolution 可选，透传到 generationConfig.mediaResolution；
 //   - 内嵌图片字节会与文本提示、系统指令一起计入 20MB 总请求大小；
@@ -104,7 +104,7 @@ var imageRoutes = []imageRoute{
 func isGeminiImageModelName(modelName string) bool {
 	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
 	return isNanoBananaModelName(normalizedModelName) ||
-		(strings.HasPrefix(normalizedModelName, "gemini-") && strings.Contains(normalizedModelName, "image"))
+		strings.HasPrefix(normalizedModelName, "gemini")
 }
 
 func isNanoBananaModelName(modelName string) bool {

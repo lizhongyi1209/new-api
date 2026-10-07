@@ -117,14 +117,8 @@ func AsyncImageSubmit(c *gin.Context) {
 		task.PrivateData.BillingContext = bc
 	}
 
-	// Check if this should use Gemini native processing
-	// Models with nano-banana prefix or specific Gemini image models use native format
-	channelType := relayInfo.ChannelMeta.ChannelType
-	isGeminiChannel := channelType == constant.ChannelTypeGemini || channelType == constant.ChannelTypeVertexAi
-	isGeminiImageModel := strings.HasPrefix(req.Model, "nano-banana") ||
-		req.Model == "gemini-3-pro-image" ||
-		req.Model == "gemini-3.1-flash-image-preview"
-	useGeminiNative := isGeminiChannel && isGeminiImageModel
+	// Share the Gemini native routing rule with /async/v1/generateImage.
+	_, useGeminiNative := service.ResolveImageRoute(req.Model, relayInfo.ChannelMeta.ChannelType)
 	var nativeReq map[string]interface{}
 
 	if useGeminiNative {

@@ -318,6 +318,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 ### Behavior contract
 
 - `/async/v1/generateImage` accepts legacy string items plus explicit `inlineData` and `fileData` objects in `images`.
+- `/async/v1/generateImage` and `/async/v1/images/generations` share `service.ResolveImageRoute`: after trimming and lowercasing, model names starting with `gemini` or `nano-banana` use native Gemini JSON on Gemini/Vertex channels. Other channel types retain the OpenAI image path. Submission entries: `controller/generate_image.go`, `controller/async_image.go`; regression coverage: `service/generate_image_test.go`.
 - Models whose names start with `gpt-image` accept optional `background` values `auto` and `transparent`; Banana/Gemini image models reject the parameter. Transparent output requires `png` or `webp`, and the option is forwarded through both OpenAI image generations and edits requests.
 - `/async/v1/generateImage`, `/v1/images/generations`, and `/v1/images/edits` accept the optional `moderation` values `auto` and `low` only for model names starting with `gpt-image`; the field is forwarded through OpenAI image generation JSON and edit multipart requests.
 - `/async/v1/generateImage` accepts `quality=xhigh|max` for GPT Image 2.5 Sunburst and Flare model names, including their `-sp` and `-sd` aliases; earlier models reject those values.
