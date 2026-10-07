@@ -84,6 +84,10 @@
   .example-panels{display:grid;min-width:0}
   .example-tab-panel{grid-area:1/1;min-width:0;visibility:hidden;opacity:0;pointer-events:none}
   .example-tab-panel.is-active{visibility:visible;opacity:1;pointer-events:auto}
+  .seedance-request-examples .example-tabs{flex-wrap:wrap;gap:0 12px}
+  .seedance-request-examples .example-panels{display:block}
+  .seedance-request-examples .example-tab-panel{display:none}
+  .seedance-request-examples .example-tab-panel.is-active{display:block}
   .example-tab-panel h4{margin-top:0}
   .compact-note{margin:5px 0 9px;color:var(--muted);font-size:11px}
   .callout{margin:13px 0;padding:7px 0 7px 11px;border-left:2px solid var(--line-strong);color:var(--muted);font-size:12px}
@@ -906,7 +910,18 @@
           <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>参考音频：2.0 需同时传图片或视频；2.5 允许音频作为唯一参考素材，仍需提示词</td></tr>
         </table>
         <p><code>@Image1</code> 是数组中第一张参考图，<code>@Video1</code> 是第一段参考视频，分别按出现顺序编号。本站保留素材顺序；首尾帧图不计入参考图编号。</p>
-        <div class="callout info"><b>生成方式</b>：文生视频、首帧、首尾帧或多模态参考。首尾帧模式不能与 <code>reference_*</code> 素材混用。</div>
+        <h3>按生成场景选择参数</h3>
+        <p>以下六种场景均调用 <code>POST /v1/video/generations</code>。通过 <code>content</code> 中的素材角色和 2.5 的 <code>omni_reference_task_type</code> 区分场景。</p>
+        <table>
+          <tr><th>场景</th><th>请求内容</th><th>适用模型</th></tr>
+          <tr><td>文生视频</td><td>只传 <code>text</code> 提示词</td><td>2.0 / fast / mini / 2.5</td></tr>
+          <tr><td>首帧视频</td><td>提示词 + 一张 <code>first_frame</code> 图片</td><td>2.0 / fast / mini / 2.5</td></tr>
+          <tr><td>首尾帧</td><td>提示词 + <code>first_frame</code> 和 <code>last_frame</code> 图片</td><td>2.0 / fast / mini / 2.5</td></tr>
+          <tr><td>全能参考</td><td>提示词 + 按需组合的 <code>reference_image</code> / <code>reference_video</code> / <code>reference_audio</code></td><td>2.0 / fast / mini / 2.5</td></tr>
+          <tr><td>视频编辑</td><td>提示词 + <code>reference_video</code>；设置 <code>omni_reference_task_type: "edit"</code></td><td>仅 2.5</td></tr>
+          <tr><td>视频延长</td><td>提示词 + <code>reference_video</code>；设置 <code>omni_reference_task_type: "extend"</code></td><td>仅 2.5</td></tr>
+        </table>
+        <div class="callout info">首尾帧模式不能与 <code>reference_*</code> 素材混用。<code>content</code> 中的 <code>last_frame</code> 是输入的目标结束画面；<code>return_last_frame: true</code> 用于导出生成视频的尾帧，完成后从 <code>metadata.last_frame_url</code> 读取。</div>
         <h3>参考素材数量</h3>
         <table>
           <tr><th>素材</th><th>2.0 / fast / mini</th><th>2.5</th></tr>
@@ -922,14 +937,20 @@
       </article>
       <aside class="example-panel" aria-label="Seedance 视频请求和响应示例">
         <h3>按场景选择请求</h3>
-<div class="example-switcher" data-example-switcher>
-<div class="example-tabs" role="tablist" aria-label="Seedance 视频请求场景">
-<button type="button" class="example-tab" id="seedance-request-url-tab" role="tab" aria-selected="true" aria-controls="seedance-request-url">直接传 URL</button>
-<button type="button" class="example-tab" id="seedance-request-tail-tab" role="tab" aria-selected="false" aria-controls="seedance-request-tail">尾帧与水印</button>
-<button type="button" class="example-tab" id="seedance-request-edit-tab" role="tab" aria-selected="false" aria-controls="seedance-request-edit">2.5 视频编辑</button>
-<button type="button" class="example-tab" id="seedance-request-asset-tab" role="tab" aria-selected="false" aria-controls="seedance-request-asset">复用素材</button>
-</div><div class="example-panels">
-<div class="example-tab-panel is-active" id="seedance-request-url" role="tabpanel" aria-labelledby="seedance-request-url-tab" aria-hidden="false"><p class="compact-note">替换为自己的公网素材 URL。HC 模型使用相同请求结构，修改 model 即可。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+        <p class="compact-note">使用本站 API Key，并将素材 URL 替换为自己的公网地址。HC 模型使用相同请求结构，修改 model 即可；已有素材可将对应 URL 替换为预上传返回的 Ref。</p>
+        <div class="example-switcher seedance-request-examples" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedance 视频请求场景">
+            <button type="button" class="example-tab" id="seedance-request-text-tab" role="tab" aria-selected="true" aria-controls="seedance-request-text">文生视频</button>
+            <button type="button" class="example-tab" id="seedance-request-first-frame-tab" role="tab" aria-selected="false" aria-controls="seedance-request-first-frame">首帧视频</button>
+            <button type="button" class="example-tab" id="seedance-request-first-last-frame-tab" role="tab" aria-selected="false" aria-controls="seedance-request-first-last-frame">首尾帧</button>
+            <button type="button" class="example-tab" id="seedance-request-omni-tab" role="tab" aria-selected="false" aria-controls="seedance-request-omni">全能参考</button>
+            <button type="button" class="example-tab" id="seedance-request-edit-tab" role="tab" aria-selected="false" aria-controls="seedance-request-edit">视频编辑</button>
+            <button type="button" class="example-tab" id="seedance-request-extend-tab" role="tab" aria-selected="false" aria-controls="seedance-request-extend">视频延长</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="seedance-request-text" role="tabpanel" aria-labelledby="seedance-request-text-tab" aria-hidden="false">
+              <p class="compact-note">只传提示词即可生成视频，不需要参考素材。可通过 ratio 指定输出比例。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -937,22 +958,18 @@
   "content": [
     {
       "type": "text",
-      "text": "@Image1 中的产品缓慢旋转，柔和光线，镜头平稳推进"
-    },
-    {
-      "type": "image_url",
-      "image_url": {
-        "url": "https://your-cdn.com/reference.png"
-      },
-      "role": "reference_image"
+      "text": "明亮的厨房中，一台精致的咖啡机缓慢旋转，柔和的晨光洒在金属表面，镜头平稳推进，广告片风格。"
     }
   ],
   "duration": 5,
   "resolution": "720p",
   "ratio": "16:9",
   "generate_audio": false
-}'</code></pre></div>
-<div class="example-tab-panel" id="seedance-request-tail" role="tabpanel" aria-labelledby="seedance-request-tail-tab" aria-hidden="true"><p class="compact-note">首帧模式比例跟随图片。完成后从 metadata.last_frame_url 读取尾帧，可用于下一段视频的 first_frame。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+}'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedance-request-first-frame" role="tabpanel" aria-labelledby="seedance-request-first-frame-tab" aria-hidden="true">
+              <p class="compact-note">first_frame 指定视频的起始画面，比例跟随图片。本例同时导出生成视频的尾帧，完成后从 metadata.last_frame_url 读取。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -960,7 +977,7 @@
   "content": [
     {
       "type": "text",
-      "text": "产品缓慢旋转，最后停留在正面"
+      "text": "从输入图片的构图开始，咖啡机缓慢旋转，镜头平稳拉近，保持产品外观和厨房场景一致。"
     },
     {
       "type": "image_url",
@@ -970,14 +987,95 @@
       "role": "first_frame"
     }
   ],
-  "duration": 8,
+  "duration": 5,
   "resolution": "720p",
   "generate_audio": false,
-  "watermark": true,
   "return_last_frame": true,
   "seed": 0
-}'</code></pre></div>
-<div class="example-tab-panel" id="seedance-request-edit" role="tabpanel" aria-labelledby="seedance-request-edit-tab" aria-hidden="true"><p class="compact-note">仅 2.5 支持指定 edit / extend 模式和 MOV 输出；回调关联方式见左侧说明。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+}'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedance-request-first-last-frame" role="tabpanel" aria-labelledby="seedance-request-first-last-frame-tab" aria-hidden="true">
+              <p class="compact-note">同时提供起始画面和目标结束画面，让模型生成两者之间的过渡。显式填写 first_frame / last_frame，比例跟随图片，不混入 reference_* 素材。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "content": [
+    {
+      "type": "text",
+      "text": "从咖啡机的正面视角平稳绕行到侧面视角，自然衔接首尾两张图片，保持产品外观与光线一致。"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://your-cdn.com/first-frame.png"
+      },
+      "role": "first_frame"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://your-cdn.com/last-frame.png"
+      },
+      "role": "last_frame"
+    }
+  ],
+  "duration": 8,
+  "resolution": "720p",
+  "generate_audio": false
+}'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedance-request-omni" role="tabpanel" aria-labelledby="seedance-request-omni-tab" aria-hidden="true">
+              <p class="compact-note">本例组合两张参考图、一段参考视频和一段参考音频，可按需删减。@Image1 / @Image2、@Video1 分别按参考图、参考视频的数组顺序编号；2.0 的音频不能作为唯一参考素材。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "model": "doubao-seedance-2-0-260128-max",
+  "content": [
+    {
+      "type": "text",
+      "text": "@Image1 的咖啡机作为主体，场景与配色参考 @Image2，运镜参考 @Video1，动作节奏跟随参考音频。保持产品外观一致，制作一段明亮的广告片。"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://your-cdn.com/product.png"
+      },
+      "role": "reference_image"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://your-cdn.com/scene.png"
+      },
+      "role": "reference_image"
+    },
+    {
+      "type": "video_url",
+      "video_url": {
+        "url": "https://your-cdn.com/camera.mp4"
+      },
+      "role": "reference_video"
+    },
+    {
+      "type": "audio_url",
+      "audio_url": {
+        "url": "https://your-cdn.com/rhythm.mp3"
+      },
+      "role": "reference_audio"
+    }
+  ],
+  "duration": 8,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "generate_audio": true
+}'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedance-request-edit" role="tabpanel" aria-labelledby="seedance-request-edit-tab" aria-hidden="true">
+              <p class="compact-note">仅 2.5：传入待编辑的视频，设置 omni_reference_task_type 为 edit。本例修改背景，并使用 MOV 输出；回调关联方式见左侧说明。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -985,12 +1083,12 @@
   "content": [
     {
       "type": "text",
-      "text": "编辑 @Video1，将背景改为晴天的海边，保留主体动作"
+      "text": "编辑 @Video1，将咖啡机周围的背景改为明亮的现代厨房，保留产品外观、运动轨迹和原有运镜。"
     },
     {
       "type": "video_url",
       "video_url": {
-        "url": "https://your-cdn.com/reference.mp4"
+        "url": "https://your-cdn.com/to-edit.mp4"
       },
       "role": "reference_video"
     }
@@ -1003,38 +1101,46 @@
   "output_format": "mov",
   "execution_expires_after": 172800,
   "callback_url": "https://your-app.com/video-callback?job_id=123"
-}'</code></pre></div>
-<div class="example-tab-panel" id="seedance-request-asset" role="tabpanel" aria-labelledby="seedance-request-asset-tab" aria-hidden="true"><p class="compact-note">先通过下方素材接口取得 Ref，并查询到 Active，再提交本请求。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+}'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedance-request-extend" role="tabpanel" aria-labelledby="seedance-request-extend-tab" aria-hidden="true">
+              <p class="compact-note">仅 2.5：传入待延长的视频，设置 omni_reference_task_type 为 extend，提示词描述后续动作与运镜。最终生成时长以任务返回结果为准。</p>
+              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-  "model": "doubao-seedance-2-0-mini-260615-max",
+  "model": "doubao-seedance-2-5-260628-max",
   "content": [
     {
       "type": "text",
-      "text": "@Image1 中的产品缓慢旋转"
+      "text": "从 @Video1 的最后一刻继续：镜头缓慢拉远，咖啡机保持在画面中央，随后一杯咖啡平稳移入画面，光线和动作自然衔接。"
     },
     {
-      "type": "image_url",
-      "image_url": {
-        "url": "asset://mva-e144dfc364a647f1"
+      "type": "video_url",
+      "video_url": {
+        "url": "https://your-cdn.com/to-extend.mp4"
       },
-      "role": "reference_image"
+      "role": "reference_video"
     }
   ],
-  "duration": 5,
+  "duration": 12,
   "resolution": "720p",
   "ratio": "16:9",
-  "generate_audio": false
-}'</code></pre></div>
-</div></div>
+  "generate_audio": true,
+  "omni_reference_task_type": "extend",
+  "output_format": "mp4"
+}'</code></pre>
+            </div>
+          </div>
+        </div>
         <h3>创建响应</h3>
+        <p class="compact-note">文生视频通常直接进入 queued。使用普通素材 URL 时，任务可能先进入 in_progress，并在 metadata.upstream_status 中标记 preparing；已就绪的素材句柄通常直接排队。</p>
 <div class="example-switcher" data-example-switcher>
 <div class="example-tabs" role="tablist" aria-label="Seedance 创建任务响应">
-<button type="button" class="example-tab" id="seedance-submit-preparing-tab" role="tab" aria-selected="true" aria-controls="seedance-submit-preparing">素材准备中</button>
-<button type="button" class="example-tab" id="seedance-submit-queued-tab" role="tab" aria-selected="false" aria-controls="seedance-submit-queued">已排队</button>
+<button type="button" class="example-tab" id="seedance-submit-queued-tab" role="tab" aria-selected="true" aria-controls="seedance-submit-queued">已排队</button>
+<button type="button" class="example-tab" id="seedance-submit-preparing-tab" role="tab" aria-selected="false" aria-controls="seedance-submit-preparing">素材准备中</button>
 </div><div class="example-panels">
-<div class="example-tab-panel is-active" id="seedance-submit-preparing" role="tabpanel" aria-labelledby="seedance-submit-preparing-tab" aria-hidden="false"><pre><code>{
+<div class="example-tab-panel" id="seedance-submit-preparing" role="tabpanel" aria-labelledby="seedance-submit-preparing-tab" aria-hidden="true"><pre><code>{
   "id": "task_xxxxxxxxxxxxxxxx",
   "task_id": "task_xxxxxxxxxxxxxxxx",
   "object": "video",
@@ -1052,7 +1158,7 @@
     }
   }
 }</code></pre></div>
-<div class="example-tab-panel" id="seedance-submit-queued" role="tabpanel" aria-labelledby="seedance-submit-queued-tab" aria-hidden="true"><pre><code>{
+<div class="example-tab-panel is-active" id="seedance-submit-queued" role="tabpanel" aria-labelledby="seedance-submit-queued-tab" aria-hidden="false"><pre><code>{
   "id": "task_xxxxxxxxxxxxxxxx",
   "task_id": "task_xxxxxxxxxxxxxxxx",
   "object": "video",
