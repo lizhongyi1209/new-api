@@ -874,9 +874,9 @@
           <tr><th>字段</th><th>必填</th><th>类型</th><th>支持值与说明</th></tr>
           <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>模型名称，取值见下方模型表</td></tr>
           <tr><td><code>content</code></td><td class="req">是</td><td>array</td><td>有序多模态数组，至少包含一项非空 <code>text</code>；第一条非空文本作为提示词</td></tr>
-          <tr><td><code>duration</code></td><td class="opt">否</td><td>integer</td><td>单位秒，默认 <code>5</code>；2.0 / fast / mini 为 <code>4–15</code>，2.5 为 <code>4–30</code>；均支持 <code>-1</code> 由模型自选时长</td></tr>
+          <tr><td><code>duration</code></td><td class="opt">否</td><td>integer</td><td>单位秒，默认 <code>5</code>；2.0 / fast / mini 为 <code>4–15</code>，2.5 为 <code>4–30</code>；均支持 <code>-1</code>。2.5 编辑任务必须显式传 <code>-1</code>，输出时长基本跟随待编辑视频；其他任务使用 <code>-1</code> 时由模型自选时长</td></tr>
           <tr><td><code>resolution</code></td><td class="opt">否</td><td>string</td><td>默认 <code>720p</code>；具体范围见模型表</td></tr>
-          <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code>；默认 <code>adaptive</code>。接受别名 <code>aspect_ratio</code>，同时填写时以非空 <code>ratio</code> 为准；首尾帧模式比例跟随图片</td></tr>
+          <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code>；默认 <code>adaptive</code>。接受别名 <code>aspect_ratio</code>，同时填写时以非空 <code>ratio</code> 为准；首尾帧模式比例跟随图片。2.5 的首帧 / 首尾帧、编辑、延长任务仅支持 <code>adaptive</code></td></tr>
           <tr><td><code>generate_audio</code></td><td class="opt">否</td><td>boolean</td><td>是否生成同步单声道音频，默认 <code>true</code>；显式 <code>false</code> 会转发</td></tr>
           <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>是否添加“AI 生成”水印，默认 <code>false</code>；Doubao MAX 和 Dreamina MAX / HC 均支持</td></tr>
           <tr><td><code>seed</code></td><td class="opt">否</td><td>integer</td><td><code>[-1, 2147483647]</code>，默认 <code>-1</code>（随机）；<code>0</code> 是有效种子。相同种子结果相似，不保证完全一致</td></tr>
@@ -884,7 +884,7 @@
           <tr><td><code>callback_url</code></td><td class="opt">否</td><td>string</td><td>任务状态变化时接收 POST 通知的地址；回调格式及关联方式见下方说明</td></tr>
           <tr><td><code>execution_expires_after</code></td><td class="opt">否</td><td>integer</td><td>上游未完成任务的过期秒数，<code>[3600, 259200]</code>，默认 <code>172800</code>；本站任务超时策略仍独立生效</td></tr>
           <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>仅 2.5：<code>mp4</code>（默认）或 <code>mov</code></td></tr>
-          <tr><td><code>omni_reference_task_type</code></td><td class="opt">否</td><td>string</td><td>仅 2.5：<code>auto</code>（默认）、<code>reference</code>、<code>edit</code>、<code>extend</code>；用于指定参考、编辑或延长模式</td></tr>
+          <tr><td><code>omni_reference_task_type</code></td><td class="opt">否</td><td>string</td><td>仅 2.5：<code>auto</code>（默认）、<code>reference</code>、<code>edit</code>、<code>extend</code>；用于引导参考、编辑或延长模式，并校验对应参数限制。提示词意图仍须与所选模式一致</td></tr>
         </table>
         <p>可选参数未填写时使用上游默认值。<code>false</code> 和 <code>0</code> 使用 JSON 原生类型，不能写成字符串；未列出的扩展字段不保证转发。</p>
         <h3>模型与分辨率</h3>
@@ -915,12 +915,13 @@
         <table>
           <tr><th>场景</th><th>请求内容</th><th>适用模型</th></tr>
           <tr><td>文生视频</td><td>只传 <code>text</code> 提示词</td><td>2.0 / fast / mini / 2.5</td></tr>
-          <tr><td>首帧视频</td><td>提示词 + 一张 <code>first_frame</code> 图片</td><td>2.0 / fast / mini / 2.5</td></tr>
-          <tr><td>首尾帧</td><td>提示词 + <code>first_frame</code> 和 <code>last_frame</code> 图片</td><td>2.0 / fast / mini / 2.5</td></tr>
+          <tr><td>首帧视频</td><td>提示词 + 一张 <code>first_frame</code> 图片；2.5 的 <code>ratio</code> 仅支持 <code>adaptive</code></td><td>2.0 / fast / mini / 2.5</td></tr>
+          <tr><td>首尾帧</td><td>提示词 + <code>first_frame</code> 和 <code>last_frame</code> 图片；2.5 的 <code>ratio</code> 仅支持 <code>adaptive</code></td><td>2.0 / fast / mini / 2.5</td></tr>
           <tr><td>全能参考</td><td>提示词 + 按需组合的 <code>reference_image</code> / <code>reference_video</code> / <code>reference_audio</code></td><td>2.0 / fast / mini / 2.5</td></tr>
-          <tr><td>视频编辑</td><td>提示词 + <code>reference_video</code>；设置 <code>omni_reference_task_type: "edit"</code></td><td>仅 2.5</td></tr>
-          <tr><td>视频延长</td><td>提示词 + <code>reference_video</code>；设置 <code>omni_reference_task_type: "extend"</code></td><td>仅 2.5</td></tr>
+          <tr><td>视频编辑</td><td>提示词 + <code>reference_video</code>；待编辑视频为 4–30 秒；设置 <code>omni_reference_task_type: "edit"</code>、<code>ratio: "adaptive"</code>、<code>duration: -1</code></td><td>仅 2.5</td></tr>
+          <tr><td>视频延长</td><td>提示词 + <code>reference_video</code>；设置 <code>omni_reference_task_type: "extend"</code>、<code>ratio: "adaptive"</code>；<code>duration</code> 可设为 4–30 秒或 <code>-1</code></td><td>仅 2.5</td></tr>
         </table>
+        <p>2.5 编辑提示词应明确增删改意图，例如“修改 @Video1 的背景”；延长提示词应明确方向与目标，例如“向后延长 @Video1”。仅填写任务类型不能替代明确的提示词。场景限制依据 <a href="https://docs.volcengine.com/docs/ark/seedance-2-5?lang=zh" target="_blank" rel="noopener noreferrer">火山引擎 Seedance 2.5 官方教程</a>；请求仍使用本站路径、模型名和 API Key。</p>
         <div class="callout info">首尾帧模式不能与 <code>reference_*</code> 素材混用。<code>content</code> 中的 <code>last_frame</code> 是输入的目标结束画面；<code>return_last_frame: true</code> 用于导出生成视频的尾帧，完成后从 <code>metadata.last_frame_url</code> 读取。</div>
         <h3>参考素材数量</h3>
         <table>
@@ -1074,7 +1075,7 @@
 }'</code></pre>
             </div>
             <div class="example-tab-panel" id="seedance-request-edit" role="tabpanel" aria-labelledby="seedance-request-edit-tab" aria-hidden="true">
-              <p class="compact-note">仅 2.5：传入待编辑的视频，设置 omni_reference_task_type 为 edit。本例修改背景，并使用 MOV 输出；回调关联方式见左侧说明。</p>
+              <p class="compact-note">仅 2.5：待编辑视频须为 4–30 秒，role 为 reference_video；设置 edit、ratio: "adaptive" 和 duration: -1，输出比例与时长基本跟随原视频。本例明确修改背景，并使用 MOV 输出；回调关联方式见左侧说明。</p>
               <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -1083,7 +1084,7 @@
   "content": [
     {
       "type": "text",
-      "text": "编辑 @Video1，将咖啡机周围的背景改为明亮的现代厨房，保留产品外观、运动轨迹和原有运镜。"
+      "text": "编辑视频 @Video1：将咖啡机周围的背景修改为明亮的现代厨房，保留产品外观、运动轨迹和原有运镜。"
     },
     {
       "type": "video_url",
@@ -1093,9 +1094,9 @@
       "role": "reference_video"
     }
   ],
-  "duration": 8,
+  "duration": -1,
   "resolution": "1080p",
-  "ratio": "16:9",
+  "ratio": "adaptive",
   "generate_audio": true,
   "omni_reference_task_type": "edit",
   "output_format": "mov",
@@ -1104,7 +1105,7 @@
 }'</code></pre>
             </div>
             <div class="example-tab-panel" id="seedance-request-extend" role="tabpanel" aria-labelledby="seedance-request-extend-tab" aria-hidden="true">
-              <p class="compact-note">仅 2.5：传入待延长的视频，设置 omni_reference_task_type 为 extend，提示词描述后续动作与运镜。最终生成时长以任务返回结果为准。</p>
+              <p class="compact-note">仅 2.5：传入 role 为 reference_video 的待延长视频，设置 extend 和 ratio: "adaptive"，比例跟随原视频。提示词明确“向前延长”或“向后延长”；本例设输出时长为 12 秒，可设为 4–30 秒中的整数，或传 -1 让模型自选，实际时长以任务结果为准。MP4 便于播放；注重声画衔接时，官方推荐 MOV 输入和输出。</p>
               <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -1113,7 +1114,7 @@
   "content": [
     {
       "type": "text",
-      "text": "从 @Video1 的最后一刻继续：镜头缓慢拉远，咖啡机保持在画面中央，随后一杯咖啡平稳移入画面，光线和动作自然衔接。"
+      "text": "向后延长 @Video1：从视频结尾自然延续，镜头缓慢拉远，咖啡机保持在画面中央，随后一杯咖啡平稳移入画面，光线和动作自然衔接。"
     },
     {
       "type": "video_url",
@@ -1125,7 +1126,7 @@
   ],
   "duration": 12,
   "resolution": "720p",
-  "ratio": "16:9",
+  "ratio": "adaptive",
   "generate_audio": true,
   "omni_reference_task_type": "extend",
   "output_format": "mp4"

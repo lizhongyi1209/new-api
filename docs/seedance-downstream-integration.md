@@ -200,9 +200,9 @@ Doubao MAX 和 Dreamina MAX 使用相同的请求参数。本站完整转发以�
 
 | 参数 | MAX 支持范围与默认值 |
 | --- | --- |
-| `duration` | 2.0 / fast / mini 为 4–15 秒，2.5 为 4–30 秒；`-1` 由模型自选；默认 5 |
+| `duration` | 2.0 / fast / mini 为 4–15 秒，2.5 为 4–30 秒；默认 5。2.5 编辑必须显式传 `-1`，输出时长基本跟随待编辑视频；其他任务的 `-1` 由模型自选 |
 | `resolution` | 2.0 为 480p / 720p / 1080p / 4k，fast / mini 为 480p / 720p，2.5 为 480p / 720p / 1080p；默认 720p |
-| `ratio` / `aspect_ratio` | 比例别名适用于两类 MAX；同时填写时以非空 `ratio` 为准，默认 adaptive；首尾帧模式跟随图片 |
+| `ratio` / `aspect_ratio` | 比例别名适用于两类 MAX；同时填写时以非空 `ratio` 为准，默认 adaptive；首尾帧模式跟随图片。2.5 首帧 / 首尾帧、编辑、延长仅支持 adaptive |
 | `generate_audio` | 默认 true；false 关闭生成音频 |
 | `watermark` | 默认 false；true 添加水印 |
 | `seed` | 整数 [-1, 2147483647]，默认 -1；0 是有效种子；相同种子不保证完全一致 |
@@ -210,7 +210,16 @@ Doubao MAX 和 Dreamina MAX 使用相同的请求参数。本站完整转发以�
 | `callback_url` | 状态变化时接收上游 POST 通知的地址 |
 | `execution_expires_after` | 上游任务过期秒数 [3600, 259200]，默认 172800；本站任务超时策略独立生效 |
 | `output_format` | 仅 2.5：mp4（默认）或 mov |
-| `omni_reference_task_type` | 仅 2.5：auto（默认）、reference、edit 或 extend |
+| `omni_reference_task_type` | 仅 2.5：auto（默认）、reference、edit 或 extend；提示词意图须与所选模式一致 |
+
+Seedance 2.5 编辑与延长有额外参数限制，不能直接套用普通参考生视频的配置。依据[火山引擎 Seedance 2.5 官方教程](https://docs.volcengine.com/docs/ark/seedance-2-5?lang=zh)：
+
+| 场景 | 素材与提示词 | 参数 |
+| --- | --- | --- |
+| 视频编辑 | 至少一段 `reference_video`，待编辑视频 4–30 秒；提示词明确编辑动作，例如“修改 @Video1 的背景” | `omni_reference_task_type: "edit"`、`ratio: "adaptive"`、`duration: -1`；输出比例与时长基本跟随原视频 |
+| 视频延长 | 至少一段 `reference_video`；提示词明确方向与目标，例如“向后延长 @Video1” | `omni_reference_task_type: "extend"`、`ratio: "adaptive"`；输出时长可设为 4–30 秒或 `-1`，比例跟随原视频 |
+
+MP4 与 MOV 均可用于 2.5；官方推荐编辑、延长使用 MOV 输入和输出，以改善色彩与声画衔接。设置 `omni_reference_task_type` 后仍需明确提示词意图，模型会结合提示词判断实际场景。
 
 `callback_url` 会原样转发。回调体为上游的 `{"task": {...}}`，其中 `task.id` 是上游任务标识，和本站公开的 `task_...` 不同。建议在回调 URL 中带自己的业务 ID，提交成功后保存它与本站任务 ID 的关联；收到通知后通过本站查询接口确认结果，轮询保留作兜底。
 
