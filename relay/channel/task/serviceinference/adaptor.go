@@ -29,28 +29,37 @@ import (
 type MediaURL = taskcommon.MediaURL
 type ContentItem = taskcommon.VideoContentItem
 
-type requestPayload struct {
-	Model           string        `json:"model"`
-	Content         []ContentItem `json:"content,omitempty"`
-	Duration        *int          `json:"duration,omitempty"`
-	Resolution      string        `json:"resolution,omitempty"`
-	Ratio           string        `json:"ratio,omitempty"`
-	CallbackURL     string        `json:"callback_url,omitempty"`
-	AIGCWatermark   *bool         `json:"aigc_watermark,omitempty"`
-	GenerateAudio   *bool         `json:"generate_audio,omitempty"`
-	Watermark       *bool         `json:"watermark,omitempty"`
-	ReturnLastFrame *bool         `json:"return_last_frame,omitempty"`
+// Both Seedance MAX providers accept the same documented v2 request contract.
+type seedanceMaxRequestPayload struct {
+	Model                 string        `json:"model"`
+	Content               []ContentItem `json:"content,omitempty"`
+	Duration              *int          `json:"duration,omitempty"`
+	Resolution            string        `json:"resolution,omitempty"`
+	Ratio                 string        `json:"ratio,omitempty"`
+	CallbackURL           string        `json:"callback_url,omitempty"`
+	GenerateAudio         *bool         `json:"generate_audio,omitempty"`
+	Watermark             *bool         `json:"watermark,omitempty"`
+	ReturnLastFrame       *bool         `json:"return_last_frame,omitempty"`
+	Seed                  *int          `json:"seed,omitempty"`
+	ExecutionExpiresAfter *int          `json:"execution_expires_after,omitempty"`
+	OutputFormat          *string       `json:"output_format,omitempty"`
+	OmniReferenceTaskType *string       `json:"omni_reference_task_type,omitempty"`
 }
 
-// doubaoSeedanceRequestPayload mirrors the documented Doubao Seedance MAX
-// contract. Dreamina MAX keeps requestPayload and its existing extensions.
-type doubaoSeedanceRequestPayload struct {
-	Model         string        `json:"model"`
-	Content       []ContentItem `json:"content,omitempty"`
-	Duration      *int          `json:"duration,omitempty"`
-	Resolution    string        `json:"resolution,omitempty"`
-	Ratio         string        `json:"ratio,omitempty"`
-	GenerateAudio *bool         `json:"generate_audio,omitempty"`
+type requestPayload struct {
+	seedanceMaxRequestPayload
+	AspectRatio   string `json:"aspect_ratio,omitempty"`
+	AIGCWatermark *bool  `json:"aigc_watermark,omitempty"`
+}
+
+func validateVideoDuration(duration *int, modelName string) error {
+	if duration == nil || (*duration == -1 && usesSeedanceV2(modelName)) {
+		return nil
+	}
+	if *duration < 0 || *duration > relaycommon.MaxTaskDurationSeconds {
+		return fmt.Errorf("duration must be between 0 and %d; Seedance MAX also accepts -1", relaycommon.MaxTaskDurationSeconds)
+	}
+	return nil
 }
 
 type taskResponse struct {
@@ -220,21 +229,18 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	if strings.TrimSpace(nativeReq.Model) == "" {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("model field is required"), "missing_model", http.StatusBadRequest)
 	}
-	if isDoubaoSeedanceMaxModel(nativeReq.Model) && strings.TrimSpace(nativeReq.Ratio) == "" {
-		var aliases struct {
-			AspectRatio string `json:"aspect_ratio"`
-		}
-		if err := common.UnmarshalBodyReusable(c, &aliases); err != nil {
-			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
-		}
-		nativeReq.Ratio = strings.TrimSpace(aliases.AspectRatio)
+	upstreamModel := info.UpstreamModelName
+	if upstreamModel == "" {
+		upstreamModel = nativeReq.Model
 	}
-	if nativeReq.Duration != nil && (*nativeReq.Duration < 0 || *nativeReq.Duration > relaycommon.MaxTaskDurationSeconds) {
-		return service.TaskErrorWrapperLocal(
-			fmt.Errorf("duration must be between 0 and %d", relaycommon.MaxTaskDurationSeconds),
-			"invalid_duration",
-			http.StatusBadRequest,
-		)
+	if usesSeedanceV2(upstreamModel) {
+		if strings.TrimSpace(nativeReq.Ratio) == "" {
+			nativeReq.Ratio = strings.TrimSpace(nativeReq.AspectRatio)
+		}
+		nativeReq.AspectRatio = ""
+	}
+	if err := validateVideoDuration(nativeReq.Duration, upstreamModel); err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_duration", http.StatusBadRequest)
 	}
 	if isMiniMaxH3Model(nativeReq.Model) {
 		if c.Request.ContentLength > tokenMartH3MaxBodyBytes {
@@ -345,6 +351,10 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	} else {
 		info.UpstreamModelName = body.Model
 	}
+	// Recheck metadata-derived durations before sending a converted request.
+	if err := validateVideoDuration(body.Duration, body.Model); err != nil {
+		return nil, err
+	}
 	if isMiniMaxH3Model(body.Model) {
 		if _, err := validateMiniMaxH3Payload(body); err != nil {
 			return nil, err
@@ -357,16 +367,11 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			return nil, err
 		}
 	}
-	if isDoubaoSeedanceMaxModel(body.Model) {
-		doubaoRequest := doubaoSeedanceRequestPayload{
-			Model:         body.Model,
-			Content:       body.Content,
-			Duration:      body.Duration,
-			Resolution:    body.Resolution,
-			Ratio:         body.Ratio,
-			GenerateAudio: body.GenerateAudio,
+	if usesSeedanceV2(body.Model) {
+		if strings.TrimSpace(body.Ratio) == "" {
+			body.Ratio = strings.TrimSpace(body.AspectRatio)
 		}
-		data, err := common.Marshal(doubaoRequest)
+		data, err := common.Marshal(body.seedanceMaxRequestPayload)
 		if err != nil {
 			return nil, err
 		}
@@ -724,8 +729,10 @@ func applyTaskPreparationMetadata(video *dto.OpenAIVideo, task videoTask) {
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*requestPayload, error) {
 	payload := &requestPayload{
-		Model:   req.Model,
-		Content: make([]ContentItem, 0),
+		seedanceMaxRequestPayload: seedanceMaxRequestPayload{
+			Model:   req.Model,
+			Content: make([]ContentItem, 0),
+		},
 	}
 	for _, imgURL := range req.Images {
 		if strings.TrimSpace(imgURL) == "" {

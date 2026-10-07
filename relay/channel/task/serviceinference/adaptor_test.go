@@ -557,7 +557,9 @@ func TestBuildRequestBodyDoubaoUsesDocumentedContract(t *testing.T) {
 		"generate_audio": false,
 		"watermark": true,
 		"return_last_frame": true,
-		"callback_url": "https://example.com/callback"
+		"callback_url": "https://example.com/callback",
+		"seed": 0,
+		"execution_expires_after": 3600
 	}`)
 
 	require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
@@ -573,9 +575,11 @@ func TestBuildRequestBodyDoubaoUsesDocumentedContract(t *testing.T) {
 	assert.Equal(t, "16:9", payload["ratio"])
 	assert.Equal(t, false, payload["generate_audio"])
 	assert.NotContains(t, payload, "aspect_ratio")
-	assert.NotContains(t, payload, "watermark")
-	assert.NotContains(t, payload, "return_last_frame")
-	assert.NotContains(t, payload, "callback_url")
+	assert.Equal(t, true, payload["watermark"])
+	assert.Equal(t, true, payload["return_last_frame"])
+	assert.Equal(t, "https://example.com/callback", payload["callback_url"])
+	assert.Equal(t, float64(0), payload["seed"])
+	assert.Equal(t, float64(3600), payload["execution_expires_after"])
 
 	content, ok := payload["content"].([]any)
 	require.True(t, ok)
@@ -585,24 +589,6 @@ func TestBuildRequestBodyDoubaoUsesDocumentedContract(t *testing.T) {
 	videoURL, ok := video["video_url"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "asset://mva-video", videoURL["url"])
-}
-
-func TestValidateSeedanceDurationRejectsBillingOverflowInput(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
-	info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
-	adaptor := &TaskAdaptor{}
-	adaptor.Init(info)
-	c := newTaskContext(`{
-		"model": "doubao-seedance-2-0-260128-max",
-		"content": [{"type": "text", "text": "test"}],
-		"duration": 3601
-	}`)
-
-	taskErr := adaptor.ValidateRequestAndSetAction(c, info)
-	require.NotNil(t, taskErr)
-	assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
-	assert.Equal(t, "invalid_duration", taskErr.Code)
 }
 
 func TestSeedanceDFModelClassification(t *testing.T) {

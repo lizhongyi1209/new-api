@@ -856,8 +856,313 @@
     </section>
 
     <div class="section-heading" id="seedance">
-      <div><h2>Seedance 素材与视频</h2><p>创建可复用素材，并通过统一异步接口生成视频。</p></div>
+      <div><h2>Seedance 素材与视频</h2><p>提交视频任务，保存任务 ID，再查询结果。参考素材可直接传 URL，需要复用时再预上传。</p></div>
     </div>
+
+    <section class="endpoint-doc" id="/v1/video/generations" aria-labelledby="video-create-title">
+      <article class="reference-panel">
+        <h2 id="video-create-title">Seedance 多模态视频生成</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
+        <div class="callout info"><b>接入步骤</b>：使用本站 API Key 提交请求 → 保存响应中的 <code>id</code> / <code>task_id</code> → 调用查询接口，直到 <code>completed</code> 或 <code>failed</code>。</div>
+        <p>下表适用于 Doubao MAX 和本站 HC 对应的 Dreamina MAX 能力。实际可用模型以本站 <code>GET /v1/models</code> 返回的名称为准；请求使用本站公开模型名。</p>
+        <h3>顶层参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>支持值与说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>模型名称，取值见下方模型表</td></tr>
+          <tr><td><code>content</code></td><td class="req">是</td><td>array</td><td>有序多模态数组，至少包含一项非空 <code>text</code>；第一条非空文本作为提示词</td></tr>
+          <tr><td><code>duration</code></td><td class="opt">否</td><td>integer</td><td>单位秒，默认 <code>5</code>；2.0 / fast / mini 为 <code>4–15</code>，2.5 为 <code>4–30</code>；均支持 <code>-1</code> 由模型自选时长</td></tr>
+          <tr><td><code>resolution</code></td><td class="opt">否</td><td>string</td><td>默认 <code>720p</code>；具体范围见模型表</td></tr>
+          <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code>；默认 <code>adaptive</code>。接受别名 <code>aspect_ratio</code>，同时填写时以非空 <code>ratio</code> 为准；首尾帧模式比例跟随图片</td></tr>
+          <tr><td><code>generate_audio</code></td><td class="opt">否</td><td>boolean</td><td>是否生成同步单声道音频，默认 <code>true</code>；显式 <code>false</code> 会转发</td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>是否添加“AI 生成”水印，默认 <code>false</code>；Doubao MAX 和 Dreamina MAX / HC 均支持</td></tr>
+          <tr><td><code>seed</code></td><td class="opt">否</td><td>integer</td><td><code>[-1, 2147483647]</code>，默认 <code>-1</code>（随机）；<code>0</code> 是有效种子。相同种子结果相似，不保证完全一致</td></tr>
+          <tr><td><code>return_last_frame</code></td><td class="opt">否</td><td>boolean</td><td>默认 <code>false</code>；设为 <code>true</code> 后，完成时从 <code>metadata.last_frame_url</code> 读取尾帧 PNG 地址</td></tr>
+          <tr><td><code>callback_url</code></td><td class="opt">否</td><td>string</td><td>任务状态变化时接收 POST 通知的地址；回调格式及关联方式见下方说明</td></tr>
+          <tr><td><code>execution_expires_after</code></td><td class="opt">否</td><td>integer</td><td>上游未完成任务的过期秒数，<code>[3600, 259200]</code>，默认 <code>172800</code>；本站任务超时策略仍独立生效</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>仅 2.5：<code>mp4</code>（默认）或 <code>mov</code></td></tr>
+          <tr><td><code>omni_reference_task_type</code></td><td class="opt">否</td><td>string</td><td>仅 2.5：<code>auto</code>（默认）、<code>reference</code>、<code>edit</code>、<code>extend</code>；用于指定参考、编辑或延长模式</td></tr>
+        </table>
+        <p>可选参数未填写时使用上游默认值。<code>false</code> 和 <code>0</code> 使用 JSON 原生类型，不能写成字符串；未列出的扩展字段不保证转发。</p>
+        <h3>模型与分辨率</h3>
+        <table>
+          <tr><th>模型</th><th>支持分辨率</th><th>时长</th></tr>
+          <tr><td><code>dreamina-seedance-2-0-hc</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code>、<code>4k</code></td><td>4–15 秒或 -1</td></tr>
+          <tr><td><code>dreamina-seedance-2-0-fast-hc</code></td><td><code>480p</code>、<code>720p</code></td><td>4–15 秒或 -1</td></tr>
+          <tr><td><code>dreamina-seedance-2-0-mini-hc</code></td><td><code>480p</code>、<code>720p</code></td><td>4–15 秒或 -1</td></tr>
+          <tr><td><code>dreamina-seedance-2-5-hc</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code></td><td>4–30 秒或 -1</td></tr>
+          <tr><td><code>doubao-seedance-2-0-260128-max</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code>、<code>4k</code></td><td>4–15 秒或 -1</td></tr>
+          <tr><td><code>doubao-seedance-2-0-fast-260128-max</code></td><td><code>480p</code>、<code>720p</code></td><td>4–15 秒或 -1</td></tr>
+          <tr><td><code>doubao-seedance-2-0-mini-260615-max</code></td><td><code>480p</code>、<code>720p</code></td><td>4–15 秒或 -1</td></tr>
+          <tr><td><code>doubao-seedance-2-5-260628-max</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code></td><td>4–30 秒或 -1</td></tr>
+        </table>
+        <h3><code>content</code> 多模态项目</h3>
+        <table>
+          <tr><th><code>type</code></th><th>字段</th><th><code>role</code></th><th>说明</th></tr>
+          <tr><td><code>text</code></td><td><code>text</code></td><td>不填</td><td>提示词，例如 <code>{"type":"text","text":"..."}</code></td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>first_frame</code></td><td>首帧图：首帧生视频时显式填写此角色；比例跟随图片</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>last_frame</code></td><td>尾帧图：首尾帧生视频时使用，同时提供首帧图</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>参考图：省略图片角色时按参考图处理；支持公开 URL 或预上传返回的 <code>Ref</code></td></tr>
+          <tr><td><code>video_url</code></td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>参考视频：支持公开 URL 或素材句柄</td></tr>
+          <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>参考音频：2.0 需同时传图片或视频；2.5 允许音频作为唯一参考素材，仍需提示词</td></tr>
+        </table>
+        <p><code>@Image1</code> 是数组中第一张参考图，<code>@Video1</code> 是第一段参考视频，分别按出现顺序编号。本站保留素材顺序；首尾帧图不计入参考图编号。</p>
+        <div class="callout info"><b>生成方式</b>：文生视频、首帧、首尾帧或多模态参考。首尾帧模式不能与 <code>reference_*</code> 素材混用。</div>
+        <h3>参考素材数量</h3>
+        <table>
+          <tr><th>素材</th><th>2.0 / fast / mini</th><th>2.5</th></tr>
+          <tr><td>参考图片</td><td>最多 9 张</td><td>最多 30 张</td></tr>
+          <tr><td>参考视频</td><td>最多 3 段；单段 2–15 秒，总时长 ≤ 15 秒</td><td>最多 10 段，总时长 ≤ 30 秒</td></tr>
+          <tr><td>参考音频</td><td>最多 3 段；单段 2–15 秒，总时长 ≤ 15 秒</td><td>最多 10 段，总时长 ≤ 30 秒</td></tr>
+        </table>
+        <p>图片支持 JPEG、PNG、WebP、BMP、TIFF、GIF、HEIC、HEIF，单张 &lt; 30 MB；视频支持 MP4 / MOV，单段 ≤ 200 MB；音频支持 WAV / MP3，单段 ≤ 15 MB。图片 / 视频边长为 300–6000 px，图片宽高比为 0.4–2.5；请求体 ≤ 64 MB。</p>
+        <p>素材 URL 需公网可下载，不依赖登录、Cookie 或防盗链。带素材的请求可能先被受理，再因下载、规格或内容审核失败；请查询最终状态和 <code>error.message</code>。含真人人脸的参考素材可能被隐私审核拒绝。</p>
+        <h3>完成通知与任务关联</h3>
+        <p><code>callback_url</code> 会原样转发，上游直接向该地址 POST 状态通知。回调体是 <code>{"task": {...}}</code>，其中 <code>task.id</code> 是上游任务标识；本站查询接口返回 <code>task_...</code> 和 <code>object: "video"</code>。</p>
+        <p>建议在回调 URL 带上自己的业务 ID（如 <code>?job_id=123</code>），提交成功后保存业务 ID 与本站 <code>task_id</code> 的关联。收到通知后用本站任务 ID 查询确认结果；保留轮询作为兜底。</p>
+      </article>
+      <aside class="example-panel" aria-label="Seedance 视频请求和响应示例">
+        <h3>按场景选择请求</h3>
+<div class="example-switcher" data-example-switcher>
+<div class="example-tabs" role="tablist" aria-label="Seedance 视频请求场景">
+<button type="button" class="example-tab" id="seedance-request-url-tab" role="tab" aria-selected="true" aria-controls="seedance-request-url">直接传 URL</button>
+<button type="button" class="example-tab" id="seedance-request-tail-tab" role="tab" aria-selected="false" aria-controls="seedance-request-tail">尾帧与水印</button>
+<button type="button" class="example-tab" id="seedance-request-edit-tab" role="tab" aria-selected="false" aria-controls="seedance-request-edit">2.5 视频编辑</button>
+<button type="button" class="example-tab" id="seedance-request-asset-tab" role="tab" aria-selected="false" aria-controls="seedance-request-asset">复用素材</button>
+</div><div class="example-panels">
+<div class="example-tab-panel is-active" id="seedance-request-url" role="tabpanel" aria-labelledby="seedance-request-url-tab" aria-hidden="false"><p class="compact-note">替换为自己的公网素材 URL。HC 模型使用相同请求结构，修改 model 即可。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "content": [
+    {
+      "type": "text",
+      "text": "@Image1 中的产品缓慢旋转，柔和光线，镜头平稳推进"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://your-cdn.com/reference.png"
+      },
+      "role": "reference_image"
+    }
+  ],
+  "duration": 5,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "generate_audio": false
+}'</code></pre></div>
+<div class="example-tab-panel" id="seedance-request-tail" role="tabpanel" aria-labelledby="seedance-request-tail-tab" aria-hidden="true"><p class="compact-note">首帧模式比例跟随图片。完成后从 metadata.last_frame_url 读取尾帧，可用于下一段视频的 first_frame。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "content": [
+    {
+      "type": "text",
+      "text": "产品缓慢旋转，最后停留在正面"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "https://your-cdn.com/first-frame.png"
+      },
+      "role": "first_frame"
+    }
+  ],
+  "duration": 8,
+  "resolution": "720p",
+  "generate_audio": false,
+  "watermark": true,
+  "return_last_frame": true,
+  "seed": 0
+}'</code></pre></div>
+<div class="example-tab-panel" id="seedance-request-edit" role="tabpanel" aria-labelledby="seedance-request-edit-tab" aria-hidden="true"><p class="compact-note">仅 2.5 支持指定 edit / extend 模式和 MOV 输出；回调关联方式见左侧说明。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "model": "doubao-seedance-2-5-260628-max",
+  "content": [
+    {
+      "type": "text",
+      "text": "编辑 @Video1，将背景改为晴天的海边，保留主体动作"
+    },
+    {
+      "type": "video_url",
+      "video_url": {
+        "url": "https://your-cdn.com/reference.mp4"
+      },
+      "role": "reference_video"
+    }
+  ],
+  "duration": 8,
+  "resolution": "1080p",
+  "ratio": "16:9",
+  "generate_audio": true,
+  "omni_reference_task_type": "edit",
+  "output_format": "mov",
+  "execution_expires_after": 172800,
+  "callback_url": "https://your-app.com/video-callback?job_id=123"
+}'</code></pre></div>
+<div class="example-tab-panel" id="seedance-request-asset" role="tabpanel" aria-labelledby="seedance-request-asset-tab" aria-hidden="true"><p class="compact-note">先通过下方素材接口取得 Ref，并查询到 Active，再提交本请求。</p><pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "content": [
+    {
+      "type": "text",
+      "text": "@Image1 中的产品缓慢旋转"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "asset://mva-e144dfc364a647f1"
+      },
+      "role": "reference_image"
+    }
+  ],
+  "duration": 5,
+  "resolution": "720p",
+  "ratio": "16:9",
+  "generate_audio": false
+}'</code></pre></div>
+</div></div>
+        <h3>创建响应</h3>
+<div class="example-switcher" data-example-switcher>
+<div class="example-tabs" role="tablist" aria-label="Seedance 创建任务响应">
+<button type="button" class="example-tab" id="seedance-submit-preparing-tab" role="tab" aria-selected="true" aria-controls="seedance-submit-preparing">素材准备中</button>
+<button type="button" class="example-tab" id="seedance-submit-queued-tab" role="tab" aria-selected="false" aria-controls="seedance-submit-queued">已排队</button>
+</div><div class="example-panels">
+<div class="example-tab-panel is-active" id="seedance-submit-preparing" role="tabpanel" aria-labelledby="seedance-submit-preparing-tab" aria-hidden="false"><pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "status": "in_progress",
+  "progress": 0,
+  "created_at": 1786350000,
+  "metadata": {
+    "upstream_status": "preparing",
+    "prep": {
+      "total": 1,
+      "active": 0,
+      "failed": 0,
+      "attempt": 1
+    }
+  }
+}</code></pre></div>
+<div class="example-tab-panel" id="seedance-submit-queued" role="tabpanel" aria-labelledby="seedance-submit-queued-tab" aria-hidden="true"><pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre></div>
+</div></div>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/v1/video/generations/{task_id}" aria-labelledby="video-query-title">
+      <article class="reference-panel">
+        <h2 id="video-query-title">查询视频任务</h2>
+        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/video/generations/{task_id}</span></div>
+        <p>使用创建响应中的本站任务 ID（<code>task_...</code>）查询进度和结果，携带同一个本站 API Key。</p>
+        <table>
+          <tr><th>状态</th><th>说明</th></tr>
+          <tr><td><code>queued</code></td><td>已提交，等待生成</td></tr>
+          <tr><td><code>in_progress</code></td><td>素材准备或视频生成中</td></tr>
+          <tr><td><code>completed</code></td><td>生成完成，从结果字段取下载地址</td></tr>
+          <tr><td><code>failed</code></td><td>生成失败，读取 <code>error.message</code></td></tr>
+        </table>
+        <h3>结果读取</h3>
+        <table>
+          <tr><th>字段</th><th>用途</th></tr>
+          <tr><td><code>result_url</code> / <code>metadata.url</code></td><td>视频下载地址，两者兼容；完整输出列表在 <code>metadata.outputs</code></td></tr>
+          <tr><td><code>metadata.last_frame_url</code></td><td>尾帧 PNG 下载地址，仅当请求开启 <code>return_last_frame</code> 时返回</td></tr>
+          <tr><td><code>metadata.usage.completion_tokens</code></td><td>上游实际视频 token 用量；最终费用以本站消费记录为准</td></tr>
+          <tr><td><code>metadata.upstream_status</code></td><td>素材准备时为 <code>preparing</code>；本站对外状态仍为 <code>in_progress</code></td></tr>
+          <tr><td><code>metadata.prep</code></td><td>素材准备进度：<code>total</code> 总数、<code>active</code> 已就绪、<code>failed</code> 失败、<code>attempt</code> 尝试轮次；失败时可能带 <code>failedRefs</code></td></tr>
+          <tr><td><code>error.message</code></td><td>失败原因，素材错误会指出 <code>@Image1</code>、<code>@Video1</code> 等编号</td></tr>
+        </table>
+        <p>建议每 5–10 秒查询一次，直到进入终态。素材准备属于正常处理过程，收到 <code>in_progress</code> 后继续查询即可。</p>
+        <p>默认透传的上游视频 / 尾帧签名链接通常有效 24 小时，无需鉴权即可下载；需要长期保存时请及时转存。</p>
+        <h3>请求失败处理</h3>
+        <p>提交返回 400 时按错误说明修正参数；带素材的请求也可能在受理后失败。429 按 <code>Retry-After</code> 退避，503 稍后重试。反馈问题时附上响应的 <code>request_id</code> / <code>x-request-id</code>。</p>
+        <p>已取得 <code>task_id</code> 后只需查询。创建请求发生超时时，先检查业务记录，避免重复提交并重复计费。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>查询请求</h3>
+<pre><code>curl https://cf-api.o1key.com/v1/video/generations/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>查询响应</h3>
+<div class="example-switcher" data-example-switcher>
+<div class="example-tabs" role="tablist" aria-label="Seedance 查询任务响应">
+<button type="button" class="example-tab" id="seedance-query-completed-tab" role="tab" aria-selected="true" aria-controls="seedance-query-completed">已完成</button>
+<button type="button" class="example-tab" id="seedance-query-preparing-tab" role="tab" aria-selected="false" aria-controls="seedance-query-preparing">素材准备中</button>
+<button type="button" class="example-tab" id="seedance-query-failed-tab" role="tab" aria-selected="false" aria-controls="seedance-query-failed">失败</button>
+</div><div class="example-panels">
+<div class="example-tab-panel is-active" id="seedance-query-completed" role="tabpanel" aria-labelledby="seedance-query-completed-tab" aria-hidden="false"><p class="compact-note">last_frame_url 仅在请求 return_last_frame: true 时返回。</p><pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1786350000,
+  "completed_at": 1786350235,
+  "seconds": "5",
+  "size": "720p",
+  "result_url": "https://cdn.example.com/result.mp4",
+  "metadata": {
+    "url": "https://cdn.example.com/result.mp4",
+    "outputs": [
+      "https://cdn.example.com/result.mp4"
+    ],
+    "last_frame_url": "https://cdn.example.com/last-frame.png",
+    "usage": {
+      "completion_tokens": 108000,
+      "total_tokens": 108000
+    }
+  }
+}</code></pre></div>
+<div class="example-tab-panel" id="seedance-query-preparing" role="tabpanel" aria-labelledby="seedance-query-preparing-tab" aria-hidden="true"><pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "status": "in_progress",
+  "progress": 0,
+  "created_at": 1786350000,
+  "metadata": {
+    "upstream_status": "preparing",
+    "prep": {
+      "total": 1,
+      "active": 0,
+      "failed": 0,
+      "attempt": 1
+    }
+  }
+}</code></pre></div>
+<div class="example-tab-panel" id="seedance-query-failed" role="tabpanel" aria-labelledby="seedance-query-failed-tab" aria-hidden="true"><pre><code>{
+  "id": "task_xxxxxxxxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "object": "video",
+  "model": "doubao-seedance-2-0-mini-260615-max",
+  "status": "failed",
+  "progress": 100,
+  "created_at": 1786350000,
+  "completed_at": 1786350020,
+  "error": {
+    "code": "upstream_error",
+    "message": "Reference material @Image1 could not be prepared: url is not reachable"
+  }
+}</code></pre></div>
+</div></div>
+      </aside>
+    </section>
 
     <section class="endpoint-doc" id="/v1/seedance/assets" aria-labelledby="asset-create-title">
       <article class="reference-panel">
@@ -870,9 +1175,10 @@
           <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开素材地址；HC/DF 要求 HTTPS，Doubao 接受 HTTP(S)</td></tr>
           <tr><td><code>name</code></td><td class="opt">否</td><td>string</td><td>素材名称</td></tr>
           <tr><td><code>asset_type</code></td><td class="opt">否</td><td>string</td><td><code>image</code>、<code>video</code> 或 <code>audio</code>；默认 <code>image</code></td></tr>
-          <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>Doubao MAX 模型名称</td></tr>
+          <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>Doubao 素材上传建议省略；如填写，只接受 <code>doubao-seedance-2-0-260128-max</code>，其他模型值会返回 400</td></tr>
         </table>
-        <p>Doubao 素材有效期为 7 天。状态变为 <code>Active</code> 后，使用响应中的 <code>Ref</code> 生成视频。</p>
+        <p>Doubao 素材有效期为 7 天。状态变为 <code>Active</code> 后，使用响应中的 <code>Ref</code> 生成视频。上传素材免费。</p>
+        <p>本节预上传示例使用 <code>type: "doubao"</code>。Dreamina MAX / HC 视频推荐直接传公开 URL；<code>type: "hc"</code>、<code>type: "df"</code> 保留原有素材接口。</p>
       </article>
       <aside class="example-panel">
         <h3>请求示例</h3>
@@ -883,8 +1189,7 @@
     "type": "doubao",
     "url": "https://upload.o1key.com/uploads/reference.png",
     "name": "人物参考图",
-    "asset_type": "image",
-    "model": "doubao-seedance-2-0-mini-260615-max"
+    "asset_type": "image"
   }'</code></pre>
         <h3>响应示例</h3>
         <pre><code>{
@@ -931,137 +1236,6 @@
     "Status": "Active",
     "AssetType": "Image",
     "Error": null
-  }
-}</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="/v1/video/generations" aria-labelledby="video-create-title">
-      <article class="reference-panel">
-        <h2 id="video-create-title">Seedance 多模态视频生成</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
-        <div class="callout info"><b>调用方式</b>：所有模型统一使用本接口；切换模型时只需修改 <code>model</code>。支持的模型及分辨率见下表。</div>
-
-        <h3>顶层参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>支持值与说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>模型名称，取值见下方模型表</td></tr>
-          <tr><td><code>content</code></td><td class="req">是</td><td>array</td><td>有序多模态内容数组，至少包含一项非空 <code>text</code></td></tr>
-          <tr><td><code>duration</code></td><td class="opt">否</td><td>integer</td><td>单位秒，默认 <code>5</code>；2.0 建议 <code>4-15</code>，2.5 支持 <code>4-30</code></td></tr>
-          <tr><td><code>resolution</code></td><td class="opt">否</td><td>string</td><td>默认 <code>720p</code>；具体范围见下方模型表</td></tr>
-          <tr><td><code>ratio</code></td><td class="opt">否</td><td>string</td><td><code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>、<code>21:9</code>、<code>adaptive</code>；Doubao MAX 也接受别名 <code>aspect_ratio</code></td></tr>
-          <tr><td><code>generate_audio</code></td><td class="opt">否</td><td>boolean</td><td>是否生成同步音频；传参考音频时建议设为 <code>true</code></td></tr>
-          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td>仅 HC 模型使用；是否添加可见水印</td></tr>
-          <tr><td><code>return_last_frame</code></td><td class="opt">否</td><td>boolean</td><td>仅 HC 模型使用；是否返回末帧地址</td></tr>
-        </table>
-
-        <h3>模型与分辨率</h3>
-        <table>
-          <tr><th>模型</th><th>支持分辨率</th></tr>
-          <tr><td><code>dreamina-seedance-2-0-hc</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code>、<code>4k</code></td></tr>
-          <tr><td><code>dreamina-seedance-2-0-fast-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
-          <tr><td><code>dreamina-seedance-2-0-mini-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
-          <tr><td><code>dreamina-seedance-2-5-hc</code></td><td><code>480p</code>、<code>720p</code></td></tr>
-          <tr><td><code>doubao-seedance-2-0-260128-max</code></td><td>以模型实际支持范围为准</td></tr>
-          <tr><td><code>doubao-seedance-2-0-fast-260128-max</code></td><td>以模型实际支持范围为准</td></tr>
-          <tr><td><code>doubao-seedance-2-0-mini-260615-max</code></td><td><code>480p</code>、<code>720p</code></td></tr>
-          <tr><td><code>doubao-seedance-2-5-260628-max</code></td><td>以模型实际支持范围为准</td></tr>
-        </table>
-
-        <h3><code>content</code> 多模态项目</h3>
-        <table>
-          <tr><th>类型</th><th>字段</th><th><code>role</code></th><th>说明</th></tr>
-          <tr><td>提示词</td><td><code>text</code></td><td>不适用</td><td><code>{"type":"text","text":"..."}</code></td></tr>
-          <tr><td>首帧图</td><td><code>image_url.url</code></td><td><code>first_frame</code></td><td>首帧生视频时使用；单张图片时也可省略 <code>role</code></td></tr>
-          <tr><td>尾帧图</td><td><code>image_url.url</code></td><td><code>last_frame</code></td><td>首尾帧生视频时使用，必须同时提供 <code>first_frame</code></td></tr>
-          <tr><td>参考图</td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>支持创建接口返回的 <code>Ref</code>（<code>asset://...</code>）或公开 URL</td></tr>
-          <tr><td>参考视频</td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>支持素材 ID 或公开直链</td></tr>
-          <tr><td>参考音频</td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>不能作为唯一参考，需同时传图片或视频</td></tr>
-        </table>
-        <div class="callout warn"><b>通用限制</b>：最多 9 张参考图、3 个参考视频和 3 段参考音频；2.0 的参考视频 / 音频单段建议 2-15 秒、各自总时长不超过 15 秒。</div>
-        <div class="callout info"><b>四种生成方式</b>：多模态参考、首帧、首尾帧和文生视频。首帧、首尾帧和多模态参考互斥，不要在同一个请求中混用 <code>first_frame</code>、<code>last_frame</code> 和 <code>reference_*</code>。</div>
-
-      </article>
-      <aside class="example-panel" aria-label="Seedance 视频请求和响应示例">
-        <h3>请求示例</h3>
-        <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "doubao-seedance-2-0-mini-260615-max",
-    "content": [
-      {
-        "type": "text",
-        "text": "@Image1 中的人物缓慢转身看向镜头，柔和光线，镜头保持稳定"
-      },
-      {
-        "type": "image_url",
-        "image_url": {
-          "url": "asset://mva-e144dfc364a647f1"
-        },
-        "role": "reference_image"
-      }
-    ],
-    "duration": 5,
-    "resolution": "480p",
-    "ratio": "16:9",
-    "generate_audio": false
-  }'</code></pre>
-        <h3>响应示例</h3>
-        <pre><code>{
-  "id": "task_xxxxxxxxxxxxxxxx",
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "object": "video",
-  "model": "doubao-seedance-2-0-mini-260615-max",
-  "status": "queued",
-  "progress": 0,
-  "created_at": 1786350000
-}</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="/v1/video/generations/{task_id}" aria-labelledby="video-query-title">
-      <article class="reference-panel">
-        <h2 id="video-query-title">查询视频任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/video/generations/{task_id}</span></div>
-        <p>使用视频创建接口返回的任务 ID 查询进度和最终视频地址。</p>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
-          <tr><td><code>task_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>task_...</code></td></tr>
-        </table>
-        <table>
-          <tr><th>状态</th><th>说明</th></tr>
-          <tr><td><code>queued</code></td><td>等待处理</td></tr>
-          <tr><td><code>in_progress</code></td><td>生成中</td></tr>
-          <tr><td><code>completed</code></td><td>生成完成</td></tr>
-          <tr><td><code>failed</code></td><td>生成失败</td></tr>
-        </table>
-        <p>建议每 5-10 秒查询一次，直到状态变为 <code>completed</code> 或 <code>failed</code>。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
-        <pre><code>curl https://cf-api.o1key.com/v1/video/generations/&lt;task_id&gt; \
-  -H "Authorization: Bearer $API_KEY"</code></pre>
-        <h3>响应示例</h3>
-        <pre><code>{
-  "id": "task_xxxxxxxxxxxxxxxx",
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "object": "video",
-  "model": "doubao-seedance-2-0-mini-260615-max",
-  "status": "completed",
-  "progress": 100,
-  "created_at": 1786350000,
-  "completed_at": 1786350235,
-  "result_url": "https://cdn.example.com/result.mp4",
-  "metadata": {
-    "url": "https://cdn.example.com/result.mp4",
-    "outputs": [
-      "https://cdn.example.com/result.mp4"
-    ],
-    "usage": {
-      "completion_tokens": 50638,
-      "total_tokens": 50638
-    }
   }
 }</code></pre>
       </aside>
