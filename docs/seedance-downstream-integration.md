@@ -9,7 +9,7 @@
 
 本站收到请求后，会根据模型和令牌分组路由到内部渠道。渠道 ID `265` 仅是本站内部配置，不是下游请求参数，不能通过请求体指定。
 
-如果请求包含公网图片 URL，本站会自动创建上游素材并把图片转换为 `asset://{asset_id}`，下游通常不需要单独调用素材接口。
+MAX 视频请求中的公网素材 URL 由上游自动准备，原有 v1 模型仍由本站创建素材并转换为 `asset://{asset_id}`。下游通常不需要单独调用素材接口。
 
 本文示例使用本站当前服务地址：
 
@@ -172,7 +172,7 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 - `completed`
 - `failed`
 
-建议每 2 至 5 秒查询一次，直到进入 `completed` 或 `failed` 终态。
+建议每 5 至 10 秒查询一次，直到进入 `completed` 或 `failed` 终态。开启 `return_last_frame` 时，完成响应中的 `metadata.last_frame_url` 是尾帧 PNG 地址。
 
 ## 5. 本站内部素材创建流程
 
@@ -196,6 +196,35 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 
 下游创建和查询路径仍然是 `/v1/video/generations` 与 `/v1/video/generations/{task_id}`。从 HC 切换到 Doubao 时只需修改请求中的 `model`。本站根据映射后的上游模型前缀分别应用 Dreamina 或 Doubao 请求适配，两者当前均提交到上游 `/v2/video/generate` 并通过 `/v2/video/tasks/{id}` 查询。
 
+Doubao MAX 和 Dreamina MAX 使用相同的请求参数。本站完整转发以下可选参数；未填写时使用上游默认值，显式 `false` 和 `0` 会保留：
+
+| 参数 | MAX 支持范围与默认值 |
+| --- | --- |
+| `duration` | 2.0 / fast / mini 为 4–15 秒，2.5 为 4–30 秒；默认 5。2.5 编辑必须显式传 `-1`，输出时长基本跟随待编辑视频；其他任务的 `-1` 由模型自选 |
+| `resolution` | 2.0 为 480p / 720p / 1080p / 4k，fast / mini 为 480p / 720p，2.5 为 480p / 720p / 1080p；默认 720p |
+| `ratio` / `aspect_ratio` | 比例别名适用于两类 MAX；同时填写时以非空 `ratio` 为准，默认 adaptive；首尾帧模式跟随图片。2.5 首帧 / 首尾帧、编辑、延长仅支持 adaptive |
+| `generate_audio` | 默认 true；false 关闭生成音频 |
+| `watermark` | 默认 false；true 添加水印 |
+| `seed` | 整数 [-1, 2147483647]，默认 -1；0 是有效种子；相同种子不保证完全一致 |
+| `return_last_frame` | 默认 false；true 时从查询响应 `metadata.last_frame_url` 取尾帧 |
+| `callback_url` | 状态变化时接收上游 POST 通知的地址 |
+| `execution_expires_after` | 上游任务过期秒数 [3600, 259200]，默认 172800；本站任务超时策略独立生效 |
+| `output_format` | 仅 2.5：mp4（默认）或 mov |
+| `omni_reference_task_type` | 仅 2.5：auto（默认）、reference、edit 或 extend；提示词意图须与所选模式一致 |
+
+Seedance 2.5 编辑与延长有额外参数限制，不能直接套用普通参考生视频的配置。依据[火山引擎 Seedance 2.5 官方教程](https://docs.volcengine.com/docs/ark/seedance-2-5?lang=zh)：
+
+| 场景 | 素材与提示词 | 参数 |
+| --- | --- | --- |
+| 视频编辑 | 至少一段 `reference_video`，待编辑视频 4–30 秒；提示词明确编辑动作，例如“修改 @Video1 的背景” | `omni_reference_task_type: "edit"`、`ratio: "adaptive"`、`duration: -1`；输出比例与时长基本跟随原视频 |
+| 视频延长 | 至少一段 `reference_video`；提示词明确方向与目标，例如“向后延长 @Video1” | `omni_reference_task_type: "extend"`、`ratio: "adaptive"`；输出时长可设为 4–30 秒或 `-1`，比例跟随原视频 |
+
+MP4 与 MOV 均可用于 2.5；官方推荐编辑、延长使用 MOV 输入和输出，以改善色彩与声画衔接。设置 `omni_reference_task_type` 后仍需明确提示词意图，模型会结合提示词判断实际场景。
+
+`callback_url` 会原样转发。回调体为上游的 `{"task": {...}}`，其中 `task.id` 是上游任务标识，和本站公开的 `task_...` 不同。建议在回调 URL 中带自己的业务 ID，提交成功后保存它与本站任务 ID 的关联；收到通知后通过本站查询接口确认结果，轮询保留作兜底。
+
+2.0 / fast / mini 允许最多 9 张参考图、3 段参考视频和 3 段参考音频；视频和音频各自总时长不超过 15 秒，音频不能作为唯一参考素材。2.5 对应为 30 张图、10 段视频、10 段音频，各自总时长不超过 30 秒，允许音频作为唯一参考素材；两类均需非空提示词。参考素材与首尾帧不能混用，`@Image1` / `@Video1` 分别按参考图 / 视频在数组中的出现顺序编号。
+
 MAX v2 请求中的公网图片和视频 URL 会原样转发，由上游视频任务自动完成素材准备；本站不会再调用旧素材接口或把图片改写为 `asset://`。上游 `preparing` 状态对外归一化为 `in_progress`，同时保留在响应元数据中：
 
 ```json
@@ -215,7 +244,7 @@ MAX v2 请求中的公网图片和视频 URL 会原样转发，由上游视频�
 
 下游仍然调用本站的 `/v1/video/generations`，并继续使用 HC 模型名和公开 `task_...` ID，不需要感知 MAX 模型名或上游 v2 路径。
 
-Doubao MAX 的可复用素材使用 `/v2/db-sd-max/assets`。本站既提供同路径代理，也允许通过统一素材接口传 `type: "doubao"`；现有 `type: "hc"` 仍走 `/v1/sd/assets`，两套素材流程互不替换。
+Doubao MAX 的可复用素材使用 `/v2/db-sd-max/assets`。本站既提供同路径代理，也允许通过统一素材接口传 `type: "doubao"`。预上传的 `model` 建议省略；如填写，只能使用固定值 `doubao-seedance-2-0-260128-max`。现有 `type: "hc"` 仍走 `/v1/sd/assets`，Dreamina MAX 视频推荐直接传公网 URL。
 
 ### 5.2 v1 素材创建流程
 
@@ -409,6 +438,6 @@ POST https://cf-api.o1key.com/v1/assets/get
 | 成功 | `status == "completed"` | 旧客户端可继续读取顶层 `result_url`；新客户端也可读取 `metadata.url` 或 `metadata.outputs[0]` |
 | 失败 | `status == "failed"` | 读取 `error.message` 和 `error.code` |
 
-下游适配器不需要实现素材上传逻辑。只要把公网图片 URL 放进 `content[].image_url.url`，素材组创建、`POST /v1/assets`、素材状态查询和 `asset://` 替换都由本站完成。
+下游适配器不需要实现素材上传逻辑。把公网素材 URL 放进 `content` 即可；MAX 由上游自动准备，既有 v1 模型由本站按对应素材流程处理。
 
 不要把本接口改写成真实上游的 `POST /v1/video/generate`。该路径属于渠道 265 后面的内部上游协议，不是下游访问本站的公开入口。
