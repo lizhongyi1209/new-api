@@ -21,6 +21,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
@@ -1326,6 +1327,37 @@ func TestClaudeCacheOnlyUsageRemainsBillable(t *testing.T) {
 			assert.Zero(t, summary.CompletionTokens)
 			assert.Equal(t, tc.wantQuota, summary.Quota)
 			assert.Equal(t, tc.wantQuota > 0, summary.hasBillableUsage())
+		})
+	}
+}
+
+// Gemini Google Search grounding reaches the tool surcharge through the
+// counts the Gemini handlers record: Gemini 3 bills each unique query, and
+// Gemini 2.5 bills one grounded prompt.
+func TestCalculateTextToolCallSurchargeBillsGeminiGrounding(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+
+	for _, tc := range []struct {
+		model    string
+		wantUSD  float64
+		wantName string
+	}{
+		{model: "gemini-3-pro-preview", wantUSD: 14.0 * 3 / 1000, wantName: dto.BuildInToolGoogleSearch},
+		{model: "gemini-2.5-flash", wantUSD: 35.0 / 1000, wantName: relaycommon.GoogleSearchGroundedPromptTool},
+	} {
+		t.Run(tc.model, func(t *testing.T) {
+			relayInfo := &relaycommon.RelayInfo{OriginModelName: tc.model}
+			relayInfo.SetBillableToolCount(dto.BuildInToolGoogleSearch, 3)
+			relayInfo.SetBillableToolCount(relaycommon.GoogleSearchGroundedPromptTool, 1)
+			summary := &textQuotaSummary{ModelName: tc.model, GroupRatio: 1}
+
+			surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
+
+			want := decimal.NewFromFloat(tc.wantUSD).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+			assert.True(t, want.Equal(surcharge), "got %s want %s", surcharge, want)
+			require.Len(t, summary.ToolSurchargeItems, 1)
+			assert.Equal(t, tc.wantName, summary.ToolSurchargeItems[0].Name)
 		})
 	}
 }

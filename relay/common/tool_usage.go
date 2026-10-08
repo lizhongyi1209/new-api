@@ -12,12 +12,19 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
+// GoogleSearchGroundedPromptTool bills Gemini 2.5-and-older Google Search
+// grounding, charged once per grounded prompt.
+const GoogleSearchGroundedPromptTool = "google_search_grounded_prompt"
+
+// reservedBillableToolNames are hosted-tool keys a client function or tool_use
+// with the same name is never counted under.
 var reservedBillableToolNames = map[string]struct{}{
 	dto.BuildInToolWebSearchPreview: {},
 	dto.BuildInToolWebSearch:        {},
 	dto.BuildInToolFileSearch:       {},
 	dto.BuildInToolGoogleSearch:     {},
 	dto.BuildInToolImageGeneration:  {},
+	GoogleSearchGroundedPromptTool:  {},
 }
 
 // CountBillableToolCall is the single entry point for per-call tool billing counts.
