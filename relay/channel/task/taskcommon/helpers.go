@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/videoexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
@@ -75,11 +76,27 @@ const (
 )
 
 // ---------------------------------------------------------------------------
-// BaseBilling — embeddable no-op implementations for TaskAdaptor billing methods.
-// Adaptors that do not need custom billing can embed this struct directly.
+// BaseBilling provides legacy billing defaults and schema-gated native video
+// usage extraction. Adaptors can override their legacy billing methods.
 // ---------------------------------------------------------------------------
 
 type BaseBilling struct{}
+
+// ExtractUsageFactsValidated enables native video expressions without changing
+// the legacy EstimateBilling/AdjustBilling contracts used by existing prices.
+func (BaseBilling) ExtractUsageFactsValidated(c *gin.Context, info *relaycommon.RelayInfo) (map[string]any, error) {
+	meta := videoexpr.ForModel(info.ChannelType, info.UpstreamModelName)
+	request, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil, err
+	}
+	return videoexpr.Estimate(meta, request, info.Action)
+}
+
+func (b BaseBilling) ExtractUsageFacts(c *gin.Context, info *relaycommon.RelayInfo) map[string]any {
+	facts, _ := b.ExtractUsageFactsValidated(c, info)
+	return facts
+}
 
 // EstimateBilling returns nil (no extra ratios; use base model price).
 func (BaseBilling) EstimateBilling(_ *gin.Context, _ *relaycommon.RelayInfo) map[string]float64 {

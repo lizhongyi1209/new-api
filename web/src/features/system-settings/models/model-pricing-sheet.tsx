@@ -85,7 +85,10 @@ import {
   createDefaultTaskVisualConfig,
   generateTaskExprFromConfig,
 } from '@/features/pricing/lib/task-expr'
-import type { BillingUsageSchema } from '@/features/pricing/types'
+import type {
+  BillingUsageExample,
+  BillingUsageSchema,
+} from '@/features/pricing/types'
 import { useDebounce } from '@/hooks/use-debounce'
 import { handleServerError } from '@/lib/handle-server-error'
 import { cn } from '@/lib/utils'
@@ -122,6 +125,7 @@ type ModelPricingSheetProps = {
   onSave?: () => void | Promise<void>
   isSaving?: boolean
   usageSchema?: BillingUsageSchema
+  usageExamples?: BillingUsageExample[]
   pluginVariants?: ModelPricingPluginVariant[]
   onDirtyChange?: (dirty: boolean) => void
 }
@@ -152,6 +156,7 @@ export const ModelPricingSheet = forwardRef<
     onSave,
     isSaving,
     usageSchema,
+    usageExamples,
     pluginVariants,
     onDirtyChange,
   },
@@ -175,6 +180,7 @@ export const ModelPricingSheet = forwardRef<
           ref={ref}
           editData={editData}
           usageSchema={usageSchema}
+          usageExamples={usageExamples}
           pluginVariants={pluginVariants}
           onDirtyChange={onDirtyChange}
           onSave={onSave}
@@ -196,6 +202,7 @@ export const ModelPricingEditorPanel = forwardRef<
     onSave,
     isSaving,
     usageSchema,
+    usageExamples,
     pluginVariants,
     onDirtyChange,
     embedded = false,
@@ -329,6 +336,7 @@ export const ModelPricingEditorPanel = forwardRef<
     pluginVariants?.find((variant) => !variant.stale)?.usage_schema ??
     usageSchemaByModel.get(watchedValues.name.trim())
   const taskUsageExamples =
+    usageExamples ??
     usageExamplesByModel.get(watchedValues.name.trim()) ??
     pluginVariants?.find((variant) => !variant.stale)?.usage_examples
   const defaultTaskBillingExpr = useMemo(

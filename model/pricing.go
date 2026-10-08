@@ -333,6 +333,10 @@ func updatePricing() {
 
 	pricingMap = make([]Pricing, 0)
 	pluginGeneration := jsplugin.DefaultRegistry.Generation()
+	nativeCatalog, _, nativeErr := nativeVideoPricingCatalog(DB)
+	if nativeErr != nil {
+		common.SysError(fmt.Sprintf("native video pricing metadata: %v", nativeErr))
+	}
 	for model, groups := range modelGroupsMap {
 		pricing := Pricing{
 			ModelName:              model,
@@ -404,7 +408,10 @@ func updatePricing() {
 				usageModel = target.Declared
 			}
 		}
-		if !pricing.HasOrdinaryChannel && ok && plugin != nil {
+		if native, exists := nativeCatalog[model]; exists {
+			pricing.BillingUsageSchema = native.Schema
+			pricing.BillingUsageExamples = native.Examples
+		} else if !pricing.HasOrdinaryChannel && ok && plugin != nil {
 			usageSchema, usageExamples := plugin.Meta.UsageForModel(usageModel)
 			pricing.BillingUsageSchema = jsplugin.CloneUsageSchema(usageSchema)
 			pricing.BillingUsageExamples = jsplugin.CloneUsageExamples(usageExamples)

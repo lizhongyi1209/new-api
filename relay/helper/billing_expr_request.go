@@ -20,17 +20,38 @@ import (
 var taskBillingParamPath = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*(?:\.(?:[A-Za-z][A-Za-z0-9_]*|[0-9]+))*$`)
 
 // FreezeTaskBillingExprRequestInput retains only the scalar request fields
-// referenced by a plugin task expression. Complete task bodies can contain
+// referenced by a task expression. Complete task bodies can contain
 // prompts, credentials and media, so they must not enter a billing snapshot.
 func FreezeTaskBillingExprRequestInput(c *gin.Context, expression string) (billingexpr.RequestInput, error) {
-	value, exists := c.Get("task_request")
-	request, ok := value.(map[string]any)
-	if !exists || !ok {
-		return billingexpr.RequestInput{}, fmt.Errorf("task plugin request is unavailable for billing")
-	}
 	paramNames, err := billingexpr.ReferencedParams(expression)
 	if err != nil {
 		return billingexpr.RequestInput{}, err
+	}
+	value, exists := c.Get("task_request")
+	request, ok := value.(map[string]any)
+	if native, isNative := value.(relaycommon.TaskSubmitReq); exists && isNative {
+		request = map[string]any{}
+		if len(paramNames) > 0 {
+			encoded, err := common.Marshal(native)
+			if err != nil {
+				return billingexpr.RequestInput{}, err
+			}
+			if err := common.Unmarshal(encoded, &request); err != nil {
+				return billingexpr.RequestInput{}, err
+			}
+			// Native provider payloads live in metadata. Expose their scalar fields
+			// at the root as on the upstream request, while retaining metadata paths.
+			if metadata, isObject := request["metadata"].(map[string]any); isObject {
+				maps.Copy(request, metadata)
+			}
+			if native.EffectiveResolution != "" {
+				request["resolution"] = native.EffectiveResolution
+			}
+		}
+		ok = true
+	}
+	if !exists || !ok {
+		return billingexpr.RequestInput{}, fmt.Errorf("task request is unavailable for billing")
 	}
 	headerNames, err := billingexpr.ReferencedHeaders(expression)
 	if err != nil {
@@ -57,7 +78,7 @@ func FreezeTaskBillingExprRequestInput(c *gin.Context, expression string) (billi
 				}
 			}
 			switch lower {
-			case "prompt", "input", "output", "image", "images", "audio", "video", "url", "content", "messages", "files", "file", "data":
+			case "prompt", "input", "output", "image", "images", "audio", "video", "url", "content", "messages", "files", "file", "data", "image_url", "video_url", "audio_url", "input_reference", "last_frame_url":
 				return billingexpr.RequestInput{}, fmt.Errorf("task billing parameter path references private content")
 			}
 		}

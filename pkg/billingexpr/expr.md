@@ -22,6 +22,42 @@ The expression is the billing contract between the administrator and the system.
 
 ## Expression Language
 
+### Native video usage expressions (2026-10-07)
+
+Native asynchronous video adaptors now support schema-validated `u(...)` expressions in the ordinary
+versioned model-pricing configuration. This applies to Seedance (TokenMart, Doubao, Xinhankr), Kling
+(official and Tencent), MiniMax H3/H3 Max, Grok video, Gemini Omni, and native Veo/Sora-compatible video.
+Non-task text/image models still cannot save an arbitrary usage expression. Plugin-scoped expression
+storage and plugin execution semantics remain unchanged.
+
+`pkg/videoexpr` defines quantities and enums, not prices. `model/native_video_pricing.go` resolves the
+mapped native model and exposes its schema/examples through admin and public pricing APIs. Submission
+freezes `native_video_meter`, expression, group ratio, quota-per-unit, referenced scalar conditions,
+permitted headers, submission time, and estimated usage. Native request projection supports the typed
+`TaskSubmitReq`; it persists no prompt/media body. Polling extracts bounded actual facts from the raw
+provider response and settles against the snapshot. Legacy `OtherRatios`, currency conversion knobs,
+current model ratios and adaptor price adjustments are not applied again. Existing non-expression
+tasks and historical snapshots keep their previous paths.
+
+Usage-token expressions use actual USD prices divided by 1,000,000, e.g.
+`tier("video", u("tokens") * 37 / 1000000)`; this differs from the engine's ordinary `p * 37` token syntax.
+Seconds/count/credit quantities use their direct unit price. Completion parsing distinguishes omitted
+usage from explicit zero: missing/invalid token or credit data retains the reservation with a warning;
+valid zero refunds it. Token/count/credit multipliers are bounded, numeric strings are parsed strictly,
+and expression charges use the existing checked quota conversion and audit path.
+
+Grok `seconds` is the billable generated duration: extension keeps the requested added portion rather
+than charging the entire returned input-plus-output video. Edit resolution is `auto` when the provider
+does not expose it, instead of inventing a resolution. Veo/Sora-compatible providers that price the
+requested duration may omit completion duration and retain the frozen request quantity. MiniMax
+completion usage overlays only fields actually reported, including explicit zero reference quantities.
+
+Frontend manual pricing uses the existing task price matrix; automatic conversion of legacy video
+prices remains blocked because historical prices can incorporate provider-specific/postpaid rules.
+See `docs/native-video-expression-pricing.md` for scope, administrator examples, and local request,
+accounting, editor and build checks. Production deployment follows `scripts/deploy-production.sh`;
+model pricing changes require an explicit administrator save.
+
 Powered by [expr-lang/expr](https://github.com/expr-lang/expr). Expressions are compiled, cached, and evaluated against a runtime environment.
 
 ### Per-request pricing and image cache extension

@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
+	"github.com/QuantumNous/new-api/pkg/videoexpr"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 
@@ -900,6 +901,14 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 			return true
 		}
 		if snap.TaskUsageBilling {
+			if snap.NativeVideoMeter != "" {
+				facts, err := videoexpr.Complete(snap.NativeVideoMeter, snap.UsageFacts, task.Data, taskResult)
+				if err != nil {
+					logger.LogWarn(ctx, fmt.Sprintf("task %s native video usage invalid; retained reserved quota: %v", task.TaskID, err))
+					return true
+				}
+				taskResult.UsageFacts = facts
+			}
 			usage := make(map[string]any, len(snap.UsageFacts)+len(taskResult.UsageFacts))
 			maps.Copy(usage, snap.UsageFacts)
 			maps.Copy(usage, taskResult.UsageFacts)

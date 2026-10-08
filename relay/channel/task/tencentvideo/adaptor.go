@@ -708,9 +708,10 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskInfo.Progress = taskcommon.ProgressComplete
 		taskInfo.Url = r.ResultVideoUrl
 		if v, err := strconv.ParseFloat(r.FinalUnitDeduction, 64); err == nil {
-			if rounded := int(math.Ceil(v)); rounded > 0 {
+			if rounded, clamp := common.QuotaFromFloatChecked(math.Ceil(v)); rounded > 0 {
 				taskInfo.CompletionTokens = rounded
 				taskInfo.TotalTokens = rounded
+				taskInfo.QuotaClamp = clamp
 			}
 		}
 	case "FAIL":

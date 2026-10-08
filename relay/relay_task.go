@@ -18,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/pkg/videoexpr"
 	"github.com/QuantumNous/new-api/relay/channel"
 	jspluginadaptor "github.com/QuantumNous/new-api/relay/channel/task/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -348,6 +349,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		usageSchema := map[string]pluginruntime.UsageFieldSchema{}
 		if selectedPlugin != nil {
 			usageSchema, _ = selectedPlugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
+		} else {
+			usageSchema = videoexpr.ForModel(info.ChannelType, info.UpstreamModelName).Schema
+			if err := billing_setting.SmokeTestTaskExpr(expression, usageSchema); err != nil {
+				return nil, service.TaskErrorWrapperLocal(err, "model_price_error", http.StatusBadRequest)
+			}
 		}
 		usedUsageFields := billingexpr.UsedUsageKeys(expression)
 		usageDisplaySchema := make(map[string]billingexpr.UsageFieldSnapshot, len(usedUsageFields))
@@ -375,6 +381,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			QuotaPerUnit: common.QuotaPerUnit, ExprVersion: billingexpr.ExprVersion(expression),
 			TaskUsageBilling: true, UsageFacts: facts,
 			UsageSchema: usageDisplaySchema,
+		}
+		if selectedPlugin == nil {
+			info.TieredBillingSnapshot.NativeVideoMeter = videoexpr.ForModel(info.ChannelType, info.UpstreamModelName).Meter
 		}
 	} else {
 		priceData, err = helper.ModelPriceHelperPerCall(c, info)

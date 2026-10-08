@@ -67,6 +67,7 @@ export type ModelPricingEntry = ModelPricingDescription & {
   version: string
   configured: PricingValues
   usage_schema?: BillingUsageSchema
+  usage_examples?: BillingUsageExample[]
 }
 
 export type ModelPricingConfig = {

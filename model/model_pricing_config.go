@@ -212,7 +212,7 @@ func PreviewModelPricing(name string, draft PricingValues) (PricingValues, error
 	if err != nil {
 		return nil, err
 	}
-	if err := validateModelPricing(name, draft, modelPricingValues(values, name)); err != nil {
+	if err := validateModelPricing(DB, name, draft, modelPricingValues(values, name)); err != nil {
 		return nil, err
 	}
 	for _, key := range modelPricingOptionKeys {
@@ -239,6 +239,10 @@ func PreviewModelPricing(name string, draft PricingValues) (PricingValues, error
 }
 
 func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
+	nativeCatalog, _, err := nativeVideoPricingCatalog(DB)
+	if err != nil {
+		return nil, err
+	}
 	values, _, _, err := readModelPricingMaps(DB)
 	if err != nil {
 		return nil, err
@@ -265,6 +269,9 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 				nameSet[name] = true
 			}
 		}
+		for name := range nativeCatalog {
+			nameSet[name] = true
+		}
 		for name := range nameSet {
 			names = append(names, name)
 		}
@@ -275,7 +282,9 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 	for _, name := range names {
 		configured := modelPricingValues(values, name)
 		entry := ModelPricingEntry{ModelName: name, Version: ModelPricingVersion(configured), Configured: configured, Effective: effectiveModelPricing(values, name)}
-		if plugin, ok := generation.GetByModel(name); ok {
+		if native, ok := nativeCatalog[name]; ok {
+			entry.UsageSchema, entry.UsageExamples = native.Schema, native.Examples
+		} else if plugin, ok := generation.GetByModel(name); ok {
 			entry.UsageSchema, entry.UsageExamples = plugin.Meta.UsageForModel(name)
 		} else if target, ok := ResolveTaskModelAlias(generation, name); ok {
 			if plugin, ok := generation.Get(target.PluginKey); ok {
@@ -343,10 +352,10 @@ func GetModelPricingSnapshot(names []string) (*ModelPricingSnapshot, error) {
 }
 
 func ValidateModelPricing(name string, values PricingValues) error {
-	return validateModelPricing(name, values, nil)
+	return validateModelPricing(DB, name, values, nil)
 }
 
-func validateModelPricing(name string, values, previous PricingValues) error {
+func validateModelPricing(db *gorm.DB, name string, values, previous PricingValues) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("model name is required")
 	}
@@ -395,6 +404,19 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 				return fmt.Errorf("model %s: %w", name, err)
 			}
 			var err error
+			nativeCatalog, conflicts, catalogErr := nativeVideoPricingCatalog(db)
+			if catalogErr != nil {
+				return catalogErr
+			}
+			if conflict := conflicts[name]; conflict != nil && billingexpr.UsesUsagePricing(expression) {
+				return conflict
+			}
+			native, nativeModel := nativeCatalog[name]
+			if nativeModel {
+				if err := billing_setting.SmokeTestTaskExpr(expression, native.Schema); err != nil {
+					return fmt.Errorf("model %s: %w", name, err)
+				}
+			}
 			if plugins := generation.PluginsByModel(name); len(plugins) > 0 {
 				for _, plugin := range plugins {
 					if _, overridden := variants[plugin.Meta.Key]; overridden {
@@ -405,6 +427,8 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 						return fmt.Errorf("model %s: plugin %s: %w", name, plugin.Meta.Key, err)
 					}
 				}
+			} else if nativeModel {
+				// Already validated against the mapped native usage schema above.
 			} else if target, resolved := ResolveTaskModelAlias(generation, name); resolved {
 				if plugin, ok := generation.Get(target.PluginKey); ok {
 					schema, _ := plugin.Meta.UsageForModel(target.Declared)
@@ -412,7 +436,7 @@ func validateModelPricing(name string, values, previous PricingValues) error {
 				} else {
 					err = billing_setting.SmokeTestExpr(expression)
 				}
-			} else if previous[key] != expression || len(billingexpr.UsedUsageKeys(expression)) == 0 {
+			} else if !nativeModel && (previous[key] != expression || len(billingexpr.UsedUsageKeys(expression)) == 0) {
 				if billingexpr.UsesUsagePricing(expression) {
 					return fmt.Errorf("model %s: no task plugin usage schema; usage-derived billing requires a configured usage schema", name)
 				}
@@ -452,7 +476,7 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 			return ErrModelPricingConflict
 		}
 	}
-	return mutateModelPricingOptions(func(_ *gorm.DB, values map[string]map[string]any) error {
+	return mutateModelPricingOptions(func(tx *gorm.DB, values map[string]map[string]any) error {
 		defaults := defaultPricingMaps()
 		for _, change := range changes {
 			previous := modelPricingValues(values, change.ModelName)
@@ -463,7 +487,7 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 			if change.Reset {
 				pricing = modelPricingValues(defaults, change.ModelName)
 			}
-			if err := validateModelPricing(change.ModelName, pricing, previous); err != nil {
+			if err := validateModelPricing(tx, change.ModelName, pricing, previous); err != nil {
 				return err
 			}
 			for _, key := range modelPricingOptionKeys {
@@ -494,7 +518,7 @@ func UpdateModelPricing(changes []ModelPricingChange) error {
 // UpdateModelPricingOptions keeps legacy single-option callers on the same
 // locking, validation and transaction path as the model-level API.
 func UpdateModelPricingOptions(updates map[string]string) error {
-	return mutateModelPricingOptions(func(_ *gorm.DB, values map[string]map[string]any) error {
+	return mutateModelPricingOptions(func(tx *gorm.DB, values map[string]map[string]any) error {
 		previous := maps.Clone(values)
 		names := make(map[string]bool)
 		for key, raw := range updates {
@@ -531,7 +555,7 @@ func UpdateModelPricingOptions(updates map[string]string) error {
 			}
 		}
 		for name := range names {
-			if err := validateModelPricing(name, modelPricingValues(values, name), modelPricingValues(previous, name)); err != nil {
+			if err := validateModelPricing(tx, name, modelPricingValues(values, name), modelPricingValues(previous, name)); err != nil {
 				return err
 			}
 		}

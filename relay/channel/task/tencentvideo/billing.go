@@ -35,9 +35,9 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	deposit := int(depositUSD * common.QuotaPerUnit * groupRatio)
-	if deposit < 0 {
-		deposit = 0
+	deposit, clamp := common.QuotaFromFloatChecked(depositUSD * common.QuotaPerUnit * groupRatio)
+	if clamp != nil {
+		info.QuotaClamp = clamp
 	}
 	// Directly set the pre-charge; return nil so no extra ratios are applied.
 	info.PriceData.Quota = deposit
@@ -73,7 +73,10 @@ func (a *TaskAdaptor) AdjustBillingOnComplete(task *model.Task, taskResult *rela
 		groupRatio = bc.GroupRatio
 	}
 
-	quota := int(math.Ceil(credits * markup / fx * common.QuotaPerUnit * groupRatio))
+	quota, clamp := common.QuotaFromFloatChecked(math.Ceil(credits * markup / fx * common.QuotaPerUnit * groupRatio))
+	if clamp != nil && taskResult != nil {
+		taskResult.QuotaClamp = clamp
+	}
 	if quota <= 0 {
 		return task.Quota
 	}

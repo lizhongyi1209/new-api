@@ -33,7 +33,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { evaluateBillingExpression } from '@/features/pricing/lib/billing-expression/runtime'
 import { tryParseTaskVisualConfig } from '@/features/pricing/lib/task-expr'
 import { tryParseVisualConfig } from '@/features/pricing/lib/tier-expr'
-import type { BillingUsageSchema } from '@/features/pricing/types'
+import type {
+  BillingUsageExample,
+  BillingUsageSchema,
+} from '@/features/pricing/types'
 import {
   ModelPricingEditorPanel,
   type ModelPricingEditorPanelHandle,
@@ -95,7 +98,8 @@ it('reads preview prices and billing metadata from the common data envelope', as
 
 function renderEditor(
   data: Partial<ModelRatioData> = {},
-  usageSchema?: BillingUsageSchema
+  usageSchema?: BillingUsageSchema,
+  usageExamples?: BillingUsageExample[]
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -116,6 +120,7 @@ function renderEditor(
           ...entry,
         }}
         usageSchema={usageSchema}
+        usageExamples={usageExamples}
         onDirtyChange={dirty}
       />
     </QueryClientProvider>
@@ -927,6 +932,31 @@ it('converts task unit prices without enum tiers and updates the monetary previe
     billingExpr: 'tier("base", 1 + u("seconds") * 2)',
   })
   expect(screen.getByText(/= ¥77$/)).toBeVisible()
+})
+
+it('uses native video examples from the admin snapshot when the public catalog is empty', async () => {
+  const schema: BillingUsageSchema = {
+    tokens: { type: 'number', unit: 'token' },
+    video_input: { enum: ['none', 'video'] },
+  }
+  renderEditor(
+    {
+      name: 'dreamina-seedance-2-0-fast-hc',
+      billingMode: 'tiered_expr',
+      billingExpr:
+        'u("video_input") == "video" ? tier("video", u("tokens") * 22 / 1000000) : tier("base", u("tokens") * 37 / 1000000)',
+    },
+    schema,
+    [{ label: '720p · 5s', facts: { tokens: 108000, video_input: 'none' } }]
+  )
+  await userEvent.click(screen.getByPlaceholderText('Example spec'))
+  await userEvent.click(
+    await screen.findByRole('option', { name: '720p · 5s' })
+  )
+  expect(
+    screen.getByRole('spinbutton', { name: 'Usage · tokens' })
+  ).toHaveValue(108000)
+  expect(screen.getByText(/= \$3.996$/)).toBeVisible()
 })
 
 it('switches currency using the keyboard without changing the saved configuration', async () => {
