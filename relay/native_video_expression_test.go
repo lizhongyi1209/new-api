@@ -20,12 +20,14 @@ import (
 
 func TestNativeVideoExpressionReservesBeforeCallingUpstream(t *testing.T) {
 	for _, tc := range []struct {
-		name, expression, body string
-		wantPriceError         bool
+		name, expression, body, mapping, meter string
+		wantCost                               float64
+		wantPriceError                         bool
 	}{
-		{"valid Seedance", `tier("original", u("tokens") * 37 / 1000000)`, `{"model":"video-alias","content":[{"type":"text","text":"video"}],"duration":5}`, false},
-		{"unknown meter field", `tier("bad", u("credits") * 1)`, `{"model":"video-alias","content":[{"type":"text","text":"video"}],"duration":5}`, true},
-		{"ordinary token expression", `tier("bad", p * 37)`, `{"model":"video-alias","content":[{"type":"text","text":"video"}],"duration":5}`, true},
+		{"valid Seedance", `tier("original", u("tokens") * 37 / 1000000)`, `{"model":"video-alias","content":[{"type":"text","text":"video"}],"duration":5}`, `{"video-alias":"dreamina-seedance-2-0-fast-hc"}`, videoexpr.Seedance, 3.996, false},
+		{"valid H3 Max Turbo 1080P", `u("resolution") == "480P" ? tier("video_480p", u("seconds") * 0.025) : (u("resolution") == "768P" ? tier("video_768p", u("seconds") * 0.040) : tier("video_1080p", u("seconds") * 0.080))`, `{"model":"video-alias","content":[{"type":"text","text":"video"}],"resolution":"1080P","duration":5,"ratio":"16:9"}`, `{"video-alias":"minimax-h3-max-turbo"}`, videoexpr.H3MaxTurbo, 0.4, false},
+		{"unknown meter field", `tier("bad", u("credits") * 1)`, `{"model":"video-alias","content":[{"type":"text","text":"video"}],"duration":5}`, `{"video-alias":"dreamina-seedance-2-0-fast-hc"}`, "", 0, true},
+		{"ordinary token expression", `tier("bad", p * 37)`, `{"model":"video-alias","content":[{"type":"text","text":"video"}],"duration":5}`, `{"video-alias":"dreamina-seedance-2-0-fast-hc"}`, "", 0, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			gin.SetMode(gin.TestMode)
@@ -48,7 +50,7 @@ func TestNativeVideoExpressionReservesBeforeCallingUpstream(t *testing.T) {
 			common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeServiceInferenceVideo)
 			common.SetContextKey(c, constant.ContextKeyOriginalModel, "video-alias")
 			common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://upstream-must-not-be-called.invalid")
-			c.Set("model_mapping", `{"video-alias":"dreamina-seedance-2-0-fast-hc"}`)
+			c.Set("model_mapping", tc.mapping)
 			c.Set("group", "default")
 			info := &relaycommon.RelayInfo{UserId: 97, UserGroup: "default", UsingGroup: "default", OriginModelName: "video-alias", TaskRelayInfo: &relaycommon.TaskRelayInfo{}}
 			_, taskErr := RelayTaskSubmit(c, info)
@@ -62,12 +64,18 @@ func TestNativeVideoExpressionReservesBeforeCallingUpstream(t *testing.T) {
 			assert.NotEqual(t, "model_price_error", taskErr.Code)
 			assert.NotEqual(t, "do_request_failed", taskErr.Code)
 			assert.Contains(t, taskErr.Code, "quota")
-			assert.Equal(t, videoexpr.Seedance, info.TieredBillingSnapshot.NativeVideoMeter)
-			assert.Equal(t, float64(108000), info.TieredBillingSnapshot.UsageFacts["tokens"])
-			assert.Equal(t, "token", info.TieredBillingSnapshot.UsageSchema["tokens"].Unit)
+			assert.Equal(t, tc.meter, info.TieredBillingSnapshot.NativeVideoMeter)
+			if tc.meter == videoexpr.Seedance {
+				assert.Equal(t, float64(108000), info.TieredBillingSnapshot.UsageFacts["tokens"])
+				assert.Equal(t, "token", info.TieredBillingSnapshot.UsageSchema["tokens"].Unit)
+			} else {
+				assert.Equal(t, float64(5), info.TieredBillingSnapshot.UsageFacts["seconds"])
+				assert.Equal(t, "1080P", info.TieredBillingSnapshot.UsageFacts["resolution"])
+				assert.Equal(t, "second", info.TieredBillingSnapshot.UsageSchema["seconds"].Unit)
+			}
 			cost, _, err := billingexpr.RunExprWithRequest(tc.expression, billingexpr.TokenParams{}, info.TieredBillingSnapshot.TaskRequestInput(info.TieredBillingSnapshot.UsageFacts))
 			require.NoError(t, err)
-			assert.InDelta(t, 3.996, cost, 0.000000001)
+			assert.InDelta(t, tc.wantCost, cost, 0.000000001)
 			assert.Equal(t, common.QuotaRound(cost*common.QuotaPerUnit), info.PriceData.Quota)
 		})
 	}

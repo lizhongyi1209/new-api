@@ -1349,12 +1349,12 @@
     </section>
 
     <div class="section-heading" id="minimax-h3">
-      <div><h2>MiniMax H3 / H3 Max 视频生成</h2><p>通过统一异步接口创建任务，并使用任务 ID 查询生成结果。</p></div>
+      <div><h2>MiniMax H3 / H3 Max / H3 Max Turbo 视频生成</h2><p>通过统一异步接口创建任务，并使用任务 ID 查询生成结果。</p></div>
     </div>
 
     <section class="endpoint-doc" id="minimax-h3-create" aria-labelledby="minimax-h3-create-title">
       <article class="reference-panel">
-        <h2 id="minimax-h3-create-title">创建 MiniMax H3 / H3 Max 视频任务</h2>
+        <h2 id="minimax-h3-create-title">创建 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务</h2>
         <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
         <p>创建成功后立即返回 <code>task_id</code>。视频在后台生成，无需保持请求连接。</p>
 
@@ -1363,13 +1363,14 @@
           <tr><th>模型</th><th>支持场景</th><th>分辨率</th><th>时长</th></tr>
           <tr><td><code>MiniMax-H3</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频、图片/视频/音频多模态参考</td><td><code>768P</code>、<code>2K</code></td><td>4-15 秒</td></tr>
           <tr><td><code>MiniMax-H3-MAX</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code></td><td>5-15 秒</td></tr>
+          <tr><td><code>minimax-h3-max-turbo</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code>、<code>1080P</code></td><td>5-15 秒</td></tr>
         </table>
-        <div class="callout info">需要 <code>2K</code> 或多模态参考时请选择 <code>MiniMax-H3</code>；<code>MiniMax-H3-MAX</code> 不支持 <code>reference_*</code> 素材。</div>
+        <div class="callout info">需要 <code>2K</code> 或多模态参考时请选择 <code>MiniMax-H3</code>；H3 Max 和 H3 Max Turbo 不支持 <code>reference_*</code> 素材。需要 <code>1080P</code> 时请选择 <code>minimax-h3-max-turbo</code>。</div>
 
         <h3>请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td>string</td><td>是</td><td><code>MiniMax-H3</code> 或 <code>MiniMax-H3-MAX</code>。</td></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td><code>MiniMax-H3</code>、<code>MiniMax-H3-MAX</code> 或 <code>minimax-h3-max-turbo</code>。</td></tr>
           <tr><td><code>content</code></td><td>array</td><td>是</td><td>提示词和输入素材，至少包含一个非空文本项。</td></tr>
           <tr><td><code>resolution</code></td><td>string</td><td>是</td><td>取值见上方模型能力表，区分大小写。</td></tr>
           <tr><td><code>duration</code></td><td>integer</td><td>是</td><td>输出秒数，取值范围见上方模型能力表。</td></tr>
@@ -1401,7 +1402,7 @@
         </ul>
 
         <h3>计费说明</h3>
-        <p>H3 按输出视频秒数计费；参考视频按输入秒数计费；参考音频免费；参考图片前 5 张免费，超出部分按张计费。H3 Max 仅按输出视频秒数计费。创建任务时会预扣额度，完成后按实际用量结算，最终费用以消费记录为准。</p>
+        <p>H3 按输出视频秒数计费；参考视频按输入秒数计费；参考音频免费；参考图片前 5 张免费，超出部分按张计费。H3 Max 和 H3 Max Turbo 仅按输出视频秒数计费。创建任务时会预扣额度，完成后按实际用量结算，最终费用以消费记录为准。</p>
       </article>
 
       <aside class="example-panel">
@@ -1493,7 +1494,7 @@
           </div>
         </div>
 
-        <div class="callout info">H3 Max 使用相同请求结构，将 <code>model</code> 改为 <code>MiniMax-H3-MAX</code>，并使用 <code>480P</code> 或 <code>768P</code>。单张首帧只需省略示例中的 <code>last_frame</code>。</div>
+        <div class="callout info">H3 Max 使用相同请求结构，将 <code>model</code> 改为 <code>MiniMax-H3-MAX</code>，并使用 <code>480P</code> 或 <code>768P</code>。H3 Max Turbo 将模型改为 <code>minimax-h3-max-turbo</code>，还可使用 <code>1080P</code>。单张首帧只需省略示例中的 <code>last_frame</code>。</div>
 
         <h3>创建响应</h3>
         <pre><code>{
@@ -1510,7 +1511,7 @@
 
     <section class="endpoint-doc" id="minimax-h3-query" aria-labelledby="minimax-h3-query-title">
       <article class="reference-panel">
-        <h2 id="minimax-h3-query-title">查询 MiniMax H3 / H3 Max 视频任务</h2>
+        <h2 id="minimax-h3-query-title">查询 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务</h2>
         <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
         <p>使用创建接口返回的 <code>task_id</code> 查询。建议每 10-20 秒轮询一次，直到任务变为 <code>completed</code> 或 <code>failed</code>。</p>
         <table>

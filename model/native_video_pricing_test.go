@@ -67,7 +67,7 @@ func TestNativeVideoPricingRejectsIncompatibleMappedProviders(t *testing.T) {
 func TestNativeVideoPricingCatalogCoversRecordedFamilies(t *testing.T) {
 	pricingPreviewDatabase(t)
 	for _, channel := range []Channel{
-		{Id: 1, Type: 60, Models: "dreamina-seedance-2-0-hc,dreamina-seedance-2-0-mini-hc,dreamina-seedance-2-5-hc,MiniMax-H3,MiniMax-H3-MAX,grok-imagine-video-1.5"},
+		{Id: 1, Type: 60, Models: "dreamina-seedance-2-0-hc,dreamina-seedance-2-0-mini-hc,dreamina-seedance-2-5-hc,MiniMax-H3,MiniMax-H3-MAX,minimax-h3-max-turbo,grok-imagine-video-1.5"},
 		{Id: 2, Type: 54, Models: "doubao-seedance-2-0-260128,seedance-2.0-fast"},
 		{Id: 3, Type: 61, Models: "seedance-2.0-mini"},
 		{Id: 4, Type: 50, Models: "kling-v3,kling-v3-omni,kling-3.0,kling-v2-6-std-5s-novoice"},
@@ -82,9 +82,13 @@ func TestNativeVideoPricingCatalogCoversRecordedFamilies(t *testing.T) {
 	catalog, conflicts, err := nativeVideoPricingCatalog(DB)
 	require.NoError(t, err)
 	assert.Empty(t, conflicts)
-	assert.Len(t, catalog, 21)
+	assert.Len(t, catalog, 22)
 	assert.Equal(t, videoexpr.Omni, catalog["gemini-omni-flash-preview"].Meter)
 	assert.Equal(t, videoexpr.Kling, catalog["kling-v2-6-motion-t"].Meter)
+	assert.Equal(t, videoexpr.H3MaxTurbo, catalog["minimax-h3-max-turbo"].Meter)
+	assert.Equal(t, []string{"480P", "768P", "1080P"}, catalog["minimax-h3-max-turbo"].Schema["resolution"].Enum)
+	turboExpression := `u("resolution") == "480P" ? tier("video_480p", u("seconds") * 0.025) : (u("resolution") == "768P" ? tier("video_768p", u("seconds") * 0.040) : tier("video_1080p", u("seconds") * 0.080))`
+	require.NoError(t, ValidateModelPricing("minimax-h3-max-turbo", PricingValues{"billing_setting.billing_expr": turboExpression}))
 	// Reading the admin snapshot must not create or rewrite any price options.
 	_, err = GetModelPricingSnapshot(nil)
 	require.NoError(t, err)

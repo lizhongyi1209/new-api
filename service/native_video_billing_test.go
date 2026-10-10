@@ -21,6 +21,7 @@ func TestNativeVideoExpressionSettlesFrozenWalletAndTokenLedger(t *testing.T) {
 		{"seedance fractional cost", videoexpr.Seedance, `tier("original", u("tokens") * 37 / 1000000)`, `{"status":"completed","usage":{"completion_tokens":100000}}`, map[string]any{"tokens": 150000, "resolution": "720p", "video_input": "none"}, 4440},
 		{"seedance zero usage", videoexpr.Seedance, `tier("original", u("tokens") * 37 / 1000000)`, `{"status":"completed","usage":{"completion_tokens":0}}`, map[string]any{"tokens": 150000, "resolution": "720p", "video_input": "none"}, 0},
 		{"precise Kling units with frozen request", videoexpr.Kling, `param("rate") == 2 ? tier("frozen", u("units") * 2) : tier("wrong", u("units") * 99)`, `{"data":{"final_unit_deduction":"1.25"}}`, map[string]any{"units": 5}, 3000},
+		{"H3 Max Turbo 1080P seconds", videoexpr.H3MaxTurbo, `u("resolution") == "1080P" ? tier("1080p", u("seconds") * 0.08) : tier("lower", u("seconds") * 0.04)`, `{"task":{"resolution":"1080P","usage":{"output_seconds":6}}}`, map[string]any{"seconds": float64(5), "resolution": "1080P"}, 576},
 		{"missing usage keeps reservation", videoexpr.Seedance, `tier("original", u("tokens") * 37 / 1000000)`, `{"status":"completed"}`, map[string]any{"tokens": 150000}, 5000},
 		{"negative usage keeps reservation", videoexpr.Kling, `tier("original", u("units") * 2)`, `{"data":{"final_unit_deduction":"-3"}}`, map[string]any{"units": 5}, 5000},
 	} {

@@ -143,7 +143,7 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 		// Resource deductions are unknown until completion. Reserve a conservative
 		// credit estimate without consulting a mutable currency price or ratio.
 		facts["units"] = seconds * 2
-	case H3, H3Max:
+	case H3, H3Max, H3MaxTurbo:
 		if seconds == 0 {
 			seconds = 5
 		}
@@ -273,7 +273,7 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 			}
 			facts["units"] = sum
 		}
-	case H3, H3Max:
+	case H3, H3Max, H3MaxTurbo:
 		if !usage.IsObject() {
 			return nil, fmt.Errorf("upstream MiniMax video usage is missing")
 		}

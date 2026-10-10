@@ -10,14 +10,15 @@ import (
 )
 
 const (
-	Seedance = "seedance"
-	Kling    = "kling"
-	H3       = "minimax_h3"
-	H3Max    = "minimax_h3_max"
-	Grok     = "grok"
-	Omni     = "gemini_omni"
-	Veo      = "veo"
-	Sora     = "sora"
+	Seedance   = "seedance"
+	Kling      = "kling"
+	H3         = "minimax_h3"
+	H3Max      = "minimax_h3_max"
+	H3MaxTurbo = "minimax_h3_max_turbo"
+	Grok       = "grok"
+	Omni       = "gemini_omni"
+	Veo        = "veo"
+	Sora       = "sora"
 )
 
 type Metadata struct {
@@ -40,6 +41,8 @@ func ForModel(channelType int, model string) Metadata {
 			meter = H3
 		case name == "minimax-h3-max":
 			meter = H3Max
+		case name == "minimax-h3-max-turbo":
+			meter = H3MaxTurbo
 		case strings.HasPrefix(name, "grok-imagine") && strings.Contains(name, "video"):
 			meter = Grok
 		}
@@ -106,13 +109,16 @@ func ForMeter(meter string) Metadata {
 	case Kling:
 		meta.Schema["units"] = number("credit", "Kling credit units", "可灵资源包单位")
 		meta.Examples = []jsplugin.UsageExample{{Label: "1 credit", Facts: map[string]any{"units": 1}}, {Label: "3.5 credits", Facts: map[string]any{"units": 3.5}}}
-	case H3, H3Max:
+	case H3, H3Max, H3MaxTurbo:
 		meta.Schema["seconds"] = number("second", "Output video duration", "输出视频时长")
 		meta.Schema["resolution"] = resolution("768P", "2K")
 		meta.Schema["input_images"] = number("count", "Input images", "输入图片数量")
 		meta.Schema["input_video_seconds"] = number("second", "Input video duration", "输入视频时长")
 		if meter == H3Max {
 			meta.Schema["resolution"] = resolution("480P", "768P")
+		}
+		if meter == H3MaxTurbo {
+			meta.Schema["resolution"] = resolution("480P", "768P", "1080P")
 		}
 		meta.Examples = []jsplugin.UsageExample{{Label: "768P · 5s", Facts: map[string]any{"seconds": 5, "resolution": "768P", "input_images": 0, "input_video_seconds": 0}}}
 	case Grok:

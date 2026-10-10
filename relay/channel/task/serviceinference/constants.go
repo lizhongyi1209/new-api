@@ -13,6 +13,7 @@ const seedance25VideoInputPriceRatio = 42.0 / 70.0
 var ModelList = []string{
 	"minimax-h3",
 	"minimax-h3-max",
+	"minimax-h3-max-turbo",
 	"doubao-seedance-2-0-260128-max",
 	"doubao-seedance-2-0-fast-260128-max",
 	"doubao-seedance-2-0-mini-260615-max",
@@ -27,7 +28,7 @@ var ModelList = []string{
 
 func isMiniMaxH3Model(model string) bool {
 	switch strings.ToLower(strings.TrimSpace(model)) {
-	case "minimax-h3", "minimax-h3-max":
+	case "minimax-h3", "minimax-h3-max", "minimax-h3-max-turbo":
 		return true
 	default:
 		return false
@@ -35,7 +36,16 @@ func isMiniMaxH3Model(model string) bool {
 }
 
 func isMiniMaxH3MaxModel(model string) bool {
-	return strings.EqualFold(strings.TrimSpace(model), "minimax-h3-max")
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "minimax-h3-max", "minimax-h3-max-turbo":
+		return true
+	default:
+		return false
+	}
+}
+
+func isMiniMaxH3MaxTurboModel(model string) bool {
+	return strings.EqualFold(strings.TrimSpace(model), "minimax-h3-max-turbo")
 }
 
 const (

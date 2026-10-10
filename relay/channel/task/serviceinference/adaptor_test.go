@@ -1194,6 +1194,41 @@ func TestMiniMaxH3MaxClientRequestMapsAndPrechargesAtOfficialRate(t *testing.T) 
 	assert.Equal(t, "last_frame", payload.Content[1].Role)
 }
 
+func TestMiniMaxH3MaxTurboAccepts1080PForUsageExpressionBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	context := newTaskContextForPath("/v1/video/generations", `{
+		"model":"minimax-h3-max-turbo",
+		"content":[{"type":"text","text":"A neon sign flickers in fog"}],
+		"resolution":"1080P",
+		"duration":5,
+		"ratio":"16:9"
+	}`)
+	info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
+	info.OriginModelName = "minimax-h3-max-turbo"
+
+	adaptor := &TaskAdaptor{}
+	adaptor.Init(info)
+	require.Nil(t, adaptor.ValidateRequestAndSetAction(context, info))
+	info.UpstreamModelName = "minimax-h3-max-turbo"
+	info.PriceData.ModelRatio = 1
+
+	request, err := relaycommon.GetTaskRequest(context)
+	require.NoError(t, err)
+	assert.Equal(t, "1080P", request.EffectiveResolution)
+	assert.Equal(t, 5, request.Duration)
+	assert.Contains(t, ModelList, "minimax-h3-max-turbo")
+	assert.Nil(t, adaptor.EstimateBilling(context, info), "Turbo legacy pricing must not reuse the H3 Max CNY table")
+
+	reader, err := adaptor.BuildRequestBody(context, info)
+	require.NoError(t, err)
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	var payload requestPayload
+	require.NoError(t, common.Unmarshal(data, &payload))
+	assert.Equal(t, "minimax-h3-max-turbo", payload.Model)
+	assert.Equal(t, "1080P", payload.Resolution)
+}
+
 func TestMiniMaxH3BillingUsesOfficialMiniMaxPrices(t *testing.T) {
 	assert.InDelta(t, 4.0, miniMaxH3CostRMB("minimax-h3", 5, 0, 0, "2K"), 1e-12)
 	assert.InDelta(t, 5.8, miniMaxH3CostRMB("minimax-h3", 5, 2, 6, "2K"), 1e-12)

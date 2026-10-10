@@ -58,7 +58,14 @@ func validateMiniMaxH3Payload(request *requestPayload) (*miniMaxH3InputSummary, 
 		return nil, fmt.Errorf("duration must be between %d and %d", minDuration, tokenMartH3MaxDuration)
 	}
 	if isMaxModel {
-		if request.Resolution != "480P" && request.Resolution != "768P" {
+		validResolution := request.Resolution == "480P" || request.Resolution == "768P"
+		if isMiniMaxH3MaxTurboModel(request.Model) {
+			validResolution = validResolution || request.Resolution == "1080P"
+		}
+		if !validResolution {
+			if isMiniMaxH3MaxTurboModel(request.Model) {
+				return nil, fmt.Errorf("resolution must be 480P, 768P, or 1080P for MiniMax-H3-Max-Turbo")
+			}
 			return nil, fmt.Errorf("resolution must be 480P or 768P for MiniMax-H3-Max")
 		}
 	} else if request.Resolution != "768P" && request.Resolution != "2K" {
@@ -200,6 +207,11 @@ func validMiniMaxH3MediaURL(rawURL string, mediaType string) bool {
 }
 
 func miniMaxH3RateRMB(modelName, resolution string) (float64, bool) {
+	// Turbo pricing is configured through its usage expression. Do not apply
+	// the legacy MiniMax CNY price table to this separately priced model.
+	if isMiniMaxH3MaxTurboModel(modelName) {
+		return 0, false
+	}
 	if isMiniMaxH3MaxModel(modelName) {
 		switch strings.ToUpper(strings.TrimSpace(resolution)) {
 		case "480P":
