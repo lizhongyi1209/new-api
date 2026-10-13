@@ -61,6 +61,9 @@ local cached_id = tonumber(redis.call('HGET', KEYS[1], 'Id') or '0')
 if cached_id == tonumber(ARGV[1])
   and redis.call('HEXISTS', KEYS[1], 'RemainQuota') == 1
   and redis.call('HEXISTS', KEYS[1], 'UsedQuota') == 1 then
+	if redis.call('HEXISTS', KEYS[1], 'AllowUserQuotaQuery') == 0 then
+		redis.call('HSET', KEYS[1], 'AllowUserQuotaQuery', ARGV[18])
+	end
 	redis.call('EXPIRE', KEYS[1], ARGV[16])
   return 2
 end
@@ -70,7 +73,8 @@ redis.call('HSET', KEYS[1],
   'CreatedTime', ARGV[5], 'AccessedTime', ARGV[6], 'ExpiredTime', ARGV[7],
   'UnlimitedQuota', ARGV[8], 'ModelLimitsEnabled', ARGV[9], 'ModelLimits', ARGV[10],
   'AllowIps', ARGV[11], 'Group', ARGV[12], 'CrossGroupRetry', ARGV[13],
-	'AutoGroups', ARGV[14], 'RemainQuota', ARGV[15], 'UsedQuota', ARGV[17])
+	'AutoGroups', ARGV[14], 'RemainQuota', ARGV[15], 'UsedQuota', ARGV[17],
+	'AllowUserQuotaQuery', ARGV[18])
 redis.call('EXPIRE', KEYS[1], ARGV[16])
 return 1`
 
@@ -82,6 +86,7 @@ return 1`
 		strconv.FormatBool(token.UnlimitedQuota), strconv.FormatBool(token.ModelLimitsEnabled),
 		token.ModelLimits, allowIps, token.Group, strconv.FormatBool(token.CrossGroupRetry),
 		token.AutoGroups, token.RemainQuota, tokenCacheTTLSeconds(), token.UsedQuota,
+		strconv.FormatBool(token.AllowUserQuotaQuery),
 	).Int()
 }
 
