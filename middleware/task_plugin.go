@@ -78,11 +78,12 @@ func PrepareTaskPluginRoute() gin.HandlerFunc {
 		if err != nil {
 			logger.LogWarn(
 				c,
-				"task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_request",
-				generation,
-				pinned.Plugin.Meta.Key,
+				common.LogText("task_plugin subsystem=route event=prepare_rejected generation=%d plugin=%q stage=request_decode reason=invalid_request err=%q",
+					generation,
+					pinned.Plugin.Meta.Key,
+					err.Error()),
 			)
-			status := http.StatusBadRequest
+			status := invalidRequestStatus(err)
 			if errors.Is(err, errTaskPluginUnsupportedMediaType) {
 				status = http.StatusUnsupportedMediaType
 			}
@@ -327,11 +328,7 @@ func PinTaskPluginEndpoint() gin.HandlerFunc {
 		modelRequest, err := getModelFromRequest(c)
 		if err != nil {
 			if _, _, protocolPath := pluginruntime.LookupHostProtocolOperation(c.Request.Method, c.Request.URL.Path); protocolPath {
-				statusCode := http.StatusBadRequest
-				if common.IsRequestBodyTooLargeError(err) {
-					statusCode = http.StatusRequestEntityTooLarge
-				}
-				abortWithOpenAiMessage(c, statusCode, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+				abortWithOpenAiMessage(c, invalidRequestStatus(err), i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 				return
 			}
 			c.Next()
