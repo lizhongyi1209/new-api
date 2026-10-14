@@ -36,6 +36,18 @@ func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing
 		{"POST", "/doubao/api/v3/contents/generations/tasks", "doubao", jsplugin.RouteTypeSubmit, "", "taskCreated"},
 		{"GET", "/doubao/api/v3/contents/generations/tasks/:task_id", "doubao", jsplugin.RouteTypeQuery, "", "taskStatus"},
 		{"POST", "/doubao/api/v3/images/generations", "doubao", jsplugin.RouteTypeSubmit, "", "imageCreated"},
+		{"POST", "/hailuo/v1/video_generation", "hailuo", jsplugin.RouteTypeSubmit, "", "taskCreated"},
+		{"GET", "/hailuo/v1/query/video_generation/:task_id", "hailuo", jsplugin.RouteTypeQuery, "", "taskStatus"},
+		{"POST", "/hailuo/v2/video_generation", "hailuo", jsplugin.RouteTypeSubmit, "", "taskCreated"},
+		{"GET", "/hailuo/v2/query/video_generation/:task_id", "hailuo", jsplugin.RouteTypeQuery, "", "h3TaskStatus"},
+		{"POST", "/vidu/ent/v2/text2video", "vidu", jsplugin.RouteTypeSubmit, "", "taskCreated"},
+		{"POST", "/vidu/ent/v2/img2video", "vidu", jsplugin.RouteTypeSubmit, "", "taskCreated"},
+		{"POST", "/vidu/ent/v2/start-end2video", "vidu", jsplugin.RouteTypeSubmit, "", "taskCreated"},
+		{"POST", "/vidu/ent/v2/reference2video", "vidu", jsplugin.RouteTypeSubmit, "", "taskCreated"},
+		{"GET", "/vidu/ent/v2/tasks/:task_id/creations", "vidu", jsplugin.RouteTypeQuery, "", "taskStatus"},
+		{"POST", "/google/v1beta/models/:model", "google", jsplugin.RouteTypeSubmit, "", "operation"},
+		{"GET", "/google/v1beta/models/:model/operations/:task_id", "google", jsplugin.RouteTypeQuery, "", "operation"},
+		{"POST", "/vertex-ai/v1/projects/:project/locations/:location/publishers/google/models/:model", "vertex-ai", jsplugin.RouteTypeDynamic, "", "operation"},
 	}
 	for _, expected := range routes {
 		t.Run(expected.method+" "+expected.path, func(t *testing.T) {
@@ -248,6 +260,26 @@ func TestBuiltInPluginsAddressNewAPIUpstreamOnNativeRoutes(t *testing.T) {
 			vendorQuery:      "/v1/videos/tid",
 			gatewayQuery:     "/v1/videos/tid",
 			content:          "/v1/videos/tid/content",
+		},
+		{
+			key:              "hailuo",
+			driver:           map[string]any{"action": "text_to_video", "model": "MiniMax-Hailuo-2.3", "upstreamModel": "MiniMax-Hailuo-2.3", "requestBody": map[string]any{"model": "MiniMax-Hailuo-2.3", "prompt": "a cat"}},
+			vendorKey:        "vendor-key",
+			vendorAuthPrefix: "Bearer vendor-key",
+			vendorSubmit:     "/v1/video_generation",
+			gatewaySubmit:    "/hailuo/v1/video_generation",
+			vendorQuery:      "/v1/query/video_generation?task_id=tid",
+			gatewayQuery:     "/hailuo/v1/query/video_generation/tid",
+		},
+		{
+			key:              "vidu",
+			driver:           map[string]any{"action": "text_to_video", "model": "viduq2", "upstreamModel": "viduq2", "requestBody": map[string]any{"model": "viduq2", "prompt": "a cat"}},
+			vendorKey:        "vendor-key",
+			vendorAuthPrefix: "Token vendor-key",
+			vendorSubmit:     "/ent/v2/text2video",
+			gatewaySubmit:    "/vidu/ent/v2/text2video",
+			vendorQuery:      "/ent/v2/tasks/tid/creations",
+			gatewayQuery:     "/vidu/ent/v2/tasks/tid/creations",
 		},
 	}
 	variants := []struct {
