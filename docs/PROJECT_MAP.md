@@ -264,6 +264,7 @@ Aliases: 图片数量, 图片预扣费, image_count, parameters.n, image reserva
 - Public routes: `/v1/images/generations`, `/v1/images/edits` in `router/relay-router.go`; dispatch: `controller/relay.go`.
 - Request quantities and provider parameter validation: `dto/openai_image.go`, `relay/helper/valid_request.go`.
 - Final outbound quantity, overrides and retry preparation: `relay/image_handler.go`; Ali forwarding: `relay/channel/ali/image.go`, `relay/channel/ali/image_wan.go`.
+- Sub2API multipart image-edit compatibility reuses the OpenAI form conversion while retaining Sub2API routing and authentication: `relay/channel/sub2api/adaptor.go`; regression: `relay/channel/sub2api/adaptor_test.go`.
 - Temporary GPT Image edit 400 diagnostics: `service/gpt_image_edit_error_capture.go` records a bounded, redacted upstream multipart snapshot under the administrator error log, gated by the UTC deadline in `docker-compose.yml`; error handling entry: `service/relay_error.go`.
 - Per-attempt reservation: `service/image_billing.go`; atomic wallet reservation and full refunds: `service/billing_session.go`, `service/funding_source.go`.
 - Expression quantity input and settlement: `relay/helper/billing_expr_request.go`, `pkg/billingexpr/`, `service/tiered_settle.go`.
