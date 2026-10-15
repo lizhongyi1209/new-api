@@ -29,3 +29,18 @@ func TestRespondRelayErrorReturnsRawUpstreamResponse(t *testing.T) {
 	assert.Equal(t, "application/json", result.Header.Get("Content-Type"))
 	assert.Equal(t, string(rawBody), recorder.Body.String())
 }
+
+func TestRespondRelayErrorMasksConfiguredAddressInRawUpstreamResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Set("channel_base_url", "https://private.example.com")
+	rawBody := []byte(`{"error":{"message":"request to https://private.example.com/v1/images failed; see https://docs.example.org/errors"}}`)
+	relayErr := types.NewOpenAIError(errors.New("normalized internal error"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
+	relayErr.SetRawUpstreamResponse(http.StatusBadRequest, "application/json", rawBody)
+
+	respondRelayError(c, ktypes.RelayFormatOpenAI, nil, relayErr, "request-id")
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.JSONEq(t, `{"error":{"message":"request to https://***.com/***/*** failed; see https://docs.example.org/errors"}}`, recorder.Body.String())
+}

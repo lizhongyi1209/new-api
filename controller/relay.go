@@ -240,23 +240,25 @@ func CountClaudeTokens(c *gin.Context) {
 }
 
 func respondRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *websocket.Conn, relayErr *types.NewAPIError, requestId string) {
+	upstreamURLs := common.UpstreamAddresses(c)
 	if raw := relayErr.GetRawUpstreamResponse(); raw != nil {
-		c.Data(raw.StatusCode, raw.ContentType, raw.Body)
+		body := []byte(common.MaskSensitiveInfo(string(raw.Body), upstreamURLs...))
+		c.Data(raw.StatusCode, raw.ContentType, body)
 		return
 	}
 
 	relayErr.SetMessage(common.MessageWithRequestId(relayErr.Error(), requestId))
 	switch relayFormat {
 	case types.RelayFormatOpenAIRealtime:
-		helper.WssError(c, ws, relayErr.ToOpenAIError())
+		helper.WssError(c, ws, relayErr.ToOpenAIError(upstreamURLs...))
 	case types.RelayFormatClaude:
 		c.JSON(relayErr.StatusCode, gin.H{
 			"type":  "error",
-			"error": relayErr.ToClaudeError(),
+			"error": relayErr.ToClaudeError(upstreamURLs...),
 		})
 	default:
 		c.JSON(relayErr.StatusCode, gin.H{
-			"error": relayErr.ToOpenAIError(),
+			"error": relayErr.ToOpenAIError(upstreamURLs...),
 		})
 	}
 }
