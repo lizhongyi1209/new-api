@@ -48,7 +48,7 @@ it('shows every export option and explanation in Chinese when the interface lang
     within(dialog).getByText('导出筛选后的记录，用于分析或账单对账。')
   ).toBeVisible()
   expect(
-    within(dialog).getByText('单次最多导出 31 天、50,000 条记录。')
+    within(dialog).getByText('单次最多导出 365 天、50,000 条记录。')
   ).toBeVisible()
   expect(within(dialog).getByText('导出格式')).toBeVisible()
   expect(within(dialog).getByText('适合电子表格和快速分析')).toBeVisible()

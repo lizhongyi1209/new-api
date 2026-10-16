@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useDebounce } from '@/hooks'
+import { useStatus } from '@/hooks/use-status'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -78,6 +79,7 @@ interface UsageLogsActionsProps {
 
 export function UsageLogsActions(props: UsageLogsActionsProps) {
   const { t } = useTranslation()
+  const { status } = useStatus()
   const [open, setOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [format, setFormat] = useState<UsageLogExportFormat>('csv')
@@ -89,6 +91,8 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
   const defaultRange = useMemo(() => getDefaultTimeRange(), [])
   const [start, setStart] = useState(defaultRange.start)
   const [end, setEnd] = useState(defaultRange.end)
+  const maxRangeDays = status?.log_max_range_days || 365
+  const maxRangeMs = maxRangeDays * 24 * 60 * 60 * 1000
 
   useEffect(() => {
     if (!open) return
@@ -127,7 +131,7 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
       props.isAdmin &&
       start.getTime() > 0 &&
       end.getTime() >= start.getTime() &&
-      end.getTime() - start.getTime() <= 31 * 24 * 60 * 60 * 1000,
+      end.getTime() - start.getTime() <= maxRangeMs,
     staleTime: 30_000,
   })
   const usernameOptions = useMemo(
@@ -152,8 +156,12 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
       toast.error(t('End time must be after start time'))
       return
     }
-    if (end.getTime() - start.getTime() > 31 * 24 * 60 * 60 * 1000) {
-      toast.error(t('Export time range cannot exceed 31 days'))
+    if (end.getTime() - start.getTime() > maxRangeMs) {
+      toast.error(
+        t('The time range cannot exceed {{days}} days', {
+          days: maxRangeDays,
+        })
+      )
       return
     }
 
@@ -195,7 +203,21 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
     } finally {
       setExporting(false)
     }
-  }, [end, format, group, model, props.isAdmin, start, t, token, username])
+  }, [
+    end,
+    format,
+    group,
+    maxRangeDays,
+    maxRangeMs,
+    model,
+    props.isAdmin,
+    start,
+    t,
+    token,
+    username,
+  ])
+
+  if (!props.isAdmin && status?.log_export_enabled === false) return null
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -242,7 +264,10 @@ export function UsageLogsActions(props: UsageLogsActionsProps) {
               }}
             />
             <p className='text-muted-foreground text-xs'>
-              {t('A single export can cover up to 31 days and 50,000 records.')}
+              {t(
+                'A single export can cover up to {{days}} days and 50,000 records.',
+                { days: maxRangeDays }
+              )}
             </p>
           </div>
 

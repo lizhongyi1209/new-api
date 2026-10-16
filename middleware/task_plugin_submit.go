@@ -36,7 +36,11 @@ func PrepareTaskPluginSubmit() gin.HandlerFunc {
 			return
 		}
 		var body map[string]any
-		if err := common.UnmarshalBodyReusable(c, &body); err != nil || body == nil {
+		if err := common.UnmarshalBodyReusable(c, &body); err != nil {
+			c.AbortWithStatusJSON(invalidRequestStatus(err), gin.H{"error": gin.H{"message": err.Error(), "type": "invalid_request_error"}})
+			return
+		}
+		if body == nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "invalid JSON request body", "type": "invalid_request_error"}})
 			return
 		}

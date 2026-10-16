@@ -2,10 +2,16 @@ package controller
 
 import (
 	"bytes"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xuri/excelize/v2"
@@ -50,6 +56,42 @@ func TestBuildUsageLogStatementContainsNumericTokensAndTotal(t *testing.T) {
 	formula, err := file.GetCellFormula("Statement", "H6")
 	require.NoError(t, err)
 	assert.Equal(t, "SUM(H5:H5)", formula)
+}
+
+func TestParseUsageLogExportRangeUsesConfiguredLimit(t *testing.T) {
+	setting := operation_setting.GetLogSetting()
+	previous := *setting
+	setting.MaxRangeDays = 2
+	t.Cleanup(func() { *setting = previous })
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(
+		http.MethodGet,
+		fmt.Sprintf("/api/log/export?start_timestamp=%d&end_timestamp=%d", 1, 3*24*60*60+1),
+		nil,
+	)
+
+	_, _, ok := parseUsageLogExportRange(ctx)
+
+	assert.False(t, ok)
+	assert.Contains(t, recorder.Body.String(), "the time range cannot exceed 2 days")
+}
+
+func TestExportUserLogsRespectsUserExportSetting(t *testing.T) {
+	setting := operation_setting.GetLogSetting()
+	previous := *setting
+	setting.UserExportEnabled = false
+	t.Cleanup(func() { *setting = previous })
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/log/self/export", nil)
+	ctx.Set("role", common.RoleCommonUser)
+
+	ExportUserLogs(ctx)
+
+	assert.Contains(t, recorder.Body.String(), "Log export is disabled")
 }
 
 func mustCellValue(t *testing.T, file *excelize.File, sheet string, cell string) string {

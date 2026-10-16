@@ -11,16 +11,14 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 )
 
-const (
-	usageLogExportMaxRows  = 50000
-	usageLogExportMaxRange = 31 * 24 * time.Hour
-)
+const usageLogExportMaxRows = 50000
 
 var usageLogExportHeaders = []string{
 	"Time", "Type", "Username", "Group", "Model", "Input Tokens", "Output Tokens",
@@ -33,6 +31,10 @@ func ExportAllLogs(c *gin.Context) {
 }
 
 func ExportUserLogs(c *gin.Context) {
+	if c.GetInt("role") < common.RoleAdminUser && !operation_setting.GetLogSetting().UserExportEnabled {
+		common.ApiErrorMsg(c, "Log export is disabled")
+		return
+	}
 	exportUsageLogs(c, false)
 }
 
@@ -47,8 +49,9 @@ func parseUsageLogExportRange(c *gin.Context) (int64, int64, bool) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "valid end_timestamp is required"})
 		return 0, 0, false
 	}
-	if time.Duration(endTimestamp-startTimestamp)*time.Second > usageLogExportMaxRange {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "export time range cannot exceed 31 days"})
+	maxRangeSeconds := operation_setting.GetLogSetting().MaxRangeSeconds()
+	if endTimestamp-startTimestamp > maxRangeSeconds {
+		common.ApiError(c, fmt.Errorf("the time range cannot exceed %d days", maxRangeSeconds/(24*60*60)))
 		return 0, 0, false
 	}
 	return startTimestamp, endTimestamp, true
@@ -79,6 +82,18 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 		return
 	}
 
+	release, acquired, err := service.AcquireLogExportLock(c.GetInt("id"))
+	if err != nil {
+		common.SysError(fmt.Sprintf("failed to lock log export: %s", err.Error()))
+		common.ApiErrorMsg(c, "Failed to export logs")
+		return
+	}
+	if !acquired {
+		common.ApiErrorMsg(c, "Another log export is running. Try again after it finishes.")
+		return
+	}
+	defer release()
+
 	logType, _ := strconv.Atoi(c.Query("type"))
 	modelName := c.Query("model_name")
 	tokenName := c.Query("token_name")
@@ -88,7 +103,6 @@ func exportUsageLogs(c *gin.Context, isAdmin bool) {
 
 	var logs []*model.Log
 	var total int64
-	var err error
 	if isAdmin {
 		channel, _ := strconv.Atoi(c.Query("channel"))
 		logs, total, err = model.GetAllLogs(

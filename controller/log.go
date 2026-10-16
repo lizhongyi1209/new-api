@@ -1,14 +1,33 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
+
+// limitLogTimeRange keeps regular-user log and dashboard queries within the
+// configured maximum range. A missing start reaches back the whole range.
+func limitLogTimeRange(startTimestamp int64, endTimestamp int64) (int64, error) {
+	maxRange := operation_setting.GetLogSetting().MaxRangeSeconds()
+	end := common.GetTimestamp()
+	if endTimestamp != 0 {
+		end = min(end, endTimestamp)
+	}
+	if startTimestamp == 0 {
+		return end - maxRange, nil
+	}
+	if end-startTimestamp > maxRange {
+		return 0, fmt.Errorf("the time range cannot exceed %d days", maxRange/(24*60*60))
+	}
+	return startTimestamp, nil
+}
 
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
@@ -44,6 +63,14 @@ func GetUserLogs(c *gin.Context) {
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if c.GetInt("role") < common.RoleAdminUser {
+		var err error
+		startTimestamp, err = limitLogTimeRange(startTimestamp, endTimestamp)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
 	group := c.Query("group")
@@ -141,6 +168,14 @@ func GetLogsSelfStat(c *gin.Context) {
 	logType, _ := strconv.Atoi(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	if c.GetInt("role") < common.RoleAdminUser {
+		var err error
+		startTimestamp, err = limitLogTimeRange(startTimestamp, endTimestamp)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	tokenName := c.Query("token_name")
 	modelName := c.Query("model_name")
 	channel, _ := strconv.Atoi(c.Query("channel"))
