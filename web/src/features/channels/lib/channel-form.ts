@@ -276,6 +276,7 @@ export const channelFormSchema = z
     // Type-specific settings (stored in settings JSON)
     is_enterprise_account: z.boolean().optional(), // OpenRouter specific
     vertex_key_type: z.enum(['json', 'api_key']).optional(), // Vertex AI specific
+    vertex_project_id: z.string().optional(), // Vertex AI specific (api_key mode only)
     aws_key_type: z.enum(['ak_sk', 'api_key']).optional(), // AWS specific
     azure_responses_version: z.string().optional(), // Azure specific
     image_output_strategy: z
@@ -480,6 +481,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   // Type-specific settings
   is_enterprise_account: false,
   vertex_key_type: 'json',
+  vertex_project_id: '',
   aws_key_type: 'ak_sk',
   azure_responses_version: '',
   // Field passthrough controls
@@ -552,6 +554,7 @@ export function transformChannelToFormDefaults(
 
   // Parse type-specific settings from settings field
   let vertexKeyType: 'json' | 'api_key' = 'json'
+  let vertexProjectId = ''
   let azureResponsesVersion = ''
   let imageOutputStrategy: ChannelFormValues['image_output_strategy'] =
     'passthrough'
@@ -576,6 +579,7 @@ export function transformChannelToFormDefaults(
     try {
       const parsed = JSON.parse(channel.settings)
       vertexKeyType = parsed.vertex_key_type || 'json'
+      vertexProjectId = parsed.vertex_project_id || ''
       azureResponsesVersion = parsed.azure_responses_version || ''
       if (
         ['oss', 'r2', 'local_temp', 'local_temp_cf', 'local_temp_esa'].includes(
@@ -645,6 +649,7 @@ export function transformChannelToFormDefaults(
     // Type-specific settings
     is_enterprise_account: isEnterpriseAccount,
     vertex_key_type: vertexKeyType,
+    vertex_project_id: vertexProjectId,
     azure_responses_version: azureResponsesVersion,
     image_output_strategy: imageOutputStrategy,
     gemini_file_data_enabled: geminiFileDataEnabled,
@@ -727,8 +732,15 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   // Add vertex_key_type for Vertex AI channels (type 41)
   if (formData.type === 41) {
     settingsObj.vertex_key_type = formData.vertex_key_type || 'json'
-  } else if ('vertex_key_type' in settingsObj) {
+    const vertexProjectId = formData.vertex_project_id?.trim()
+    if (settingsObj.vertex_key_type === 'api_key' && vertexProjectId) {
+      settingsObj.vertex_project_id = vertexProjectId
+    } else {
+      delete settingsObj.vertex_project_id
+    }
+  } else {
     delete settingsObj.vertex_key_type
+    delete settingsObj.vertex_project_id
   }
 
   // Add azure_responses_version for Azure channels (type 3)
