@@ -200,6 +200,7 @@ Aliases: 渠道创建/编辑, 草稿模型发现, 内联选模, 分类选模, `/
 - Inline selection: `web/src/features/channels/components/channel-model-discovery.tsx`, `components/upstream-model-selection.tsx`, `lib/model-categories.ts` under that feature; changes update the form only. Connection changes/close invalidate and abort browser discovery without discarding selected models.
 - Authorization: `router/channel-router.go`; unsaved POST discovery retains ChannelSensitiveWrite, saved GET discovery retains ChannelOperate. Frontend transport: `web/src/features/channels/api.ts`.
 - Provider-specific address hints: read-authorized `GET /api/channel/default_base_urls` in `router/channel-router.go` / `controller/channel.go` returns current `constant.ChannelBaseURLs` without empty entries. Default frontend uses placeholders only and falls back locally on failure. Regression: `controller/channel_defaults_test.go`, `router/channel_router_test.go`.
+- Vertex API-key mode stores its optional Google project in `settings.vertex_project_id`; the DTO is `relaykit/dto/channel_settings.go`, request URL/header handling is in `relay/channel/vertex/adaptor.go`, and the form mapping is in `web/src/features/channels/lib/channel-form.ts`.
 - Mapping direction/help and visual/JSON drafts: `web/src/features/channels/components/model-mapping-editor.tsx`; its controlled-value feedback preserves unfinished rows, while external resets replace the mapping. Regression: `components/model-mapping-editor.test.tsx`, `components/drawers/channel-configuration.test.tsx` under the channel feature.
 - POST preview builder: `controller/channel_model_preview.go`; handler `controller/channel.go`; shared model-list routing/HTTP behavior `controller/channel_upstream_update.go`. Draft optional fields distinguish omitted from explicit empty values; detached previews retain unknown settings, use enabled saved keys without advancing polling, and cannot refresh saved Codex credentials.
 - Regression entries: `controller/channel_model_preview_test.go`, `web/src/features/channels/components/__tests__/upstream-model-selection.test.tsx`, `web/src/features/channels/lib/__tests__/channel-type-options.test.ts`.
@@ -217,6 +218,7 @@ Aliases: 状态请求去重, status dedup, 日志分组筛选, log group filter.
 
 - Shared cached status query and consumers: `web/src/lib/status-query.ts`, `web/src/hooks/use-status.ts`, `web/src/hooks/use-system-config.ts`.
 - Group-aware log query and filter UI: `model/log.go`, `controller/log.go`, `web/src/features/usage-logs/components/common-logs-filter-bar.tsx`.
+- Usage-log exports: routes in `router/api-router.go`, format generation in `controller/log_export.go`, per-user concurrency locking in `service/log_export.go`, and limits in `setting/operation_setting/log_setting.go`. The existing CSV/JSON/XLSX frontend is `web/src/features/usage-logs/components/usage-logs-actions.tsx`; administrators configure export access and maximum ranges in `web/src/features/system-settings/maintenance/log-settings-section.tsx`.
 
 ## System updates, quota details, and mobile filters
 
