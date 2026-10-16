@@ -35,29 +35,26 @@ const chainedExpression =
   'len <= 32000 && c <= 200 ? tier("discount", p * 0.8 + c * 2 + cr * 0.16 + cc * 0.17) : len <= 32000 ? tier("short", p * 0.8 + c * 8 + cr * 0.16 + cc * 0.17) : len <= 128000 ? tier("mid", p * 1.2 + c * 16 + cr * 0.16 + cc * 0.17) : tier("long", p * 2.4 + c * 24 + cr * 0.16 + cc * 0.17)'
 
 test.each([
-  ['zhCN', '星期一'],
-  ['zhTW', '星期一'],
-  ['en', 'Monday'],
-  ['fr', 'lundi'],
-  ['ru', 'понедельник'],
-  ['ja', '月曜日'],
-  ['vi', 'Thứ Hai'],
+  ['zhCN', '星期一', 'en', 'Monday'],
+  ['en', 'Monday', 'zhCN', '星期一'],
   [
     'invalid_locale',
     new Intl.DateTimeFormat(undefined, {
       weekday: 'long',
       timeZone: 'UTC',
     }).format(new Date('2026-01-05T00:00:00Z')),
+    'zhCN',
+    '星期一',
   ],
 ])(
   'formats weekdays for %s and updates after a language switch',
-  async (language, monday) => {
+  async (language, monday, nextLanguage, nextMonday) => {
     const translations = createInstance()
     await translations.init({
       lng: language,
       fallbackLng: 'en',
       resources: Object.fromEntries(
-        ['en', 'fr', language].map((code) => [
+        ['en', 'zhCN', language].map((code) => [
           code,
           { translation: { 'Condition value': 'Condition value' } },
         ])
@@ -76,10 +73,10 @@ test.each([
     expect(
       screen.getByRole('combobox', { name: 'Condition value' })
     ).toHaveTextContent(monday)
-    await act(() => translations.changeLanguage('fr'))
+    await act(() => translations.changeLanguage(nextLanguage))
     expect(
       screen.getByRole('combobox', { name: 'Condition value' })
-    ).toHaveTextContent('lundi')
+    ).toHaveTextContent(nextMonday)
     expect(onChange).not.toHaveBeenCalled()
   }
 )

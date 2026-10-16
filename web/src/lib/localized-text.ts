@@ -26,10 +26,9 @@ export type LocalizedTextValue = string | Record<string, string>
 /**
  * Resolve LocalizedText against an i18next language code.
  *
- * This project's `i18n.language` values are `en` / `zhCN` / `zhTW` / `fr` /
- * `ru` / `ja` / `vi` (see `web/src/i18n/config.ts`). Backend keys are BCP-47
- * (`en`, `zh`, `zh-TW`). Matching is case-insensitive and also accepts
- * hyphenated tags (`zh-TW`, `en-US`) so callers can pass either shape.
+ * This project's supported `i18n.language` values are `en` / `zhCN` (see
+ * `web/src/i18n/config.ts`). Backend keys are BCP-47 tags. Matching remains
+ * generic and case-insensitive so marketplace metadata can be resolved safely.
  *
  * Fallback: exact tag → primary subtag → `en` → first key in sorted order → `''`.
  */
