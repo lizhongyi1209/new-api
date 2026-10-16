@@ -85,6 +85,7 @@ func TestNativeVideoPricingCatalogCoversRecordedFamilies(t *testing.T) {
 	assert.Len(t, catalog, 22)
 	assert.Equal(t, videoexpr.Omni, catalog["gemini-omni-flash-preview"].Meter)
 	assert.Equal(t, videoexpr.Kling, catalog["kling-v2-6-motion-t"].Meter)
+	assert.Equal(t, []string{"480p", "720p", "1080p"}, catalog["dreamina-seedance-2-5-hc"].Schema["resolution"].Enum)
 	assert.Equal(t, videoexpr.H3MaxTurbo, catalog["minimax-h3-max-turbo"].Meter)
 	assert.Equal(t, []string{"480P", "768P", "1080P"}, catalog["minimax-h3-max-turbo"].Schema["resolution"].Enum)
 	turboExpression := `u("resolution") == "480P" ? tier("video_480p", u("seconds") * 0.025) : (u("resolution") == "768P" ? tier("video_768p", u("seconds") * 0.040) : tier("video_1080p", u("seconds") * 0.080))`

@@ -48,6 +48,13 @@ Mini 对应：
 u("video_input") == "video" ? tier("reference_video", u("tokens") * 14 / 1000000) : tier("standard", u("tokens") * 23 / 1000000)
 ```
 
+Seedance 2.5 支持 480p、720p、1080p；480p/720p 为 70/42，1080p 为 77/46
+（依次为无视频输入/含视频输入）：
+
+```text
+u("resolution") == "1080p" ? (u("video_input") == "video" ? tier("1080p_reference_video", u("tokens") * 46 / 1000000) : tier("1080p_standard", u("tokens") * 77 / 1000000)) : (u("video_input") == "video" ? tier("reference_video", u("tokens") * 42 / 1000000) : tier("standard", u("tokens") * 70 / 1000000))
+```
+
 `video_input` 的值是 `none` / `video`，表示提交时是否含参考视频。普通版和 2.5 可以同样按
 `resolution` 和 `video_input` 分支设置；各分辨率的价格应按实际供应商账单填写。
 表达式模式不会叠加旧的 `ModelRatio` 或 `video_input` 倍率。分组倍率仍作用一次，

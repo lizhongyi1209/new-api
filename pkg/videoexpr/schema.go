@@ -93,9 +93,14 @@ func ForModel(channelType int, model string) Metadata {
 			meta.AutomaticDurationSeconds = 30
 		}
 	}
-	if meter == Seedance && (strings.Contains(name, "fast") || strings.Contains(name, "mini")) {
+	if meter == Seedance {
 		field := meta.Schema["resolution"]
-		field.Enum = []string{"480p", "720p"}
+		switch {
+		case strings.Contains(name, "seedance-2-5"):
+			field.Enum = []string{"480p", "720p", "1080p"}
+		case strings.Contains(name, "fast"), strings.Contains(name, "mini"):
+			field.Enum = []string{"480p", "720p"}
+		}
 		meta.Schema["resolution"] = field
 	}
 	return meta

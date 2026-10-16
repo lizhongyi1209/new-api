@@ -66,6 +66,25 @@ func TestSeedanceRequestEstimateIncludesReferenceVideo(t *testing.T) {
 	assert.Equal(t, "none", facts["video_input"])
 }
 
+func TestSeedanceResolutionSchemaMatchesModelFamily(t *testing.T) {
+	tests := []struct {
+		name  string
+		model string
+		want  []string
+	}{
+		{name: "2.0 standard", model: "dreamina-seedance-2-0-260128-max", want: []string{"480p", "720p", "1080p", "4k"}},
+		{name: "2.0 fast", model: "dreamina-seedance-2-0-fast-260128-max", want: []string{"480p", "720p"}},
+		{name: "2.0 mini", model: "dreamina-seedance-2-0-mini-260615-max", want: []string{"480p", "720p"}},
+		{name: "2.5", model: "dreamina-seedance-2-5-260628-max", want: []string{"480p", "720p", "1080p"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			meta := ForModel(constant.ChannelTypeServiceInferenceVideo, tt.model)
+			assert.Equal(t, tt.want, meta.Schema["resolution"].Enum)
+		})
+	}
+}
+
 func TestSeedanceAutomaticDurationUsesMappedModelMaximum(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
