@@ -34,6 +34,8 @@ auth.user_info_invalid: "無權進行此操作，使用者資訊無效"
 auth.user_id_not_provided: "無權進行此操作，未提供 New-Api-User"
 auth.user_id_format_error: "無權進行此操作，New-Api-User 格式錯誤"
 auth.user_id_mismatch: "無權進行此操作，New-Api-User 與登入使用者不匹配"
+auth.client_ip_unresolved: "無法解析用戶端 IP 位址"
+auth.token_ip_not_allowed: "您的 IP 不在令牌允許存取的清單中"
 auth.user_banned: "使用者已被封禁"
 auth.insufficient_privilege: "無權進行此操作，權限不足"
 

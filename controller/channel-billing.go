@@ -504,7 +504,7 @@ func updateChannelNewAPIBalance(channel *model.Channel) (float64, error) {
 		remaining = min(remaining, userQuota.TotalAvailable)
 	}
 	if math.IsInf(remaining, 1) {
-		return 0, common.NewMessage(`The upstream key has unlimited quota. Turn on "Allow querying user quota" for this key on the upstream to see the real balance.`)
+		return 0, errors.New(`The upstream key has unlimited quota. Turn on "Allow querying user quota" for this key on the upstream to see the real balance.`)
 	}
 
 	body, err = GetResponseBody("GET", baseURL+"/api/status", channel, nil)

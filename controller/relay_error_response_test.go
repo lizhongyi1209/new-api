@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	ktypes "github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -34,7 +36,7 @@ func TestRespondRelayErrorMasksConfiguredAddressInRawUpstreamResponse(t *testing
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Set("channel_base_url", "https://private.example.com")
+	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://private.example.com")
 	rawBody := []byte(`{"error":{"message":"request to https://private.example.com/v1/images failed; see https://docs.example.org/errors"}}`)
 	relayErr := types.NewOpenAIError(errors.New("normalized internal error"), types.ErrorCodeBadResponseStatusCode, http.StatusBadGateway)
 	relayErr.SetRawUpstreamResponse(http.StatusBadRequest, "application/json", rawBody)

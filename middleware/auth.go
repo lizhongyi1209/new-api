@@ -330,12 +330,18 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		if allowIps := token.GetIpLimits(); len(allowIps) > 0 {
 			ip := net.ParseIP(c.ClientIP())
 			if ip == nil {
-				common.ApiErrorStatus(c, http.StatusForbidden, errors.New(common.TranslateMessage(c, i18n.MsgAuthClientIPUnresolved)))
+				c.JSON(http.StatusForbidden, gin.H{
+					"success": false,
+					"message": common.TranslateMessage(c, i18n.MsgAuthClientIPUnresolved),
+				})
 				c.Abort()
 				return
 			}
 			if !common.IsIpInCIDRList(ip, allowIps) {
-				common.ApiErrorStatus(c, http.StatusForbidden, errors.New(common.TranslateMessage(c, i18n.MsgAuthTokenIPNotAllowed)))
+				c.JSON(http.StatusForbidden, gin.H{
+					"success": false,
+					"message": common.TranslateMessage(c, i18n.MsgAuthTokenIPNotAllowed),
+				})
 				c.Abort()
 				return
 			}
