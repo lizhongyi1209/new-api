@@ -562,6 +562,27 @@ const AUDIT_TEMPLATES: Record<string, string> = {
 }
 
 /**
+ * Render a log's structured content in the viewer's language. Older logs do
+ * not have content_parts, so callers fall back to the raw content field.
+ */
+export function renderLogContent(
+  other: LogOtherData | null | undefined,
+  t: (key: string, opts?: Record<string, unknown>) => string
+): string | null {
+  const parts = other?.content_parts
+  if (!Array.isArray(parts) || parts.length === 0) return null
+  return parts.map((part) => t(part.key, part.params)).join(', ')
+}
+
+/** The token name shown for a log. */
+export function logTokenName(
+  log: Pick<UsageLog, 'token_name'>,
+  _t: (key: string, opts?: Record<string, unknown>) => string
+): string {
+  return log.token_name
+}
+
+/**
  * Render the localized content of an operation log from its structured
  * `other.op` descriptor. Returns null when the log has no recognized action,
  * letting callers fall back to the raw `content` field.

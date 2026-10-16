@@ -49,8 +49,8 @@ interface LogsFilterToolbarProps<TData> {
   mobileFilters?: ReactNode
   mobileFilterCount?: number
   stats?: ReactNode
-  leadingAction?: ReactNode
   actionStart?: ReactNode
+  actionEnd?: ReactNode
   hasActiveFilters: boolean
   hasAdvancedActiveFilters?: boolean
   advancedFilterCount?: number
@@ -147,7 +147,6 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
           className={cn('w-full', props.className)}
           actions={
             <>
-              {props.leadingAction}
               {props.actionStart}
               <DrawerTrigger asChild>
                 <Button
@@ -183,6 +182,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
                 {props.searchLoading && <Loader2 className='animate-spin' />}
                 {t('Search')}
               </Button>
+              {props.actionEnd}
               <DataTableViewOptions table={props.table} />
             </>
           }
@@ -269,7 +269,6 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
       <div className='mt-2 flex flex-wrap items-center gap-2'>
         {props.stats}
         <div className='ms-auto flex flex-wrap items-center justify-end gap-1.5 sm:gap-2'>
-          {props.leadingAction}
           {props.actionStart}
           <Button
             type='button'
@@ -287,6 +286,7 @@ export function LogsFilterToolbar<TData>(props: LogsFilterToolbarProps<TData>) {
             {props.searchLoading && <Loader2 className='animate-spin' />}
             {t('Search')}
           </Button>
+          {props.actionEnd}
           <DataTableViewOptions table={props.table} />
         </div>
       </div>

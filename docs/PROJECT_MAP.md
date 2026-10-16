@@ -218,7 +218,7 @@ Aliases: 状态请求去重, status dedup, 日志分组筛选, log group filter.
 
 - Shared cached status query and consumers: `web/src/lib/status-query.ts`, `web/src/hooks/use-status.ts`, `web/src/hooks/use-system-config.ts`.
 - Group-aware log query and filter UI: `model/log.go`, `controller/log.go`, `web/src/features/usage-logs/components/common-logs-filter-bar.tsx`.
-- Usage-log exports: routes in `router/api-router.go`, format generation in `controller/log_export.go`, per-user concurrency locking in `service/log_export.go`, and limits in `setting/operation_setting/log_setting.go`. The existing CSV/JSON/XLSX frontend is `web/src/features/usage-logs/components/usage-logs-actions.tsx`; administrators configure export access and maximum ranges in `web/src/features/system-settings/maintenance/log-settings-section.tsx`.
+- Usage-log exports: routes in `router/api-router.go`; shared filtering and NDJSON streaming in `controller/log.go` and `model/log.go`; per-user concurrency locking in `service/log_export.go`; limits in `setting/operation_setting/log_setting.go`. The frontend converts the stream to localized CSV through `web/src/features/usage-logs/components/dialogs/export-logs-dialog.tsx` and `web/src/features/usage-logs/lib/export.ts`; administrators configure export access and maximum ranges in `web/src/features/system-settings/maintenance/log-settings-section.tsx`.
 
 ## System updates, quota details, and mobile filters
 

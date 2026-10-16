@@ -32,17 +32,6 @@ import type { UsageLog } from './data/schema'
  */
 export type LogCategory = 'common' | 'drawing' | 'task'
 
-export type UsageLogExportFormat = 'csv' | 'json' | 'xlsx'
-
-export interface ExportUsageLogsParams extends GetLogsParams {
-  format: UsageLogExportFormat
-}
-
-export interface UsageLogExportOptions {
-  usernames: string[]
-  tokens: string[]
-}
-
 // ============================================================================
 // Filter Types
 // ============================================================================
@@ -164,6 +153,10 @@ export interface LogOtherData {
     upstream_task_id?: string
     node_name?: string
   }
+  content_parts?: {
+    key: string
+    params?: Record<string, string | number | boolean>
+  }[]
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.
   op?: {

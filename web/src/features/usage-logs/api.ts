@@ -16,14 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import axios from 'axios'
+import { api, getFreshAuthHeaders, type ApiRequestConfig } from '@/lib/api'
+import { createServerError } from '@/lib/server-error-message'
 
-import { api, type ApiRequestConfig } from '@/lib/api'
-import {
-  createServerError,
-  requireServerSuccess,
-} from '@/lib/server-error-message'
-
+import type { UsageLog } from './data/schema'
 import { buildQueryParams } from './lib/query-params'
 import { parseTaskArtifactsResponse } from './lib/task-artifacts'
 import type {
@@ -33,8 +29,6 @@ import type {
   GetLogStatsResponse,
   GetMidjourneyLogsParams,
   GetTaskLogsParams,
-  ExportUsageLogsParams,
-  UsageLogExportOptions,
   TaskArtifactsResponse,
   UserInfo,
 } from './types'
@@ -94,52 +88,58 @@ export const getUserLogStats = (
   params: Omit<GetLogStatsParams, 'username' | 'channel'> = {}
 ) => fetchLogStats('/api/log', params, false)
 
-export async function exportUsageLogs(
-  params: ExportUsageLogsParams,
-  isAdmin: boolean
-): Promise<{ blob: Blob; filename: string }> {
-  const path = isAdmin ? '/api/log/export' : '/api/log/self/export'
+/**
+ * Stream the logs matching params, newest first. The server sends one JSON
+ * log per line and ends with an API response object; a stream that ends
+ * without a successful one is a failed export. Resolves with the log count.
+ */
+export async function exportLogs(
+  params: GetLogsParams,
+  isAdmin: boolean,
+  options: { signal: AbortSignal; onLog: (log: UsageLog) => void }
+): Promise<number> {
   const queryParams = buildQueryParams(
     params as unknown as Record<string, unknown>
   )
-  let response
-  try {
-    response = await api.get<Blob>(`${path}?${queryParams}`, {
-      responseType: 'blob',
-      skipErrorHandler: true,
-    })
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
-      const body = await error.response.data.text()
-      let parsed: { message?: string } = {}
-      try {
-        parsed = JSON.parse(body) as { message?: string }
-      } catch {
-        // An upstream proxy may return a non-JSON error body.
-      }
-      throw createServerError(
-        { success: false, message: parsed.message },
-        'Failed to export logs'
-      )
+  const response = await fetch(
+    `${buildApiPath('/api/log', isAdmin)}/export?${queryParams}`,
+    {
+      credentials: 'include',
+      headers: await getFreshAuthHeaders(),
+      signal: options.signal,
     }
-    throw error
+  )
+  if (!response.ok || !response.body) {
+    const body: unknown = await response.json().catch(() => null)
+    throw createServerError(body ?? { status: response.status })
   }
-  const disposition = String(response.headers['content-disposition'] || '')
-  const filenameMatch = disposition.match(/filename="?([^";]+)"?/i)
-  return {
-    blob: response.data,
-    filename: filenameMatch?.[1] || `usage-logs.${params.format}`,
-  }
-}
 
-export async function getUsageLogExportOptions(params: {
-  start_timestamp: number
-  end_timestamp: number
-  username?: string
-}): Promise<UsageLogExportOptions> {
-  const queryParams = buildQueryParams(params)
-  const response = await api.get(`/api/log/export/options?${queryParams}`)
-  return requireServerSuccess(response.data).data
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: { success?: unknown; data?: { count?: number } } | null = null
+  for (;;) {
+    const { done, value } = await reader.read()
+    buffer += done ? decoder.decode() : decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = done ? '' : (lines.pop() ?? '')
+    for (const line of lines) {
+      if (!line.trim()) continue
+      let parsed
+      try {
+        parsed = JSON.parse(line)
+      } catch {
+        throw createServerError(null)
+      }
+      if (typeof parsed.success === 'boolean') result = parsed
+      else options.onLog(parsed as UsageLog)
+    }
+    if (done) break
+  }
+  if (result?.success !== true) {
+    throw createServerError(result)
+  }
+  return result.data?.count ?? 0
 }
 
 export interface TaskAuditDetails {

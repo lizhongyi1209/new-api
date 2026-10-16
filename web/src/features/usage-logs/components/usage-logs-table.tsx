@@ -49,7 +49,6 @@ import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
-import { UsageLogsActions } from './usage-logs-actions'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
 import { useLogsViewScope, type LogsViewAccess } from './usage-logs-provider'
 
@@ -227,9 +226,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   })
 
   const isCommon = logCategory === 'common'
-  const exportAction = isCommon ? (
-    <UsageLogsActions isAdmin={isAdmin} searchParams={searchParams} />
-  ) : null
 
   return (
     <DataTablePage
@@ -256,7 +252,7 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       }
       toolbar={
         isCommon ? (
-          <CommonLogsFilterBar table={table} leadingAction={exportAction} />
+          <CommonLogsFilterBar table={table} />
         ) : (
           <TaskLogsFilterBar table={table} logCategory={logCategory} />
         )
