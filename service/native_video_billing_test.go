@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/videoexpr"
@@ -65,6 +66,90 @@ func TestNativeVideoExpressionSettlesFrozenWalletAndTokenLedger(t *testing.T) {
 			assert.Equal(t, initialToken+preConsumed-tc.actual, getTokenRemainQuota(t, tokenID))
 		})
 	}
+}
+
+func TestNativeSeedanceExpressionSettlementFallsBackToFrozenLegacyRatio(t *testing.T) {
+	truncate(t)
+	const userID, channelID, tokenID = 93, 193, 93
+	const preConsumed, initialWallet, initialToken = 5000, 20000, 15000
+	seedUser(t, userID, initialWallet)
+	seedToken(t, tokenID, userID, "test-native-video-fallback-token", initialToken)
+	seedTaskPollingChannel(t, channelID, true)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Platform = "60"
+	task.TaskID = "native-expression-legacy-fallback"
+	task.Properties.OriginModelName = "billing-video"
+	task.PrivateData.BillingContext.TieredSnapshot = billingSnapshotJSON(t, &billingexpr.BillingSnapshot{
+		ExprString: `tier("broken", 1 / (u("tokens") - 100))`,
+		ExprHash:   billingexpr.ExprHashString(`tier("broken", 1 / (u("tokens") - 100))`),
+		GroupRatio: 1.2, QuotaPerUnit: 1000, ExprVersion: 1,
+		TaskUsageBilling: true, NativeVideoMeter: videoexpr.Seedance,
+		UsageFacts: map[string]any{"tokens": float64(150), "resolution": "720p", "video_input": "video"},
+		LegacyTaskBilling: &billingexpr.LegacyTaskBillingSnapshot{
+			Quota: 100, ModelRatio: 1, GroupRatio: 1.2,
+			OtherRatios: map[string]float64{"video_input": 0.5},
+		},
+	})
+	require.NoError(t, model.DB.Create(task).Error)
+	task.PrivateData.SubmitLogID = seedConsumeLog(t, task, preConsumed, map[string]any{})
+
+	result := &relaycommon.TaskInfo{Status: string(model.TaskStatusSuccess), TotalTokens: 100, CompletionTokens: 100}
+	require.NoError(t, ApplyVideoTaskPollingResult(context.Background(), &taskPollingFetchAdaptor{}, task, result, []byte(`{"status":"completed","usage":{"completion_tokens":100}}`)))
+
+	assert.Equal(t, 60, task.Quota)
+	assert.Equal(t, initialWallet+preConsumed-60, getUserQuota(t, userID))
+	assert.Equal(t, initialToken+preConsumed-60, getTokenRemainQuota(t, tokenID))
+	var log model.Log
+	require.NoError(t, model.LOG_DB.First(&log, task.PrivateData.SubmitLogID).Error)
+	assert.Equal(t, 60, log.Quota)
+	other, err := common.StrToMap(log.Other)
+	require.NoError(t, err)
+	assert.Equal(t, "ratio", other["billing_mode"])
+	adminInfo, ok := other["admin_info"].(map[string]any)
+	require.True(t, ok)
+	fallback, ok := adminInfo["billing_fallback"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "settlement", fallback["phase"])
+
+	// Repeated terminal polling must not apply the fallback delta twice.
+	require.NoError(t, ApplyVideoTaskPollingResult(context.Background(), &taskPollingFetchAdaptor{}, task, result, []byte(`{"status":"completed","usage":{"completion_tokens":100}}`)))
+	assert.Equal(t, initialWallet+preConsumed-60, getUserQuota(t, userID))
+	assert.Equal(t, initialToken+preConsumed-60, getTokenRemainQuota(t, tokenID))
+}
+
+func TestNativeSeedanceMissingCompletionUsageRetainsLegacyReservation(t *testing.T) {
+	truncate(t)
+	const userID, channelID = 94, 194
+	const preConsumed, initialWallet = 5000, 20000
+	seedUser(t, userID, initialWallet)
+	seedTaskPollingChannel(t, channelID, true)
+
+	task := makeTask(userID, channelID, preConsumed, 0, BillingSourceWallet, 0)
+	task.Platform = "60"
+	task.TaskID = "native-expression-missing-usage-fallback"
+	task.Properties.OriginModelName = "billing-video"
+	task.PrivateData.BillingContext.TieredSnapshot = billingSnapshotJSON(t, &billingexpr.BillingSnapshot{
+		ExprString: `tier("standard", u("tokens") * 70 / 1000000)`,
+		ExprHash:   billingexpr.ExprHashString(`tier("standard", u("tokens") * 70 / 1000000)`),
+		GroupRatio: 1.2, QuotaPerUnit: 1000, ExprVersion: 1,
+		TaskUsageBilling: true, NativeVideoMeter: videoexpr.Seedance,
+		UsageFacts: map[string]any{"tokens": float64(150), "resolution": "720p", "video_input": "none"},
+		LegacyTaskBilling: &billingexpr.LegacyTaskBillingSnapshot{
+			Quota: 100, ModelRatio: 1, GroupRatio: 1.2,
+			OtherRatios: map[string]float64{"video_input": 0.5},
+		},
+	})
+	require.NoError(t, model.DB.Create(task).Error)
+	task.PrivateData.SubmitLogID = seedConsumeLog(t, task, preConsumed, map[string]any{})
+
+	result := &relaycommon.TaskInfo{Status: string(model.TaskStatusSuccess)}
+	require.NoError(t, ApplyVideoTaskPollingResult(context.Background(), &taskPollingFetchAdaptor{}, task, result, []byte(`{"status":"completed"}`)))
+
+	// The 150 tokens above are an estimate, not actual completion usage. The
+	// existing ratio path retains its 100-quota reservation when usage is absent.
+	assert.Equal(t, 100, task.Quota)
+	assert.Equal(t, initialWallet+preConsumed-100, getUserQuota(t, userID))
 }
 
 func TestNativeVideoExpressionFailedTaskRefundsReservation(t *testing.T) {

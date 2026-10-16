@@ -22,9 +22,10 @@ const (
 )
 
 type Metadata struct {
-	Meter    string
-	Schema   map[string]jsplugin.UsageFieldSchema
-	Examples []jsplugin.UsageExample
+	Meter                    string
+	Schema                   map[string]jsplugin.UsageFieldSchema
+	Examples                 []jsplugin.UsageExample
+	AutomaticDurationSeconds float64
 }
 
 // ForModel checks both the actual native adaptor and its mapped upstream model.
@@ -86,6 +87,12 @@ func ForModel(channelType int, model string) Metadata {
 		return Metadata{}
 	}
 	meta := ForMeter(meter)
+	if meter == Seedance && channelType == constant.ChannelTypeServiceInferenceVideo && strings.HasSuffix(name, "-max") {
+		meta.AutomaticDurationSeconds = 15
+		if strings.Contains(name, "seedance-2-5") {
+			meta.AutomaticDurationSeconds = 30
+		}
+	}
 	if meter == Seedance && (strings.Contains(name, "fast") || strings.Contains(name, "mini")) {
 		field := meta.Schema["resolution"]
 		field.Enum = []string{"480p", "720p"}

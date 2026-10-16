@@ -904,6 +904,13 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 			if snap.NativeVideoMeter != "" {
 				facts, err := videoexpr.Complete(snap.NativeVideoMeter, snap.UsageFacts, task.Data, taskResult)
 				if err != nil {
+					// Submitted usage facts are only an expression reservation. They
+					// must not masquerade as actual legacy token usage when completion
+					// facts are missing or invalid; the old path would retain its
+					// reservation unless TaskInfo contains authoritative tokens.
+					if settleLegacyTaskBillingFallback(ctx, task, taskResult, nil, snap.LegacyTaskBilling, err) {
+						return true
+					}
 					logger.LogWarn(ctx, fmt.Sprintf("task %s native video usage invalid; retained reserved quota: %v", task.TaskID, err))
 					return true
 				}
@@ -914,6 +921,9 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 			maps.Copy(usage, taskResult.UsageFacts)
 			result, err := billingexpr.ComputeTieredQuotaWithRequest(&snap, billingexpr.TokenParams{}, snap.TaskRequestInput(usage))
 			if err != nil {
+				if settleLegacyTaskBillingFallback(ctx, task, taskResult, usage, snap.LegacyTaskBilling, err) {
+					return true
+				}
 				logger.LogWarn(ctx, fmt.Sprintf("task %s usage settlement failed; retained reserved quota: %v", task.TaskID, err))
 				return true
 			}

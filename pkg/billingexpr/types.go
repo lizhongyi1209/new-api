@@ -74,6 +74,19 @@ type UsageFieldSnapshot struct {
 	EnumLabels  map[string]map[string]string `json:"enumLabels,omitempty"`
 }
 
+// LegacyTaskBillingSnapshot freezes the existing task price alongside a native
+// video expression. It is a compatibility circuit only: the expression remains
+// authoritative while it can be evaluated, and these values are used only when
+// native Seedance expression pricing fails at runtime.
+type LegacyTaskBillingSnapshot struct {
+	Quota       int                `json:"quota"`
+	ModelPrice  float64            `json:"model_price,omitempty"`
+	ModelRatio  float64            `json:"model_ratio,omitempty"`
+	GroupRatio  float64            `json:"group_ratio"`
+	OtherRatios map[string]float64 `json:"other_ratios,omitempty"`
+	UsePrice    bool               `json:"use_price,omitempty"`
+}
+
 // BillingSnapshot captures billing state at pre-consume time. Expression and
 // request fields stay frozen; group-dependent fields are refreshed before an
 // auto-group retry and settlement. It is fully serializable and contains no
@@ -102,6 +115,7 @@ type BillingSnapshot struct {
 	NativeVideoMeter          string                        `json:"native_video_meter,omitempty"`
 	UsageFacts                map[string]any                `json:"usage_facts,omitempty"`
 	UsageSchema               map[string]UsageFieldSnapshot `json:"usage_schema,omitempty"`
+	LegacyTaskBilling         *LegacyTaskBillingSnapshot    `json:"legacy_task_billing,omitempty"`
 }
 
 // TaskRequestInput reconstructs the request conditions captured when a task

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +18,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -231,6 +233,19 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 			"quota":            info.PriceData.Quota,
 			"per_call_billing": perCallBilling,
 		},
+	}
+	if reason := strings.TrimSpace(info.TaskBillingFallbackReason); reason != "" {
+		if len(reason) > 512 {
+			reason = reason[:512]
+		}
+		other["admin_info"] = map[string]interface{}{
+			"billing_fallback": map[string]interface{}{
+				"from":   billing_setting.BillingModeTieredExpr,
+				"to":     "legacy_ratio",
+				"phase":  "submission",
+				"reason": reason,
+			},
+		}
 	}
 	if task != nil {
 		other["task_status"] = string(task.Status)
@@ -811,6 +826,87 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 
 	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, otherMultiplier=%.4f", totalTokens, modelRatio, finalGroupRatio, otherMultiplier)
 	RecalculateTaskQuota(ctx, task, actualQuota, reason, clamp)
+	return true
+}
+
+// settleLegacyTaskBillingFallback applies the frozen pre-expression Seedance
+// price only when native usage expression settlement cannot be completed. It
+// deliberately does not read mutable runtime prices: the fallback must match
+// the legacy price that was available when the task was submitted.
+func settleLegacyTaskBillingFallback(
+	ctx context.Context,
+	task *model.Task,
+	taskResult *relaycommon.TaskInfo,
+	usage map[string]any,
+	fallback *billingexpr.LegacyTaskBillingSnapshot,
+	cause error,
+) bool {
+	if fallback == nil || fallback.Quota < 0 || math.IsNaN(fallback.GroupRatio) || math.IsInf(fallback.GroupRatio, 0) || fallback.GroupRatio < 0 {
+		return false
+	}
+
+	actualQuota := fallback.Quota
+	var clamp *common.QuotaClamp
+	if !fallback.UsePrice {
+		if math.IsNaN(fallback.ModelRatio) || math.IsInf(fallback.ModelRatio, 0) || fallback.ModelRatio < 0 {
+			return false
+		}
+		totalTokens := taskResult.TotalTokens
+		if totalTokens == 0 && taskResult.CompletionTokens > 0 {
+			totalTokens = taskResult.CompletionTokens
+		}
+		if rawTokens, exists := usage["tokens"]; exists {
+			var value float64
+			switch typed := rawTokens.(type) {
+			case float64:
+				value = typed
+			case float32:
+				value = float64(typed)
+			case int:
+				value = float64(typed)
+			case int64:
+				value = float64(typed)
+			}
+			if value >= 0 && value <= math.MaxInt32 && value == math.Trunc(value) {
+				totalTokens = int(value)
+			}
+		}
+		if totalTokens > 0 {
+			priceData := types.PriceData{}
+			if len(fallback.OtherRatios) > 0 {
+				priceData.ReplaceOtherRatios(fallback.OtherRatios)
+				if len(priceData.OtherRatios()) != len(fallback.OtherRatios) {
+					return false
+				}
+			}
+			actualQuota, clamp = common.QuotaFromFloatChecked(
+				priceData.ApplyOtherRatiosToFloat(float64(totalTokens) * fallback.ModelRatio * fallback.GroupRatio),
+			)
+		}
+	}
+
+	RecalculateTaskQuota(ctx, task, actualQuota, "表达式结算失败，回退原按量计费", clamp)
+	if task.PrivateData.SubmitLogID > 0 {
+		reason := "native video expression settlement failed"
+		if cause != nil {
+			reason = cause.Error()
+		}
+		if len(reason) > 512 {
+			reason = reason[:512]
+		}
+		model.UpdateConsumeLogQuotaAndOther(task.PrivateData.SubmitLogID, task.Quota, map[string]interface{}{
+			"billing_mode": "ratio",
+			"admin_info": map[string]interface{}{
+				"billing_fallback": map[string]interface{}{
+					"from":   billing_setting.BillingModeTieredExpr,
+					"to":     "legacy_ratio",
+					"phase":  "settlement",
+					"reason": reason,
+				},
+			},
+		})
+	}
+	logger.LogWarn(ctx, fmt.Sprintf("task %s native Seedance expression settlement failed; used frozen legacy billing: %v", task.TaskID, cause))
 	return true
 }
 

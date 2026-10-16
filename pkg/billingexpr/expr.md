@@ -42,9 +42,19 @@ tasks and historical snapshots keep their previous paths.
 Usage-token expressions use actual USD prices divided by 1,000,000, e.g.
 `tier("video", u("tokens") * 37 / 1000000)`; this differs from the engine's ordinary `p * 37` token syntax.
 Seconds/count/credit quantities use their direct unit price. Completion parsing distinguishes omitted
-usage from explicit zero: missing/invalid token or credit data retains the reservation with a warning;
-valid zero refunds it. Token/count/credit multipliers are bounded, numeric strings are parsed strictly,
-and expression charges use the existing checked quota conversion and audit path.
+usage from explicit zero: except for the Seedance compatibility circuit below, missing/invalid token or
+credit data retains the expression reservation with a warning; valid zero refunds it. Token/count/credit
+multipliers are bounded, numeric strings are parsed strictly, and expression charges use the existing
+checked quota conversion and audit path.
+
+Seedance keeps a frozen copy of its pre-existing legacy task price as a runtime compatibility circuit.
+The expression is still authoritative whenever it evaluates successfully. If expression configuration,
+compilation, or evaluation fails, submission uses the legacy price; if completion usage or settlement
+evaluation fails, settlement uses the frozen legacy price. User-controlled usage validation failures do
+not trigger fallback; neither do failures while freezing request-controlled scalar expression inputs.
+Every fallback is logged under the admin-only
+`other.admin_info.billing_fallback`; unavailable legacy pricing still fails closed. Other native meters
+and task plugins retain their strict expression behavior.
 
 Grok `seconds` is the billable generated duration: extension keeps the requested added portion rather
 than charging the entire returned input-plus-output video. Edit resolution is `auto` when the provider

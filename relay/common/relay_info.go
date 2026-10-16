@@ -189,6 +189,10 @@ type RelayInfo struct {
 	TieredBillingSnapshot *billingexpr.BillingSnapshot
 	BillingRequestInput   *billingexpr.RequestInput
 	BillingImageCount     *int
+	// TaskBillingFallbackReason is populated when a native task cannot use its
+	// configured expression and safely continues through the existing legacy
+	// billing path. It is written only to the admin audit scope.
+	TaskBillingFallbackReason string
 	// ImageRequestCount is the effective quantity sent on the current attempt;
 	// ImageQuotaBeforeGroup is the frozen legacy estimate before request ratios.
 	ImageRequestCount     int

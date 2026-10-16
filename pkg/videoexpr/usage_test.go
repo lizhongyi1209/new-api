@@ -66,6 +66,26 @@ func TestSeedanceRequestEstimateIncludesReferenceVideo(t *testing.T) {
 	assert.Equal(t, "none", facts["video_input"])
 }
 
+func TestSeedanceAutomaticDurationUsesMappedModelMaximum(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		model      string
+		hasVideo   bool
+		wantTokens float64
+	}{
+		{name: "2.0 max reserves 15 seconds", model: "dreamina-seedance-2-0-260128-max", wantTokens: 324000},
+		{name: "2.5 max reserves 30 seconds", model: "dreamina-seedance-2-5-260628-max", wantTokens: 648000},
+		{name: "2.5 max includes conservative reference input", model: "dreamina-seedance-2-5-260628-max", hasVideo: true, wantTokens: 972000},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := relaycommon.TaskSubmitReq{Duration: -1, HasVideo: tc.hasVideo, Metadata: map[string]any{"duration": -1}}
+			facts, err := Estimate(ForModel(constant.ChannelTypeServiceInferenceVideo, tc.model), request, constant.TaskActionGenerate)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantTokens, facts["tokens"])
+		})
+	}
+}
+
 func TestNativeVideoRequestBounds(t *testing.T) {
 	meta := ForModel(60, "dreamina-seedance-2-0-hc")
 	for _, req := range []relaycommon.TaskSubmitReq{

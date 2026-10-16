@@ -27,6 +27,9 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 	}
 	body := gjson.ParseBytes(encoded)
 	seconds := float64(req.Duration)
+	if seconds == -1 && meta.AutomaticDurationSeconds > 0 {
+		seconds = meta.AutomaticDurationSeconds
+	}
 	if req.Seconds != "" {
 		seconds, err = strconv.ParseFloat(req.Seconds, 64)
 		if err != nil {
@@ -42,6 +45,9 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 			n, parseErr := numeric(value)
 			if parseErr != nil {
 				return nil, fmt.Errorf("invalid %s: %w", path, parseErr)
+			}
+			if n == -1 && meta.AutomaticDurationSeconds > 0 {
+				n = meta.AutomaticDurationSeconds
 			}
 			if err = bounded(path, n, relaycommon.MaxTaskDurationSeconds); err != nil {
 				return nil, err

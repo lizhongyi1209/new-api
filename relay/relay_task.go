@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -289,6 +289,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 4. 价格计算：基础模型价格
 	info.OriginModelName = modelName
+	info.TaskBillingFallbackReason = ""
 	var priceData types.PriceData
 	var err error
 	pluginKey := c.GetString("task_plugin_key")
@@ -301,89 +302,49 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 	}
 	expression, configured := billing_setting.ResolveTaskBillingExpr(pluginKey, modelName, info.UpstreamModelName)
+	legacyBillingPrepared := false
 	if configured || billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr {
-		provider, supported := adaptor.(channel.TaskUsageFactsProvider)
-		if !configured || !supported || strings.TrimSpace(expression) == "" || billingexpr.UsesFixedPricing(expression) {
-			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task model %s has no usable billing expression or meter", modelName), "model_price_error", http.StatusBadRequest)
+		generation := pluginruntime.DefaultRegistry.Generation()
+		if pinned, ok := pinnedValue.(pluginruntime.PinnedPlugin); ok && pinned.Generation != nil {
+			generation = pinned.Generation
 		}
-		if selectedPlugin != nil {
-			generation := pluginruntime.DefaultRegistry.Generation()
-			if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedPlugin); exists {
-				if pinned, ok := pinnedValue.(pluginruntime.PinnedPlugin); ok {
-					generation = pinned.Generation
+		expressionResult, expressionErr := prepareTaskExpressionBilling(
+			c, info, adaptor, selectedPlugin, generation, modelName, pluginKey, expression, configured,
+		)
+		if expressionErr != nil {
+			nativeMeta := videoexpr.ForModel(info.ChannelType, info.UpstreamModelName)
+			if selectedPlugin != nil || nativeMeta.Meter != videoexpr.Seedance || !expressionErr.legacyFallbackEligible {
+				return nil, expressionErr.taskError
+			}
+			legacyPriceData, clamp, legacyErr := prepareLegacyTaskBilling(c, info, adaptor, modelName)
+			if legacyErr != nil {
+				return nil, service.TaskErrorWrapperLocal(
+					fmt.Errorf("%s; legacy billing fallback is unavailable: %w", expressionErr.taskError.Message, legacyErr),
+					"model_price_error", http.StatusBadRequest,
+				)
+			}
+			priceData = legacyPriceData
+			legacyBillingPrepared = true
+			noteTaskQuotaClamp(info, clamp)
+			info.TieredBillingSnapshot = nil
+			info.BillingRequestInput = nil
+			info.TaskBillingFallbackReason = expressionErr.taskError.Message
+			logger.LogWarn(c, fmt.Sprintf("native Seedance billing expression failed; using legacy billing: model=%s reason=%s", modelName, expressionErr.taskError.Message))
+		} else {
+			priceData = expressionResult.priceData
+			info.TieredBillingSnapshot = expressionResult.snapshot
+			info.BillingRequestInput = &expressionResult.requestInput
+			noteTaskQuotaClamp(info, expressionResult.clamp)
+			if expressionResult.snapshot.NativeVideoMeter == videoexpr.Seedance {
+				legacyPriceData, clamp, legacyErr := prepareLegacyTaskBilling(c, info, adaptor, modelName)
+				if legacyErr == nil && clamp == nil {
+					expressionResult.snapshot.LegacyTaskBilling = legacyTaskBillingSnapshot(legacyPriceData)
+				} else if legacyErr != nil {
+					logger.LogWarn(c, fmt.Sprintf("native Seedance legacy billing fallback could not be frozen: model=%s reason=%s", modelName, legacyErr.Error()))
+				} else {
+					logger.LogWarn(c, fmt.Sprintf("native Seedance legacy billing fallback saturated and was not frozen: model=%s", modelName))
 				}
 			}
-			if generation != nil && (generation.SharedModel(modelName) || generation.SharedModel(info.UpstreamModelName)) {
-				schema, _ := selectedPlugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
-				if !billing_setting.TaskExprCompatible(expression, schema) {
-					return nil, service.TaskErrorWrapperLocal(fmt.Errorf("task model %s pricing is not configured for plugin %s", modelName, pluginKey), "model_price_error", http.StatusBadRequest)
-				}
-			}
-		}
-		var facts map[string]any
-		if validated, ok := adaptor.(channel.TaskValidatedUsageFactsProvider); ok {
-			var usageErr error
-			facts, usageErr = validated.ExtractUsageFactsValidated(c, info)
-			if usageErr != nil {
-				return nil, service.TaskErrorWrapperLocal(usageErr, "plugin_usage_invalid", http.StatusBadRequest)
-			}
-		} else {
-			facts = provider.ExtractUsageFacts(c, info)
-		}
-		billingInput, inputErr := helper.FreezeTaskBillingExprRequestInput(c, expression)
-		if inputErr != nil {
-			return nil, service.TaskErrorWrapperLocal(inputErr, "task_plugin_price_invalid", http.StatusBadRequest)
-		}
-		billingInput.Usage = facts
-		cost, trace, runErr := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingInput)
-		if runErr != nil || math.IsNaN(cost) || math.IsInf(cost, 0) || cost < 0 {
-			if runErr == nil {
-				runErr = fmt.Errorf("invalid task usage expression result")
-			}
-			return nil, service.TaskErrorWrapper(runErr, "model_price_error", http.StatusBadRequest)
-		}
-		groupRatio := helper.HandleGroupRatio(c, info)
-		quota, clamp := common.QuotaRoundChecked(cost * common.QuotaPerUnit * groupRatio.GroupRatio)
-		noteTaskQuotaClamp(info, clamp)
-		priceData = types.PriceData{Quota: quota, QuotaToPreConsume: quota, GroupRatioInfo: groupRatio}
-		usageSchema := map[string]pluginruntime.UsageFieldSchema{}
-		if selectedPlugin != nil {
-			usageSchema, _ = selectedPlugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
-		} else {
-			usageSchema = videoexpr.ForModel(info.ChannelType, info.UpstreamModelName).Schema
-			if err := billing_setting.SmokeTestTaskExpr(expression, usageSchema); err != nil {
-				return nil, service.TaskErrorWrapperLocal(err, "model_price_error", http.StatusBadRequest)
-			}
-		}
-		usedUsageFields := billingexpr.UsedUsageKeys(expression)
-		usageDisplaySchema := make(map[string]billingexpr.UsageFieldSnapshot, len(usedUsageFields))
-		for field, definition := range usageSchema {
-			if !usedUsageFields[field] {
-				continue
-			}
-			labels := make(map[string]map[string]string, len(definition.EnumLabels))
-			for value, translations := range definition.EnumLabels {
-				labels[value] = maps.Clone(translations)
-			}
-			usageDisplaySchema[field] = billingexpr.UsageFieldSnapshot{
-				Type: definition.Type, Unit: definition.Unit,
-				UnitLabel: maps.Clone(definition.UnitLabel), Enum: append([]string(nil), definition.Enum...),
-				Description: maps.Clone(definition.Description), EnumLabels: labels,
-			}
-		}
-		info.TieredBillingSnapshot = &billingexpr.BillingSnapshot{
-			BillingMode: billing_setting.BillingModeTieredExpr, ModelName: modelName,
-			ExprString: expression, ExprHash: billingexpr.ExprHashString(expression),
-			RequestHeaders: billingInput.Headers, RequestParams: billingInput.Params,
-			RequestTimeUnix: billingInput.At.Unix(),
-			GroupRatio:      groupRatio.GroupRatio, EstimatedQuotaBeforeGroup: cost * common.QuotaPerUnit,
-			EstimatedQuotaAfterGroup: quota, EstimatedTier: trace.MatchedTier,
-			QuotaPerUnit: common.QuotaPerUnit, ExprVersion: billingexpr.ExprVersion(expression),
-			TaskUsageBilling: true, UsageFacts: facts,
-			UsageSchema: usageDisplaySchema,
-		}
-		if selectedPlugin == nil {
-			info.TieredBillingSnapshot.NativeVideoMeter = videoexpr.ForModel(info.ChannelType, info.UpstreamModelName).Meter
 		}
 	} else {
 		priceData, err = helper.ModelPriceHelperPerCall(c, info)
@@ -396,7 +357,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）
 	//    必须在 ModelPriceHelperPerCall 之后调用（它会重建 PriceData）。
 	//    ResolveOriginTask 可能已在 remix 路径中预设了 OtherRatios，此处合并。
-	if info.TieredBillingSnapshot == nil {
+	if info.TieredBillingSnapshot == nil && !legacyBillingPrepared {
 		var estimatedRatios map[string]float64
 		if validated, ok := adaptor.(channel.TaskValidatedBillingProvider); ok {
 			var usageErr error
@@ -415,7 +376,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 
 	// 6. 将 OtherRatios 应用到基础额度（饱和转换，防止溢出成负数）
-	if info.TieredBillingSnapshot == nil && !common.StringsContains(constant.TaskPricePatches, modelName) {
+	if info.TieredBillingSnapshot == nil && !legacyBillingPrepared && !common.StringsContains(constant.TaskPricePatches, modelName) {
 		quotaWithRatios := float64(info.PriceData.Quota)
 		for _, ra := range info.PriceData.OtherRatios() {
 			if ra != 1.0 {
