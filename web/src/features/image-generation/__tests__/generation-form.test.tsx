@@ -49,6 +49,10 @@ describe('image generation form', () => {
 
     const referencePicker = screen.getByText('Reference images')
     const groupLabel = screen.getByText('Group')
+    expect(groupLabel.closest('[data-slot="form-item"]')).toHaveClass(
+      'sm:col-span-2',
+      'xl:col-span-1'
+    )
     expect(
       referencePicker.compareDocumentPosition(groupLabel) &
         Node.DOCUMENT_POSITION_FOLLOWING
@@ -65,7 +69,7 @@ describe('image generation form', () => {
     expect(screen.getByRole('option', { name: 'group-19' })).toBeInTheDocument()
   })
 
-  it('shows readable tier labels while selecting the exact model ID', async () => {
+  it('selects a model series and tier separately while submitting the exact variant ID', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()
     render(
@@ -81,18 +85,23 @@ describe('image generation form', () => {
 
     await user.click(screen.getByRole('combobox', { name: 'Model' }))
     expect(
-      screen.getByRole('option', { name: 'Nano Banana 2.1 · Special price' })
+      screen.getByRole('option', { name: 'Nano Banana 2.1' })
     ).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+
+    await user.click(screen.getByRole('combobox', { name: 'Tier' }))
     expect(
-      screen.getByRole('option', { name: 'Nano Banana 2.1 · Premium' })
+      screen.getByRole('option', { name: 'Special price' })
     ).toBeInTheDocument()
-    await user.click(
-      screen.getByRole('option', { name: 'Nano Banana 2.1 · Enterprise' })
-    )
+    expect(screen.getByRole('option', { name: 'Premium' })).toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Enterprise' }))
 
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Model' })).toHaveTextContent(
-        'Nano Banana 2.1 · Enterprise'
+        'Nano Banana 2.1'
+      )
+      expect(screen.getByRole('combobox', { name: 'Tier' })).toHaveTextContent(
+        'Enterprise'
       )
     })
 
@@ -104,5 +113,38 @@ describe('image generation form', () => {
         []
       )
     })
+  })
+
+  it('offers only available tiers after changing to a different model series', async () => {
+    const user = userEvent.setup()
+    render(
+      <GenerationForm
+        disabled={false}
+        groups={[{ label: 'default', ratio: 1, value: 'default' }]}
+        isLoadingModels={false}
+        models={[
+          { label: 'gemini-nano-banana-2.1', value: 'gemini-nano-banana-2.1' },
+          { label: 'gpt-image-2-c-sp', value: 'gpt-image-2-c-sp' },
+        ]}
+        onGroupChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+
+    await user.click(screen.getByRole('combobox', { name: 'Model' }))
+    await user.click(screen.getByRole('option', { name: 'GPT Image 2' }))
+
+    expect(screen.getByRole('combobox', { name: 'Tier' })).toHaveTextContent(
+      'Special price'
+    )
+    await user.click(screen.getByRole('combobox', { name: 'Tier' }))
+    expect(screen.getByRole('option', { name: 'Premium' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+    expect(screen.getByRole('option', { name: 'Enterprise' })).toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
   })
 })

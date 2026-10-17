@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LoaderCircle, Sparkles } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 
@@ -32,6 +32,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
@@ -44,8 +45,9 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 
 import {
-  getImageModelDisplayName,
   getImageModelFamily,
+  getImageModelOption,
+  type ImageModelTier,
 } from '../lib/image-generation'
 import { imageGenerationSchema } from '../lib/schema'
 import type {
@@ -84,6 +86,7 @@ const defaultValues: ImageGenerationFormValue = {
 
 export function GenerationForm(props: GenerationFormProps) {
   const { t } = useTranslation()
+  const tierId = useId()
   const [references, setReferences] = useState<ReferenceImage[]>([])
   const previewUrlsRef = useRef(new Set<string>())
   const form = useForm<ImageGenerationFormValue>({
@@ -92,24 +95,54 @@ export function GenerationForm(props: GenerationFormProps) {
   })
   const selectedGroup = useWatch({ control: form.control, name: 'group' })
   const selectedModel = useWatch({ control: form.control, name: 'model' })
-  const family = getImageModelFamily(selectedModel)
-  const modelOptions = useMemo(() => {
-    const tiers = {
-      specialPrice: t('Special price'),
-      premium: t('Premium'),
-      enterprise: t('Enterprise'),
-    }
-    return props.models.map((model) => ({
-      ...model,
-      label: getImageModelDisplayName(model.value, tiers),
-    }))
-  }, [props.models, t])
-  const bananaModels = modelOptions.filter(
-    (model) => getImageModelFamily(model.value) === 'banana'
+  const selectedOption = getImageModelOption(selectedModel)
+  const selectedSeriesId = selectedOption?.seriesId ?? ''
+  const family = selectedOption?.family ?? null
+  const modelSeriesOptions = useMemo(() => {
+    const seen = new Set<string>()
+    return props.models.flatMap((model) => {
+      const option = getImageModelOption(model.value)
+      if (!option || seen.has(option.seriesId)) return []
+      seen.add(option.seriesId)
+      return [
+        {
+          family: option.family,
+          label: option.seriesLabel,
+          value: option.seriesId,
+        },
+      ]
+    })
+  }, [props.models])
+  const bananaModels = modelSeriesOptions.filter(
+    (model) => model.family === 'banana'
   )
-  const gptImageModels = modelOptions.filter(
-    (model) => getImageModelFamily(model.value) === 'gpt-image'
+  const gptImageModels = modelSeriesOptions.filter(
+    (model) => model.family === 'gpt-image'
   )
+  const availableTiers = new Set<ImageModelTier>()
+  for (const model of props.models) {
+    const option = getImageModelOption(model.value)
+    if (option?.seriesId === selectedSeriesId) availableTiers.add(option.tier)
+  }
+  const tierOptions: Array<
+    SelectOption & { disabled: boolean; value: ImageModelTier }
+  > = [
+    {
+      disabled: !availableTiers.has('special'),
+      label: t('Special price'),
+      value: 'special',
+    },
+    {
+      disabled: !availableTiers.has('premium'),
+      label: t('Premium'),
+      value: 'premium',
+    },
+    {
+      disabled: !availableTiers.has('enterprise'),
+      label: t('Enterprise'),
+      value: 'enterprise',
+    },
+  ]
   const groups = props.groups
   const onGroupChange = props.onGroupChange
   const models = props.models
@@ -161,6 +194,28 @@ export function GenerationForm(props: GenerationFormProps) {
     form.setValue('thinkingLevel', 'default')
   }
 
+  const selectSeries = (seriesId: string) => {
+    const matchingModels = props.models.filter(
+      (model) => getImageModelOption(model.value)?.seriesId === seriesId
+    )
+    const preferredModel =
+      matchingModels.find(
+        (model) =>
+          getImageModelOption(model.value)?.tier === selectedOption?.tier
+      ) ?? matchingModels[0]
+    if (preferredModel) selectModel(preferredModel.value)
+  }
+
+  const selectTier = (tier: string) => {
+    const matchingModel = props.models.find((model) => {
+      const option = getImageModelOption(model.value)
+      return option?.seriesId === selectedSeriesId && option.tier === tier
+    })
+    if (matchingModel) {
+      form.setValue('model', matchingModel.value, { shouldValidate: true })
+    }
+  }
+
   return (
     <Form {...form}>
       <form
@@ -180,7 +235,7 @@ export function GenerationForm(props: GenerationFormProps) {
             control={form.control}
             name='group'
             render={({ field }) => (
-              <FormItem>
+              <FormItem className='sm:col-span-2 xl:col-span-1'>
                 <FormLabel>{t('Group')}</FormLabel>
                 <Select
                   items={props.groups}
@@ -219,13 +274,13 @@ export function GenerationForm(props: GenerationFormProps) {
           <FormField
             control={form.control}
             name='model'
-            render={({ field }) => (
+            render={() => (
               <FormItem>
                 <FormLabel>{t('Model')}</FormLabel>
                 <Select
-                  items={modelOptions}
-                  value={field.value}
-                  onValueChange={(value) => value && selectModel(value)}
+                  items={modelSeriesOptions}
+                  value={selectedSeriesId}
+                  onValueChange={(value) => value && selectSeries(value)}
                   disabled={
                     props.disabled ||
                     props.isLoadingModels ||
@@ -270,6 +325,33 @@ export function GenerationForm(props: GenerationFormProps) {
               </FormItem>
             )}
           />
+
+          <div className='grid gap-2'>
+            <Label htmlFor={tierId}>{t('Tier')}</Label>
+            <Select
+              items={tierOptions}
+              value={selectedOption?.tier ?? ''}
+              onValueChange={(value) => value && selectTier(value)}
+              disabled={props.disabled || selectedSeriesId === ''}
+            >
+              <SelectTrigger id={tierId} className='w-full'>
+                <SelectValue placeholder={t('Tier')} />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectGroup>
+                  {tierOptions.map((tier) => (
+                    <SelectItem
+                      key={tier.value}
+                      value={tier.value}
+                      disabled={tier.disabled}
+                    >
+                      {tier.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <FormField

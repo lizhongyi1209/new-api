@@ -23,7 +23,7 @@ import {
   buildImageGenerationRequest,
   filterImageGenerationModels,
   generatedImageSource,
-  getImageModelDisplayName,
+  getImageModelOption,
   isTerminalTaskStatus,
 } from '../lib/image-generation'
 import type { ImageGenerationFormValue } from '../types'
@@ -121,22 +121,25 @@ describe('image generation request contract', () => {
     })
   })
 
-  it('shows model series and tiers instead of opaque model suffixes', () => {
-    const tiers = {
-      specialPrice: '特价',
-      premium: '优质',
-      enterprise: '企业',
-    }
-
-    expect(getImageModelDisplayName('gemini-nano-banana-2.1-sp', tiers)).toBe(
-      'Nano Banana 2.1 · 特价'
-    )
-    expect(getImageModelDisplayName('gemini-3-pro-image-c-sd', tiers)).toBe(
-      'Gemini 3 Pro Image · 优质'
-    )
-    expect(getImageModelDisplayName('gpt-image-2', tiers)).toBe(
-      'GPT Image 2 · 企业'
-    )
+  it('maps each variant ID to its model series and tier', () => {
+    expect(getImageModelOption('gemini-nano-banana-2.1-sp')).toEqual({
+      family: 'banana',
+      seriesId: 'gemini-nano-banana-2.1',
+      seriesLabel: 'Nano Banana 2.1',
+      tier: 'special',
+    })
+    expect(getImageModelOption('gemini-3-pro-image-c-sd')).toEqual({
+      family: 'banana',
+      seriesId: 'gemini-3-pro-image',
+      seriesLabel: 'Gemini 3 Pro Image',
+      tier: 'premium',
+    })
+    expect(getImageModelOption('gpt-image-2')).toEqual({
+      family: 'gpt-image',
+      seriesId: 'gpt-image-2',
+      seriesLabel: 'GPT Image 2',
+      tier: 'enterprise',
+    })
   })
 
   it('normalizes inline image output and terminal task states', () => {

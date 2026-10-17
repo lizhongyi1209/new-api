@@ -73,6 +73,15 @@ const imageModelSeries: Record<string, string> = {
   'gpt-image-2': 'GPT Image 2',
 }
 
+export type ImageModelTier = 'special' | 'premium' | 'enterprise'
+
+export type ImageModelOption = {
+  family: ImageModelFamily
+  seriesId: string
+  seriesLabel: string
+  tier: ImageModelTier
+}
+
 export function getImageModelFamily(model: string): ImageModelFamily | null {
   const normalized = model.trim().toLowerCase()
   if (gptImageModelSet.has(normalized)) return 'gpt-image'
@@ -85,21 +94,19 @@ export function filterImageGenerationModels(models: string[]): string[] {
   return DOCUMENTED_IMAGE_MODELS.filter((model) => availableModels.has(model))
 }
 
-export function getImageModelDisplayName(
-  model: string,
-  tiers: { specialPrice: string; premium: string; enterprise: string }
-): string {
+export function getImageModelOption(model: string): ImageModelOption | null {
   const normalized = model.trim().toLowerCase()
-  if (!getImageModelFamily(normalized)) return model
+  const family = getImageModelFamily(normalized)
+  if (!family) return null
 
   const seriesId = normalized.replace(/(?:-c)?-(?:sp|sd)$/, '')
-  const series = imageModelSeries[seriesId]
-  if (!series) return model
+  const seriesLabel = imageModelSeries[seriesId]
+  if (!seriesLabel) return null
 
-  let tier = tiers.enterprise
-  if (normalized.endsWith('-sp')) tier = tiers.specialPrice
-  if (normalized.endsWith('-sd')) tier = tiers.premium
-  return `${series} · ${tier}`
+  let tier: ImageModelTier = 'enterprise'
+  if (normalized.endsWith('-sp')) tier = 'special'
+  if (normalized.endsWith('-sd')) tier = 'premium'
+  return { family, seriesId, seriesLabel, tier }
 }
 
 export function isGeminiFlashImageModel(model: string): boolean {

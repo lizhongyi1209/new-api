@@ -105,7 +105,10 @@ export function ImageGeneration() {
         </header>
 
         <div className='grid min-h-0 flex-1 items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]'>
-          <Card className='h-fit min-w-0 overflow-hidden'>
+          <Card
+            data-card-hover='false'
+            className='h-fit min-w-0 overflow-hidden'
+          >
             <CardHeader className='border-b px-4 sm:px-6'>
               <CardTitle>{t('Generation settings')}</CardTitle>
             </CardHeader>
@@ -123,7 +126,10 @@ export function ImageGeneration() {
             </CardContent>
           </Card>
 
-          <Card className='min-h-[360px] min-w-0 gap-0 overflow-hidden py-0 sm:min-h-[480px] xl:min-h-[calc(100dvh-11rem)]'>
+          <Card
+            data-card-hover='false'
+            className='min-h-[360px] min-w-0 gap-0 overflow-hidden py-0 sm:min-h-[480px] xl:min-h-[calc(100dvh-11rem)]'
+          >
             <GenerationResult
               isError={taskQuery.isError}
               isLoading={generationMutation.isPending}
