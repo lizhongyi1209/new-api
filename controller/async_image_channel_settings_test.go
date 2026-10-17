@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -62,9 +63,11 @@ func TestPrepareAsyncBillingPreservesChannelOtherSettings(t *testing.T) {
 	require.NoError(t, db.Create(&channel).Error)
 
 	context, _ := gin.CreateTestContext(nil)
+	context.Request = httptest.NewRequest("POST", "/pg/images/generations", nil)
 	relayInfo, _, apiErr := prepareAsyncBilling(context, 1, "test", channel.Id, 1, "test-image-model")
 	require.Nil(t, apiErr)
 	require.NotNil(t, relayInfo)
 	assert.True(t, relayInfo.ChannelOtherSettings.GeminiFileDataEnabled)
+	assert.True(t, relayInfo.IsPlayground)
 	assert.Equal(t, dto.ImageOutputStrategyLocalTempCF, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
 }

@@ -1279,11 +1279,12 @@ func processGenerateImageGemini(ctx context.Context, c *gin.Context, task *model
 		"generate_image_timing: phase=response_parse task=%s request_id=%s provider=gemini channel=%d images=%d parse_ms=%.3f",
 		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), parseDuration.Seconds()*1000,
 	))
-	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	imageOutputStrategy := generateImageOutputStrategy(task, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, imageOutputStrategy)
 	outputTiming.applyToAudit(audit)
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=output_storage task=%s request_id=%s provider=gemini channel=%d strategy=%s images=%d source_base64=%d source_url=%d download_ms=%.3f upload_ms=%.3f upload_mbps=%.3f upload_transport_attempts=%d upload_connection_wait_ms=%.3f upload_request_write_ms=%.3f upload_server_wait_ms=%.3f upload_conn_reused=%t total_ms=%.3f output_bytes=%d storage_error=%t",
-		task.TaskID, task.PrivateData.RequestID, task.ChannelId, relayInfo.ChannelOtherSettings.ImageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, imageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
 	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
@@ -1594,11 +1595,12 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 		"generate_image_timing: phase=response_parse task=%s request_id=%s provider=openai channel=%d images=%d parse_ms=%.3f",
 		task.TaskID, task.PrivateData.RequestID, task.ChannelId, len(images), parseDuration.Seconds()*1000,
 	))
-	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	imageOutputStrategy := generateImageOutputStrategy(task, relayInfo.ChannelOtherSettings.ImageOutputStrategy)
+	images, outputTiming, err := prepareGenerateImageResultsWithStrategyTiming(ctx, images, task.Properties.RequestHost, imageOutputStrategy)
 	outputTiming.applyToAudit(audit)
 	logger.LogInfo(ctx, fmt.Sprintf(
 		"generate_image_timing: phase=output_storage task=%s request_id=%s provider=openai channel=%d strategy=%s images=%d source_base64=%d source_url=%d download_ms=%.3f upload_ms=%.3f upload_mbps=%.3f upload_transport_attempts=%d upload_connection_wait_ms=%.3f upload_request_write_ms=%.3f upload_server_wait_ms=%.3f upload_conn_reused=%t total_ms=%.3f output_bytes=%d storage_error=%t",
-		task.TaskID, task.PrivateData.RequestID, task.ChannelId, relayInfo.ChannelOtherSettings.ImageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
+		task.TaskID, task.PrivateData.RequestID, task.ChannelId, imageOutputStrategy, len(images), outputTiming.SourceBase64, outputTiming.SourceURL, outputTiming.Download.Seconds()*1000, outputTiming.Upload.Seconds()*1000, outputTiming.UploadMegabitsPerSecond(), outputTiming.UploadTransportAttempts, outputTiming.UploadConnectionWaitMilliseconds, outputTiming.UploadRequestWriteMilliseconds, outputTiming.UploadServerWaitMilliseconds, outputTiming.UploadConnectionReused, outputTiming.Total.Seconds()*1000, outputTiming.OutputBytes, err != nil,
 	))
 	if err != nil {
 		failGenerateImageTask(task, fmt.Sprintf("上传图片到对象存储失败: %v", err))
@@ -1709,6 +1711,13 @@ func (timing *generateImageOutputTiming) uploadBytes(ctx context.Context, mimeTy
 func prepareGenerateImageResultsWithStrategy(images []dto.GenerateImageData, requestHost, strategy string) ([]dto.GenerateImageData, error) {
 	out, _, err := prepareGenerateImageResultsWithStrategyTiming(context.Background(), images, requestHost, strategy)
 	return out, err
+}
+
+func generateImageOutputStrategy(task *model.Task, channelStrategy string) string {
+	if task.PrivateData.ImageGallery {
+		return dto.ImageOutputStrategyR2
+	}
+	return channelStrategy
 }
 
 func prepareGenerateImageResultsWithStrategyTiming(ctx context.Context, images []dto.GenerateImageData, requestHost, strategy string) ([]dto.GenerateImageData, generateImageOutputTiming, error) {
@@ -1933,6 +1942,17 @@ func finalizeGenerateImageTask(ctx context.Context, task *model.Task, images []d
 	task.SetData(result)
 	if len(images) > 0 && images[0].Url != "" {
 		task.PrivateData.ResultURL = images[0].Url
+	}
+	if task.PrivateData.ImageGallery {
+		task.PrivateData.ImageGalleryResults = make([]model.TaskImageGalleryResult, 0, len(images))
+		for _, image := range images {
+			if image.Url == "" {
+				continue
+			}
+			task.PrivateData.ImageGalleryResults = append(task.PrivateData.ImageGalleryResults, model.TaskImageGalleryResult{
+				URL: image.Url, MimeType: image.MimeType, OutputFormat: image.OutputFormat, Size: image.Size,
+			})
+		}
 	}
 	task.Status = model.TaskStatusSuccess
 	task.Progress = "100%"

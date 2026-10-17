@@ -583,6 +583,12 @@ func generateDefaultSidebarConfig(userRole int) string {
 		"task":       true,
 	}
 
+	// 生成区域 - 所有用户都可以访问
+	defaultConfig["generation"] = map[string]any{
+		"enabled": true,
+		"image":   true,
+	}
+
 	// 个人中心区域 - 所有用户都可以访问
 	defaultConfig["personal"] = map[string]any{
 		"enabled":  true,

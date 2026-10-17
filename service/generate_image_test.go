@@ -35,6 +35,14 @@ func testStringPtr(value string) *string {
 	return &value
 }
 
+func TestGenerateImageOutputStrategyStoresDashboardResultsAsDurableURLs(t *testing.T) {
+	galleryTask := &model.Task{PrivateData: model.TaskPrivateData{ImageGallery: true}}
+	publicTask := &model.Task{}
+
+	assert.Equal(t, dto.ImageOutputStrategyR2, generateImageOutputStrategy(galleryTask, dto.ImageOutputStrategyPassthrough))
+	assert.Equal(t, dto.ImageOutputStrategyPassthrough, generateImageOutputStrategy(publicTask, dto.ImageOutputStrategyPassthrough))
+}
+
 type passthroughImageAdaptor struct{}
 
 func (passthroughImageAdaptor) Init(*relaycommon.RelayInfo) {}

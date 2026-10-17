@@ -385,6 +385,12 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 	upstreamModelName := service.ApplyModelMapping(modelName, channel.ModelMapping)
 	isModelMapped := upstreamModelName != modelName
 
+	isPlayground := false
+	requestURLPath := ""
+	if c.Request != nil && c.Request.URL != nil {
+		isPlayground = strings.HasPrefix(c.Request.URL.Path, "/pg/")
+		requestURLPath = c.Request.URL.String()
+	}
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          userId,
 		UserGroup:       common.GetContextKeyString(c, constant.ContextKeyUserGroup),
@@ -401,6 +407,8 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 		TokenId:        tokenId,
 		TokenKey:       common.GetContextKeyString(c, constant.ContextKeyTokenKey),
 		TokenUnlimited: common.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
+		IsPlayground:   isPlayground,
+		RequestURLPath: requestURLPath,
 	}
 
 	// Populate user settings for billing preference
@@ -585,8 +593,19 @@ func AsyncTaskFetch(c *gin.Context) {
 
 	if task.Status == model.TaskStatusSuccess {
 		if task.Platform == constant.TaskPlatformGenerateImage {
-			// 统一生图：完成时已存入 GenerateImageResult，原样返回
-			resp.Data = task.Data
+			if task.PrivateData.ImageGallery && len(task.PrivateData.ImageGalleryResults) > 0 {
+				images := make([]dto.GenerateImageData, 0, len(task.PrivateData.ImageGalleryResults))
+				for _, image := range task.PrivateData.ImageGalleryResults {
+					images = append(images, dto.GenerateImageData{
+						Url: image.URL, MimeType: image.MimeType, OutputFormat: image.OutputFormat, Size: image.Size,
+					})
+				}
+				resp.Data, _ = common.Marshal(dto.GenerateImageResult{
+					Model: task.Properties.OriginModelName, Created: task.FinishTime, Images: images,
+				})
+			} else {
+				resp.Data = task.Data
+			}
 		} else if task.Platform == constant.TaskPlatformUnifiedImage {
 			// Return standard OpenAI ImageResponse format
 			imageResp := dto.ImageResponse{Created: task.FinishTime}

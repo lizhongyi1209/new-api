@@ -73,6 +73,10 @@ export function SidebarModulesSection({
       title: t('Console area'),
       description: t('Dashboards, tokens, and usage analytics.'),
     },
+    generation: {
+      title: t('Generate'),
+      description: t('Create media with supported generation models.'),
+    },
     personal: {
       title: t('Personal area'),
       description: t('Wallet management and personal preferences.'),
@@ -121,6 +125,14 @@ export function SidebarModulesSection({
       task: {
         title: t('Task logs'),
         description: t('Background job tracker for queued work.'),
+      },
+    },
+    generation: {
+      image: {
+        title: t('Image Generation'),
+        description: t(
+          'Create and edit images with Nano Banana and GPT Image.'
+        ),
       },
     },
     personal: {

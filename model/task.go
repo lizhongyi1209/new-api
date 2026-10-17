@@ -121,6 +121,8 @@ type TaskPrivateData struct {
 	RequestSnapshot     *TaskRequestSnapshot      `json:"request_snapshot,omitempty"`      // 脱敏后的原始/生效请求参数
 	SubmitResponse      json.RawMessage           `json:"submit_response,omitempty"`       // 脱敏后的上游提交响应
 	ResultURL           string                    `json:"result_url,omitempty"`            // 任务成功后的结果 URL（视频地址等）
+	ImageGallery        bool                      `json:"image_gallery,omitempty"`         // 后台绘图任务，结果永久保留为 URL
+	ImageGalleryResults []TaskImageGalleryResult  `json:"image_gallery_results,omitempty"` // URL-only gallery metadata; survives data cleanup
 	ErrorDetail         *TaskErrorDetail          `json:"error_detail,omitempty"`          // 任务失败时的结构化错误信息
 	GenerateImageTiming *GenerateImageTimingAudit `json:"generate_image_timing,omitempty"` // 统一异步生图的分段耗时与流量审计
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
@@ -138,6 +140,28 @@ type TaskPrivateData struct {
 	PollFailures        int                    `json:"poll_failures,omitempty"`
 	ResponsesBackground bool                   `json:"responses_background,omitempty"`
 	ResultDiscarded     bool                   `json:"result_discarded,omitempty"`
+}
+
+type TaskImageGalleryResult struct {
+	URL          string `json:"url"`
+	MimeType     string `json:"mime_type,omitempty"`
+	OutputFormat string `json:"output_format,omitempty"`
+	Size         string `json:"size,omitempty"`
+}
+
+// ListImageGalleryCandidates reads only metadata, never the potentially large
+// data column. Filtering the private JSON marker is done by the caller so the
+// query stays portable across SQLite, MySQL, and PostgreSQL.
+func ListImageGalleryCandidates(userID int, beforeID int64, limit int) ([]Task, error) {
+	query := DB.Model(&Task{}).
+		Select("id", "task_id", "submit_time", "finish_time", "properties", "private_data").
+		Where("user_id = ? AND platform = ? AND status = ?", userID, constant.TaskPlatformGenerateImage, TaskStatusSuccess)
+	if beforeID > 0 {
+		query = query.Where("id < ?", beforeID)
+	}
+	var tasks []Task
+	err := query.Order("id DESC").Limit(limit).Find(&tasks).Error
+	return tasks, err
 }
 
 // TaskExecutionSnapshot contains only credential-free provenance. Plugin
