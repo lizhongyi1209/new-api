@@ -49,6 +49,49 @@ func seedHardcodedToolPrices(prices map[string]float64) {
 	prices["web_search_preview:gpt-4.1*"] = defaultSearchPreviewModelPrice
 	prices["web_search_preview:gpt-4o-mini*"] = defaultSearchPreviewModelPrice
 	prices["web_search_preview:gpt-4.1-mini*"] = defaultSearchPreviewModelPrice
+
+	// Google Search grounding (USD per 1K, ai.google.dev/gemini-api/docs/pricing
+	// and cloud.google.com/vertex-ai/generative-ai/pricing): Gemini 3 bills each
+	// search query at $14 (the google_search default); Gemini 2.5 and older bill
+	// $35 per grounded prompt, so their query count is free and the grounded
+	// prompt carries the price.
+	prices["google_search:gemini-2.5*"] = 0
+	prices["google_search:gemini-2.0*"] = 0
+	prices["google_search:gemini-1.5*"] = 0
+	prices["google_search_grounded_prompt:gemini-2.5*"] = 35
+	prices["google_search_grounded_prompt:gemini-2.0*"] = 35
+	prices["google_search_grounded_prompt:gemini-1.5*"] = 35
+
+	// Vendor search tiers, verbatim in the vendor's list currency per 1K
+	// calls. CNY: Zhipu search engines, 0.01/0.03/0.05 CNY per call
+	// (https://docs.bigmodel.cn/cn/guide/tools/web-search), and Alibaba Model
+	// Studio search strategies at Beijing prices
+	// (https://help.aliyun.com/zh/model-studio/web-search); the Singapore
+	// agent price (73.392381 CNY) is set by the operator. USD: Azure
+	// Responses web search, billed as Bing transactions at $14 per 1,000
+	// (https://www.microsoft.com/en-us/bing/apis), and xAI web search $5 per
+	// 1K calls, x_search $5 per 1K posts and $10 per 1K profiles
+	// (https://docs.x.ai/developers/pricing).
+	prices["search_std"] = 10
+	prices["search_pro"] = 30
+	prices["search_pro_sogou"] = 50
+	prices["search_pro_quark"] = 50
+	prices["search_strategy_turbo"] = 3
+	prices["search_strategy_max"] = 4
+	prices["search_strategy_agent"] = 4
+	prices["search_strategy_agent_max"] = 4
+	prices["bing_web_search"] = 14
+	prices["web_search:grok*"] = 5
+	prices["x_search_posts"] = 5
+	prices["x_search_profiles"] = 10
+
+	// DeepSeek Search and Fetch APIs, $0.75 per 1,000 successful requests
+	// each (https://api-docs.deepseek.com/quick_start/pricing), for the
+	// searches and page fetches DeepSeek runs server-side for Claude Code and
+	// Codex traffic. /v1/tools/search and /v1/tools/fetch bill through the
+	// deepseek-search and deepseek-fetch model prices instead.
+	prices["deepseek_search"] = 0.75
+	prices["deepseek_fetch"] = 0.75
 }
 
 // ToolPriceSetting is managed by config.GlobalConfig.Register.
