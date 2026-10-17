@@ -24,11 +24,6 @@ export type SelectOption = {
   value: string
 }
 
-export type GroupOption = SelectOption & {
-  desc?: string
-  ratio: number
-}
-
 export type ReferenceImage = {
   file: File
   id: string
@@ -101,7 +96,6 @@ export type ImageGenerationTask = {
 export type ImageGenerationFormValue = {
   aspectRatio: string
   background: 'auto' | 'transparent'
-  group: string
   model: string
   moderation: 'auto' | 'low'
   outputFormat: 'jpeg' | 'png' | 'webp'

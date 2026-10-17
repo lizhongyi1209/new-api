@@ -23,7 +23,6 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { ImagePlus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -31,7 +30,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { handleServerError } from '@/lib/handle-server-error'
 
 import {
-  getImageGenerationGroups,
   getImageGenerationHistory,
   getImageGenerationModels,
   getImageGenerationTask,
@@ -49,17 +47,11 @@ import type { ImageGenerationFormValue, ReferenceImage } from './types'
 export function ImageGeneration() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
-  const [group, setGroup] = useState('')
   const [taskId, setTaskId] = useState('')
 
-  const groupsQuery = useQuery({
-    queryKey: ['image-generation', 'groups'],
-    queryFn: getImageGenerationGroups,
-  })
   const modelsQuery = useQuery({
-    queryKey: ['image-generation', 'models', group],
-    queryFn: () => getImageGenerationModels(group),
-    enabled: group !== '',
+    queryKey: ['image-generation', 'models', 'auto'],
+    queryFn: () => getImageGenerationModels('auto'),
   })
   const taskQuery = useQuery({
     queryKey: ['image-generation', 'task', taskId],
@@ -110,22 +102,8 @@ export function ImageGeneration() {
 
   return (
     <div className='bg-muted/20 flex size-full min-h-0 flex-col overflow-x-hidden overflow-y-auto xl:overflow-hidden'>
-      <div className='mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5 lg:p-6'>
-        <header className='flex items-start gap-3 px-1 sm:items-center'>
-          <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl'>
-            <ImagePlus className='size-5' aria-hidden='true' />
-          </div>
-          <div className='min-w-0'>
-            <h1 className='text-xl font-semibold tracking-tight sm:text-2xl'>
-              {t('Image Generation')}
-            </h1>
-            <p className='text-muted-foreground mt-0.5 text-sm sm:mt-1'>
-              {t('Create and edit images with Nano Banana and GPT Image.')}
-            </p>
-          </div>
-        </header>
-
-        <div className='grid min-h-0 flex-1 items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch'>
+      <div className='mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col p-2 sm:p-3 lg:p-4'>
+        <div className='grid min-h-0 flex-1 items-start gap-3 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch'>
           <Card
             data-card-hover='false'
             className='min-h-0 min-w-0 overflow-visible xl:h-full'
@@ -136,10 +114,8 @@ export function ImageGeneration() {
             <CardContent className='flex min-h-0 flex-1 flex-col px-4 sm:px-6 xl:[scrollbar-width:none] xl:overflow-y-auto xl:[&::-webkit-scrollbar]:hidden'>
               <GenerationForm
                 disabled={disabled}
-                groups={groupsQuery.data ?? []}
                 isLoadingModels={modelsQuery.isLoading}
                 models={modelsQuery.data ?? []}
-                onGroupChange={setGroup}
                 onSubmit={(value, references) =>
                   generationMutation.mutate({ references, value })
                 }

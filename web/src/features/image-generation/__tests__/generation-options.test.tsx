@@ -29,7 +29,6 @@ function OptionsFixture(props: { family: ImageModelFamily; model: string }) {
     defaultValues: {
       aspectRatio: '1:1',
       background: 'auto',
-      group: 'default',
       model: props.model,
       moderation: 'auto',
       outputFormat: 'png',

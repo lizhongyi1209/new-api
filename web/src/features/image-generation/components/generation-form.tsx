@@ -51,7 +51,6 @@ import {
 } from '../lib/image-generation'
 import { imageGenerationSchema } from '../lib/schema'
 import type {
-  GroupOption,
   ImageGenerationFormValue,
   ReferenceImage,
   SelectOption,
@@ -61,10 +60,8 @@ import { ReferenceImagePicker } from './reference-image-picker'
 
 type GenerationFormProps = {
   disabled: boolean
-  groups: GroupOption[]
   isLoadingModels: boolean
   models: SelectOption[]
-  onGroupChange: (group: string) => void
   onSubmit: (
     value: ImageGenerationFormValue,
     references: ReferenceImage[]
@@ -74,7 +71,6 @@ type GenerationFormProps = {
 const defaultValues: ImageGenerationFormValue = {
   aspectRatio: '1:1',
   background: 'auto',
-  group: '',
   model: '',
   moderation: 'auto',
   outputFormat: 'png',
@@ -93,7 +89,6 @@ export function GenerationForm(props: GenerationFormProps) {
     defaultValues,
     resolver: zodResolver(imageGenerationSchema),
   })
-  const selectedGroup = useWatch({ control: form.control, name: 'group' })
   const selectedModel = useWatch({ control: form.control, name: 'model' })
   const selectedOption = getImageModelOption(selectedModel)
   const selectedSeriesId = selectedOption?.seriesId ?? ''
@@ -143,17 +138,7 @@ export function GenerationForm(props: GenerationFormProps) {
       value: 'enterprise',
     },
   ]
-  const groups = props.groups
-  const onGroupChange = props.onGroupChange
   const models = props.models
-
-  useEffect(() => {
-    if (groups.length === 0) return
-    if (groups.some((group) => group.value === selectedGroup)) return
-    const nextGroup = groups[0].value
-    form.setValue('group', nextGroup)
-    onGroupChange(nextGroup)
-  }, [form, groups, onGroupChange, selectedGroup])
 
   useEffect(() => {
     if (models.length === 0) {
@@ -233,47 +218,6 @@ export function GenerationForm(props: GenerationFormProps) {
         <div className='grid gap-3 sm:grid-cols-2'>
           <FormField
             control={form.control}
-            name='group'
-            render={({ field }) => (
-              <FormItem className='sm:col-span-2'>
-                <FormLabel>{t('Group')}</FormLabel>
-                <Select
-                  modal={false}
-                  items={props.groups}
-                  value={field.value}
-                  onValueChange={(value) => {
-                    if (!value) return
-                    field.onChange(value)
-                    form.setValue('model', '')
-                    props.onGroupChange(value)
-                  }}
-                  disabled={props.disabled || props.groups.length === 0}
-                >
-                  <FormControl>
-                    <SelectTrigger className='w-full'>
-                      <SelectValue placeholder={t('Select a group')} />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent
-                    alignItemWithTrigger={false}
-                    className='max-h-[min(15rem,var(--available-height))] overscroll-contain data-closed:animate-none data-open:animate-none'
-                  >
-                    <SelectGroup>
-                      {props.groups.map((group) => (
-                        <SelectItem key={group.value} value={group.value}>
-                          {group.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
             name='model'
             render={() => (
               <FormItem>
@@ -290,7 +234,7 @@ export function GenerationForm(props: GenerationFormProps) {
                   }
                 >
                   <FormControl>
-                    <SelectTrigger className='w-full'>
+                    <SelectTrigger className='w-full transition-none'>
                       <SelectValue
                         placeholder={
                           props.isLoadingModels
@@ -300,10 +244,7 @@ export function GenerationForm(props: GenerationFormProps) {
                       />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent
-                    alignItemWithTrigger={false}
-                    className='data-closed:animate-none data-open:animate-none'
-                  >
+                  <SelectContent alignItemWithTrigger={false} animated={false}>
                     {bananaModels.length > 0 ? (
                       <SelectGroup>
                         <SelectLabel>Nano Banana</SelectLabel>
@@ -340,13 +281,10 @@ export function GenerationForm(props: GenerationFormProps) {
               onValueChange={(value) => value && selectTier(value)}
               disabled={props.disabled || selectedSeriesId === ''}
             >
-              <SelectTrigger id={tierId} className='w-full'>
+              <SelectTrigger id={tierId} className='w-full transition-none'>
                 <SelectValue placeholder={t('Tier')} />
               </SelectTrigger>
-              <SelectContent
-                alignItemWithTrigger={false}
-                className='data-closed:animate-none data-open:animate-none'
-              >
+              <SelectContent alignItemWithTrigger={false} animated={false}>
                 <SelectGroup>
                   {tierOptions.map((tier) => (
                     <SelectItem
@@ -391,9 +329,7 @@ export function GenerationForm(props: GenerationFormProps) {
 
         {props.models.length === 0 && !props.isLoadingModels ? (
           <p className='text-muted-foreground rounded-lg border border-dashed p-3 text-sm'>
-            {t(
-              'No Nano Banana or GPT Image models are available in this group.'
-            )}
+            {t('No available models')}
           </p>
         ) : null}
 

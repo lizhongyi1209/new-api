@@ -101,13 +101,13 @@ function OptionSelect(props: {
       onValueChange={(value) => value && props.onChange(value)}
       disabled={props.disabled}
     >
-      <SelectTrigger className='w-full' aria-label={props.label}>
+      <SelectTrigger
+        className='w-full transition-none'
+        aria-label={props.label}
+      >
         <SelectValue />
       </SelectTrigger>
-      <SelectContent
-        alignItemWithTrigger={false}
-        className='data-closed:animate-none data-open:animate-none'
-      >
+      <SelectContent alignItemWithTrigger={false} animated={false}>
         <SelectGroup>
           {props.options.map((value) => (
             <SelectItem key={value} value={value}>

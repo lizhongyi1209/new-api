@@ -119,7 +119,7 @@ export function buildImageGenerationRequest(
 ): ImageGenerationRequest {
   const family = getImageModelFamily(form.model)
   const request: ImageGenerationRequest = {
-    group: form.group,
+    group: 'auto',
     model: form.model,
     prompt: form.prompt.trim(),
   }

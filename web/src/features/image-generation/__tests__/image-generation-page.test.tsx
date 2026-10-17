@@ -18,13 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { getImageGenerationModels } from '../api'
 import { ImageGeneration } from '../index'
 
 vi.mock('../api', () => ({
-  getImageGenerationGroups: vi.fn().mockResolvedValue([]),
   getImageGenerationHistory: vi
     .fn()
     .mockResolvedValue({ items: [], next_before_id: 0 }),
@@ -57,6 +57,19 @@ describe('image generation page', () => {
     ).toHaveClass('xl:overflow-y-auto', 'xl:[scrollbar-width:none]')
     expect(resultCard).toHaveAttribute('data-card-hover', 'false')
     expect(resultCard).toHaveClass('overflow-hidden')
+    expect(
+      screen.queryByRole('heading', { name: 'Image Generation' })
+    ).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Group' })).toBeNull()
+    expect(settingsCard?.parentElement).toHaveClass('gap-3')
+    expect(settingsCard?.parentElement?.parentElement).toHaveClass(
+      'p-2',
+      'sm:p-3',
+      'lg:p-4'
+    )
+    await waitFor(() =>
+      expect(getImageGenerationModels).toHaveBeenCalledWith('auto')
+    )
     expect(resultCard?.closest('.bg-muted\\/20')).toHaveClass(
       'xl:overflow-hidden'
     )

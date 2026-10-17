@@ -31,7 +31,6 @@ import type { ImageGenerationFormValue } from '../types'
 const baseForm: ImageGenerationFormValue = {
   aspectRatio: '16:9',
   background: 'transparent',
-  group: 'default',
   model: 'gemini-3.1-flash-image-c-sp',
   moderation: 'low',
   outputFormat: 'png',
@@ -70,7 +69,7 @@ describe('image generation request contract', () => {
       buildImageGenerationRequest(baseForm, ['https://r2.test/input.png'])
     ).toEqual({
       aspect_ratio: '16:9',
-      group: 'default',
+      group: 'auto',
       images: ['https://r2.test/input.png'],
       model: 'gemini-3.1-flash-image-c-sp',
       prompt: 'A quiet lake at sunrise',
@@ -91,7 +90,7 @@ describe('image generation request contract', () => {
       )
     ).toEqual({
       aspect_ratio: '16:9',
-      group: 'default',
+      group: 'auto',
       model: 'gemini-nano-banana-2.1-sp',
       prompt: 'A quiet lake at sunrise',
       response_modalities: ['IMAGE'],
@@ -111,7 +110,7 @@ describe('image generation request contract', () => {
       )
     ).toEqual({
       background: 'transparent',
-      group: 'default',
+      group: 'auto',
       model: 'gpt-image-2.5-sunburst-sp',
       moderation: 'low',
       output_format: 'png',

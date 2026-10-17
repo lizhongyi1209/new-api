@@ -22,7 +22,6 @@ import { requireServerSuccess } from '@/lib/server-error-message'
 
 import { filterImageGenerationModels } from './lib/image-generation'
 import type {
-  GroupOption,
   ImageGenerationRequest,
   ImageGenerationSubmission,
   ImageGenerationHistoryPage,
@@ -42,22 +41,6 @@ export async function getImageGenerationModels(
   return filterImageGenerationModels(models).map((model) => ({
     label: model,
     value: model,
-  }))
-}
-
-export async function getImageGenerationGroups(): Promise<GroupOption[]> {
-  const response = await api.get('/api/user/self/groups')
-  requireServerSuccess(response.data)
-  const groups = response.data.data as
-    | Record<string, { desc?: string; ratio: number }>
-    | undefined
-  if (!groups) return []
-
-  return Object.entries(groups).map(([group, info]) => ({
-    desc: info.desc,
-    label: group,
-    ratio: info.ratio,
-    value: group,
   }))
 }
 

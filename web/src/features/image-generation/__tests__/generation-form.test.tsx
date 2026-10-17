@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -34,10 +34,8 @@ describe('image generation form', () => {
     render(
       <GenerationForm
         disabled={false}
-        groups={[]}
         isLoadingModels={false}
         models={models}
-        onGroupChange={vi.fn()}
         onSubmit={vi.fn()}
       />
     )
@@ -47,66 +45,45 @@ describe('image generation form', () => {
     expect(prompt.closest('[data-slot="form-item"]')).toHaveClass('flex-1')
   })
 
-  it('places reference images before the group and limits a long group menu to a scrollable height', async () => {
-    const groups = Array.from({ length: 20 }, (_, index) => ({
-      label: `group-${index}`,
-      ratio: 1,
-      value: `group-${index}`,
-    }))
+  it('places reference images before model settings without a group selector', () => {
     render(
       <GenerationForm
         disabled={false}
-        groups={groups}
         isLoadingModels={false}
         models={models}
-        onGroupChange={vi.fn()}
         onSubmit={vi.fn()}
       />
     )
 
     const referencePicker = screen.getByText('Reference images')
-    const groupLabel = screen.getByText('Group')
-    expect(groupLabel.closest('[data-slot="form-item"]')).toHaveClass(
-      'sm:col-span-2'
-    )
+    const modelLabel = screen.getByText('Model')
     expect(
-      referencePicker.compareDocumentPosition(groupLabel) &
+      referencePicker.compareDocumentPosition(modelLabel) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('combobox', { name: 'Group' }))
-    await waitFor(() => {
-      const menu = document.querySelector('[data-slot="select-content"]')
-      expect(menu).toHaveClass(
-        'max-h-[min(15rem,var(--available-height))]',
-        'overflow-y-auto'
-      )
-    })
-    expect(screen.getByRole('option', { name: 'group-19' })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Group' })).toBeNull()
   })
 
-  it('opens the group menu repeatedly without locking the page or animating the popup', async () => {
+  it('opens the model menu repeatedly without locking the page or moving the popup', async () => {
     const user = userEvent.setup()
     const bodyOverflow = document.body.style.overflow
     render(
       <GenerationForm
         disabled={false}
-        groups={[{ label: 'default', ratio: 1, value: 'default' }]}
         isLoadingModels={false}
         models={models}
-        onGroupChange={vi.fn()}
         onSubmit={vi.fn()}
       />
     )
 
-    const trigger = screen.getByRole('combobox', { name: 'Group' })
+    const trigger = screen.getByRole('combobox', { name: 'Model' })
     await user.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'true')
     expect(document.body.style.overflow).toBe(bodyOverflow)
-    expect(document.querySelector('[data-slot="select-content"]')).toHaveClass(
-      'data-open:animate-none',
-      'data-closed:animate-none'
-    )
+    const popup = document.querySelector('[data-slot="select-content"]')
+    expect(popup).toHaveClass('animate-none', 'transition-none')
+    expect(popup).not.toHaveClass('data-open:animate-in')
+    expect(trigger).toHaveClass('transition-none')
     await user.click(trigger)
     expect(trigger).toHaveAttribute('aria-expanded', 'false')
     await user.click(trigger)
@@ -119,10 +96,8 @@ describe('image generation form', () => {
     render(
       <GenerationForm
         disabled={false}
-        groups={[{ label: 'default', ratio: 1, value: 'default' }]}
         isLoadingModels={false}
         models={models}
-        onGroupChange={vi.fn()}
         onSubmit={onSubmit}
       />
     )
@@ -164,13 +139,11 @@ describe('image generation form', () => {
     render(
       <GenerationForm
         disabled={false}
-        groups={[{ label: 'default', ratio: 1, value: 'default' }]}
         isLoadingModels={false}
         models={[
           { label: 'gemini-nano-banana-2.1', value: 'gemini-nano-banana-2.1' },
           { label: 'gpt-image-2-c-sp', value: 'gpt-image-2-c-sp' },
         ]}
-        onGroupChange={vi.fn()}
         onSubmit={vi.fn()}
       />
     )
