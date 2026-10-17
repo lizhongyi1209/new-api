@@ -238,7 +238,7 @@ export function GenerationResult(props: GenerationResultProps) {
             aria-label={t('Generating your image')}
           />
         ) : null}
-        {visibleImages.map(({ item, image, index, source }) => (
+        {visibleImages.map(({ item, index, source }) => (
           <figure
             key={`${item.task_id}-${source}`}
             className='group bg-muted/30 relative aspect-square min-w-0 overflow-hidden rounded-xl border'
@@ -251,19 +251,16 @@ export function GenerationResult(props: GenerationResultProps) {
             />
             <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100'>
               <Button
-                size='sm'
+                size='icon-sm'
                 variant='secondary'
+                aria-label={t('Download')}
                 render={
                   <a
-                    href={source}
-                    download={`generated-image-${item.task_id}-${index + 1}.${image.output_format || 'png'}`}
-                    target='_blank'
-                    rel='noreferrer'
+                    href={`/pg/images/tasks/${encodeURIComponent(item.task_id)}/images/${index}/download`}
                   />
                 }
               >
                 <Download aria-hidden='true' />
-                {t('Download')}
               </Button>
             </figcaption>
           </figure>

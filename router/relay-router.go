@@ -92,6 +92,7 @@ func SetRelayRouter(router *gin.Engine) {
 		playgroundImageRouter.POST("/uploads", middleware.UploadRateLimit(), controller.UploadTemporaryInputAttachment)
 		playgroundImageRouter.GET("/history", controller.ImageGenerationHistory)
 		playgroundImageRouter.GET("/tasks/:id", controller.AsyncTaskFetch)
+		playgroundImageRouter.GET("/tasks/:id/images/:index/download", controller.ImageGenerationDownload)
 		playgroundImageRouter.POST("/generations", middleware.Distribute(), controller.GenerateImageSubmit)
 	}
 	relayV1Router := router.Group("/v1")

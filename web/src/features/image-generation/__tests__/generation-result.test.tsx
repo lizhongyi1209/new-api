@@ -64,6 +64,32 @@ describe('generation result gallery', () => {
     expect(range).toHaveAttribute('aria-valuenow', '120')
   })
 
+  it('offers an icon-only download that uses the owned task endpoint', () => {
+    render(
+      <GenerationResult
+        {...defaultProps}
+        history={[
+          {
+            task_id: 'saved-task',
+            model: 'gemini-nano-banana-2.1',
+            created: 100,
+            images: [{ url: 'https://images.example.com/images/saved.png' }],
+          },
+        ]}
+      />
+    )
+
+    const download = screen.getByRole('button', { name: 'Download' })
+    expect(download).toHaveAttribute(
+      'href',
+      '/pg/images/tasks/saved-task/images/0/download'
+    )
+    expect(download).not.toHaveAttribute('target')
+    expect(download).toHaveClass('size-7')
+    expect(download.textContent).toBe('')
+    expect(download.querySelector('svg')).toBeInTheDocument()
+  })
+
   it('shows a square preview while a new task runs alongside saved results', () => {
     render(
       <GenerationResult
