@@ -285,6 +285,11 @@ func ApiErrorMsg(c *gin.Context, msg string) {
 	})
 }
 
+// ApiErrorT returns an English source key and parameters for the web console.
+func ApiErrorT(c *gin.Context, key string, params ...map[string]any) {
+	ApiError(c, NewMessage(key, params...))
+}
+
 func ApiSuccess(c *gin.Context, data any) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
