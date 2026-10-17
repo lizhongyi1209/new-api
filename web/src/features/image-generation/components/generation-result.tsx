@@ -28,13 +28,19 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
+import { handleServerError } from '@/lib/handle-server-error'
 
+import { getImageGenerationDownload } from '../api'
 import {
   calculateImageGridLayout,
   generatedImageSource,
   isTerminalTaskStatus,
 } from '../lib/image-generation'
-import type { ImageGenerationHistoryItem, ImageGenerationTask } from '../types'
+import type {
+  GeneratedImage,
+  ImageGenerationHistoryItem,
+  ImageGenerationTask,
+} from '../types'
 
 type GenerationResultProps = {
   history: ImageGenerationHistoryItem[]
@@ -53,6 +59,7 @@ export function GenerationResult(props: GenerationResultProps) {
   const { t } = useTranslation()
   const [tileSize, setTileSize] = useState(220)
   const [page, setPage] = useState(0)
+  const [downloadingImage, setDownloadingImage] = useState<string | null>(null)
   const [layout, setLayout] = useState({ columns: 2, capacity: 6 })
   const gridRef = useRef<HTMLDivElement>(null)
   const taskIsActive =
@@ -88,6 +95,30 @@ export function GenerationResult(props: GenerationResultProps) {
     Math.max(0, firstTileIndex + layout.capacity - (taskIsActive ? 1 : 0))
   )
   const showPreview = taskIsActive && currentPage === 0
+
+  const downloadImage = async (
+    item: ImageGenerationHistoryItem,
+    index: number,
+    image: GeneratedImage
+  ) => {
+    if (downloadingImage !== null) return
+    setDownloadingImage(`${item.task_id}:${index}`)
+    try {
+      const blob = await getImageGenerationDownload(item.task_id, index)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `generated-image-${item.task_id}-${index + 1}.${image.output_format || 'png'}`
+      document.body.append(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      handleServerError(error)
+    } finally {
+      setDownloadingImage(null)
+    }
+  }
 
   useLayoutEffect(() => {
     const grid = gridRef.current
@@ -238,7 +269,7 @@ export function GenerationResult(props: GenerationResultProps) {
             aria-label={t('Generating your image')}
           />
         ) : null}
-        {visibleImages.map(({ item, index, source }) => (
+        {visibleImages.map(({ item, image, index, source }) => (
           <figure
             key={`${item.task_id}-${source}`}
             className='group bg-muted/30 relative aspect-square min-w-0 overflow-hidden rounded-xl border'
@@ -253,14 +284,17 @@ export function GenerationResult(props: GenerationResultProps) {
               <Button
                 size='icon-sm'
                 variant='secondary'
+                type='button'
                 aria-label={t('Download')}
-                render={
-                  <a
-                    href={`/pg/images/tasks/${encodeURIComponent(item.task_id)}/images/${index}/download`}
-                  />
-                }
+                aria-busy={downloadingImage === `${item.task_id}:${index}`}
+                disabled={downloadingImage !== null}
+                onClick={() => void downloadImage(item, index, image)}
               >
-                <Download aria-hidden='true' />
+                {downloadingImage === `${item.task_id}:${index}` ? (
+                  <LoaderCircle className='animate-spin' aria-hidden='true' />
+                ) : (
+                  <Download aria-hidden='true' />
+                )}
               </Button>
             </figcaption>
           </figure>

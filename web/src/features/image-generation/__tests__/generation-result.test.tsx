@@ -17,11 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { getImageGenerationDownload } from '../api'
 import { GenerationResult } from '../components/generation-result'
+
+vi.mock('../api', () => ({ getImageGenerationDownload: vi.fn() }))
+
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.mocked(getImageGenerationDownload).mockReset()
+})
 
 const defaultProps = {
   hasMore: false,
@@ -64,7 +72,20 @@ describe('generation result gallery', () => {
     expect(range).toHaveAttribute('aria-valuenow', '120')
   })
 
-  it('offers an icon-only download that uses the owned task endpoint', () => {
+  it('downloads through the authenticated API client without navigating away', async () => {
+    const user = userEvent.setup()
+    const blob = new Blob(['saved-image-bytes'], { type: 'image/png' })
+    vi.mocked(getImageGenerationDownload).mockResolvedValue(blob)
+    const createObjectURL = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:generated-download')
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL')
+    const clickedDownloads: Array<{ href: string; filename: string }> = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+      function (this: HTMLAnchorElement) {
+        clickedDownloads.push({ href: this.href, filename: this.download })
+      }
+    )
     render(
       <GenerationResult
         {...defaultProps}
@@ -80,14 +101,54 @@ describe('generation result gallery', () => {
     )
 
     const download = screen.getByRole('button', { name: 'Download' })
-    expect(download).toHaveAttribute(
-      'href',
-      '/pg/images/tasks/saved-task/images/0/download'
-    )
-    expect(download).not.toHaveAttribute('target')
+    expect(download).not.toHaveAttribute('href')
     expect(download).toHaveClass('size-7')
     expect(download.textContent).toBe('')
     expect(download.querySelector('svg')).toBeInTheDocument()
+    await user.click(download)
+
+    await waitFor(() => {
+      expect(getImageGenerationDownload).toHaveBeenCalledWith('saved-task', 0)
+      expect(clickedDownloads).toEqual([
+        {
+          href: 'blob:generated-download',
+          filename: 'generated-image-saved-task-1.png',
+        },
+      ])
+    })
+    expect(createObjectURL).toHaveBeenCalledWith(blob)
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:generated-download')
+  })
+
+  it('keeps the gallery available when the authenticated download fails', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getImageGenerationDownload).mockRejectedValue(
+      new Error('download unavailable')
+    )
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL')
+    render(
+      <GenerationResult
+        {...defaultProps}
+        history={[
+          {
+            task_id: 'saved-task',
+            model: 'gemini-nano-banana-2.1',
+            created: 100,
+            images: [{ url: 'https://images.example.com/images/saved.png' }],
+          },
+        ]}
+      />
+    )
+
+    const download = screen.getByRole('button', { name: 'Download' })
+    await user.click(download)
+
+    await waitFor(() => {
+      expect(getImageGenerationDownload).toHaveBeenCalledWith('saved-task', 0)
+      expect(download).toBeEnabled()
+    })
+    expect(createObjectURL).not.toHaveBeenCalled()
+    expect(screen.getByRole('img', { name: 'Generated image 1' })).toBeVisible()
   })
 
   it('shows a square preview while a new task runs alongside saved results', () => {

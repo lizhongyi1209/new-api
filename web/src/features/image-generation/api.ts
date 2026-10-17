@@ -76,6 +76,17 @@ export async function getImageGenerationTask(
   return response.data
 }
 
+export async function getImageGenerationDownload(
+  taskId: string,
+  index: number
+): Promise<Blob> {
+  const response = await api.get<Blob>(
+    `/pg/images/tasks/${encodeURIComponent(taskId)}/images/${index}/download`,
+    { responseType: 'blob', disableDuplicate: true }
+  )
+  return response.data
+}
+
 export async function getImageGenerationHistory(
   beforeId = 0
 ): Promise<ImageGenerationHistoryPage> {
