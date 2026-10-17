@@ -46,7 +46,6 @@ export type TemporaryImageUpload = {
 export type ImageGenerationRequest = {
   aspect_ratio?: string
   background?: 'auto' | 'transparent'
-  google_search?: boolean
   group: string
   images?: string[]
   model: string
@@ -90,7 +89,6 @@ export type ImageGenerationTask = {
 export type ImageGenerationFormValue = {
   aspectRatio: string
   background: 'auto' | 'transparent'
-  googleSearch: boolean
   group: string
   model: string
   moderation: 'auto' | 'low'

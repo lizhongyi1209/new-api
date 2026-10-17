@@ -34,7 +34,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 
 import { isGeminiFlashImageModel } from '../lib/image-generation'
 import type { ImageGenerationFormValue, ImageModelFamily } from '../types'
@@ -285,26 +284,6 @@ export function GenerationOptions(props: GenerationOptionsProps) {
                   onChange={field.onChange}
                   options={['default', 'minimal', 'high']}
                   value={field.value}
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
-      ) : null}
-
-      {props.family === 'banana' ? (
-        <FormField
-          control={props.control}
-          name='googleSearch'
-          render={({ field }) => (
-            <FormItem className='border-border/70 bg-muted/20 flex min-h-16 flex-row items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2'>
-              <FormLabel className='m-0'>{t('Google Search')}</FormLabel>
-              <FormControl>
-                <Switch
-                  checked={field.value}
-                  disabled={props.disabled}
-                  onCheckedChange={field.onChange}
-                  aria-label={t('Google Search')}
                 />
               </FormControl>
             </FormItem>

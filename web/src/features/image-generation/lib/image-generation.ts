@@ -64,6 +64,15 @@ export const DOCUMENTED_IMAGE_MODELS = [
 const bananaImageModelSet = new Set<string>(BANANA_IMAGE_MODELS)
 const gptImageModelSet = new Set<string>(GPT_IMAGE_MODELS)
 
+const imageModelSeries: Record<string, string> = {
+  'gemini-nano-banana-2.1': 'Nano Banana 2.1',
+  'gemini-3-pro-image': 'Gemini 3 Pro Image',
+  'gemini-3.1-flash-image': 'Gemini 3.1 Flash Image',
+  'gpt-image-2.5-sunburst': 'GPT Image 2.5 Sunburst',
+  'gpt-image-2.5-flare': 'GPT Image 2.5 Flare',
+  'gpt-image-2': 'GPT Image 2',
+}
+
 export function getImageModelFamily(model: string): ImageModelFamily | null {
   const normalized = model.trim().toLowerCase()
   if (gptImageModelSet.has(normalized)) return 'gpt-image'
@@ -74,6 +83,23 @@ export function getImageModelFamily(model: string): ImageModelFamily | null {
 export function filterImageGenerationModels(models: string[]): string[] {
   const availableModels = new Set(models.map((model) => model.trim()))
   return DOCUMENTED_IMAGE_MODELS.filter((model) => availableModels.has(model))
+}
+
+export function getImageModelDisplayName(
+  model: string,
+  tiers: { specialPrice: string; premium: string; enterprise: string }
+): string {
+  const normalized = model.trim().toLowerCase()
+  if (!getImageModelFamily(normalized)) return model
+
+  const seriesId = normalized.replace(/(?:-c)?-(?:sp|sd)$/, '')
+  const series = imageModelSeries[seriesId]
+  if (!series) return model
+
+  let tier = tiers.enterprise
+  if (normalized.endsWith('-sp')) tier = tiers.specialPrice
+  if (normalized.endsWith('-sd')) tier = tiers.premium
+  return `${series} · ${tier}`
 }
 
 export function isGeminiFlashImageModel(model: string): boolean {
@@ -96,7 +122,6 @@ export function buildImageGenerationRequest(
 
   if (family === 'banana') {
     if (form.aspectRatio) request.aspect_ratio = form.aspectRatio
-    if (form.googleSearch) request.google_search = true
     if (
       isGeminiFlashImageModel(form.model) &&
       form.thinkingLevel !== 'default'

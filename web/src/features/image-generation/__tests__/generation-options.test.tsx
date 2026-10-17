@@ -29,7 +29,6 @@ function OptionsFixture(props: { family: ImageModelFamily; model: string }) {
     defaultValues: {
       aspectRatio: '1:1',
       background: 'auto',
-      googleSearch: false,
       group: 'default',
       model: props.model,
       moderation: 'auto',
@@ -62,14 +61,14 @@ describe('generation model options', () => {
     expect(screen.queryByText('Output format')).not.toBeInTheDocument()
     expect(screen.getByText('Output aspect ratio')).toBeInTheDocument()
     expect(screen.getByText('Thinking level')).toBeInTheDocument()
-    expect(screen.getByText('Google Search')).toBeInTheDocument()
+    expect(screen.queryByText('Google Search')).not.toBeInTheDocument()
   })
 
   it('does not offer Flash-only thinking controls to Nano Banana 2.1', () => {
     render(<OptionsFixture family='banana' model='gemini-nano-banana-2.1-sp' />)
 
     expect(screen.queryByText('Thinking level')).not.toBeInTheDocument()
-    expect(screen.getByText('Google Search')).toBeInTheDocument()
+    expect(screen.queryByText('Google Search')).not.toBeInTheDocument()
   })
 
   it('shows output format for GPT Image models', () => {

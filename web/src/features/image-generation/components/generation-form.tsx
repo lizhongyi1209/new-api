@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LoaderCircle, Sparkles } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 
@@ -43,7 +43,10 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-import { getImageModelFamily } from '../lib/image-generation'
+import {
+  getImageModelDisplayName,
+  getImageModelFamily,
+} from '../lib/image-generation'
 import { imageGenerationSchema } from '../lib/schema'
 import type {
   GroupOption,
@@ -69,7 +72,6 @@ type GenerationFormProps = {
 const defaultValues: ImageGenerationFormValue = {
   aspectRatio: '1:1',
   background: 'auto',
-  googleSearch: false,
   group: '',
   model: '',
   moderation: 'auto',
@@ -91,10 +93,21 @@ export function GenerationForm(props: GenerationFormProps) {
   const selectedGroup = useWatch({ control: form.control, name: 'group' })
   const selectedModel = useWatch({ control: form.control, name: 'model' })
   const family = getImageModelFamily(selectedModel)
-  const bananaModels = props.models.filter(
+  const modelOptions = useMemo(() => {
+    const tiers = {
+      specialPrice: t('Special price'),
+      premium: t('Premium'),
+      enterprise: t('Enterprise'),
+    }
+    return props.models.map((model) => ({
+      ...model,
+      label: getImageModelDisplayName(model.value, tiers),
+    }))
+  }, [props.models, t])
+  const bananaModels = modelOptions.filter(
     (model) => getImageModelFamily(model.value) === 'banana'
   )
-  const gptImageModels = props.models.filter(
+  const gptImageModels = modelOptions.filter(
     (model) => getImageModelFamily(model.value) === 'gpt-image'
   )
   const groups = props.groups
@@ -143,7 +156,6 @@ export function GenerationForm(props: GenerationFormProps) {
     form.setValue('size', nextFamily === 'banana' ? '1K' : 'auto')
     form.setValue('outputFormat', 'png')
     form.setValue('background', 'auto')
-    form.setValue('googleSearch', false)
     form.setValue('moderation', 'auto')
     form.setValue('quality', 'auto')
     form.setValue('thinkingLevel', 'default')
@@ -157,6 +169,12 @@ export function GenerationForm(props: GenerationFormProps) {
           props.onSubmit(value, references)
         )}
       >
+        <ReferenceImagePicker
+          disabled={props.disabled}
+          images={references}
+          onChange={updateReferences}
+        />
+
         <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-1'>
           <FormField
             control={form.control}
@@ -180,7 +198,10 @@ export function GenerationForm(props: GenerationFormProps) {
                       <SelectValue placeholder={t('Select a group')} />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent alignItemWithTrigger={false}>
+                  <SelectContent
+                    alignItemWithTrigger={false}
+                    className='max-h-[min(15rem,var(--available-height))] overscroll-contain'
+                  >
                     <SelectGroup>
                       {props.groups.map((group) => (
                         <SelectItem key={group.value} value={group.value}>
@@ -202,7 +223,7 @@ export function GenerationForm(props: GenerationFormProps) {
               <FormItem>
                 <FormLabel>{t('Model')}</FormLabel>
                 <Select
-                  items={props.models}
+                  items={modelOptions}
                   value={field.value}
                   onValueChange={(value) => value && selectModel(value)}
                   disabled={
@@ -268,12 +289,6 @@ export function GenerationForm(props: GenerationFormProps) {
               <FormMessage />
             </FormItem>
           )}
-        />
-
-        <ReferenceImagePicker
-          disabled={props.disabled}
-          images={references}
-          onChange={updateReferences}
         />
 
         <GenerationOptions

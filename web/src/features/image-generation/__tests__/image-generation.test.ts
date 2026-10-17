@@ -23,6 +23,7 @@ import {
   buildImageGenerationRequest,
   filterImageGenerationModels,
   generatedImageSource,
+  getImageModelDisplayName,
   isTerminalTaskStatus,
 } from '../lib/image-generation'
 import type { ImageGenerationFormValue } from '../types'
@@ -30,7 +31,6 @@ import type { ImageGenerationFormValue } from '../types'
 const baseForm: ImageGenerationFormValue = {
   aspectRatio: '16:9',
   background: 'transparent',
-  googleSearch: true,
   group: 'default',
   model: 'gemini-3.1-flash-image-c-sp',
   moderation: 'low',
@@ -71,7 +71,6 @@ describe('image generation request contract', () => {
     ).toEqual({
       aspect_ratio: '16:9',
       group: 'default',
-      google_search: true,
       images: ['https://r2.test/input.png'],
       model: 'gemini-3.1-flash-image-c-sp',
       prompt: 'A quiet lake at sunrise',
@@ -93,7 +92,6 @@ describe('image generation request contract', () => {
     ).toEqual({
       aspect_ratio: '16:9',
       group: 'default',
-      google_search: true,
       model: 'gemini-nano-banana-2.1-sp',
       prompt: 'A quiet lake at sunrise',
       response_modalities: ['IMAGE'],
@@ -121,6 +119,24 @@ describe('image generation request contract', () => {
       quality: 'max',
       size: '1536x1024',
     })
+  })
+
+  it('shows model series and tiers instead of opaque model suffixes', () => {
+    const tiers = {
+      specialPrice: '特价',
+      premium: '优质',
+      enterprise: '企业',
+    }
+
+    expect(getImageModelDisplayName('gemini-nano-banana-2.1-sp', tiers)).toBe(
+      'Nano Banana 2.1 · 特价'
+    )
+    expect(getImageModelDisplayName('gemini-3-pro-image-c-sd', tiers)).toBe(
+      'Gemini 3 Pro Image · 优质'
+    )
+    expect(getImageModelDisplayName('gpt-image-2', tiers)).toBe(
+      'GPT Image 2 · 企业'
+    )
   })
 
   it('normalizes inline image output and terminal task states', () => {
