@@ -47,13 +47,22 @@ describe('image generation request contract', () => {
       filterImageGenerationModels([
         'gpt-4o',
         'gpt-image-2.5-flare-sd',
+        'gemini-nano-banana-2.1-sp',
+        'gemini-nano-banana-2.1-sd',
+        'gemini-nano-banana-2.1',
         'gemini-3.1-flash-image-c-sp',
         'nano-banana-pro',
         'gpt-image-1',
         'gemini-2.5-flash-image-preview',
         'dall-e-3',
       ])
-    ).toEqual(['gemini-3.1-flash-image-c-sp', 'gpt-image-2.5-flare-sd'])
+    ).toEqual([
+      'gemini-nano-banana-2.1-sp',
+      'gemini-nano-banana-2.1-sd',
+      'gemini-nano-banana-2.1',
+      'gemini-3.1-flash-image-c-sp',
+      'gpt-image-2.5-flare-sd',
+    ])
   })
 
   it('builds the native Banana payload without GPT-only options', () => {
@@ -69,6 +78,26 @@ describe('image generation request contract', () => {
       response_modalities: ['IMAGE'],
       size: '2K',
       thinking_level: 'high',
+    })
+  })
+
+  it('builds Nano Banana 2.1 without Flash-only thinking options', () => {
+    expect(
+      buildImageGenerationRequest(
+        {
+          ...baseForm,
+          model: 'gemini-nano-banana-2.1-sp',
+        },
+        []
+      )
+    ).toEqual({
+      aspect_ratio: '16:9',
+      group: 'default',
+      google_search: true,
+      model: 'gemini-nano-banana-2.1-sp',
+      prompt: 'A quiet lake at sunrise',
+      response_modalities: ['IMAGE'],
+      size: '2K',
     })
   })
 

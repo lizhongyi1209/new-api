@@ -65,8 +65,8 @@ describe('generation model options', () => {
     expect(screen.getByText('Google Search')).toBeInTheDocument()
   })
 
-  it('does not offer Flash-only thinking controls to Gemini Pro', () => {
-    render(<OptionsFixture family='banana' model='gemini-3-pro-image-c-sp' />)
+  it('does not offer Flash-only thinking controls to Nano Banana 2.1', () => {
+    render(<OptionsFixture family='banana' model='gemini-nano-banana-2.1-sp' />)
 
     expect(screen.queryByText('Thinking level')).not.toBeInTheDocument()
     expect(screen.getByText('Google Search')).toBeInTheDocument()

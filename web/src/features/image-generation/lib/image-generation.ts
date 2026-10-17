@@ -33,6 +33,9 @@ export const ACCEPTED_REFERENCE_IMAGE_TYPES = new Set([
 ])
 
 const BANANA_IMAGE_MODELS = [
+  'gemini-nano-banana-2.1-sp',
+  'gemini-nano-banana-2.1-sd',
+  'gemini-nano-banana-2.1',
   'gemini-3-pro-image-c-sp',
   'gemini-3-pro-image-c-sd',
   'gemini-3-pro-image',
