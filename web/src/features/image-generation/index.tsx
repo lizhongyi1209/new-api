@@ -89,27 +89,27 @@ export function ImageGeneration() {
 
   return (
     <div className='bg-muted/20 flex size-full min-h-0 flex-col overflow-auto'>
-      <div className='mx-auto flex w-full max-w-7xl flex-1 flex-col gap-5 p-4 sm:p-6'>
-        <header className='flex items-start gap-3'>
-          <div className='bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl'>
+      <div className='mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5 lg:p-6'>
+        <header className='flex items-start gap-3 px-1 sm:items-center'>
+          <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl'>
             <ImagePlus className='size-5' aria-hidden='true' />
           </div>
-          <div>
-            <h1 className='text-2xl font-semibold tracking-tight'>
+          <div className='min-w-0'>
+            <h1 className='text-xl font-semibold tracking-tight sm:text-2xl'>
               {t('Image Generation')}
             </h1>
-            <p className='text-muted-foreground mt-1 text-sm'>
+            <p className='text-muted-foreground mt-0.5 text-sm sm:mt-1'>
               {t('Create and edit images with Nano Banana and GPT Image.')}
             </p>
           </div>
         </header>
 
-        <div className='grid min-h-0 flex-1 gap-5 lg:grid-cols-[360px_minmax(0,1fr)]'>
-          <Card className='h-fit'>
-            <CardHeader className='border-b'>
+        <div className='grid min-h-0 flex-1 items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]'>
+          <Card className='h-fit min-w-0 overflow-hidden'>
+            <CardHeader className='border-b px-4 sm:px-6'>
               <CardTitle>{t('Generation settings')}</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className='px-4 sm:px-6'>
               <GenerationForm
                 disabled={disabled}
                 groups={groupsQuery.data ?? []}
@@ -123,7 +123,7 @@ export function ImageGeneration() {
             </CardContent>
           </Card>
 
-          <Card className='min-h-[520px] gap-0 py-0'>
+          <Card className='min-h-[360px] min-w-0 gap-0 overflow-hidden py-0 sm:min-h-[480px] xl:min-h-[calc(100dvh-11rem)]'>
             <GenerationResult
               isError={taskQuery.isError}
               isLoading={generationMutation.isPending}

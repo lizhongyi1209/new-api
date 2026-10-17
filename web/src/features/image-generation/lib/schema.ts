@@ -22,10 +22,13 @@ import { z } from 'zod'
 export const imageGenerationSchema = z.object({
   aspectRatio: z.string(),
   background: z.enum(['auto', 'transparent']),
+  googleSearch: z.boolean(),
   group: z.string().min(1, 'Select a group'),
   model: z.string().min(1, 'Select a model'),
+  moderation: z.enum(['auto', 'low']),
   outputFormat: z.enum(['jpeg', 'png', 'webp']),
   prompt: z.string().trim().min(1, 'Enter an image prompt'),
   quality: z.string(),
   size: z.string(),
+  thinkingLevel: z.enum(['default', 'high', 'minimal']),
 })

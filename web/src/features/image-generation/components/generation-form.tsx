@@ -37,6 +37,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -68,12 +69,15 @@ type GenerationFormProps = {
 const defaultValues: ImageGenerationFormValue = {
   aspectRatio: '1:1',
   background: 'auto',
+  googleSearch: false,
   group: '',
   model: '',
+  moderation: 'auto',
   outputFormat: 'png',
   prompt: '',
   quality: 'auto',
   size: '1K',
+  thinkingLevel: 'default',
 }
 
 export function GenerationForm(props: GenerationFormProps) {
@@ -87,6 +91,12 @@ export function GenerationForm(props: GenerationFormProps) {
   const selectedGroup = useWatch({ control: form.control, name: 'group' })
   const selectedModel = useWatch({ control: form.control, name: 'model' })
   const family = getImageModelFamily(selectedModel)
+  const bananaModels = props.models.filter(
+    (model) => getImageModelFamily(model.value) === 'banana'
+  )
+  const gptImageModels = props.models.filter(
+    (model) => getImageModelFamily(model.value) === 'gpt-image'
+  )
   const groups = props.groups
   const onGroupChange = props.onGroupChange
   const models = props.models
@@ -133,18 +143,21 @@ export function GenerationForm(props: GenerationFormProps) {
     form.setValue('size', nextFamily === 'banana' ? '1K' : 'auto')
     form.setValue('outputFormat', 'png')
     form.setValue('background', 'auto')
+    form.setValue('googleSearch', false)
+    form.setValue('moderation', 'auto')
     form.setValue('quality', 'auto')
+    form.setValue('thinkingLevel', 'default')
   }
 
   return (
     <Form {...form}>
       <form
-        className='space-y-5'
+        className='space-y-4 sm:space-y-5'
         onSubmit={form.handleSubmit((value) =>
           props.onSubmit(value, references)
         )}
       >
-        <div className='grid gap-3 sm:grid-cols-2 lg:grid-cols-1'>
+        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-1'>
           <FormField
             control={form.control}
             name='group'
@@ -163,7 +176,7 @@ export function GenerationForm(props: GenerationFormProps) {
                   disabled={props.disabled || props.groups.length === 0}
                 >
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className='w-full'>
                       <SelectValue placeholder={t('Select a group')} />
                     </SelectTrigger>
                   </FormControl>
@@ -199,7 +212,7 @@ export function GenerationForm(props: GenerationFormProps) {
                   }
                 >
                   <FormControl>
-                    <SelectTrigger>
+                    <SelectTrigger className='w-full'>
                       <SelectValue
                         placeholder={
                           props.isLoadingModels
@@ -210,13 +223,26 @@ export function GenerationForm(props: GenerationFormProps) {
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent alignItemWithTrigger={false}>
-                    <SelectGroup>
-                      {props.models.map((model) => (
-                        <SelectItem key={model.value} value={model.value}>
-                          {model.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
+                    {bananaModels.length > 0 ? (
+                      <SelectGroup>
+                        <SelectLabel>Nano Banana</SelectLabel>
+                        {bananaModels.map((model) => (
+                          <SelectItem key={model.value} value={model.value}>
+                            {model.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ) : null}
+                    {gptImageModels.length > 0 ? (
+                      <SelectGroup>
+                        <SelectLabel>GPT Image</SelectLabel>
+                        {gptImageModels.map((model) => (
+                          <SelectItem key={model.value} value={model.value}>
+                            {model.label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    ) : null}
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -234,7 +260,7 @@ export function GenerationForm(props: GenerationFormProps) {
               <FormControl>
                 <Textarea
                   {...field}
-                  className='min-h-32 resize-y'
+                  className='min-h-28 resize-y sm:min-h-32'
                   placeholder={t('Describe the image you want to create')}
                   disabled={props.disabled}
                 />

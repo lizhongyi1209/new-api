@@ -30,12 +30,15 @@ import type { ImageGenerationFormValue } from '../types'
 const baseForm: ImageGenerationFormValue = {
   aspectRatio: '16:9',
   background: 'transparent',
+  googleSearch: true,
   group: 'default',
   model: 'gemini-3.1-flash-image-c-sp',
+  moderation: 'low',
   outputFormat: 'png',
   prompt: '  A quiet lake at sunrise  ',
   quality: 'max',
   size: '2K',
+  thinkingLevel: 'high',
 }
 
 describe('image generation request contract', () => {
@@ -46,13 +49,11 @@ describe('image generation request contract', () => {
         'gpt-image-2.5-flare-sd',
         'gemini-3.1-flash-image-c-sp',
         'nano-banana-pro',
+        'gpt-image-1',
+        'gemini-2.5-flash-image-preview',
         'dall-e-3',
       ])
-    ).toEqual([
-      'gpt-image-2.5-flare-sd',
-      'gemini-3.1-flash-image-c-sp',
-      'nano-banana-pro',
-    ])
+    ).toEqual(['gemini-3.1-flash-image-c-sp', 'gpt-image-2.5-flare-sd'])
   })
 
   it('builds the native Banana payload without GPT-only options', () => {
@@ -61,11 +62,13 @@ describe('image generation request contract', () => {
     ).toEqual({
       aspect_ratio: '16:9',
       group: 'default',
+      google_search: true,
       images: ['https://r2.test/input.png'],
       model: 'gemini-3.1-flash-image-c-sp',
       prompt: 'A quiet lake at sunrise',
       response_modalities: ['IMAGE'],
       size: '2K',
+      thinking_level: 'high',
     })
   })
 
@@ -83,6 +86,7 @@ describe('image generation request contract', () => {
       background: 'transparent',
       group: 'default',
       model: 'gpt-image-2.5-sunburst-sp',
+      moderation: 'low',
       output_format: 'png',
       prompt: 'A quiet lake at sunrise',
       quality: 'max',

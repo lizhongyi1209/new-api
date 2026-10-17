@@ -34,7 +34,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
+import { isGeminiFlashImageModel } from '../lib/image-generation'
 import type { ImageGenerationFormValue, ImageModelFamily } from '../types'
 
 type GenerationOptionsProps = {
@@ -45,8 +47,31 @@ type GenerationOptionsProps = {
 }
 
 const BANANA_SIZES = ['1K', '2K', '4K']
-const GPT_SIZES = ['auto', '1024x1024', '1536x1024', '1024x1536']
-const ASPECT_RATIOS = [
+const GPT_SIZES = [
+  'auto',
+  '1024x1024',
+  '1536x1024',
+  '1360x1024',
+  '1824x1024',
+  '1024x1536',
+  '1024x1360',
+  '1024x1824',
+  '2048x2048',
+  '3072x2048',
+  '2736x2048',
+  '3648x2048',
+  '2048x3072',
+  '2048x2736',
+  '2048x3648',
+  '2880x2880',
+  '3504x2336',
+  '3264x2448',
+  '3840x2160',
+  '2336x3504',
+  '2448x3264',
+  '2160x3840',
+]
+const BASE_ASPECT_RATIOS = [
   '1:1',
   '2:3',
   '3:2',
@@ -58,6 +83,7 @@ const ASPECT_RATIOS = [
   '16:9',
   '21:9',
 ]
+const FLASH_ASPECT_RATIOS = [...BASE_ASPECT_RATIOS, '1:4', '1:8', '4:1', '8:1']
 const QUALITIES = ['auto', 'low', 'medium', 'high', 'xhigh', 'max']
 const OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const
 
@@ -75,7 +101,7 @@ function OptionSelect(props: {
       onValueChange={(value) => value && props.onChange(value)}
       disabled={props.disabled}
     >
-      <SelectTrigger aria-label={props.label}>
+      <SelectTrigger className='w-full' aria-label={props.label}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false}>
@@ -102,9 +128,13 @@ export function GenerationOptions(props: GenerationOptionsProps) {
   const qualityOptions = supportsExtendedQuality
     ? QUALITIES
     : QUALITIES.slice(0, 4)
+  const flashImageModel = isGeminiFlashImageModel(props.model)
+  const aspectRatioOptions = flashImageModel
+    ? FLASH_ASPECT_RATIOS
+    : BASE_ASPECT_RATIOS
 
   return (
-    <div className='grid grid-cols-2 gap-3'>
+    <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
       <FormField
         control={props.control}
         name='size'
@@ -136,7 +166,7 @@ export function GenerationOptions(props: GenerationOptionsProps) {
                   disabled={props.disabled}
                   label={t('Output aspect ratio')}
                   onChange={field.onChange}
-                  options={ASPECT_RATIOS}
+                  options={aspectRatioOptions}
                   value={field.value}
                 />
               </FormControl>
@@ -198,11 +228,11 @@ export function GenerationOptions(props: GenerationOptionsProps) {
             name='background'
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{t('Background')}</FormLabel>
+                <FormLabel>{t('Image background')}</FormLabel>
                 <FormControl>
                   <OptionSelect
                     disabled={props.disabled}
-                    label={t('Background')}
+                    label={t('Image background')}
                     onChange={(value) => {
                       field.onChange(value)
                       if (
@@ -219,7 +249,67 @@ export function GenerationOptions(props: GenerationOptionsProps) {
               </FormItem>
             )}
           />
+
+          <FormField
+            control={props.control}
+            name='moderation'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Moderation')}</FormLabel>
+                <FormControl>
+                  <OptionSelect
+                    disabled={props.disabled}
+                    label={t('Moderation')}
+                    onChange={field.onChange}
+                    options={['auto', 'low']}
+                    value={field.value}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
         </>
+      ) : null}
+
+      {props.family === 'banana' && flashImageModel ? (
+        <FormField
+          control={props.control}
+          name='thinkingLevel'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Thinking level')}</FormLabel>
+              <FormControl>
+                <OptionSelect
+                  disabled={props.disabled}
+                  label={t('Thinking level')}
+                  onChange={field.onChange}
+                  options={['default', 'minimal', 'high']}
+                  value={field.value}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+      ) : null}
+
+      {props.family === 'banana' ? (
+        <FormField
+          control={props.control}
+          name='googleSearch'
+          render={({ field }) => (
+            <FormItem className='border-border/70 bg-muted/20 flex min-h-16 flex-row items-center justify-between gap-3 rounded-lg border px-3 py-2 sm:col-span-2'>
+              <FormLabel className='m-0'>{t('Google Search')}</FormLabel>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  disabled={props.disabled}
+                  onCheckedChange={field.onChange}
+                  aria-label={t('Google Search')}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
       ) : null}
     </div>
   )

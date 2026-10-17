@@ -46,14 +46,17 @@ export type TemporaryImageUpload = {
 export type ImageGenerationRequest = {
   aspect_ratio?: string
   background?: 'auto' | 'transparent'
+  google_search?: boolean
   group: string
   images?: string[]
   model: string
+  moderation?: 'auto' | 'low'
   output_format?: 'jpeg' | 'png' | 'webp'
   prompt: string
   quality?: string
   response_modalities?: ['IMAGE']
   size?: string
+  thinking_level?: 'high' | 'minimal'
 }
 
 export type ImageGenerationSubmission = {
@@ -87,10 +90,13 @@ export type ImageGenerationTask = {
 export type ImageGenerationFormValue = {
   aspectRatio: string
   background: 'auto' | 'transparent'
+  googleSearch: boolean
   group: string
   model: string
+  moderation: 'auto' | 'low'
   outputFormat: 'jpeg' | 'png' | 'webp'
   prompt: string
   quality: string
   size: string
+  thinkingLevel: 'default' | 'high' | 'minimal'
 }

@@ -101,7 +101,7 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
       </div>
       <div
         className={cn(
-          'border-border bg-muted/20 hover:bg-muted/35 flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-5 text-center transition-colors',
+          'border-border bg-muted/20 hover:bg-muted/35 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-3 py-4 text-center transition-colors sm:min-h-28 sm:px-4 sm:py-5',
           dragActive && 'border-primary bg-primary/5',
           props.disabled && 'pointer-events-none opacity-50'
         )}
@@ -156,7 +156,7 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
       />
 
       {props.images.length > 0 ? (
-        <div className='grid grid-cols-4 gap-2 sm:grid-cols-5'>
+        <div className='grid grid-cols-3 gap-2 sm:grid-cols-5'>
           {props.images.map((image) => (
             <div
               key={image.id}

@@ -32,18 +32,49 @@ export const ACCEPTED_REFERENCE_IMAGE_TYPES = new Set([
   'image/webp',
 ])
 
+const BANANA_IMAGE_MODELS = [
+  'gemini-3-pro-image-c-sp',
+  'gemini-3-pro-image-c-sd',
+  'gemini-3-pro-image',
+  'gemini-3.1-flash-image-c-sp',
+  'gemini-3.1-flash-image-c-sd',
+  'gemini-3.1-flash-image',
+] as const
+
+const GPT_IMAGE_MODELS = [
+  'gpt-image-2.5-sunburst-sp',
+  'gpt-image-2.5-sunburst-sd',
+  'gpt-image-2.5-sunburst',
+  'gpt-image-2.5-flare-sp',
+  'gpt-image-2.5-flare-sd',
+  'gpt-image-2.5-flare',
+  'gpt-image-2-c-sp',
+  'gpt-image-2-c-sd',
+  'gpt-image-2',
+] as const
+
+export const DOCUMENTED_IMAGE_MODELS = [
+  ...BANANA_IMAGE_MODELS,
+  ...GPT_IMAGE_MODELS,
+] as const
+
+const bananaImageModelSet = new Set<string>(BANANA_IMAGE_MODELS)
+const gptImageModelSet = new Set<string>(GPT_IMAGE_MODELS)
+
 export function getImageModelFamily(model: string): ImageModelFamily | null {
   const normalized = model.trim().toLowerCase()
-  if (normalized.startsWith('gpt-image')) return 'gpt-image'
-  if (normalized.startsWith('nano-banana')) return 'banana'
-  if (normalized.startsWith('gemini') && normalized.includes('image')) {
-    return 'banana'
-  }
+  if (gptImageModelSet.has(normalized)) return 'gpt-image'
+  if (bananaImageModelSet.has(normalized)) return 'banana'
   return null
 }
 
 export function filterImageGenerationModels(models: string[]): string[] {
-  return models.filter((model) => getImageModelFamily(model) !== null)
+  const availableModels = new Set(models.map((model) => model.trim()))
+  return DOCUMENTED_IMAGE_MODELS.filter((model) => availableModels.has(model))
+}
+
+export function isGeminiFlashImageModel(model: string): boolean {
+  return model.trim().toLowerCase().startsWith('gemini-3.1-flash-image')
 }
 
 export function buildImageGenerationRequest(
@@ -62,12 +93,20 @@ export function buildImageGenerationRequest(
 
   if (family === 'banana') {
     if (form.aspectRatio) request.aspect_ratio = form.aspectRatio
+    if (form.googleSearch) request.google_search = true
+    if (
+      isGeminiFlashImageModel(form.model) &&
+      form.thinkingLevel !== 'default'
+    ) {
+      request.thinking_level = form.thinkingLevel
+    }
     request.response_modalities = ['IMAGE']
   }
 
   if (family === 'gpt-image') {
     if (form.quality) request.quality = form.quality
     request.background = form.background
+    request.moderation = form.moderation
     request.output_format = form.outputFormat
   }
 

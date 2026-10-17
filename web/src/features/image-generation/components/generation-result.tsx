@@ -50,7 +50,7 @@ export function GenerationResult(props: GenerationResultProps) {
         description={t(
           'Choose a model, describe your idea, and start generating.'
         )}
-        className='h-full min-h-[420px] border-0'
+        className='h-full min-h-[320px] border-0 sm:min-h-[420px] xl:min-h-[560px]'
       />
     )
   }
@@ -61,14 +61,14 @@ export function GenerationResult(props: GenerationResultProps) {
         title={t('Could not load the generation task')}
         description={t('Check the connection and try again.')}
         onRetry={props.onRetry}
-        className='h-full min-h-[420px]'
+        className='h-full min-h-[320px] sm:min-h-[420px] xl:min-h-[560px]'
       />
     )
   }
 
   if (!props.task || !isTerminalTaskStatus(props.task.status)) {
     return (
-      <div className='flex h-full min-h-[420px] flex-col p-5'>
+      <div className='flex h-full min-h-[320px] flex-col p-4 sm:min-h-[420px] sm:p-5 xl:min-h-[560px]'>
         <div className='mb-5 flex items-center justify-between gap-3'>
           <div className='flex items-center gap-2'>
             <LoaderCircle
@@ -81,9 +81,9 @@ export function GenerationResult(props: GenerationResultProps) {
             {props.task?.progress || t('Queued')}
           </Badge>
         </div>
-        <div className='grid flex-1 gap-4 sm:grid-cols-2'>
-          <Skeleton className='min-h-72 rounded-xl' />
-          <Skeleton className='hidden min-h-72 rounded-xl sm:block' />
+        <div className='grid flex-1 gap-4 lg:grid-cols-2'>
+          <Skeleton className='min-h-56 rounded-xl sm:min-h-72' />
+          <Skeleton className='hidden min-h-56 rounded-xl sm:min-h-72 lg:block' />
         </div>
       </div>
     )
@@ -97,7 +97,7 @@ export function GenerationResult(props: GenerationResultProps) {
           props.task.error ||
           t('The image provider did not complete this request.')
         }
-        className='h-full min-h-[420px]'
+        className='h-full min-h-[320px] sm:min-h-[420px] xl:min-h-[560px]'
       />
     )
   }
@@ -109,14 +109,14 @@ export function GenerationResult(props: GenerationResultProps) {
         icon={ImageIcon}
         title={t('No images were returned')}
         description={t('The task completed without a usable image result.')}
-        className='h-full min-h-[420px] border-0'
+        className='h-full min-h-[320px] border-0 sm:min-h-[420px] xl:min-h-[560px]'
       />
     )
   }
 
   return (
-    <div className='space-y-4 p-4 sm:p-5'>
-      <div className='flex items-center justify-between gap-3'>
+    <div className='space-y-4 p-3 sm:p-5'>
+      <div className='flex flex-wrap items-center justify-between gap-3'>
         <div>
           <p className='font-medium'>{t('Generated images')}</p>
           <p className='text-muted-foreground text-xs'>
@@ -125,7 +125,7 @@ export function GenerationResult(props: GenerationResultProps) {
         </div>
         <Badge variant='secondary'>{t('Completed')}</Badge>
       </div>
-      <div className='grid gap-4 sm:grid-cols-2'>
+      <div className='grid gap-3 sm:gap-4 lg:grid-cols-2'>
         {images.map((image, index) => {
           const source = generatedImageSource(image)
           return (

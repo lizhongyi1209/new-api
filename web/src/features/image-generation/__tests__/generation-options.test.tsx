@@ -29,12 +29,15 @@ function OptionsFixture(props: { family: ImageModelFamily; model: string }) {
     defaultValues: {
       aspectRatio: '1:1',
       background: 'auto',
+      googleSearch: false,
       group: 'default',
       model: props.model,
+      moderation: 'auto',
       outputFormat: 'png',
       prompt: 'test',
       quality: 'auto',
       size: props.family === 'banana' ? '1K' : 'auto',
+      thinkingLevel: 'default',
     },
   })
 
@@ -58,6 +61,15 @@ describe('generation model options', () => {
 
     expect(screen.queryByText('Output format')).not.toBeInTheDocument()
     expect(screen.getByText('Output aspect ratio')).toBeInTheDocument()
+    expect(screen.getByText('Thinking level')).toBeInTheDocument()
+    expect(screen.getByText('Google Search')).toBeInTheDocument()
+  })
+
+  it('does not offer Flash-only thinking controls to Gemini Pro', () => {
+    render(<OptionsFixture family='banana' model='gemini-3-pro-image-c-sp' />)
+
+    expect(screen.queryByText('Thinking level')).not.toBeInTheDocument()
+    expect(screen.getByText('Google Search')).toBeInTheDocument()
   })
 
   it('shows output format for GPT Image models', () => {
@@ -66,5 +78,7 @@ describe('generation model options', () => {
     )
 
     expect(screen.getByText('Output format')).toBeInTheDocument()
+    expect(screen.getByText('Moderation')).toBeInTheDocument()
+    expect(screen.queryByText('Google Search')).not.toBeInTheDocument()
   })
 })
