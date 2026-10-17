@@ -64,6 +64,27 @@ func resolveWebSearchToolName(tools map[string]*BuildInToolInfo) string {
 	return dto.BuildInToolWebSearchPreview
 }
 
+// SetBillableToolCount records the count reported by the upstream provider.
+// It replaces protocol item counts for the same tool to avoid charging twice.
+func (info *RelayInfo) SetBillableToolCount(name string, count int) {
+	if info == nil || name == "" || count < 0 {
+		return
+	}
+	if count > MaxBillableToolCallCount {
+		common.SysError(common.LogText("billable tool count clamped: tool=%s count=%d", name, count))
+		count = MaxBillableToolCallCount
+	}
+	if info.ResponsesUsageInfo == nil {
+		info.ResponsesUsageInfo = &ResponsesUsageInfo{}
+	}
+	if info.ResponsesUsageInfo.BuiltInTools == nil {
+		info.ResponsesUsageInfo.BuiltInTools = make(map[string]*BuildInToolInfo)
+	}
+	info.ResponsesUsageInfo.BuiltInTools[name] = &BuildInToolInfo{ToolName: name, CallCount: count}
+}
+
+const MaxBillableToolCallCount = 10_000
+
 func (info *RelayInfo) incrementBillableToolCall(name string) {
 	if existing, ok := info.ResponsesUsageInfo.BuiltInTools[name]; ok && existing != nil {
 		existing.CallCount++

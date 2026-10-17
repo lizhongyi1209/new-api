@@ -346,3 +346,68 @@ const (
 )
 
 const MsgTaskPluginUnknownMetaField = "task_plugin.unknown_meta_field"
+
+// Email and notification messages
+const (
+	MsgUserDefaultTokenName = "user.default_token_name"
+
+	MsgEmailVerificationSubject  = "email.verification.subject"
+	MsgEmailVerificationGreeting = "email.verification.greeting"
+	MsgEmailVerificationCode     = "email.verification.code"
+	MsgEmailVerificationValidity = "email.verification.validity"
+
+	MsgEmailPasswordResetSubject      = "email.password_reset.subject"
+	MsgEmailPasswordResetGreeting     = "email.password_reset.greeting"
+	MsgEmailPasswordResetLink         = "email.password_reset.link"
+	MsgEmailPasswordResetLinkFallback = "email.password_reset.link_fallback"
+	MsgEmailPasswordResetValidity     = "email.password_reset.validity"
+
+	MsgEmailBindingSubject     = "email.binding.subject"
+	MsgEmailBindingNewIntro    = "email.binding.new_intro"
+	MsgEmailBindingOldIntro    = "email.binding.old_intro"
+	MsgEmailBindingCode        = "email.binding.code"
+	MsgEmailBindingNewValidity = "email.binding.new_validity"
+	MsgEmailBindingOldValidity = "email.binding.old_validity"
+
+	MsgEmailSecurityNoticeSubject = "email.security_notice.subject"
+	MsgEmailSecurityNoticeChanged = "email.security_notice.changed"
+	MsgEmailSecurityNoticeAdvice  = "email.security_notice.advice"
+
+	MsgSecurityEventPasswordUpdated      = "email.security_event.password_updated"
+	MsgSecurityEventEmailChangeRequested = "email.security_event.email_change_requested"
+	MsgSecurityEventEmailChanged         = "email.security_event.email_changed"
+	MsgSecurityEventEmailConfirmed       = "email.security_event.email_confirmed"
+	MsgSecurityEventLoginLinked          = "email.security_event.login_linked"
+	MsgSecurityEventLoginUnlinked        = "email.security_event.login_unlinked"
+	MsgSecurityEventWeChatLinked         = "email.security_event.wechat_linked"
+)
+
+// Low-quota notices, in the recipient's saved language
+const (
+	MsgNotifyQuotaLowTitle             = "notify.quota_low_title"
+	MsgNotifySubscriptionQuotaLowTitle = "notify.subscription_quota_low_title"
+	MsgNotifyQuotaLowBark              = "notify.quota_low_bark"
+	MsgNotifyQuotaLowGotify            = "notify.quota_low_gotify"
+	MsgNotifyQuotaLowEmail             = "notify.quota_low_email"
+)
+
+// Channel notices sent to administrators who receive them and to model update
+// watchers
+const (
+	MsgChannelNotifyDisabledSubject = "channel.notify_disabled_subject"
+	MsgChannelNotifyDisabledContent = "channel.notify_disabled_content"
+	MsgChannelNotifyEnabledSubject  = "channel.notify_enabled_subject"
+	MsgChannelNotifyEnabledContent  = "channel.notify_enabled_content"
+	MsgChannelTestCompletedSubject  = "channel.test_completed_subject"
+	MsgChannelTestCompletedContent  = "channel.test_completed_content"
+	MsgChannelResponseTimeExceeded  = "channel.response_time_exceeded"
+
+	MsgChannelUpstreamUpdateNotifySubject   = "channel.upstream_update_notify_subject"
+	MsgChannelUpstreamUpdateSummary         = "channel.upstream_update_summary"
+	MsgChannelUpstreamUpdateChangedChannels = "channel.upstream_update_changed_channels"
+	MsgChannelUpstreamUpdateMoreChannels    = "channel.upstream_update_more_channels"
+	MsgChannelUpstreamUpdateAddedModels     = "channel.upstream_update_added_models"
+	MsgChannelUpstreamUpdateRemovedModels   = "channel.upstream_update_removed_models"
+	MsgChannelUpstreamUpdateFailedChannels  = "channel.upstream_update_failed_channels"
+	MsgChannelUpstreamUpdateMoreOmitted     = "channel.upstream_update_more_omitted"
+)
