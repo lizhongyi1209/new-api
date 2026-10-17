@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { GenerationResult } from '../components/generation-result'
@@ -29,7 +30,7 @@ const defaultProps = {
   isHistoryLoading: false,
   isLoading: false,
   isLoadingMore: false,
-  onLoadMore: vi.fn(),
+  onLoadMore: vi.fn().mockResolvedValue(true),
   onRetry: vi.fn(),
 }
 
@@ -85,5 +86,39 @@ describe('generation result gallery', () => {
     expect(
       screen.getByRole('img', { name: 'Generated image 1' })
     ).toBeInTheDocument()
+  })
+
+  it('pages through results without making the panel scroll', async () => {
+    const user = userEvent.setup()
+    render(
+      <GenerationResult
+        {...defaultProps}
+        history={[
+          {
+            task_id: 'gallery-task',
+            model: 'gpt-image-2',
+            created: 100,
+            images: Array.from({ length: 7 }, (_, index) => ({
+              url: `https://images.example.com/${index + 1}.png`,
+            })),
+          },
+        ]}
+      />
+    )
+
+    expect(
+      screen.getAllByRole('img', { name: /Generated image/ })
+    ).toHaveLength(6)
+    const grid = screen
+      .getByRole('img', { name: 'Generated image 1' })
+      .closest('.grid')
+    expect(grid).toHaveClass('overflow-hidden')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(
+      screen.getByRole('img', { name: 'Generated image 7' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'Generated image 1' })
+    ).not.toBeInTheDocument()
   })
 })

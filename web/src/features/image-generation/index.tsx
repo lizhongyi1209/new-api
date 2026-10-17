@@ -109,8 +109,8 @@ export function ImageGeneration() {
   const disabled = generationMutation.isPending || taskIsActive
 
   return (
-    <div className='bg-muted/20 flex size-full min-h-0 [scrollbar-width:none] flex-col overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden'>
-      <div className='mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5 lg:p-6'>
+    <div className='bg-muted/20 flex size-full min-h-0 flex-col overflow-x-hidden overflow-y-auto xl:overflow-hidden'>
+      <div className='mx-auto flex min-h-0 w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5 lg:p-6'>
         <header className='flex items-start gap-3 px-1 sm:items-center'>
           <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl'>
             <ImagePlus className='size-5' aria-hidden='true' />
@@ -125,15 +125,15 @@ export function ImageGeneration() {
           </div>
         </header>
 
-        <div className='grid min-h-0 flex-1 items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:items-stretch'>
+        <div className='grid min-h-0 flex-1 items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch'>
           <Card
             data-card-hover='false'
-            className='min-w-0 overflow-visible xl:min-h-[calc(100dvh-11rem)]'
+            className='min-h-0 min-w-0 overflow-visible xl:h-full'
           >
             <CardHeader className='border-b px-4 sm:px-6'>
               <CardTitle>{t('Generation settings')}</CardTitle>
             </CardHeader>
-            <CardContent className='flex flex-1 flex-col px-4 sm:px-6'>
+            <CardContent className='flex min-h-0 flex-1 flex-col px-4 sm:px-6 xl:[scrollbar-width:none] xl:overflow-y-auto xl:[&::-webkit-scrollbar]:hidden'>
               <GenerationForm
                 disabled={disabled}
                 groups={groupsQuery.data ?? []}
@@ -149,7 +149,7 @@ export function ImageGeneration() {
 
           <Card
             data-card-hover='false'
-            className='min-h-[360px] min-w-0 gap-0 overflow-visible py-0 sm:min-h-[480px] xl:min-h-[calc(100dvh-11rem)]'
+            className='h-[min(70dvh,800px)] min-h-[360px] min-w-0 gap-0 overflow-hidden py-0 sm:min-h-[480px] xl:h-full xl:min-h-0'
           >
             <GenerationResult
               history={
@@ -157,7 +157,10 @@ export function ImageGeneration() {
               }
               hasMore={historyQuery.hasNextPage}
               isLoadingMore={historyQuery.isFetchingNextPage}
-              onLoadMore={() => void historyQuery.fetchNextPage()}
+              onLoadMore={async () => {
+                const nextPage = await historyQuery.fetchNextPage()
+                return !nextPage.isError
+              }}
               isError={taskQuery.isError}
               isHistoryError={historyQuery.isError}
               isHistoryLoading={historyQuery.isPending}

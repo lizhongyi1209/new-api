@@ -52,7 +52,21 @@ describe('image generation page', () => {
       await screen.findByText('Your generated images will appear here')
     ).closest('[data-slot="card"]')
     expect(settingsCard).toHaveAttribute('data-card-hover', 'false')
+    expect(
+      settingsCard?.querySelector('[data-slot="card-content"]')
+    ).toHaveClass('xl:overflow-y-auto', 'xl:[scrollbar-width:none]')
     expect(resultCard).toHaveAttribute('data-card-hover', 'false')
-    expect(resultCard).toHaveClass('overflow-visible')
+    expect(resultCard).toHaveClass('overflow-hidden')
+    expect(resultCard?.closest('.bg-muted\\/20')).toHaveClass(
+      'xl:overflow-hidden'
+    )
+    const emptyStateContainer = screen
+      .getByText('Your generated images will appear here')
+      .closest('[data-slot="empty"]')?.parentElement?.parentElement
+    expect(emptyStateContainer).toHaveClass(
+      'flex-1',
+      'items-center',
+      'justify-center'
+    )
   })
 })

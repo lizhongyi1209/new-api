@@ -43,7 +43,7 @@ describe('image generation form', () => {
     )
 
     const prompt = screen.getByRole('textbox', { name: 'Prompt' })
-    expect(prompt).toHaveClass('h-full')
+    expect(prompt).toHaveClass('field-sizing-fixed', 'h-full', 'max-h-none')
     expect(prompt.closest('[data-slot="form-item"]')).toHaveClass('flex-1')
   })
 
@@ -67,8 +67,7 @@ describe('image generation form', () => {
     const referencePicker = screen.getByText('Reference images')
     const groupLabel = screen.getByText('Group')
     expect(groupLabel.closest('[data-slot="form-item"]')).toHaveClass(
-      'sm:col-span-2',
-      'xl:col-span-1'
+      'sm:col-span-2'
     )
     expect(
       referencePicker.compareDocumentPosition(groupLabel) &
@@ -84,6 +83,34 @@ describe('image generation form', () => {
       )
     })
     expect(screen.getByRole('option', { name: 'group-19' })).toBeInTheDocument()
+  })
+
+  it('opens the group menu repeatedly without locking the page or animating the popup', async () => {
+    const user = userEvent.setup()
+    const bodyOverflow = document.body.style.overflow
+    render(
+      <GenerationForm
+        disabled={false}
+        groups={[{ label: 'default', ratio: 1, value: 'default' }]}
+        isLoadingModels={false}
+        models={models}
+        onGroupChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+
+    const trigger = screen.getByRole('combobox', { name: 'Group' })
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(document.body.style.overflow).toBe(bodyOverflow)
+    expect(document.querySelector('[data-slot="select-content"]')).toHaveClass(
+      'data-open:animate-none',
+      'data-closed:animate-none'
+    )
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    await user.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('selects a model series and tier separately while submitting the exact variant ID', async () => {

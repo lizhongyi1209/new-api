@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { Download, ImageIcon, LoaderCircle, WandSparkles } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { EmptyState } from '@/components/empty-state'
@@ -30,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 
 import {
+  calculateImageGridLayout,
   generatedImageSource,
   isTerminalTaskStatus,
 } from '../lib/image-generation'
@@ -43,7 +44,7 @@ type GenerationResultProps = {
   isHistoryLoading: boolean
   isLoading: boolean
   isLoadingMore: boolean
-  onLoadMore: () => void
+  onLoadMore: () => Promise<boolean>
   onRetry: () => void
   task?: ImageGenerationTask
 }
@@ -51,6 +52,9 @@ type GenerationResultProps = {
 export function GenerationResult(props: GenerationResultProps) {
   const { t } = useTranslation()
   const [tileSize, setTileSize] = useState(220)
+  const [page, setPage] = useState(0)
+  const [layout, setLayout] = useState({ columns: 2, capacity: 6 })
+  const gridRef = useRef<HTMLDivElement>(null)
   const taskIsActive =
     props.isLoading ||
     (props.task !== undefined && !isTerminalTaskStatus(props.task.status))
@@ -67,6 +71,54 @@ export function GenerationResult(props: GenerationResultProps) {
       images: props.task.data.images,
     })
   }
+
+  const imageTiles = items.flatMap((item) =>
+    item.images.flatMap((image, index) => {
+      const source = generatedImageSource(image)
+      if (!source) return []
+      return [{ item, image, index, source }]
+    })
+  )
+  const totalTiles = imageTiles.length + (taskIsActive ? 1 : 0)
+  const pageCount = Math.max(1, Math.ceil(totalTiles / layout.capacity))
+  const currentPage = Math.min(page, pageCount - 1)
+  const firstTileIndex = currentPage * layout.capacity
+  const visibleImages = imageTiles.slice(
+    Math.max(0, firstTileIndex - (taskIsActive ? 1 : 0)),
+    Math.max(0, firstTileIndex + layout.capacity - (taskIsActive ? 1 : 0))
+  )
+  const showPreview = taskIsActive && currentPage === 0
+
+  useLayoutEffect(() => {
+    const grid = gridRef.current
+    if (!grid) return
+
+    const updateLayout = () => {
+      const bounds = grid.getBoundingClientRect()
+      if (bounds.width <= 0 || bounds.height <= 0) return
+      const next = calculateImageGridLayout(
+        bounds.width,
+        bounds.height,
+        tileSize
+      )
+      setLayout((previous) =>
+        previous.columns === next.columns && previous.capacity === next.capacity
+          ? previous
+          : next
+      )
+    }
+    updateLayout()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(updateLayout)
+    observer.observe(grid)
+    return () => observer.disconnect()
+  }, [tileSize, totalTiles])
+
+  useEffect(() => setPage(0), [props.task?.task_id])
+  useEffect(
+    () => setPage((previous) => Math.min(previous, pageCount - 1)),
+    [pageCount]
+  )
 
   if (props.isError && items.length === 0) {
     return (
@@ -92,7 +144,7 @@ export function GenerationResult(props: GenerationResultProps) {
 
   if (props.isHistoryLoading && items.length === 0 && !taskIsActive) {
     return (
-      <div className='p-3 sm:p-5'>
+      <div className='flex min-h-0 flex-1 items-center justify-center p-3 sm:p-5'>
         <Skeleton className='aspect-square w-full max-w-72 rounded-xl' />
       </div>
     )
@@ -100,25 +152,24 @@ export function GenerationResult(props: GenerationResultProps) {
 
   if (!taskIsActive && items.length === 0 && props.task?.status !== 'FAILURE') {
     return (
-      <EmptyState
-        icon={WandSparkles}
-        title={t('Your generated images will appear here')}
-        description={t(
-          'Choose a model, describe your idea, and start generating.'
-        )}
-        className='h-full min-h-[320px] border-0 sm:min-h-[420px]'
-      />
+      <div className='flex min-h-0 flex-1 items-center justify-center'>
+        <EmptyState
+          icon={WandSparkles}
+          title={t('Your generated images will appear here')}
+          description={t(
+            'Choose a model, describe your idea, and start generating.'
+          )}
+          className='min-h-0 border-0'
+        />
+      </div>
     )
   }
 
-  const imageCount = items.reduce(
-    (count, item) => count + item.images.length,
-    0
-  )
+  const imageCount = imageTiles.length
 
   return (
-    <div className='flex min-w-0 flex-col gap-4 p-3 sm:gap-5 sm:p-5'>
-      <div className='flex flex-wrap items-center justify-between gap-3'>
+    <div className='flex h-full min-h-0 min-w-0 flex-col gap-4 p-3 sm:gap-5 sm:p-5'>
+      <div className='flex shrink-0 flex-wrap items-center justify-between gap-3'>
         <div className='min-w-0'>
           <p className='font-medium'>{t('Generated images')}</p>
           <p className='text-muted-foreground text-xs'>
@@ -149,7 +200,7 @@ export function GenerationResult(props: GenerationResultProps) {
         </div>
       ) : null}
 
-      <div className='flex flex-wrap items-center justify-between gap-3 border-b pb-3'>
+      <div className='flex shrink-0 flex-wrap items-center justify-between gap-3 border-b pb-3'>
         <Label htmlFor='image-grid-size'>{t('Image grid size')}</Label>
         <div className='flex w-full max-w-48 items-center gap-3'>
           <ImageIcon
@@ -175,64 +226,88 @@ export function GenerationResult(props: GenerationResultProps) {
       </div>
 
       <div
-        className='grid min-w-0 content-start gap-3 sm:gap-4'
+        ref={gridRef}
+        className='grid min-h-0 min-w-0 flex-1 content-start gap-3 overflow-hidden'
         style={{
-          gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${tileSize}px), 1fr))`,
+          gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
         }}
       >
-        {taskIsActive ? (
+        {showPreview ? (
           <Skeleton
             className='aspect-square w-full rounded-xl'
             aria-label={t('Generating your image')}
           />
         ) : null}
-        {items.flatMap((item) =>
-          item.images.map((image, index) => {
-            const source = generatedImageSource(image)
-            if (!source) return []
-            return [
-              <figure
-                key={`${item.task_id}-${source}`}
-                className='group bg-muted/30 relative aspect-square min-w-0 overflow-hidden rounded-xl border'
+        {visibleImages.map(({ item, image, index, source }) => (
+          <figure
+            key={`${item.task_id}-${source}`}
+            className='group bg-muted/30 relative aspect-square min-w-0 overflow-hidden rounded-xl border'
+          >
+            <img
+              src={source}
+              alt={t('Generated image {{number}}', { number: index + 1 })}
+              loading='lazy'
+              className='size-full object-contain'
+            />
+            <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100'>
+              <Button
+                size='sm'
+                variant='secondary'
+                render={
+                  <a
+                    href={source}
+                    download={`generated-image-${item.task_id}-${index + 1}.${image.output_format || 'png'}`}
+                    target='_blank'
+                    rel='noreferrer'
+                  />
+                }
               >
-                <img
-                  src={source}
-                  alt={t('Generated image {{number}}', { number: index + 1 })}
-                  loading='lazy'
-                  className='size-full object-contain'
-                />
-                <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100'>
-                  <Button
-                    size='sm'
-                    variant='secondary'
-                    render={
-                      <a
-                        href={source}
-                        download={`generated-image-${item.task_id}-${index + 1}.${image.output_format || 'png'}`}
-                        target='_blank'
-                        rel='noreferrer'
-                      />
-                    }
-                  >
-                    <Download aria-hidden='true' />
-                    {t('Download')}
-                  </Button>
-                </figcaption>
-              </figure>,
-            ]
-          })
-        )}
+                <Download aria-hidden='true' />
+                {t('Download')}
+              </Button>
+            </figcaption>
+          </figure>
+        ))}
       </div>
 
-      {props.hasMore ? (
-        <Button
-          variant='outline'
-          className='self-center'
-          onClick={props.onLoadMore}
-          disabled={props.isLoadingMore}
-        >
-          {props.isLoadingMore ? t('Loading...') : t('Load more images')}
-        </Button>
+      {pageCount > 1 || props.hasMore ? (
+        <div className='flex shrink-0 items-center justify-between gap-2 border-t pt-3'>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={() => setPage(currentPage - 1)}
+            disabled={currentPage === 0}
+          >
+            {t('Previous')}
+          </Button>
+          <span className='text-muted-foreground text-xs'>
+            {props.hasMore
+              ? `${t('Page')} ${currentPage + 1}`
+              : t('Page {{current}} of {{total}}', {
+                  current: currentPage + 1,
+                  total: pageCount,
+                })}
+          </span>
+          <Button
+            variant='outline'
+            size='sm'
+            onClick={async () => {
+              if (currentPage + 1 < pageCount) {
+                setPage(currentPage + 1)
+                return
+              }
+              if (props.hasMore && (await props.onLoadMore())) {
+                setPage(currentPage + 1)
+              }
+            }}
+            disabled={
+              props.isLoadingMore ||
+              (currentPage + 1 >= pageCount && !props.hasMore)
+            }
+          >
+            {props.isLoadingMore ? t('Loading...') : t('Next')}
+          </Button>
+        </div>
       ) : null}
     </div>
   )

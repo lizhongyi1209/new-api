@@ -230,14 +230,15 @@ export function GenerationForm(props: GenerationFormProps) {
           onChange={updateReferences}
         />
 
-        <div className='grid gap-3 sm:grid-cols-2 xl:grid-cols-1'>
+        <div className='grid gap-3 sm:grid-cols-2'>
           <FormField
             control={form.control}
             name='group'
             render={({ field }) => (
-              <FormItem className='sm:col-span-2 xl:col-span-1'>
+              <FormItem className='sm:col-span-2'>
                 <FormLabel>{t('Group')}</FormLabel>
                 <Select
+                  modal={false}
                   items={props.groups}
                   value={field.value}
                   onValueChange={(value) => {
@@ -255,7 +256,7 @@ export function GenerationForm(props: GenerationFormProps) {
                   </FormControl>
                   <SelectContent
                     alignItemWithTrigger={false}
-                    className='max-h-[min(15rem,var(--available-height))] overscroll-contain'
+                    className='max-h-[min(15rem,var(--available-height))] overscroll-contain data-closed:animate-none data-open:animate-none'
                   >
                     <SelectGroup>
                       {props.groups.map((group) => (
@@ -278,6 +279,7 @@ export function GenerationForm(props: GenerationFormProps) {
               <FormItem>
                 <FormLabel>{t('Model')}</FormLabel>
                 <Select
+                  modal={false}
                   items={modelSeriesOptions}
                   value={selectedSeriesId}
                   onValueChange={(value) => value && selectSeries(value)}
@@ -298,7 +300,10 @@ export function GenerationForm(props: GenerationFormProps) {
                       />
                     </SelectTrigger>
                   </FormControl>
-                  <SelectContent alignItemWithTrigger={false}>
+                  <SelectContent
+                    alignItemWithTrigger={false}
+                    className='data-closed:animate-none data-open:animate-none'
+                  >
                     {bananaModels.length > 0 ? (
                       <SelectGroup>
                         <SelectLabel>Nano Banana</SelectLabel>
@@ -329,6 +334,7 @@ export function GenerationForm(props: GenerationFormProps) {
           <div className='grid gap-2'>
             <Label htmlFor={tierId}>{t('Tier')}</Label>
             <Select
+              modal={false}
               items={tierOptions}
               value={selectedOption?.tier ?? ''}
               onValueChange={(value) => value && selectTier(value)}
@@ -337,7 +343,10 @@ export function GenerationForm(props: GenerationFormProps) {
               <SelectTrigger id={tierId} className='w-full'>
                 <SelectValue placeholder={t('Tier')} />
               </SelectTrigger>
-              <SelectContent alignItemWithTrigger={false}>
+              <SelectContent
+                alignItemWithTrigger={false}
+                className='data-closed:animate-none data-open:animate-none'
+              >
                 <SelectGroup>
                   {tierOptions.map((tier) => (
                     <SelectItem
@@ -358,12 +367,12 @@ export function GenerationForm(props: GenerationFormProps) {
           control={form.control}
           name='prompt'
           render={({ field }) => (
-            <FormItem className='min-h-36 flex-1 grid-rows-[auto_minmax(7rem,1fr)_auto]'>
+            <FormItem className='min-h-36 flex-1 grid-rows-[auto_minmax(7rem,1fr)]'>
               <FormLabel>{t('Prompt')}</FormLabel>
               <FormControl>
                 <Textarea
                   {...field}
-                  className='h-full min-h-28 resize-y sm:min-h-32'
+                  className='field-sizing-fixed h-full max-h-none min-h-28 resize-none sm:min-h-32'
                   placeholder={t('Describe the image you want to create')}
                   disabled={props.disabled}
                 />

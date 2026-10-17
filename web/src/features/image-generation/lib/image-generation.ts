@@ -158,3 +158,23 @@ export function generatedImageSource(image: GeneratedImage): string {
 export function isTerminalTaskStatus(status?: string): boolean {
   return status === 'SUCCESS' || status === 'FAILURE'
 }
+
+export function calculateImageGridLayout(
+  width: number,
+  height: number,
+  preferredTileSize: number
+): { columns: number; capacity: number } {
+  if (width <= 0 || height <= 0) return { columns: 1, capacity: 1 }
+
+  const gap = 12
+  const preferredColumns = Math.max(
+    1,
+    Math.floor((width + gap) / (preferredTileSize + gap))
+  )
+  const columnsNeededToFitHeight = Math.ceil((width + gap) / (height + gap))
+  const columns = Math.max(preferredColumns, columnsNeededToFitHeight)
+  const tileWidth = (width - gap * (columns - 1)) / columns
+  const rows = Math.max(1, Math.floor((height + gap) / (tileWidth + gap)))
+
+  return { columns, capacity: columns * rows }
+}
