@@ -25,6 +25,9 @@ import { ImageGeneration } from '../index'
 
 vi.mock('../api', () => ({
   getImageGenerationGroups: vi.fn().mockResolvedValue([]),
+  getImageGenerationHistory: vi
+    .fn()
+    .mockResolvedValue({ items: [], next_before_id: 0 }),
   getImageGenerationModels: vi.fn().mockResolvedValue([]),
   getImageGenerationTask: vi.fn(),
   submitImageGeneration: vi.fn(),
@@ -32,7 +35,7 @@ vi.mock('../api', () => ({
 }))
 
 describe('image generation page', () => {
-  it('keeps both panels stationary when the pointer hovers over them', () => {
+  it('keeps both panels stationary when the pointer hovers over them', async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     })
@@ -45,10 +48,11 @@ describe('image generation page', () => {
     const settingsCard = screen
       .getByText('Generation settings')
       .closest('[data-slot="card"]')
-    const resultCard = screen
-      .getByText('Your generated images will appear here')
-      .closest('[data-slot="card"]')
+    const resultCard = (
+      await screen.findByText('Your generated images will appear here')
+    ).closest('[data-slot="card"]')
     expect(settingsCard).toHaveAttribute('data-card-hover', 'false')
     expect(resultCard).toHaveAttribute('data-card-hover', 'false')
+    expect(resultCard).toHaveClass('overflow-visible')
   })
 })

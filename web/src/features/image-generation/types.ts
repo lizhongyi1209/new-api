@@ -78,6 +78,18 @@ export type ImageGenerationResult = {
   model: string
 }
 
+export type ImageGenerationHistoryItem = {
+  task_id: string
+  model: string
+  created: number
+  images: GeneratedImage[]
+}
+
+export type ImageGenerationHistoryPage = {
+  items: ImageGenerationHistoryItem[]
+  next_before_id: number
+}
+
 export type ImageGenerationTask = {
   data?: ImageGenerationResult
   error?: string

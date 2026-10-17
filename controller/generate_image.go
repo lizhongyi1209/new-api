@@ -92,6 +92,7 @@ func GenerateImageSubmit(c *gin.Context) {
 		},
 	}
 	task.PrivateData.RequestID = c.GetString(common.RequestIdKey)
+	task.PrivateData.ImageGallery = c.Request.URL.Path == "/pg/images/generations"
 	requestBodyBytes := c.Request.ContentLength
 	if storageValue, ok := c.Get(common.KeyBodyStorage); ok {
 		if storage, ok := storageValue.(common.BodyStorage); ok {

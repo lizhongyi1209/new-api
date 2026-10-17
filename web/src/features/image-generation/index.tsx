@@ -17,9 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useMutation, useQuery } from '@tanstack/react-query'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { ImagePlus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,6 +32,7 @@ import { handleServerError } from '@/lib/handle-server-error'
 
 import {
   getImageGenerationGroups,
+  getImageGenerationHistory,
   getImageGenerationModels,
   getImageGenerationTask,
   submitImageGeneration,
@@ -42,6 +48,7 @@ import type { ImageGenerationFormValue, ReferenceImage } from './types'
 
 export function ImageGeneration() {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
   const [group, setGroup] = useState('')
   const [taskId, setTaskId] = useState('')
 
@@ -61,6 +68,20 @@ export function ImageGeneration() {
     refetchInterval: (query) =>
       isTerminalTaskStatus(query.state.data?.status) ? false : 1500,
   })
+  const historyQuery = useInfiniteQuery({
+    queryKey: ['image-generation', 'history'],
+    queryFn: ({ pageParam }) => getImageGenerationHistory(pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.next_before_id || undefined,
+  })
+
+  useEffect(() => {
+    if (taskQuery.data?.status === 'SUCCESS') {
+      void queryClient.invalidateQueries({
+        queryKey: ['image-generation', 'history'],
+      })
+    }
+  }, [queryClient, taskQuery.data?.status, taskQuery.data?.task_id])
 
   const generationMutation = useMutation({
     mutationFn: async (input: {
@@ -88,7 +109,7 @@ export function ImageGeneration() {
   const disabled = generationMutation.isPending || taskIsActive
 
   return (
-    <div className='bg-muted/20 flex size-full min-h-0 flex-col overflow-auto'>
+    <div className='bg-muted/20 flex size-full min-h-0 [scrollbar-width:none] flex-col overflow-x-hidden overflow-y-auto [&::-webkit-scrollbar]:hidden'>
       <div className='mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5 lg:p-6'>
         <header className='flex items-start gap-3 px-1 sm:items-center'>
           <div className='bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg sm:size-10 sm:rounded-xl'>
@@ -104,15 +125,15 @@ export function ImageGeneration() {
           </div>
         </header>
 
-        <div className='grid min-h-0 flex-1 items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]'>
+        <div className='grid min-h-0 flex-1 items-start gap-4 sm:gap-5 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:items-stretch'>
           <Card
             data-card-hover='false'
-            className='h-fit min-w-0 overflow-hidden'
+            className='min-w-0 overflow-visible xl:min-h-[calc(100dvh-11rem)]'
           >
             <CardHeader className='border-b px-4 sm:px-6'>
               <CardTitle>{t('Generation settings')}</CardTitle>
             </CardHeader>
-            <CardContent className='px-4 sm:px-6'>
+            <CardContent className='flex flex-1 flex-col px-4 sm:px-6'>
               <GenerationForm
                 disabled={disabled}
                 groups={groupsQuery.data ?? []}
@@ -128,12 +149,23 @@ export function ImageGeneration() {
 
           <Card
             data-card-hover='false'
-            className='min-h-[360px] min-w-0 gap-0 overflow-hidden py-0 sm:min-h-[480px] xl:min-h-[calc(100dvh-11rem)]'
+            className='min-h-[360px] min-w-0 gap-0 overflow-visible py-0 sm:min-h-[480px] xl:min-h-[calc(100dvh-11rem)]'
           >
             <GenerationResult
+              history={
+                historyQuery.data?.pages.flatMap((page) => page.items) ?? []
+              }
+              hasMore={historyQuery.hasNextPage}
+              isLoadingMore={historyQuery.isFetchingNextPage}
+              onLoadMore={() => void historyQuery.fetchNextPage()}
               isError={taskQuery.isError}
+              isHistoryError={historyQuery.isError}
+              isHistoryLoading={historyQuery.isPending}
               isLoading={generationMutation.isPending}
-              onRetry={() => void taskQuery.refetch()}
+              onRetry={() => {
+                void taskQuery.refetch()
+                void historyQuery.refetch()
+              }}
               task={taskQuery.data}
             />
           </Card>

@@ -219,7 +219,7 @@ export function GenerationForm(props: GenerationFormProps) {
   return (
     <Form {...form}>
       <form
-        className='space-y-4 sm:space-y-5'
+        className='flex flex-1 flex-col gap-4 sm:gap-5'
         onSubmit={form.handleSubmit((value) =>
           props.onSubmit(value, references)
         )}
@@ -358,12 +358,12 @@ export function GenerationForm(props: GenerationFormProps) {
           control={form.control}
           name='prompt'
           render={({ field }) => (
-            <FormItem>
+            <FormItem className='min-h-36 flex-1 grid-rows-[auto_minmax(7rem,1fr)_auto]'>
               <FormLabel>{t('Prompt')}</FormLabel>
               <FormControl>
                 <Textarea
                   {...field}
-                  className='min-h-28 resize-y sm:min-h-32'
+                  className='h-full min-h-28 resize-y sm:min-h-32'
                   placeholder={t('Describe the image you want to create')}
                   disabled={props.disabled}
                 />

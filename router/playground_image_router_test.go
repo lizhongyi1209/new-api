@@ -18,6 +18,7 @@ func TestPlaygroundImageRoutesAreRegisteredAndRequireAuthentication(t *testing.T
 	wantRoutes := map[string]bool{
 		http.MethodPost + " /pg/images/uploads":     false,
 		http.MethodPost + " /pg/images/generations": false,
+		http.MethodGet + " /pg/images/history":      false,
 		http.MethodGet + " /pg/images/tasks/:id":    false,
 	}
 	for _, route := range engine.Routes() {
@@ -36,6 +37,7 @@ func TestPlaygroundImageRoutesAreRegisteredAndRequireAuthentication(t *testing.T
 	}{
 		{method: http.MethodPost, path: "/pg/images/uploads"},
 		{method: http.MethodPost, path: "/pg/images/generations"},
+		{method: http.MethodGet, path: "/pg/images/history"},
 		{method: http.MethodGet, path: "/pg/images/tasks/task_example"},
 	} {
 		recorder := httptest.NewRecorder()

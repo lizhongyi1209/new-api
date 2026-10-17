@@ -30,6 +30,23 @@ const models = [
 ]
 
 describe('image generation form', () => {
+  it('stretches the prompt by default to fill the settings panel', () => {
+    render(
+      <GenerationForm
+        disabled={false}
+        groups={[]}
+        isLoadingModels={false}
+        models={models}
+        onGroupChange={vi.fn()}
+        onSubmit={vi.fn()}
+      />
+    )
+
+    const prompt = screen.getByRole('textbox', { name: 'Prompt' })
+    expect(prompt).toHaveClass('h-full')
+    expect(prompt.closest('[data-slot="form-item"]')).toHaveClass('flex-1')
+  })
+
   it('places reference images before the group and limits a long group menu to a scrollable height', async () => {
     const groups = Array.from({ length: 20 }, (_, index) => ({
       label: `group-${index}`,

@@ -25,6 +25,7 @@ import type {
   GroupOption,
   ImageGenerationRequest,
   ImageGenerationSubmission,
+  ImageGenerationHistoryPage,
   ImageGenerationTask,
   SelectOption,
   TemporaryImageUpload,
@@ -88,6 +89,16 @@ export async function getImageGenerationTask(
   const response = await api.get<ImageGenerationTask>(
     `/pg/images/tasks/${encodeURIComponent(taskId)}`,
     { disableDuplicate: true }
+  )
+  return response.data
+}
+
+export async function getImageGenerationHistory(
+  beforeId = 0
+): Promise<ImageGenerationHistoryPage> {
+  const response = await api.get<ImageGenerationHistoryPage>(
+    '/pg/images/history',
+    { params: beforeId > 0 ? { before_id: beforeId } : undefined }
   )
   return response.data
 }
