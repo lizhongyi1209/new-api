@@ -385,6 +385,12 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 	upstreamModelName := service.ApplyModelMapping(modelName, channel.ModelMapping)
 	isModelMapped := upstreamModelName != modelName
 
+	isPlayground := false
+	requestURLPath := ""
+	if c.Request != nil && c.Request.URL != nil {
+		isPlayground = strings.HasPrefix(c.Request.URL.Path, "/pg/")
+		requestURLPath = c.Request.URL.String()
+	}
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          userId,
 		UserGroup:       common.GetContextKeyString(c, constant.ContextKeyUserGroup),
@@ -401,6 +407,8 @@ func prepareAsyncBilling(c *gin.Context, userId int, group string, channelId int
 		TokenId:        tokenId,
 		TokenKey:       common.GetContextKeyString(c, constant.ContextKeyTokenKey),
 		TokenUnlimited: common.GetContextKeyBool(c, constant.ContextKeyTokenUnlimited),
+		IsPlayground:   isPlayground,
+		RequestURLPath: requestURLPath,
 	}
 
 	// Populate user settings for billing preference

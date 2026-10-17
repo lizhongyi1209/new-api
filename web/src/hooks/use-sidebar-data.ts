@@ -23,6 +23,7 @@ import {
   CreditCard,
   FileText,
   FlaskConical,
+  ImagePlus,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -104,6 +105,17 @@ export function useSidebarData(): SidebarData {
             activeUrls: ['/usage-logs/drawing'],
             configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
             icon: ListTodo,
+          },
+        ],
+      },
+      {
+        id: 'generation',
+        title: t('Generate'),
+        items: [
+          {
+            title: t('Image Generation'),
+            url: '/generation/images',
+            icon: ImagePlus,
           },
         ],
       },

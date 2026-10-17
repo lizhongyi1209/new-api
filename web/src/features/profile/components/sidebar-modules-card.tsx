@@ -112,6 +112,20 @@ export function SidebarModulesCard() {
       ],
     },
     {
+      key: 'generation',
+      title: t('Generate'),
+      description: t('Create media with supported generation models.'),
+      modules: [
+        {
+          key: 'image',
+          title: t('Image Generation'),
+          description: t(
+            'Create and edit images with Nano Banana and GPT Image.'
+          ),
+        },
+      ],
+    },
+    {
       key: 'personal',
       title: t('Personal Center Area'),
       description: t('User personal functions'),

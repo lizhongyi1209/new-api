@@ -78,9 +78,15 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
-				// check path is /pg/chat/completions
-				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
+				// Dashboard playground requests use session auth instead of an API token,
+				// so resolve their selectable group from the request before routing.
+				if isPlaygroundModelRequest(c.Request.URL.Path) {
+					userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 					usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+					if usingGroup == "" {
+						usingGroup = userGroup
+						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
+					}
 					playgroundRequest := &dto.PlayGroundRequest{}
 					err = common.UnmarshalBodyReusable(c, playgroundRequest)
 					if err != nil {
@@ -88,7 +94,7 @@ func Distribute() func(c *gin.Context) {
 						return
 					}
 					if playgroundRequest.Group != "" {
-						if !service.GroupInUserUsableGroups(usingGroup, playgroundRequest.Group) && playgroundRequest.Group != usingGroup {
+						if !service.GroupInUserUsableGroups(userGroup, playgroundRequest.Group) && playgroundRequest.Group != userGroup {
 							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorGroupAccessDenied))
 							return
 						}
@@ -492,8 +498,8 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		c.Set("relay_mode", relayMode)
 	}
-	if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
-		// playground chat completions
+	if isPlaygroundModelRequest(c.Request.URL.Path) {
+		// Session-authenticated playground model requests.
 		req, err := getModelFromRequest(c)
 		if err != nil {
 			return nil, false, err
@@ -504,6 +510,11 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	}
 
 	return &modelRequest, shouldSelectChannel, nil
+}
+
+func isPlaygroundModelRequest(path string) bool {
+	return strings.HasPrefix(path, "/pg/chat/completions") ||
+		strings.HasPrefix(path, "/pg/images/generations")
 }
 
 // TokenModelLimitAllows reports whether a token model-limit map authorizes

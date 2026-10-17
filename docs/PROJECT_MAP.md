@@ -89,6 +89,13 @@ Aliases: 在线测试, 停止生成, 流式回复, 消息编辑, 未保存提醒
 - Overview guide and header action: `web/src/features/dashboard/components/overview/overview-dashboard.tsx`; existing onboarding state remains in the dashboard hooks.
 - Focused regressions: `features/playground/hooks/use-stream-request.test.ts`, `use-chat-handler.test.ts`, `components/message/__tests__/playground-message-editor.test.tsx` under `web/src/`. Evidence: `docs/reviews/ui-batch-3c-validation-2026-09-14.md`.
 
+## Dashboard image generation
+
+Aliases: 生成, 图片生成, Nano Banana, GPT Image, `/generation/images`, `/pg/images`.
+
+- Session-authenticated dashboard adapters reuse the unified asynchronous image implementation: temporary R2 input upload is `POST /pg/images/uploads`, submission is `POST /pg/images/generations`, and user-scoped polling is `GET /pg/images/tasks/:id`; routes live in `router/relay-router.go`, with existing handlers in `controller/temporary_upload.go`, `controller/generate_image.go`, and `controller/async_image.go`.
+- The default frontend route is `web/src/routes/_authenticated/generation/images.tsx`; feature UI, request/polling client, model filtering, and result normalization live under `web/src/features/image-generation/`. Sidebar and visibility configuration entries are in `web/src/hooks/use-sidebar-data.ts`, `web/src/hooks/use-sidebar-config.ts`, `web/src/features/system-settings/maintenance/`, and `web/src/features/profile/components/sidebar-modules-card.tsx`.
+
 ## Account security, verification, and audit logs
 
 Aliases: 安全与访问, 登录会话, 统一验证, Passkey 验证, 2FA 验证, 访问令牌, 操作审计, Telegram OAuth, `/api/verify`, `/api/audit`.
