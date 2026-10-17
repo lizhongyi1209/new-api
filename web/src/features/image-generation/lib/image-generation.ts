@@ -59,7 +59,6 @@ export function buildImageGenerationRequest(
 
   if (images.length > 0) request.images = images
   if (form.size) request.size = form.size
-  if (form.outputFormat) request.output_format = form.outputFormat
 
   if (family === 'banana') {
     if (form.aspectRatio) request.aspect_ratio = form.aspectRatio
@@ -69,6 +68,7 @@ export function buildImageGenerationRequest(
   if (family === 'gpt-image') {
     if (form.quality) request.quality = form.quality
     request.background = form.background
+    request.output_format = form.outputFormat
   }
 
   return request

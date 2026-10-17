@@ -63,7 +63,6 @@ describe('image generation request contract', () => {
       group: 'default',
       images: ['https://r2.test/input.png'],
       model: 'gemini-3.1-flash-image-c-sp',
-      output_format: 'png',
       prompt: 'A quiet lake at sunrise',
       response_modalities: ['IMAGE'],
       size: '2K',

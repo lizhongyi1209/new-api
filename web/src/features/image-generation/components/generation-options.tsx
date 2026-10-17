@@ -164,60 +164,62 @@ export function GenerationOptions(props: GenerationOptionsProps) {
         />
       )}
 
-      <FormField
-        control={props.control}
-        name='outputFormat'
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>{t('Output format')}</FormLabel>
-            <FormControl>
-              <OptionSelect
-                disabled={props.disabled}
-                label={t('Output format')}
-                onChange={(value) => {
-                  field.onChange(value)
-                  if (
-                    value === 'jpeg' &&
-                    form.getValues('background') === 'transparent'
-                  ) {
-                    form.setValue('background', 'auto')
-                  }
-                }}
-                options={OUTPUT_FORMATS}
-                value={field.value}
-              />
-            </FormControl>
-          </FormItem>
-        )}
-      />
-
       {props.family === 'gpt-image' ? (
-        <FormField
-          control={props.control}
-          name='background'
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{t('Background')}</FormLabel>
-              <FormControl>
-                <OptionSelect
-                  disabled={props.disabled}
-                  label={t('Background')}
-                  onChange={(value) => {
-                    field.onChange(value)
-                    if (
-                      value === 'transparent' &&
-                      form.getValues('outputFormat') === 'jpeg'
-                    ) {
-                      form.setValue('outputFormat', 'png')
-                    }
-                  }}
-                  options={['auto', 'transparent']}
-                  value={field.value}
-                />
-              </FormControl>
-            </FormItem>
-          )}
-        />
+        <>
+          <FormField
+            control={props.control}
+            name='outputFormat'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Output format')}</FormLabel>
+                <FormControl>
+                  <OptionSelect
+                    disabled={props.disabled}
+                    label={t('Output format')}
+                    onChange={(value) => {
+                      field.onChange(value)
+                      if (
+                        value === 'jpeg' &&
+                        form.getValues('background') === 'transparent'
+                      ) {
+                        form.setValue('background', 'auto')
+                      }
+                    }}
+                    options={OUTPUT_FORMATS}
+                    value={field.value}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={props.control}
+            name='background'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Background')}</FormLabel>
+                <FormControl>
+                  <OptionSelect
+                    disabled={props.disabled}
+                    label={t('Background')}
+                    onChange={(value) => {
+                      field.onChange(value)
+                      if (
+                        value === 'transparent' &&
+                        form.getValues('outputFormat') === 'jpeg'
+                      ) {
+                        form.setValue('outputFormat', 'png')
+                      }
+                    }}
+                    options={['auto', 'transparent']}
+                    value={field.value}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </>
       ) : null}
     </div>
   )

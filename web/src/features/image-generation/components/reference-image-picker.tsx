@@ -68,10 +68,11 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
         )
         continue
       }
+      const previewUrl = URL.createObjectURL(file)
       accepted.push({
         file,
-        id: `${file.name}-${file.size}-${file.lastModified}-${crypto.randomUUID()}`,
-        previewUrl: URL.createObjectURL(file),
+        id: previewUrl,
+        previewUrl,
       })
     }
 
@@ -139,19 +140,20 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
         <p className='text-muted-foreground mt-1 text-xs'>
           {t('PNG, JPEG or WebP, up to 20 MiB each')}
         </p>
-        <input
-          ref={inputRef}
-          className='sr-only'
-          type='file'
-          multiple
-          accept='image/png,image/jpeg,image/webp'
-          disabled={props.disabled}
-          onChange={(event) => {
-            if (event.target.files) addFiles(event.target.files)
-            event.target.value = ''
-          }}
-        />
       </div>
+      <input
+        ref={inputRef}
+        className='sr-only'
+        type='file'
+        multiple
+        accept='image/png,image/jpeg,image/webp'
+        disabled={props.disabled}
+        aria-label={t('Add reference images')}
+        onChange={(event) => {
+          if (event.target.files) addFiles(event.target.files)
+          event.target.value = ''
+        }}
+      />
 
       {props.images.length > 0 ? (
         <div className='grid grid-cols-4 gap-2 sm:grid-cols-5'>
