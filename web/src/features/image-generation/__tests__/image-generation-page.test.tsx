@@ -107,7 +107,7 @@ describe('image generation page', () => {
     expect(settingsCard?.parentElement).toHaveClass(
       'auto-rows-max',
       'grid-cols-1',
-      'xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]'
+      'xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]'
     )
     expect(settingsCard?.nextElementSibling).toBe(resultCard)
     expect(settingsCard).not.toHaveClass('hidden')
