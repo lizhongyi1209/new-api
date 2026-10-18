@@ -207,13 +207,7 @@ export function GenerationForm(props: GenerationFormProps) {
           props.onSubmit(value, references)
         )}
       >
-        <ReferenceImagePicker
-          disabled={props.disabled}
-          images={references}
-          onChange={updateReferences}
-        />
-
-        <div className='grid gap-3 @sm:grid-cols-2'>
+        <div className='grid gap-3'>
           <FormField
             control={form.control}
             name='model'
@@ -298,6 +292,12 @@ export function GenerationForm(props: GenerationFormProps) {
             </Select>
           </div>
         </div>
+
+        <ReferenceImagePicker
+          disabled={props.disabled}
+          images={references}
+          onChange={updateReferences}
+        />
 
         <FormField
           control={form.control}

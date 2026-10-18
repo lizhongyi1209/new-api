@@ -27,18 +27,17 @@ afterEach(() => {
 })
 
 describe('reference image picker', () => {
-  it('shows a tap instruction on touch screens and a drop hint with a pointer', () => {
+  it('shows a square dashed upload button and the per-image size limit', () => {
     render(
       <ReferenceImagePicker disabled={false} images={[]} onChange={vi.fn()} />
     )
 
-    expect(screen.getByText('Add reference images')).toHaveClass(
-      '[@media(hover:hover)]:hidden'
-    )
-    expect(screen.getByText('Drop images here or click to upload')).toHaveClass(
-      'hidden',
-      '[@media(hover:hover)]:block'
-    )
+    expect(
+      screen.getByRole('button', { name: 'Add reference images' })
+    ).toHaveClass('aspect-square', 'border-dashed')
+    expect(
+      screen.getByText('PNG, JPEG or WebP, up to 10 MiB each')
+    ).toBeInTheDocument()
   })
 
   it('opens the native picker once when the drop zone is clicked', () => {
@@ -47,7 +46,9 @@ describe('reference image picker', () => {
       <ReferenceImagePicker disabled={false} images={[]} onChange={vi.fn()} />
     )
 
-    fireEvent.click(screen.getAllByLabelText('Add reference images')[0])
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add reference images' })
+    )
 
     expect(inputClick).toHaveBeenCalledTimes(1)
   })
@@ -60,9 +61,12 @@ describe('reference image picker', () => {
       <ReferenceImagePicker disabled={false} images={[]} onChange={onChange} />
     )
 
-    fireEvent.drop(screen.getAllByLabelText('Add reference images')[0], {
-      dataTransfer: { files: [file] },
-    })
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Add reference images' }),
+      {
+        dataTransfer: { files: [file] },
+      }
+    )
 
     expect(onChange).toHaveBeenCalledWith([
       {
@@ -71,5 +75,23 @@ describe('reference image picker', () => {
         previewUrl: 'blob:reference-preview',
       },
     ])
+  })
+
+  it('rejects a reference image over 10 MiB before upload', () => {
+    const onChange = vi.fn()
+    const file = new File(['png'], 'large.png', { type: 'image/png' })
+    Object.defineProperty(file, 'size', { value: 10 * 1024 * 1024 + 1 })
+    render(
+      <ReferenceImagePicker disabled={false} images={[]} onChange={onChange} />
+    )
+
+    fireEvent.drop(
+      screen.getByRole('button', { name: 'Add reference images' }),
+      {
+        dataTransfer: { files: [file] },
+      }
+    )
+
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

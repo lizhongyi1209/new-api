@@ -25,7 +25,7 @@ import type {
 } from '../types'
 
 export const MAX_REFERENCE_IMAGES = 10
-export const MAX_REFERENCE_IMAGE_BYTES = 20 * 1024 * 1024
+export const MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
 export const ACCEPTED_REFERENCE_IMAGE_TYPES = new Set([
   'image/jpeg',
   'image/png',

@@ -57,7 +57,18 @@ describe('generation model options', () => {
     )
 
     expect(screen.queryByText('Output format')).not.toBeInTheDocument()
-    expect(screen.getByText('Output aspect ratio')).toBeInTheDocument()
+    expect(screen.queryByText('Output image size')).not.toBeInTheDocument()
+    expect(screen.queryByText('Output aspect ratio')).not.toBeInTheDocument()
+    expect(
+      screen
+        .getByRole('combobox', { name: 'Output image size' })
+        .querySelector('svg')
+    ).toBeInTheDocument()
+    expect(
+      screen
+        .getByRole('combobox', { name: 'Output aspect ratio' })
+        .querySelector('svg')
+    ).toBeInTheDocument()
     expect(screen.getByText('Thinking level')).toBeInTheDocument()
     expect(screen.queryByText('Google Search')).not.toBeInTheDocument()
   })

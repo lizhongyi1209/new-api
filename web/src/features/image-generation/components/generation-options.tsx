@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { Image, Ratio, type LucideIcon } from 'lucide-react'
 import { useFormContext, type Control } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 
@@ -88,6 +89,7 @@ const OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const
 
 function OptionSelect(props: {
   disabled: boolean
+  icon?: LucideIcon
   label: string
   onChange: (value: string) => void
   options: readonly string[]
@@ -105,6 +107,12 @@ function OptionSelect(props: {
         className='w-full transition-none'
         aria-label={props.label}
       >
+        {props.icon ? (
+          <props.icon
+            className='text-muted-foreground size-4 shrink-0'
+            aria-hidden='true'
+          />
+        ) : null}
         <SelectValue />
       </SelectTrigger>
       <SelectContent alignItemWithTrigger={false} animated={false}>
@@ -143,10 +151,10 @@ export function GenerationOptions(props: GenerationOptionsProps) {
         name='size'
         render={({ field }) => (
           <FormItem>
-            <FormLabel>{t('Output image size')}</FormLabel>
             <FormControl>
               <OptionSelect
                 disabled={props.disabled}
+                icon={Image}
                 label={t('Output image size')}
                 onChange={field.onChange}
                 options={sizeOptions}
@@ -163,10 +171,10 @@ export function GenerationOptions(props: GenerationOptionsProps) {
           name='aspectRatio'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t('Output aspect ratio')}</FormLabel>
               <FormControl>
                 <OptionSelect
                   disabled={props.disabled}
+                  icon={Ratio}
                   label={t('Output aspect ratio')}
                   onChange={field.onChange}
                   options={aspectRatioOptions}
@@ -252,7 +260,6 @@ export function GenerationOptions(props: GenerationOptionsProps) {
               </FormItem>
             )}
           />
-
         </>
       ) : null}
 

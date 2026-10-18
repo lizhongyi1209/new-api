@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { ImagePlus, X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -64,7 +64,7 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
       }
       if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
         toast.error(
-          t('{{name}} exceeds the 20 MiB limit.', { name: file.name })
+          t('{{name}} exceeds the 10 MiB limit.', { name: file.name })
         )
         continue
       }
@@ -99,51 +99,63 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
           {props.images.length}/{MAX_REFERENCE_IMAGES}
         </span>
       </div>
-      <div
-        className={cn(
-          'border-border bg-muted/20 hover:bg-muted/35 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-3 py-4 text-center transition-colors sm:min-h-28 sm:px-4 sm:py-5',
-          dragActive && 'border-primary bg-primary/5',
-          props.disabled && 'pointer-events-none opacity-50'
-        )}
-        onClick={() => inputRef.current?.click()}
-        onDragEnter={(event) => {
-          event.preventDefault()
-          setDragActive(true)
-        }}
-        onDragLeave={(event) => {
-          event.preventDefault()
-          setDragActive(false)
-        }}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault()
-          setDragActive(false)
-          addFiles(event.dataTransfer.files)
-        }}
-        role='button'
-        tabIndex={props.disabled ? -1 : 0}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault()
-            inputRef.current?.click()
-          }
-        }}
-        aria-label={t('Add reference images')}
-      >
-        <ImagePlus
-          className='text-muted-foreground mb-2 size-5'
-          aria-hidden='true'
-        />
-        <p className='text-sm font-medium [@media(hover:hover)]:hidden'>
-          {t('Add reference images')}
-        </p>
-        <p className='hidden text-sm font-medium [@media(hover:hover)]:block'>
-          {t('Drop images here or click to upload')}
-        </p>
-        <p className='text-muted-foreground mt-1 text-xs'>
-          {t('PNG, JPEG or WebP, up to 20 MiB each')}
-        </p>
+      <div className='grid grid-cols-3 gap-2 @sm:grid-cols-4'>
+        {props.images.length < MAX_REFERENCE_IMAGES ? (
+          <Button
+            type='button'
+            variant='outline'
+            className={cn(
+              'bg-muted/20 text-muted-foreground hover:bg-muted/35 aspect-square h-auto w-full rounded-lg border-dashed p-0 transition-colors',
+              dragActive && 'border-primary bg-primary/5'
+            )}
+            onClick={() => inputRef.current?.click()}
+            onDragEnter={(event) => {
+              event.preventDefault()
+              setDragActive(true)
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault()
+              setDragActive(false)
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault()
+              setDragActive(false)
+              if (!props.disabled) addFiles(event.dataTransfer.files)
+            }}
+            disabled={props.disabled}
+            aria-label={t('Add reference images')}
+          >
+            <Plus className='size-6' aria-hidden='true' />
+          </Button>
+        ) : null}
+        {props.images.map((image) => (
+          <div
+            key={image.id}
+            className='group bg-muted relative aspect-square overflow-hidden rounded-lg border'
+          >
+            <img
+              src={image.previewUrl}
+              alt={image.file.name}
+              className='size-full object-cover'
+            />
+            <Button
+              type='button'
+              variant='destructive'
+              size='icon-xs'
+              className='absolute top-1 right-1 opacity-90'
+              aria-label={t('Remove {{name}}', { name: image.file.name })}
+              onClick={() => removeImage(image)}
+              disabled={props.disabled}
+            >
+              <X aria-hidden='true' />
+            </Button>
+          </div>
+        ))}
       </div>
+      <p className='text-muted-foreground text-xs'>
+        {t('PNG, JPEG or WebP, up to 10 MiB each')}
+      </p>
       <input
         ref={inputRef}
         className='sr-only'
@@ -157,34 +169,6 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
           event.target.value = ''
         }}
       />
-
-      {props.images.length > 0 ? (
-        <div className='grid grid-cols-3 gap-2 sm:grid-cols-5'>
-          {props.images.map((image) => (
-            <div
-              key={image.id}
-              className='group bg-muted relative aspect-square overflow-hidden rounded-lg border'
-            >
-              <img
-                src={image.previewUrl}
-                alt={image.file.name}
-                className='size-full object-cover'
-              />
-              <Button
-                type='button'
-                variant='destructive'
-                size='icon-xs'
-                className='absolute top-1 right-1 opacity-90'
-                aria-label={t('Remove {{name}}', { name: image.file.name })}
-                onClick={() => removeImage(image)}
-                disabled={props.disabled}
-              >
-                <X aria-hidden='true' />
-              </Button>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }

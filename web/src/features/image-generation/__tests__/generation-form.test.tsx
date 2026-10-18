@@ -47,12 +47,10 @@ describe('image generation form', () => {
       'xl:h-full',
       'max-h-none'
     )
-    expect(prompt.closest('[data-slot="form-item"]')).toHaveClass(
-      'xl:flex-1'
-    )
+    expect(prompt.closest('[data-slot="form-item"]')).toHaveClass('xl:flex-1')
   })
 
-  it('places reference images before model settings without a group selector', () => {
+  it('places model and tier in separate rows above reference images', () => {
     render(
       <GenerationForm
         disabled={false}
@@ -64,10 +62,21 @@ describe('image generation form', () => {
 
     const referencePicker = screen.getByText('Reference images')
     const modelLabel = screen.getByText('Model')
+    const tierLabel = screen.getByText('Tier')
     expect(
-      referencePicker.compareDocumentPosition(modelLabel) &
+      modelLabel.compareDocumentPosition(tierLabel) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+    expect(
+      tierLabel.compareDocumentPosition(referencePicker) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      modelLabel.closest('[data-slot="form-item"]')?.parentElement
+    ).toHaveClass('grid', 'gap-3')
+    expect(
+      modelLabel.closest('[data-slot="form-item"]')?.parentElement
+    ).not.toHaveClass('@sm:grid-cols-2')
     expect(screen.queryByRole('combobox', { name: 'Group' })).toBeNull()
   })
 

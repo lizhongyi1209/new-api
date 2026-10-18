@@ -149,6 +149,27 @@ func TestUploadTemporaryInputAttachmentRejectsFileOver20MiB(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "20 MiB")
 }
 
+func TestUploadPlaygroundReferenceImageRejectsFileOver10MiB(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+	filePart, err := writer.CreateFormFile("file", "reference.png")
+	require.NoError(t, err)
+	_, err = filePart.Write(make([]byte, service.PlaygroundReferenceImageMaxFileBytes+1))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/pg/images/uploads", &requestBody)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = request
+	UploadPlaygroundReferenceImage(context)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "10 MiB")
+}
+
 func TestServeTemporaryInputDocumentForcesDownload(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	storageDir := t.TempDir()

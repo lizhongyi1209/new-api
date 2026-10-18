@@ -19,9 +19,10 @@ import (
 )
 
 const (
-	TemporaryInputCategory     = "input"
-	TemporaryInputRetention    = TemporaryImageRetention
-	TemporaryInputMaxFileBytes = int64(20 * 1024 * 1024)
+	TemporaryInputCategory               = "input"
+	TemporaryInputRetention              = TemporaryImageRetention
+	TemporaryInputMaxFileBytes           = int64(20 * 1024 * 1024)
+	PlaygroundReferenceImageMaxFileBytes = int64(10 * 1024 * 1024)
 )
 
 var (
@@ -89,16 +90,20 @@ var legacyTemporaryInputContentTypes = map[string]string{
 }
 
 func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
-	return storeTemporaryInputAttachment(ctx, reader, originalFilename)
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, TemporaryInputMaxFileBytes)
+}
+
+func StorePlaygroundReferenceImage(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, PlaygroundReferenceImageMaxFileBytes)
 }
 
 // StoreTemporaryInputAttachmentToR2 preserves the explicit R2 entry point used
 // by Gemini fileData conversion.
 func StoreTemporaryInputAttachmentToR2(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
-	return storeTemporaryInputAttachment(ctx, reader, originalFilename)
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, TemporaryInputMaxFileBytes)
 }
 
-func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
+func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string, maxFileBytes int64) (*TemporaryInputAttachment, error) {
 	originalExtension := strings.ToLower(filepath.Ext(strings.TrimSpace(originalFilename)))
 	if originalExtension != "" {
 		if _, ok := temporaryInputFormats[originalExtension]; !ok {
@@ -107,14 +112,14 @@ func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, origin
 	}
 
 	var body bytes.Buffer
-	size, err := io.Copy(&body, io.LimitReader(reader, TemporaryInputMaxFileBytes+1))
+	size, err := io.Copy(&body, io.LimitReader(reader, maxFileBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read temporary input attachment: %w", err)
 	}
 	if size == 0 {
 		return nil, ErrTemporaryInputEmpty
 	}
-	if size > TemporaryInputMaxFileBytes {
+	if size > maxFileBytes {
 		return nil, ErrTemporaryInputTooLarge
 	}
 	detected, err := mimetype.DetectReader(bytes.NewReader(body.Bytes()))
