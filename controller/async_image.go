@@ -593,6 +593,8 @@ func AsyncTaskFetch(c *gin.Context) {
 	if task.PrivateData.ImageGallery {
 		resp.Prompt = task.Properties.Input
 		resp.Options = task.PrivateData.ImageGalleryOptions
+		resp.References = task.PrivateData.ImageGalleryReferences
+		resp.CanRegenerate = &task.PrivateData.ImageGalleryReferencesStored
 	}
 
 	if task.Status == model.TaskStatusSuccess {

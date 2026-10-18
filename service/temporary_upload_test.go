@@ -58,6 +58,24 @@ func configureTemporaryInputR2Test(t *testing.T, handler http.HandlerFunc) {
 	t.Setenv("R2_PUBLIC_BASE_URL", "https://r2.example.com")
 }
 
+func TestStorePlaygroundReferenceImageKeepsOriginalForRegeneration(t *testing.T) {
+	pngBytes, err := base64.StdEncoding.DecodeString(temporaryImageTestPNG)
+	require.NoError(t, err)
+	var objectPath, cacheControl string
+	configureTemporaryInputR2Test(t, func(w http.ResponseWriter, r *http.Request) {
+		objectPath = r.URL.Path
+		cacheControl = r.Header.Get("Cache-Control")
+		w.WriteHeader(http.StatusOK)
+	})
+
+	attachment, err := StorePlaygroundReferenceImage(context.Background(), bytes.NewReader(pngBytes), "model.png")
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(attachment.URL, "https://r2.example.com/gallery/input/"))
+	assert.True(t, strings.HasPrefix(objectPath, "/r2-bucket/gallery/input/"))
+	assert.Equal(t, generatedImageCacheControl, cacheControl)
+	assert.True(t, attachment.ExpiresAt.IsZero())
+}
+
 func TestStoreTemporaryInputAttachmentSupportsMainstreamAttachments(t *testing.T) {
 	pngBytes, err := base64.StdEncoding.DecodeString(temporaryImageTestPNG)
 	require.NoError(t, err)

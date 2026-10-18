@@ -42,7 +42,7 @@ export type BatchCombinationMode = 'paired' | 'all'
 
 export type TemporaryImageUpload = {
   content_type: string
-  expires_at: number
+  expires_at?: number
   filename: string
   size: number
   url: string
@@ -97,6 +97,8 @@ export type ImageGenerationHistoryItem = {
   model: string
   prompt?: string
   options?: ImageGalleryOptions
+  references?: string[]
+  can_regenerate?: boolean
   created: number
   images: GeneratedImage[]
 }
@@ -112,6 +114,8 @@ export type ImageResultAction = ImageGallerySelection & {
   url: string
   outputFormat?: string
   options?: ImageGalleryOptions
+  references?: string[]
+  canRegenerate?: boolean
 }
 
 export type ImageGenerationHistoryPage = {
@@ -124,6 +128,8 @@ export type ImageGenerationTask = {
   error?: string
   prompt?: string
   options?: ImageGalleryOptions
+  references?: string[]
+  can_regenerate?: boolean
   progress?: string
   status: string
   task_id: string

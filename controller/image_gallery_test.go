@@ -30,8 +30,10 @@ func TestImageGenerationGalleryDeletePreservesIndicesAndOwnership(t *testing.T) 
 			Status:     model.TaskStatusSuccess,
 			Properties: model.Properties{Input: "Try the outfit", OriginModelName: "gemini-nano-banana-2.1"},
 			PrivateData: model.TaskPrivateData{
-				ImageGallery: true,
-				ResultURL:    "https://images.example.com/first.png",
+				ImageGallery:                 true,
+				ImageGalleryReferencesStored: true,
+				ImageGalleryReferences:       []string{"https://images.example.com/model.png"},
+				ResultURL:                    "https://images.example.com/first.png",
 				ImageGalleryResults: []model.TaskImageGalleryResult{
 					{URL: "https://images.example.com/first.png"},
 					{URL: "https://images.example.com/second.png"},
@@ -86,6 +88,7 @@ func TestImageGenerationGalleryDeletePreservesIndicesAndOwnership(t *testing.T) 
 	assert.NotContains(t, historyRecorder.Body.String(), "first.png")
 	assert.Contains(t, historyRecorder.Body.String(), "second.png")
 	assert.Contains(t, historyRecorder.Body.String(), "Try the outfit")
+	assert.Contains(t, historyRecorder.Body.String(), "model.png")
 
 	deleted = deleteItems([]model.ImageGallerySelection{{TaskID: "a-owned-gallery", Index: 1}})
 	assert.Equal(t, http.StatusOK, deleted.Code)
@@ -158,6 +161,7 @@ func TestImageGenerationHistoryKeepsUserScopedURLsAfterTaskDataCleanup(t *testin
 	assert.Equal(t, http.StatusOK, fetchRecorder.Code)
 	assert.Contains(t, fetchRecorder.Body.String(), "https://images.example.com/images/owned.png")
 	assert.NotContains(t, fetchRecorder.Body.String(), "b64_json")
+	assert.Contains(t, fetchRecorder.Body.String(), `"can_regenerate":false`)
 }
 
 func TestImageGenerationDownloadReturnsAttachmentOnlyForOwnedGalleryTask(t *testing.T) {

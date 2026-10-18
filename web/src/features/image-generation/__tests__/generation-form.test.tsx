@@ -200,6 +200,9 @@ describe('image generation form', () => {
     )
 
     await user.click(screen.getByRole('switch', { name: 'Batch mode' }))
+    expect(
+      screen.getByRole('combobox', { name: 'Combination mode' })
+    ).toHaveTextContent('All combinations')
     const inputs = document.querySelectorAll<HTMLInputElement>(
       'input[type="file"][multiple]'
     )

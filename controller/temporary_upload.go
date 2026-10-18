@@ -100,13 +100,16 @@ func uploadTemporaryInputAttachment(c *gin.Context, maxFileBytes int64, store fu
 		}
 		logger.LogInfo(c, fmt.Sprintf("temporary_input_upload provider=r2 content_type=%s bytes=%d", attachment.ContentType, attachment.Size))
 
-		c.JSON(http.StatusOK, gin.H{
+		result := gin.H{
 			"url":          attachment.URL,
 			"filename":     originalFilename,
 			"content_type": attachment.ContentType,
 			"size":         attachment.Size,
-			"expires_at":   attachment.ExpiresAt.Unix(),
-		})
+		}
+		if !attachment.ExpiresAt.IsZero() {
+			result["expires_at"] = attachment.ExpiresAt.Unix()
+		}
+		c.JSON(http.StatusOK, result)
 		return
 	}
 }

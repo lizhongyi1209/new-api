@@ -48,6 +48,34 @@ const defaultProps = {
 }
 
 describe('generation result gallery', () => {
+  it('disables regeneration when an older task no longer has its original references', async () => {
+    const user = userEvent.setup()
+    const onRegenerate = vi.fn()
+    render(
+      <GenerationResult
+        {...defaultProps}
+        history={[
+          {
+            task_id: 'legacy-task',
+            model: 'gemini-nano-banana-2.1-sp',
+            created: 100,
+            images: [{ url: 'https://images.example.com/result.png' }],
+            can_regenerate: false,
+          },
+        ]}
+        onRegenerate={onRegenerate}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Image 1 actions' }))
+    expect(
+      screen.getByRole('menuitem', {
+        name: 'Original generation settings unavailable',
+      })
+    ).toHaveAttribute('aria-disabled', 'true')
+    expect(onRegenerate).not.toHaveBeenCalled()
+  })
+
   it('uses the compact grid default after the viewport becomes narrow', () => {
     const history = [
       {

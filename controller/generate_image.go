@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -107,6 +108,7 @@ func GenerateImageSubmit(c *gin.Context) {
 			options.ThinkingLevel = *req.ThinkingLevel
 		}
 		task.PrivateData.ImageGalleryOptions = options
+		task.PrivateData.ImageGalleryReferences, task.PrivateData.ImageGalleryReferencesStored = durableGalleryReferenceURLs(req.Images)
 	}
 	requestBodyBytes := c.Request.ContentLength
 	if storageValue, ok := c.Get(common.KeyBodyStorage); ok {
@@ -374,6 +376,29 @@ func applyGenerateImageGoogleSearchTool(nativeReq map[string]interface{}, google
 			"googleSearch": map[string]interface{}{},
 		},
 	}
+}
+
+// durableGalleryReferenceURLs records only stable, non-signed URL references.
+// Inline data and temporary objects cannot be safely replayed from history.
+func durableGalleryReferenceURLs(inputs []dto.GenerateImageInput) ([]string, bool) {
+	references := make([]string, 0, len(inputs))
+	for _, input := range inputs {
+		if input.InlineData != nil {
+			return nil, false
+		}
+		raw := input.LegacyString()
+		if len(raw) > 2048 {
+			return nil, false
+		}
+		parsed, err := url.Parse(raw)
+		if err != nil || parsed.Scheme != "https" || parsed.Host == "" ||
+			parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" ||
+			strings.Contains(parsed.Path, "/tmp/input/") {
+			return nil, false
+		}
+		references = append(references, raw)
+	}
+	return references, true
 }
 
 func unmarshalGenerateImageBody(c *gin.Context, v any) error {

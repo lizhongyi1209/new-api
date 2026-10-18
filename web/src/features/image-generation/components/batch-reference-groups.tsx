@@ -51,8 +51,8 @@ type BatchReferenceGroupsProps = {
 export function BatchReferenceGroups(props: BatchReferenceGroupsProps) {
   const { t } = useTranslation()
   const modeOptions = [
-    { label: t('Pair by position'), value: 'paired' },
     { label: t('All combinations'), value: 'all' },
+    { label: t('Pair by position'), value: 'paired' },
   ]
 
   return (

@@ -95,7 +95,7 @@ export function GenerationForm(props: GenerationFormProps) {
   const tierId = useId()
   const [references, setReferences] = useState<ReferenceImage[]>([])
   const [batchEnabled, setBatchEnabled] = useState(false)
-  const [batchMode, setBatchMode] = useState<BatchCombinationMode>('paired')
+  const [batchMode, setBatchMode] = useState<BatchCombinationMode>('all')
   const [batchGroups, setBatchGroups] = useState<BatchReferenceGroup[]>(() => [
     {
       id: crypto.randomUUID(),

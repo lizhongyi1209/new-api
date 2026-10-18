@@ -90,20 +90,20 @@ var legacyTemporaryInputContentTypes = map[string]string{
 }
 
 func StoreTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
-	return storeTemporaryInputAttachment(ctx, reader, originalFilename, TemporaryInputMaxFileBytes)
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, TemporaryInputMaxFileBytes, "tmp/input/")
 }
 
 func StorePlaygroundReferenceImage(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
-	return storeTemporaryInputAttachment(ctx, reader, originalFilename, PlaygroundReferenceImageMaxFileBytes)
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, PlaygroundReferenceImageMaxFileBytes, "gallery/input/")
 }
 
 // StoreTemporaryInputAttachmentToR2 preserves the explicit R2 entry point used
 // by Gemini fileData conversion.
 func StoreTemporaryInputAttachmentToR2(ctx context.Context, reader io.Reader, originalFilename string) (*TemporaryInputAttachment, error) {
-	return storeTemporaryInputAttachment(ctx, reader, originalFilename, TemporaryInputMaxFileBytes)
+	return storeTemporaryInputAttachment(ctx, reader, originalFilename, TemporaryInputMaxFileBytes, "tmp/input/")
 }
 
-func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string, maxFileBytes int64) (*TemporaryInputAttachment, error) {
+func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, originalFilename string, maxFileBytes int64, objectPrefix string) (*TemporaryInputAttachment, error) {
 	originalExtension := strings.ToLower(filepath.Ext(strings.TrimSpace(originalFilename)))
 	if originalExtension != "" {
 		if _, ok := temporaryInputFormats[originalExtension]; !ok {
@@ -157,14 +157,18 @@ func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, origin
 	if err != nil || parsedBase.Scheme != "https" || parsedBase.Host == "" || parsedBase.User != nil || parsedBase.RawQuery != "" || parsedBase.Fragment != "" {
 		return nil, fmt.Errorf("temporary input public base URL must be an HTTPS origin")
 	}
-	objectKey := "tmp/input/" + filename
+	objectKey := objectPrefix + filename
+	cacheControl := "public, max-age=3600, must-revalidate"
+	if objectPrefix == "gallery/input/" {
+		cacheControl = generatedImageCacheControl
+	}
 	putInput := &s3.PutObjectInput{
 		Bucket:        aws.String(bucket),
 		Key:           aws.String(objectKey),
 		Body:          bytes.NewReader(body.Bytes()),
 		ContentLength: aws.Int64(size),
 		ContentType:   aws.String(contentType),
-		CacheControl:  aws.String("public, max-age=3600, must-revalidate"),
+		CacheControl:  aws.String(cacheControl),
 	}
 	if !strings.HasPrefix(contentType, "image/") && !strings.HasPrefix(contentType, "audio/") && !strings.HasPrefix(contentType, "video/") {
 		putInput.ContentDisposition = aws.String("attachment")
@@ -173,7 +177,10 @@ func storeTemporaryInputAttachment(ctx context.Context, reader io.Reader, origin
 	if err != nil {
 		return nil, fmt.Errorf("upload temporary input attachment to object storage: %w", err)
 	}
-	expiresAt := time.Now().Add(TemporaryInputRetention)
+	var expiresAt time.Time
+	if objectPrefix == "tmp/input/" {
+		expiresAt = time.Now().Add(TemporaryInputRetention)
+	}
 	return &TemporaryInputAttachment{
 		URL:         publicBase + "/" + objectKey,
 		Filename:    filename,

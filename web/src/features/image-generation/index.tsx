@@ -181,7 +181,7 @@ export function ImageGeneration() {
           formValue.outputFormat = outputFormat
         }
         const submission = await submitImageGeneration(
-          buildImageGenerationRequest(formValue, [image.url])
+          buildImageGenerationRequest(formValue, image.references ?? [])
         )
         submittedIDs.push(submission.task_id)
         setTaskIds([...submittedIDs])

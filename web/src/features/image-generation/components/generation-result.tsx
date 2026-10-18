@@ -123,6 +123,8 @@ export function GenerationResult(props: GenerationResultProps) {
         model: task.data.model,
         prompt: task.prompt,
         options: task.options,
+        references: task.references,
+        can_regenerate: task.can_regenerate,
         created: task.data.created,
         images: task.data.images,
       })
@@ -147,6 +149,8 @@ export function GenerationResult(props: GenerationResultProps) {
             url: source,
             outputFormat: image.output_format,
             options: item.options,
+            references: item.references,
+            canRegenerate: item.can_regenerate,
           },
         },
       ]
@@ -438,11 +442,16 @@ export function GenerationResult(props: GenerationResultProps) {
                   <DropdownMenuContent align='end' className='w-40'>
                     {props.onRegenerate ? (
                       <DropdownMenuItem
-                        disabled={props.actionsDisabled ?? props.isLoading}
+                        disabled={
+                          (props.actionsDisabled ?? props.isLoading) ||
+                          action.canRegenerate === false
+                        }
                         onClick={() => props.onRegenerate?.([action])}
                       >
                         <RotateCw aria-hidden='true' />
-                        {t('Regenerate')}
+                        {action.canRegenerate === false
+                          ? t('Original generation settings unavailable')
+                          : t('Regenerate')}
                       </DropdownMenuItem>
                     ) : null}
                     {props.onEdit ? (
@@ -530,11 +539,20 @@ export function GenerationResult(props: GenerationResultProps) {
                 <DropdownMenuContent align='end' className='w-44'>
                   {props.onRegenerate ? (
                     <DropdownMenuItem
-                      disabled={props.actionsDisabled ?? props.isLoading}
+                      disabled={
+                        (props.actionsDisabled ?? props.isLoading) ||
+                        selectedActions.some(
+                          (image) => image.canRegenerate === false
+                        )
+                      }
                       onClick={() => props.onRegenerate?.(selectedActions)}
                     >
                       <RotateCw aria-hidden='true' />
-                      {t('Regenerate selected')}
+                      {selectedActions.some(
+                        (image) => image.canRegenerate === false
+                      )
+                        ? t('Original generation settings unavailable')
+                        : t('Regenerate selected')}
                     </DropdownMenuItem>
                   ) : null}
                   {props.onDelete ? (

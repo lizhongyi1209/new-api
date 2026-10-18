@@ -16,12 +16,14 @@ import (
 )
 
 type imageGalleryItem struct {
-	TaskID  string                         `json:"task_id"`
-	Model   string                         `json:"model"`
-	Prompt  string                         `json:"prompt"`
-	Options *model.TaskImageGalleryOptions `json:"options,omitempty"`
-	Created int64                          `json:"created"`
-	Images  []model.TaskImageGalleryResult `json:"images"`
+	TaskID        string                         `json:"task_id"`
+	Model         string                         `json:"model"`
+	Prompt        string                         `json:"prompt"`
+	Options       *model.TaskImageGalleryOptions `json:"options,omitempty"`
+	References    []string                       `json:"references,omitempty"`
+	CanRegenerate bool                           `json:"can_regenerate"`
+	Created       int64                          `json:"created"`
+	Images        []model.TaskImageGalleryResult `json:"images"`
 }
 
 // ImageGenerationHistory returns only the current user's durable image URLs.
@@ -62,12 +64,14 @@ func ImageGenerationHistory(c *gin.Context) {
 				continue
 			}
 			items = append(items, imageGalleryItem{
-				TaskID:  task.TaskID,
-				Model:   task.Properties.OriginModelName,
-				Prompt:  task.Properties.Input,
-				Options: task.PrivateData.ImageGalleryOptions,
-				Created: task.FinishTime,
-				Images:  task.PrivateData.ImageGalleryResults,
+				TaskID:        task.TaskID,
+				Model:         task.Properties.OriginModelName,
+				Prompt:        task.Properties.Input,
+				Options:       task.PrivateData.ImageGalleryOptions,
+				References:    task.PrivateData.ImageGalleryReferences,
+				CanRegenerate: task.PrivateData.ImageGalleryReferencesStored,
+				Created:       task.FinishTime,
+				Images:        task.PrivateData.ImageGalleryResults,
 			})
 			if len(items) == pageSize {
 				c.JSON(http.StatusOK, gin.H{"items": items, "next_before_id": beforeID})

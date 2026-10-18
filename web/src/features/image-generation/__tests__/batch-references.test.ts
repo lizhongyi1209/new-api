@@ -64,7 +64,7 @@ describe('batch reference plan', () => {
     ])
   })
 
-  it('can make every model and outfit combination when requested', () => {
+  it('makes one hundred model and outfit combinations in all-combinations mode', () => {
     const plan = buildBatchReferencePlan(
       [],
       [group('model', 10), group('outfit', 10)],

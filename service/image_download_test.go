@@ -65,25 +65,30 @@ func TestGetImageBytesFromURLRetriesHTTP522And525(t *testing.T) {
 	}
 }
 
-func TestGetImageBytesFromR2TemporaryInputUsesSDK(t *testing.T) {
+func TestGetImageBytesFromR2OwnedInputUsesSDK(t *testing.T) {
 	const filename = "8045b62c-39b6-4a7d-a75e-15fdb83420c2.png"
 	var calls atomic.Int32
 	configureTemporaryInputR2Test(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		assert.Equal(t, http.MethodGet, r.Method)
-		assert.Equal(t, "/r2-bucket/tmp/input/"+filename, r.URL.Path)
+		assert.Contains(t, []string{
+			"/r2-bucket/tmp/input/" + filename,
+			"/r2-bucket/gallery/input/" + filename,
+		}, r.URL.Path)
 		w.Header().Set("Content-Type", "image/png")
 		_, _ = w.Write([]byte("image-bytes"))
 	})
 
-	mimeType, imageBytes, err := GetImageBytesFromUrlWithLimit("https://r2.example.com/tmp/input/"+filename, 1)
-	require.NoError(t, err)
-	assert.Equal(t, "image/png", mimeType)
-	assert.Equal(t, []byte("image-bytes"), imageBytes)
-	assert.Equal(t, int32(1), calls.Load())
+	for _, prefix := range []string{"tmp/input/", "gallery/input/"} {
+		mimeType, imageBytes, err := GetImageBytesFromUrlWithLimit("https://r2.example.com/"+prefix+filename, 1)
+		require.NoError(t, err)
+		assert.Equal(t, "image/png", mimeType)
+		assert.Equal(t, []byte("image-bytes"), imageBytes)
+	}
+	assert.Equal(t, int32(2), calls.Load())
 }
 
-func TestR2TemporaryInputImageKeyRejectsOtherObjectsAndAmbiguousURLs(t *testing.T) {
+func TestR2OwnedInputImageKeyRejectsOtherObjectsAndAmbiguousURLs(t *testing.T) {
 	t.Setenv("R2_BUCKET", "r2-bucket")
 	t.Setenv("R2_PUBLIC_BASE_URL", "https://r2.example.com")
 	const filename = "8045b62c-39b6-4a7d-a75e-15fdb83420c2.png"
@@ -94,8 +99,10 @@ func TestR2TemporaryInputImageKeyRejectsOtherObjectsAndAmbiguousURLs(t *testing.
 		"https://r2.example.com/tmp/input/8045b62c-39b6-4a7d-a75e-15fdb83420c2.pdf",
 		"https://r2.example.com/tmp/input/" + filename + "?signature=secret",
 		"https://r2.example.com/tmp%2Finput/" + filename,
+		"https://r2.example.com/gallery/input/not-a-uuid.png",
+		"https://r2.example.com/gallery/input/" + filename + "?signature=secret",
 	} {
-		key, ok := r2TemporaryInputImageKey(rawURL)
+		key, ok := r2OwnedInputImageKey(rawURL)
 		assert.False(t, ok, rawURL)
 		assert.Empty(t, key)
 	}

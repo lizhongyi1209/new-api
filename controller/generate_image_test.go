@@ -13,6 +13,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDurableGalleryReferenceURLsPreservesOrderWithoutPersistingInlineOrTemporaryData(t *testing.T) {
+	modelURL := "https://r2.example.com/gallery/input/model.png"
+	outfitURL := "https://r2.example.com/gallery/input/outfit.png"
+	references, stored := durableGalleryReferenceURLs([]dto.GenerateImageInput{
+		{Value: &modelURL}, {Value: &outfitURL},
+	})
+	require.True(t, stored)
+	assert.Equal(t, []string{modelURL, outfitURL}, references)
+
+	for _, unsafeReference := range []string{
+		"data:image/png;base64,AAAA",
+		"https://r2.example.com/tmp/input/old.png",
+		"https://images.example.com/reference.png?token=secret",
+	} {
+		references, stored := durableGalleryReferenceURLs([]dto.GenerateImageInput{
+			{Value: &modelURL}, {Value: &unsafeReference},
+		})
+		assert.False(t, stored, unsafeReference)
+		assert.Empty(t, references, unsafeReference)
+	}
+	references, stored = durableGalleryReferenceURLs(nil)
+	assert.True(t, stored)
+	assert.Empty(t, references)
+}
+
 func TestUnmarshalGenerateImageBodyWithoutContentType(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(nil)

@@ -180,6 +180,11 @@ describe('image generation page', () => {
           prompt: 'A blue coat',
           created: 100,
           options: { size: '1K', aspect_ratio: '1:1' },
+          references: [
+            'https://images.example.com/model.png',
+            'https://images.example.com/coat-reference.png',
+          ],
+          can_regenerate: true,
           images: [{ url: 'https://images.example.com/coat.png' }],
         },
       ],
@@ -222,7 +227,10 @@ describe('image generation page', () => {
         expect.objectContaining({
           model: 'gemini-nano-banana-2.1-sp',
           prompt: 'A blue coat',
-          images: ['https://images.example.com/coat.png'],
+          images: [
+            'https://images.example.com/model.png',
+            'https://images.example.com/coat-reference.png',
+          ],
         })
       )
     )

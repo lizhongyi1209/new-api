@@ -98,7 +98,7 @@ func GetImageBytesFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, 
 	var body io.ReadCloser
 	var contentType string
 	var contentLength int64 = -1
-	if objectKey, ownR2Input := r2TemporaryInputImageKey(url); ownR2Input {
+	if objectKey, ownR2Input := r2OwnedInputImageKey(url); ownR2Input {
 		startedAt := time.Now()
 		client, _ := getR2Client()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -191,7 +191,7 @@ func GetImageBytesFromUrlWithLimit(url string, maxSizeMB int) (mimeType string, 
 	return mimeType, data, nil
 }
 
-func r2TemporaryInputImageKey(rawURL string) (string, bool) {
+func r2OwnedInputImageKey(rawURL string) (string, bool) {
 	baseURL := normalizeHTTPBaseURL(os.Getenv("R2_PUBLIC_BASE_URL"))
 	if baseURL == "" || strings.TrimSpace(os.Getenv("R2_BUCKET")) == "" {
 		return "", false
@@ -204,11 +204,22 @@ func r2TemporaryInputImageKey(rawURL string) (string, bool) {
 		imageURL.EscapedPath() != imageURL.Path {
 		return "", false
 	}
-	prefix := strings.TrimSuffix(base.Path, "/") + "/tmp/input/"
-	if !strings.HasPrefix(imageURL.Path, prefix) {
+	pathPrefix := strings.TrimSuffix(base.Path, "/") + "/"
+	if !strings.HasPrefix(imageURL.Path, pathPrefix) {
 		return "", false
 	}
-	filename := strings.TrimPrefix(imageURL.Path, prefix)
+	objectPath := strings.TrimPrefix(imageURL.Path, pathPrefix)
+	objectPrefix := ""
+	for _, candidate := range []string{"tmp/input/", "gallery/input/"} {
+		if strings.HasPrefix(objectPath, candidate) {
+			objectPrefix = candidate
+			break
+		}
+	}
+	if objectPrefix == "" {
+		return "", false
+	}
+	filename := strings.TrimPrefix(objectPath, objectPrefix)
 	if !isTemporaryInputFilename(filename) {
 		return "", false
 	}
@@ -216,7 +227,7 @@ func r2TemporaryInputImageKey(rawURL string) (string, bool) {
 	if !strings.HasPrefix(format.ContentType, "image/") {
 		return "", false
 	}
-	return "tmp/input/" + filename, true
+	return objectPrefix + filename, true
 }
 
 func DecodeUrlImageData(imageUrl string) (image.Config, string, error) {
