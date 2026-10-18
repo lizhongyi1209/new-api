@@ -107,6 +107,30 @@ describe('image generation form', () => {
     expect(screen.queryByRole('combobox', { name: 'Group' })).toBeNull()
   })
 
+  it('places image count below output options and above the generate button', () => {
+    render(
+      <GenerationForm
+        disabled={false}
+        isLoadingModels={false}
+        models={models}
+        onSubmit={vi.fn()}
+      />
+    )
+
+    const outputSize = screen.getByRole('combobox', {
+      name: 'Output image size',
+    })
+    const count = screen.getByRole('combobox', { name: 'Image count' })
+    const generate = screen.getByRole('button', { name: 'Generate image' })
+    expect(
+      outputSize.compareDocumentPosition(count) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      count.compareDocumentPosition(generate) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
   it('opens the model menu repeatedly without locking the page or moving the popup', async () => {
     const user = userEvent.setup()
     const bodyOverflow = document.body.style.overflow

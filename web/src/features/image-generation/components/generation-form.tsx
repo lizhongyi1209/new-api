@@ -398,41 +398,6 @@ export function GenerationForm(props: GenerationFormProps) {
               </SelectContent>
             </Select>
           </div>
-
-          <FormField
-            control={form.control}
-            name='count'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('Image count')}</FormLabel>
-                <Select
-                  modal={false}
-                  items={imageCountOptions}
-                  value={String(field.value)}
-                  onValueChange={(value) => {
-                    if (value) field.onChange(Number(value))
-                  }}
-                  disabled={props.disabled}
-                >
-                  <FormControl>
-                    <SelectTrigger className='w-full transition-none'>
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent alignItemWithTrigger={false} animated={false}>
-                    <SelectGroup>
-                      {imageCountOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
         </div>
 
         <div className='flex items-center justify-between gap-3'>
@@ -504,6 +469,41 @@ export function GenerationForm(props: GenerationFormProps) {
           disabled={props.disabled}
           family={family}
           model={selectedModel}
+        />
+
+        <FormField
+          control={form.control}
+          name='count'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{t('Image count')}</FormLabel>
+              <Select
+                modal={false}
+                items={imageCountOptions}
+                value={String(field.value)}
+                onValueChange={(value) => {
+                  if (value) field.onChange(Number(value))
+                }}
+                disabled={props.disabled}
+              >
+                <FormControl>
+                  <SelectTrigger className='w-full transition-none'>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent alignItemWithTrigger={false} animated={false}>
+                  <SelectGroup>
+                    {imageCountOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
         />
 
         {props.models.length === 0 && !props.isLoadingModels ? (
