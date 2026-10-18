@@ -123,6 +123,7 @@ type TaskPrivateData struct {
 	ResultURL           string                    `json:"result_url,omitempty"`            // 任务成功后的结果 URL（视频地址等）
 	ImageGallery        bool                      `json:"image_gallery,omitempty"`         // 后台绘图任务，结果永久保留为 URL
 	ImageGalleryResults []TaskImageGalleryResult  `json:"image_gallery_results,omitempty"` // URL-only gallery metadata; survives data cleanup
+	ImageGalleryOptions *TaskImageGalleryOptions  `json:"image_gallery_options,omitempty"` // Non-secret generation settings for edit/retry
 	ErrorDetail         *TaskErrorDetail          `json:"error_detail,omitempty"`          // 任务失败时的结构化错误信息
 	GenerateImageTiming *GenerateImageTimingAudit `json:"generate_image_timing,omitempty"` // 统一异步生图的分段耗时与流量审计
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
@@ -147,6 +148,15 @@ type TaskImageGalleryResult struct {
 	MimeType     string `json:"mime_type,omitempty"`
 	OutputFormat string `json:"output_format,omitempty"`
 	Size         string `json:"size,omitempty"`
+}
+
+type TaskImageGalleryOptions struct {
+	Size          string `json:"size,omitempty"`
+	AspectRatio   string `json:"aspect_ratio,omitempty"`
+	Quality       string `json:"quality,omitempty"`
+	Background    string `json:"background,omitempty"`
+	OutputFormat  string `json:"output_format,omitempty"`
+	ThinkingLevel string `json:"thinking_level,omitempty"`
 }
 
 // ListImageGalleryCandidates reads only metadata, never the potentially large

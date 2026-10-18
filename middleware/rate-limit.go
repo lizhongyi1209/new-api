@@ -196,6 +196,12 @@ func UploadRateLimit() func(c *gin.Context) {
 	return rateLimitFactory(common.UploadRateLimitNum, common.UploadRateLimitDuration, "UP")
 }
 
+// PlaygroundReferenceUploadRateLimit permits a bounded batch of reference
+// images while keeping the quota scoped to the authenticated user.
+func PlaygroundReferenceUploadRateLimit() func(c *gin.Context) {
+	return userRateLimitFactory(30, common.UploadRateLimitDuration, "PGIMGUP")
+}
+
 // userRateLimitFactory creates a rate limiter keyed by authenticated user ID
 // instead of client IP, making it resistant to proxy rotation attacks.
 // Must be used AFTER authentication middleware (UserAuth).

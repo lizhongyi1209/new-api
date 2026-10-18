@@ -89,8 +89,9 @@ func SetRelayRouter(router *gin.Engine) {
 	playgroundImageRouter.Use(middleware.SystemPerformanceCheck())
 	playgroundImageRouter.Use(middleware.UserAuth())
 	{
-		playgroundImageRouter.POST("/uploads", middleware.UploadRateLimit(), controller.UploadPlaygroundReferenceImage)
+		playgroundImageRouter.POST("/uploads", middleware.PlaygroundReferenceUploadRateLimit(), controller.UploadPlaygroundReferenceImage)
 		playgroundImageRouter.GET("/history", controller.ImageGenerationHistory)
+		playgroundImageRouter.DELETE("/gallery", controller.DeleteImageGenerationGalleryImages)
 		playgroundImageRouter.GET("/tasks/:id", controller.AsyncTaskFetch)
 		playgroundImageRouter.GET("/tasks/:id/images/:index/download", controller.ImageGenerationDownload)
 		playgroundImageRouter.POST("/generations", middleware.Distribute(), controller.GenerateImageSubmit)

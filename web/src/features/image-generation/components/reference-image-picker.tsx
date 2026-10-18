@@ -48,6 +48,7 @@ import type { ReferenceImage } from '../types'
 type ReferenceImagePickerProps = {
   disabled: boolean
   images: ReferenceImage[]
+  label?: string
   onChange: (images: ReferenceImage[]) => void
 }
 
@@ -101,7 +102,9 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
   }
 
   const removeImage = (image: ReferenceImage) => {
-    URL.revokeObjectURL(image.previewUrl)
+    if (image.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(image.previewUrl)
+    }
     props.onChange(props.images.filter((item) => item.id !== image.id))
   }
 
@@ -113,7 +116,9 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
     const nextImages = [...props.images]
     nextImages[index] = replacement
     props.onChange(nextImages)
-    URL.revokeObjectURL(props.images[index].previewUrl)
+    if (props.images[index].previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(props.images[index].previewUrl)
+    }
   }
 
   const moveImage = (fromIndex: number, toIndex: number) => {
@@ -135,14 +140,16 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
   return (
     <div className='space-y-2'>
       <div className='flex items-center justify-between gap-3'>
-        <p className='text-sm font-medium'>{t('Reference images')}</p>
+        <p className='text-sm font-medium'>
+          {props.label ?? t('Reference images')}
+        </p>
         <span className='text-muted-foreground text-xs'>
           {props.images.length}/{MAX_REFERENCE_IMAGES}
         </span>
       </div>
       <div
         role='region'
-        aria-label={t('Reference images')}
+        aria-label={props.label ?? t('Reference images')}
         tabIndex={0}
         className='flex min-w-0 [scrollbar-width:thin] [scrollbar-color:var(--border)_transparent] flex-nowrap gap-2 overflow-x-auto overscroll-x-contain pb-2'
       >
@@ -221,7 +228,7 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
               src={image.previewUrl}
               alt={t('Reference image {{index}}: {{name}}', {
                 index: index + 1,
-                name: image.file.name,
+                name: image.file?.name ?? image.name,
               })}
               draggable={false}
               className='size-full object-cover'

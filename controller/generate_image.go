@@ -93,6 +93,21 @@ func GenerateImageSubmit(c *gin.Context) {
 	}
 	task.PrivateData.RequestID = c.GetString(common.RequestIdKey)
 	task.PrivateData.ImageGallery = c.Request.URL.Path == "/pg/images/generations"
+	if task.PrivateData.ImageGallery {
+		options := &model.TaskImageGalleryOptions{
+			Size: req.Size, AspectRatio: req.AspectRatio, Quality: req.Quality,
+		}
+		if req.Background != nil {
+			options.Background = *req.Background
+		}
+		if req.OutputFormat != nil {
+			options.OutputFormat = *req.OutputFormat
+		}
+		if req.ThinkingLevel != nil {
+			options.ThinkingLevel = *req.ThinkingLevel
+		}
+		task.PrivateData.ImageGalleryOptions = options
+	}
 	requestBodyBytes := c.Request.ContentLength
 	if storageValue, ok := c.Get(common.KeyBodyStorage); ok {
 		if storage, ok := storageValue.(common.BodyStorage); ok {

@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"mime"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -16,6 +18,8 @@ import (
 type imageGalleryItem struct {
 	TaskID  string                         `json:"task_id"`
 	Model   string                         `json:"model"`
+	Prompt  string                         `json:"prompt"`
+	Options *model.TaskImageGalleryOptions `json:"options,omitempty"`
 	Created int64                          `json:"created"`
 	Images  []model.TaskImageGalleryResult `json:"images"`
 }
@@ -47,9 +51,21 @@ func ImageGenerationHistory(c *gin.Context) {
 			if !task.PrivateData.ImageGallery || len(task.PrivateData.ImageGalleryResults) == 0 {
 				continue
 			}
+			hasImage := false
+			for _, image := range task.PrivateData.ImageGalleryResults {
+				if image.URL != "" {
+					hasImage = true
+					break
+				}
+			}
+			if !hasImage {
+				continue
+			}
 			items = append(items, imageGalleryItem{
 				TaskID:  task.TaskID,
 				Model:   task.Properties.OriginModelName,
+				Prompt:  task.Properties.Input,
+				Options: task.PrivateData.ImageGalleryOptions,
 				Created: task.FinishTime,
 				Images:  task.PrivateData.ImageGalleryResults,
 			})
@@ -63,6 +79,34 @@ func ImageGenerationHistory(c *gin.Context) {
 			return
 		}
 	}
+}
+
+// DeleteImageGenerationGalleryImages removes selected results from the current
+// user's gallery. Original indices remain reserved for surviving downloads.
+func DeleteImageGenerationGalleryImages(c *gin.Context) {
+	var request struct {
+		Items []model.ImageGallerySelection `json:"items"`
+	}
+	if err := common.DecodeJson(http.MaxBytesReader(c.Writer, c.Request.Body, 16*1024), &request); err != nil || len(request.Items) == 0 || len(request.Items) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid image selection"})
+		return
+	}
+	for _, item := range request.Items {
+		if item.TaskID == "" || len(item.TaskID) > 191 || item.Index < 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid image selection"})
+			return
+		}
+	}
+	deleted, err := model.DeleteImageGallerySelections(c.GetInt("id"), request.Items)
+	if errors.Is(err, model.ErrImageGalleryImageNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "image not found"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete images"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": deleted})
 }
 
 // ImageGenerationDownload returns a saved image as an attachment after

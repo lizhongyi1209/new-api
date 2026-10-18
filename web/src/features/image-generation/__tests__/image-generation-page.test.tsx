@@ -18,11 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { getImageGenerationModels, submitImageGeneration } from '../api'
+import {
+  getImageGenerationHistory,
+  getImageGenerationModels,
+  submitImageGeneration,
+} from '../api'
 import { ImageGeneration } from '../index'
 
 vi.mock('../api', () => ({
@@ -33,6 +37,7 @@ vi.mock('../api', () => ({
   getImageGenerationTask: vi.fn(),
   submitImageGeneration: vi.fn(),
   uploadReferenceImage: vi.fn(),
+  deleteImageGenerationImages: vi.fn(),
 }))
 
 describe('image generation page', () => {
@@ -156,5 +161,70 @@ describe('image generation page', () => {
     const resultCard = settingsCard?.nextElementSibling
     expect(resultCard).toHaveAttribute('data-slot', 'card')
     expect(resultCard).not.toHaveClass('hidden')
+  })
+
+  it('loads a saved result into the editor and regenerates from its durable URL', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getImageGenerationModels).mockResolvedValueOnce([
+      {
+        label: 'gemini-nano-banana-2.1-sp',
+        value: 'gemini-nano-banana-2.1-sp',
+      },
+    ])
+    vi.mocked(getImageGenerationHistory).mockResolvedValueOnce({
+      next_before_id: 0,
+      items: [
+        {
+          task_id: 'saved-task',
+          model: 'gemini-nano-banana-2.1-sp',
+          prompt: 'A blue coat',
+          created: 100,
+          options: { size: '1K', aspect_ratio: '1:1' },
+          images: [{ url: 'https://images.example.com/coat.png' }],
+        },
+      ],
+    })
+    vi.mocked(submitImageGeneration).mockResolvedValueOnce({
+      status: 'PENDING',
+      task_id: 'retry-task',
+    })
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ImageGeneration />
+      </QueryClientProvider>
+    )
+
+    const resultTile = (
+      await screen.findByRole('img', {
+        name: 'Generated image 1',
+      })
+    ).closest('figure') as HTMLElement
+    await user.click(
+      within(resultTile).getByRole('button', { name: 'Image 1 actions' })
+    )
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    expect(screen.getByRole('textbox', { name: 'Prompt' })).toHaveValue(
+      'A blue coat'
+    )
+    expect(
+      screen.getByRole('img', { name: /Reference image 1/ })
+    ).toHaveAttribute('src', 'https://images.example.com/coat.png')
+
+    await user.click(
+      within(resultTile).getByRole('button', { name: 'Image 1 actions' })
+    )
+    await user.click(screen.getByRole('menuitem', { name: 'Regenerate' }))
+    await waitFor(() =>
+      expect(submitImageGeneration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'gemini-nano-banana-2.1-sp',
+          prompt: 'A blue coat',
+          images: ['https://images.example.com/coat.png'],
+        })
+      )
+    )
   })
 })

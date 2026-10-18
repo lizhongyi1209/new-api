@@ -278,6 +278,77 @@ describe('generation result gallery', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('offers per-image edit and regenerate actions and bulk regenerate and delete', async () => {
+    const user = userEvent.setup()
+    const onEdit = vi.fn()
+    const onRegenerate = vi.fn()
+    const onDelete = vi.fn().mockResolvedValue(undefined)
+    render(
+      <GenerationResult
+        {...defaultProps}
+        onEdit={onEdit}
+        onRegenerate={onRegenerate}
+        onDelete={onDelete}
+        history={[
+          {
+            task_id: 'actions-task',
+            model: 'gemini-nano-banana-2.1',
+            prompt: 'Try a coat',
+            created: 100,
+            images: [
+              { url: 'https://images.example.com/coat-1.png' },
+              { url: 'https://images.example.com/coat-2.png' },
+            ],
+          },
+        ]}
+      />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Image 1 actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }))
+    expect(onEdit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        task_id: 'actions-task',
+        index: 0,
+        prompt: 'Try a coat',
+      })
+    )
+    await user.click(screen.getByRole('button', { name: 'Image 1 actions' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Regenerate' }))
+    expect(onRegenerate).toHaveBeenCalledWith([
+      expect.objectContaining({ task_id: 'actions-task', index: 0 }),
+    ])
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select generated image 1' })
+    )
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select generated image 2' })
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Selected image actions' })
+    )
+    await user.click(
+      screen.getByRole('menuitem', { name: 'Regenerate selected' })
+    )
+    expect(onRegenerate).toHaveBeenLastCalledWith([
+      expect.objectContaining({ index: 0 }),
+      expect.objectContaining({ index: 1 }),
+    ])
+
+    await user.click(
+      screen.getByRole('button', { name: 'Selected image actions' })
+    )
+    await user.click(screen.getByRole('menuitem', { name: 'Delete selected' }))
+    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await waitFor(() =>
+      expect(onDelete).toHaveBeenCalledWith([
+        { task_id: 'actions-task', index: 0 },
+        { task_id: 'actions-task', index: 1 },
+      ])
+    )
+  })
+
   it('shows a square preview while a new task runs alongside saved results', () => {
     render(
       <GenerationResult

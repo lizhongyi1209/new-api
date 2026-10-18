@@ -26,6 +26,7 @@ import type {
   ImageGenerationSubmission,
   ImageGenerationHistoryPage,
   ImageGenerationTask,
+  ImageGallerySelection,
   SelectOption,
   TemporaryImageUpload,
 } from './types'
@@ -95,4 +96,13 @@ export async function getImageGenerationHistory(
     { params: beforeId > 0 ? { before_id: beforeId } : undefined }
   )
   return response.data
+}
+
+export async function deleteImageGenerationImages(
+  items: ImageGallerySelection[]
+): Promise<number> {
+  const response = await api.delete<{ deleted: number }>('/pg/images/gallery', {
+    data: { items },
+  })
+  return response.data.deleted
 }

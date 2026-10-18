@@ -23,6 +23,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -42,8 +43,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
+import {
+  buildBatchReferencePlan,
+  type BatchReferencePlan,
+} from '../lib/batch-references'
 import {
   getImageModelFamily,
   getImageModelOption,
@@ -51,20 +57,25 @@ import {
 } from '../lib/image-generation'
 import { imageGenerationSchema } from '../lib/schema'
 import type {
+  BatchCombinationMode,
+  BatchReferenceGroup,
   ImageGenerationFormValue,
+  ImageResultAction,
   ReferenceImage,
   SelectOption,
 } from '../types'
+import { BatchReferenceGroups } from './batch-reference-groups'
 import { GenerationOptions } from './generation-options'
 import { ReferenceImagePicker } from './reference-image-picker'
 
 type GenerationFormProps = {
   disabled: boolean
+  editDraft?: { key: number; image: ImageResultAction }
   isLoadingModels: boolean
   models: SelectOption[]
   onSubmit: (
     value: ImageGenerationFormValue,
-    references: ReferenceImage[]
+    referenceSets: ReferenceImage[][]
   ) => void
 }
 
@@ -83,6 +94,17 @@ export function GenerationForm(props: GenerationFormProps) {
   const { t } = useTranslation()
   const tierId = useId()
   const [references, setReferences] = useState<ReferenceImage[]>([])
+  const [batchEnabled, setBatchEnabled] = useState(false)
+  const [batchMode, setBatchMode] = useState<BatchCombinationMode>('paired')
+  const [batchGroups, setBatchGroups] = useState<BatchReferenceGroup[]>(() => [
+    {
+      id: crypto.randomUUID(),
+      name: t('Group {{number}}', { number: 1 }),
+      images: [],
+    },
+  ])
+  const [pendingBatchValue, setPendingBatchValue] =
+    useState<ImageGenerationFormValue | null>(null)
   const previewUrlsRef = useRef(new Set<string>())
   const form = useForm<ImageGenerationFormValue>({
     defaultValues,
@@ -138,6 +160,29 @@ export function GenerationForm(props: GenerationFormProps) {
     },
   ]
   const models = props.models
+  const batchPlan: BatchReferencePlan = batchEnabled
+    ? buildBatchReferencePlan(references, batchGroups, batchMode)
+    : { sets: [references] }
+  const referenceSets = batchPlan.sets ?? []
+  const batchError = batchEnabled ? batchPlan.error : undefined
+  const batchErrorMessages = {
+    empty_group: t('Add at least one image to each batch group.'),
+    group_count: t('Too many batch groups.'),
+    reference_count: t('Each generation can use up to 10 reference images.'),
+    upload_count: t('A batch can contain up to 30 uploaded reference images.'),
+    uneven_groups: t(
+      'Groups must contain one image or the same number of images.'
+    ),
+    job_count: t('A batch can contain up to 100 generations.'),
+  }
+  let submitLabel = t('Generate image')
+  if (props.disabled) {
+    submitLabel = t('Generating...')
+  } else if (referenceSets.length > 1) {
+    submitLabel = t('Generate {{count}} images', {
+      count: referenceSets.length,
+    })
+  }
 
   useEffect(() => {
     if (models.length === 0) {
@@ -160,9 +205,50 @@ export function GenerationForm(props: GenerationFormProps) {
     }
   }, [])
 
+  useEffect(() => {
+    const draft = props.editDraft
+    if (!draft) return
+    const options = draft.image.options
+    const outputFormat = options?.output_format ?? draft.image.outputFormat
+    form.reset({
+      ...defaultValues,
+      model: draft.image.model,
+      prompt: draft.image.prompt,
+      size:
+        options?.size ||
+        (getImageModelFamily(draft.image.model) === 'banana' ? '1K' : 'auto'),
+      aspectRatio: options?.aspect_ratio || '1:1',
+      quality: options?.quality || 'auto',
+      background:
+        options?.background === 'transparent' ? 'transparent' : 'auto',
+      outputFormat:
+        outputFormat === 'jpeg' || outputFormat === 'webp'
+          ? outputFormat
+          : 'png',
+      thinkingLevel:
+        options?.thinking_level === 'high' ||
+        options?.thinking_level === 'minimal'
+          ? options.thinking_level
+          : 'default',
+    })
+    setBatchEnabled(false)
+    setReferences([
+      {
+        id: `gallery:${draft.image.task_id}:${draft.image.index}`,
+        sourceUrl: draft.image.url,
+        previewUrl: draft.image.url,
+        name: t('Generated image {{number}}', {
+          number: draft.image.index + 1,
+        }),
+      },
+    ])
+  }, [form, props.editDraft, t])
+
   const updateReferences = (nextReferences: ReferenceImage[]) => {
     for (const reference of nextReferences) {
-      previewUrlsRef.current.add(reference.previewUrl)
+      if (reference.previewUrl.startsWith('blob:')) {
+        previewUrlsRef.current.add(reference.previewUrl)
+      }
     }
     setReferences(nextReferences)
   }
@@ -203,9 +289,14 @@ export function GenerationForm(props: GenerationFormProps) {
     <Form {...form}>
       <form
         className='flex flex-col gap-4 sm:gap-5 xl:flex-1'
-        onSubmit={form.handleSubmit((value) =>
-          props.onSubmit(value, references)
-        )}
+        onSubmit={form.handleSubmit((value) => {
+          if (batchError || referenceSets.length === 0) return
+          if (referenceSets.length > 10) {
+            setPendingBatchValue(value)
+            return
+          }
+          props.onSubmit(value, referenceSets)
+        })}
       >
         <div className='grid gap-3'>
           <FormField
@@ -293,11 +384,48 @@ export function GenerationForm(props: GenerationFormProps) {
           </div>
         </div>
 
-        <ReferenceImagePicker
-          disabled={props.disabled}
-          images={references}
-          onChange={updateReferences}
-        />
+        <div className='flex items-center justify-between gap-3'>
+          <Label htmlFor={`${tierId}-batch`}>{t('Batch mode')}</Label>
+          <Switch
+            id={`${tierId}-batch`}
+            checked={batchEnabled}
+            onCheckedChange={setBatchEnabled}
+            disabled={props.disabled}
+          />
+        </div>
+
+        {batchEnabled ? (
+          <BatchReferenceGroups
+            disabled={props.disabled}
+            fixed={references}
+            groups={batchGroups}
+            mode={batchMode}
+            onFixedChange={updateReferences}
+            onGroupsChange={(groups) => {
+              for (const group of groups) {
+                for (const image of group.images) {
+                  if (image.previewUrl.startsWith('blob:')) {
+                    previewUrlsRef.current.add(image.previewUrl)
+                  }
+                }
+              }
+              setBatchGroups(groups)
+            }}
+            onModeChange={setBatchMode}
+          />
+        ) : (
+          <ReferenceImagePicker
+            disabled={props.disabled}
+            images={references}
+            onChange={updateReferences}
+          />
+        )}
+
+        {batchError ? (
+          <p className='text-destructive text-xs' role='alert'>
+            {batchErrorMessages[batchError]}
+          </p>
+        ) : null}
 
         <FormField
           control={form.control}
@@ -335,16 +463,37 @@ export function GenerationForm(props: GenerationFormProps) {
           type='submit'
           size='lg'
           className='w-full'
-          disabled={props.disabled || props.models.length === 0}
+          disabled={
+            props.disabled || props.models.length === 0 || Boolean(batchError)
+          }
         >
           {props.disabled ? (
             <LoaderCircle className='animate-spin' aria-hidden='true' />
           ) : (
             <Sparkles aria-hidden='true' />
           )}
-          {props.disabled ? t('Generating...') : t('Generate image')}
+          {submitLabel}
         </Button>
       </form>
+      <ConfirmDialog
+        open={pendingBatchValue !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingBatchValue(null)
+        }}
+        title={t('Confirm batch generation')}
+        desc={t('This will submit {{count}} separately billed image tasks.', {
+          count: referenceSets.length,
+        })}
+        confirmText={t('Generate {{count}} images', {
+          count: referenceSets.length,
+        })}
+        handleConfirm={() => {
+          if (pendingBatchValue && referenceSets.length > 0) {
+            props.onSubmit(pendingBatchValue, referenceSets)
+          }
+          setPendingBatchValue(null)
+        }}
+      />
     </Form>
   )
 }

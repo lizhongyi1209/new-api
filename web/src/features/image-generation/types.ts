@@ -25,10 +25,20 @@ export type SelectOption = {
 }
 
 export type ReferenceImage = {
-  file: File
   id: string
   previewUrl: string
+} & (
+  | { file: File; sourceUrl?: never; name?: never }
+  | { file?: never; sourceUrl: string; name: string }
+)
+
+export type BatchReferenceGroup = {
+  id: string
+  name: string
+  images: ReferenceImage[]
 }
+
+export type BatchCombinationMode = 'paired' | 'all'
 
 export type TemporaryImageUpload = {
   content_type: string
@@ -73,11 +83,35 @@ export type ImageGenerationResult = {
   model: string
 }
 
+export type ImageGalleryOptions = {
+  size?: string
+  aspect_ratio?: string
+  quality?: string
+  background?: string
+  output_format?: string
+  thinking_level?: string
+}
+
 export type ImageGenerationHistoryItem = {
   task_id: string
   model: string
+  prompt?: string
+  options?: ImageGalleryOptions
   created: number
   images: GeneratedImage[]
+}
+
+export type ImageGallerySelection = {
+  task_id: string
+  index: number
+}
+
+export type ImageResultAction = ImageGallerySelection & {
+  model: string
+  prompt: string
+  url: string
+  outputFormat?: string
+  options?: ImageGalleryOptions
 }
 
 export type ImageGenerationHistoryPage = {
@@ -88,6 +122,8 @@ export type ImageGenerationHistoryPage = {
 export type ImageGenerationTask = {
   data?: ImageGenerationResult
   error?: string
+  prompt?: string
+  options?: ImageGalleryOptions
   progress?: string
   status: string
   task_id: string

@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { GenerationForm } from '../components/generation-form'
 
@@ -28,6 +28,8 @@ const models = [
   { label: 'gemini-nano-banana-2.1-sd', value: 'gemini-nano-banana-2.1-sd' },
   { label: 'gemini-nano-banana-2.1', value: 'gemini-nano-banana-2.1' },
 ]
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('image generation form', () => {
   it('keeps the phone prompt compact and stretches it in the desktop panel', () => {
@@ -145,7 +147,7 @@ describe('image generation form', () => {
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(
         expect.objectContaining({ model: 'gemini-nano-banana-2.1' }),
-        []
+        [[]]
       )
     })
   })
@@ -179,5 +181,52 @@ describe('image generation form', () => {
       'aria-disabled',
       'true'
     )
+  })
+
+  it('combines fixed images with each batch group alternative', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    let nextPreview = 0
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(
+      () => `blob:batch-${++nextPreview}`
+    )
+    render(
+      <GenerationForm
+        disabled={false}
+        isLoadingModels={false}
+        models={models}
+        onSubmit={onSubmit}
+      />
+    )
+
+    await user.click(screen.getByRole('switch', { name: 'Batch mode' }))
+    const inputs = document.querySelectorAll<HTMLInputElement>(
+      'input[type="file"][multiple]'
+    )
+    const model = new File(['model'], 'model.png', { type: 'image/png' })
+    const outfitA = new File(['outfit-a'], 'outfit-a.png', {
+      type: 'image/png',
+    })
+    const outfitB = new File(['outfit-b'], 'outfit-b.png', {
+      type: 'image/png',
+    })
+    await user.upload(inputs[0], model)
+    await user.upload(inputs[1], [outfitA, outfitB])
+    await user.type(
+      screen.getByRole('textbox', { name: 'Prompt' }),
+      'Dress model'
+    )
+    await user.click(screen.getByRole('button', { name: 'Generate 2 images' }))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const referenceSets = onSubmit.mock.calls[0][1]
+    expect(
+      referenceSets.map((set: { file: File }[]) =>
+        set.map((image) => image.file.name)
+      )
+    ).toEqual([
+      ['model.png', 'outfit-a.png'],
+      ['model.png', 'outfit-b.png'],
+    ])
   })
 })

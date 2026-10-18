@@ -19,19 +19,30 @@ For commercial licensing, please contact support@quantumnous.com
 
 import {
   Download,
+  Ellipsis,
   ImageIcon,
   LoaderCircle,
+  Pencil,
+  RotateCw,
+  Trash2,
   WandSparkles,
   X,
 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { handleServerError } from '@/lib/handle-server-error'
@@ -46,11 +57,14 @@ import {
 } from '../lib/image-generation'
 import type {
   GeneratedImage,
+  ImageGallerySelection,
   ImageGenerationHistoryItem,
   ImageGenerationTask,
+  ImageResultAction,
 } from '../types'
 
 type GenerationResultProps = {
+  actionsDisabled?: boolean
   compact?: boolean
   history: ImageGenerationHistoryItem[]
   hasMore: boolean
@@ -59,9 +73,15 @@ type GenerationResultProps = {
   isHistoryLoading: boolean
   isLoading: boolean
   isLoadingMore: boolean
+  onDelete?: (items: ImageGallerySelection[]) => Promise<void>
+  onEdit?: (image: ImageResultAction) => void
   onLoadMore: () => Promise<boolean>
+  onRegenerate?: (images: ImageResultAction[]) => void
   onRetry: () => void
+  pendingTaskIds?: string[]
   task?: ImageGenerationTask
+  taskKey?: string
+  tasks?: ImageGenerationTask[]
 }
 
 export function GenerationResult(props: GenerationResultProps) {
@@ -73,43 +93,77 @@ export function GenerationResult(props: GenerationResultProps) {
   const [selectedImageKeys, setSelectedImageKeys] = useState<Set<string>>(
     () => new Set()
   )
+  const [pendingDelete, setPendingDelete] = useState<ImageGallerySelection[]>(
+    []
+  )
+  const [isDeleting, setIsDeleting] = useState(false)
   const [layout, setLayout] = useState({ columns: 2, capacity: 6 })
   const gridRef = useRef<HTMLDivElement>(null)
-  const taskIsActive =
-    props.isLoading ||
-    (props.task !== undefined && !isTerminalTaskStatus(props.task.status))
+  const tasks = props.tasks ?? (props.task ? [props.task] : [])
+  const activeTaskCount = props.pendingTaskIds
+    ? props.pendingTaskIds.filter((taskId) =>
+        tasks.every(
+          (task) =>
+            task.task_id !== taskId || !isTerminalTaskStatus(task.status)
+        )
+      ).length
+    : tasks.filter((task) => !isTerminalTaskStatus(task.status)).length
+  const previewCount = Math.max(activeTaskCount, props.isLoading ? 1 : 0)
+  const taskIsActive = previewCount > 0
+  const failedTask = tasks.find((task) => task.status === 'FAILURE')
   const items = [...props.history]
-  if (
-    props.task?.status === 'SUCCESS' &&
-    props.task.data?.images?.length &&
-    !items.some((item) => item.task_id === props.task?.task_id)
-  ) {
-    items.unshift({
-      task_id: props.task.task_id,
-      model: props.task.data.model,
-      created: props.task.data.created,
-      images: props.task.data.images,
-    })
+  for (const task of tasks) {
+    if (
+      task.status === 'SUCCESS' &&
+      task.data?.images?.length &&
+      !items.some((item) => item.task_id === task.task_id)
+    ) {
+      items.unshift({
+        task_id: task.task_id,
+        model: task.data.model,
+        prompt: task.prompt,
+        options: task.options,
+        created: task.data.created,
+        images: task.data.images,
+      })
+    }
   }
 
   const imageTiles = items.flatMap((item) =>
     item.images.flatMap((image, index) => {
       const source = generatedImageSource(image)
       if (!source) return []
-      return [{ item, image, index, source }]
+      return [
+        {
+          item,
+          image,
+          index,
+          source,
+          action: {
+            task_id: item.task_id,
+            index,
+            model: item.model,
+            prompt: item.prompt ?? '',
+            url: source,
+            outputFormat: image.output_format,
+            options: item.options,
+          },
+        },
+      ]
     })
   )
   const selectedTiles = imageTiles.filter(({ item, index }) =>
     selectedImageKeys.has(`${item.task_id}:${index}`)
   )
-  const totalTiles = imageTiles.length + (taskIsActive ? 1 : 0)
+  const selectedActions = selectedTiles.map((tile) => tile.action)
+  const totalTiles = imageTiles.length + previewCount
   const pageCapacity = props.compact ? 12 : layout.capacity
   const pageCount = Math.max(1, Math.ceil(totalTiles / pageCapacity))
   const currentPage = Math.min(page, pageCount - 1)
   const firstTileIndex = currentPage * pageCapacity
   const visibleImages = imageTiles.slice(
-    Math.max(0, firstTileIndex - (taskIsActive ? 1 : 0)),
-    Math.max(0, firstTileIndex + pageCapacity - (taskIsActive ? 1 : 0))
+    Math.max(0, firstTileIndex - previewCount),
+    Math.max(0, firstTileIndex + pageCapacity - previewCount)
   )
   const showPreview = taskIsActive && currentPage === 0
 
@@ -195,7 +249,7 @@ export function GenerationResult(props: GenerationResultProps) {
     return () => observer.disconnect()
   }, [props.compact, tileSize, totalTiles])
 
-  useEffect(() => setPage(0), [props.task?.task_id])
+  useEffect(() => setPage(0), [props.taskKey, props.task?.task_id])
   useEffect(
     () => setPage((previous) => Math.min(previous, pageCount - 1)),
     [pageCount]
@@ -231,7 +285,7 @@ export function GenerationResult(props: GenerationResultProps) {
     )
   }
 
-  if (!taskIsActive && items.length === 0 && props.task?.status !== 'FAILURE') {
+  if (!taskIsActive && items.length === 0 && !failedTask) {
     return (
       <div className='flex min-h-0 flex-1 items-center justify-center'>
         <EmptyState
@@ -274,14 +328,14 @@ export function GenerationResult(props: GenerationResultProps) {
         </div>
       </div>
 
-      {props.task?.status === 'FAILURE' ? (
+      {failedTask ? (
         <div
           role='alert'
           className='border-destructive/30 bg-destructive/5 rounded-lg border p-3 text-sm'
         >
           <p className='font-medium'>{t('Image generation failed')}</p>
           <p className='text-muted-foreground mt-1'>
-            {props.task.error ||
+            {failedTask.error ||
               t('The image provider did not complete this request.')}
           </p>
         </div>
@@ -320,13 +374,19 @@ export function GenerationResult(props: GenerationResultProps) {
             : `repeat(${layout.columns}, minmax(0, 1fr))`,
         }}
       >
-        {showPreview ? (
-          <Skeleton
-            className='aspect-square w-full rounded-xl'
-            aria-label={t('Generating your image')}
-          />
-        ) : null}
-        {visibleImages.map(({ item, image, index, source }) => {
+        {showPreview
+          ? Array.from(
+              { length: Math.min(previewCount, pageCapacity) },
+              (_, index) => (
+                <Skeleton
+                  key={`preview-${index}`}
+                  className='aspect-square w-full rounded-xl'
+                  aria-label={t('Generating your image')}
+                />
+              )
+            )
+          : null}
+        {visibleImages.map(({ item, image, index, source, action }) => {
           const key = `${item.task_id}:${index}`
           const selected = selectedImageKeys.has(key)
           return (
@@ -358,6 +418,55 @@ export function GenerationResult(props: GenerationResultProps) {
                 })}
                 className='bg-background/90 absolute top-2 left-2 z-10 size-6 rounded-full border-2 opacity-0 shadow-sm transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 data-checked:opacity-100 [@media(hover:none)]:opacity-100'
               />
+              {props.onRegenerate || props.onEdit || props.onDelete ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button
+                        type='button'
+                        size='icon-sm'
+                        variant='secondary'
+                        className='bg-background/90 absolute top-2 right-2 z-10 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'
+                        aria-label={t('Image {{index}} actions', {
+                          index: index + 1,
+                        })}
+                      />
+                    }
+                  >
+                    <Ellipsis aria-hidden='true' />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align='end' className='w-40'>
+                    {props.onRegenerate ? (
+                      <DropdownMenuItem
+                        disabled={props.actionsDisabled ?? props.isLoading}
+                        onClick={() => props.onRegenerate?.([action])}
+                      >
+                        <RotateCw aria-hidden='true' />
+                        {t('Regenerate')}
+                      </DropdownMenuItem>
+                    ) : null}
+                    {props.onEdit ? (
+                      <DropdownMenuItem onClick={() => props.onEdit?.(action)}>
+                        <Pencil aria-hidden='true' />
+                        {t('Edit')}
+                      </DropdownMenuItem>
+                    ) : null}
+                    {props.onDelete ? (
+                      <DropdownMenuItem
+                        variant='destructive'
+                        onClick={() =>
+                          setPendingDelete([
+                            { task_id: action.task_id, index: action.index },
+                          ])
+                        }
+                      >
+                        <Trash2 aria-hidden='true' />
+                        {t('Delete')}
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : null}
               <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'>
                 <Button
                   size='icon-sm'
@@ -403,6 +512,50 @@ export function GenerationResult(props: GenerationResultProps) {
               {t('Download')}{' '}
               <span className='tabular-nums'>{selectedTiles.length}</span>
             </Button>
+            {props.onRegenerate || props.onDelete ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type='button'
+                      size='icon-sm'
+                      variant='ghost'
+                      className='rounded-full'
+                      aria-label={t('Selected image actions')}
+                    />
+                  }
+                >
+                  <Ellipsis aria-hidden='true' />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align='end' className='w-44'>
+                  {props.onRegenerate ? (
+                    <DropdownMenuItem
+                      disabled={props.actionsDisabled ?? props.isLoading}
+                      onClick={() => props.onRegenerate?.(selectedActions)}
+                    >
+                      <RotateCw aria-hidden='true' />
+                      {t('Regenerate selected')}
+                    </DropdownMenuItem>
+                  ) : null}
+                  {props.onDelete ? (
+                    <DropdownMenuItem
+                      variant='destructive'
+                      onClick={() =>
+                        setPendingDelete(
+                          selectedActions.map(({ task_id, index }) => ({
+                            task_id,
+                            index,
+                          }))
+                        )
+                      }
+                    >
+                      <Trash2 aria-hidden='true' />
+                      {t('Delete selected')}
+                    </DropdownMenuItem>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             <Button
               type='button'
               size='icon-sm'
@@ -456,6 +609,31 @@ export function GenerationResult(props: GenerationResultProps) {
           </Button>
         </div>
       ) : null}
+      <ConfirmDialog
+        open={pendingDelete.length > 0}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setPendingDelete([])
+        }}
+        title={t('Delete selected images')}
+        desc={t('Remove {{count}} images from your saved gallery?', {
+          count: pendingDelete.length,
+        })}
+        confirmText={t('Delete')}
+        destructive
+        isLoading={isDeleting}
+        handleConfirm={() => {
+          if (!props.onDelete || pendingDelete.length === 0) return
+          setIsDeleting(true)
+          void props
+            .onDelete(pendingDelete)
+            .then(() => {
+              setSelectedImageKeys(new Set())
+              setPendingDelete([])
+            })
+            .catch(handleServerError)
+            .finally(() => setIsDeleting(false))
+        }}
+      />
     </div>
   )
 }

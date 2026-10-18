@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -16,6 +17,86 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestImageGenerationGalleryDeletePreservesIndicesAndOwnership(t *testing.T) {
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	t.Cleanup(func() { model.DB, model.LOG_DB = previousDB, previousLogDB })
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Task{}))
+
+	newTask := func(taskID string, userID int) {
+		task := &model.Task{
+			TaskID: taskID, UserId: userID, Platform: constant.TaskPlatformGenerateImage,
+			Status:     model.TaskStatusSuccess,
+			Properties: model.Properties{Input: "Try the outfit", OriginModelName: "gemini-nano-banana-2.1"},
+			PrivateData: model.TaskPrivateData{
+				ImageGallery: true,
+				ResultURL:    "https://images.example.com/first.png",
+				ImageGalleryResults: []model.TaskImageGalleryResult{
+					{URL: "https://images.example.com/first.png"},
+					{URL: "https://images.example.com/second.png"},
+				},
+			},
+		}
+		task.SetData(dto.GenerateImageResult{Images: []dto.GenerateImageData{{Url: "https://images.example.com/first.png"}}})
+		require.NoError(t, db.Create(task).Error)
+	}
+	newTask("a-owned-gallery", 17)
+	newTask("z-foreign-gallery", 18)
+
+	deleteItems := func(items []model.ImageGallerySelection) *httptest.ResponseRecorder {
+		body, err := common.Marshal(gin.H{"items": items})
+		require.NoError(t, err)
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Set("id", 17)
+		context.Request = httptest.NewRequest(http.MethodDelete, "/pg/images/gallery", bytes.NewReader(body))
+		DeleteImageGenerationGalleryImages(context)
+		return recorder
+	}
+
+	blocked := deleteItems([]model.ImageGallerySelection{
+		{TaskID: "a-owned-gallery", Index: 1},
+		{TaskID: "z-foreign-gallery", Index: 0},
+	})
+	assert.Equal(t, http.StatusNotFound, blocked.Code)
+	rolledBack, exists, err := model.GetByTaskId(17, "a-owned-gallery")
+	require.NoError(t, err)
+	require.True(t, exists)
+	assert.Equal(t, "https://images.example.com/second.png", rolledBack.PrivateData.ImageGalleryResults[1].URL)
+
+	deleted := deleteItems([]model.ImageGallerySelection{{TaskID: "a-owned-gallery", Index: 0}})
+	assert.Equal(t, http.StatusOK, deleted.Code)
+	assert.Contains(t, deleted.Body.String(), `"deleted":1`)
+
+	owned, exists, err := model.GetByTaskId(17, "a-owned-gallery")
+	require.NoError(t, err)
+	require.True(t, exists)
+	assert.Empty(t, owned.PrivateData.ImageGalleryResults[0].URL)
+	assert.Equal(t, "https://images.example.com/second.png", owned.PrivateData.ImageGalleryResults[1].URL)
+	assert.Equal(t, "https://images.example.com/second.png", owned.PrivateData.ResultURL)
+	assert.Empty(t, owned.Data)
+
+	historyRecorder := httptest.NewRecorder()
+	historyContext, _ := gin.CreateTestContext(historyRecorder)
+	historyContext.Set("id", 17)
+	historyContext.Request = httptest.NewRequest(http.MethodGet, "/pg/images/history", nil)
+	ImageGenerationHistory(historyContext)
+	assert.Equal(t, http.StatusOK, historyRecorder.Code)
+	assert.NotContains(t, historyRecorder.Body.String(), "first.png")
+	assert.Contains(t, historyRecorder.Body.String(), "second.png")
+	assert.Contains(t, historyRecorder.Body.String(), "Try the outfit")
+
+	deleted = deleteItems([]model.ImageGallerySelection{{TaskID: "a-owned-gallery", Index: 1}})
+	assert.Equal(t, http.StatusOK, deleted.Code)
+	historyRecorder = httptest.NewRecorder()
+	historyContext, _ = gin.CreateTestContext(historyRecorder)
+	historyContext.Set("id", 17)
+	historyContext.Request = httptest.NewRequest(http.MethodGet, "/pg/images/history", nil)
+	ImageGenerationHistory(historyContext)
+	assert.Equal(t, http.StatusOK, historyRecorder.Code)
+	assert.NotContains(t, historyRecorder.Body.String(), "a-owned-gallery")
+}
 
 func TestImageGenerationHistoryKeepsUserScopedURLsAfterTaskDataCleanup(t *testing.T) {
 	previousDB, previousLogDB := model.DB, model.LOG_DB

@@ -590,10 +590,14 @@ func AsyncTaskFetch(c *gin.Context) {
 		Status:   string(task.Status),
 		Progress: task.Progress,
 	}
+	if task.PrivateData.ImageGallery {
+		resp.Prompt = task.Properties.Input
+		resp.Options = task.PrivateData.ImageGalleryOptions
+	}
 
 	if task.Status == model.TaskStatusSuccess {
 		if task.Platform == constant.TaskPlatformGenerateImage {
-			if task.PrivateData.ImageGallery && len(task.PrivateData.ImageGalleryResults) > 0 {
+			if task.PrivateData.ImageGallery {
 				images := make([]dto.GenerateImageData, 0, len(task.PrivateData.ImageGalleryResults))
 				for _, image := range task.PrivateData.ImageGalleryResults {
 					images = append(images, dto.GenerateImageData{
