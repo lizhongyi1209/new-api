@@ -213,7 +213,7 @@ export function GenerationForm(props: GenerationFormProps) {
           onChange={updateReferences}
         />
 
-        <div className='grid gap-3 sm:grid-cols-2'>
+        <div className='grid gap-3 @sm:grid-cols-2'>
           <FormField
             control={form.control}
             name='model'

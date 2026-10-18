@@ -137,7 +137,7 @@ export function GenerationOptions(props: GenerationOptionsProps) {
     : BASE_ASPECT_RATIOS
 
   return (
-    <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
+    <div className='grid grid-cols-1 gap-3 @sm:grid-cols-2'>
       <FormField
         control={props.control}
         name='size'

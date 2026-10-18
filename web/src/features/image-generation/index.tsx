@@ -105,7 +105,7 @@ export function ImageGeneration() {
   return (
     <div className='bg-muted/20 flex size-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain xl:overflow-hidden'>
       <div className='flex min-h-full w-full flex-1 flex-col p-2 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-3 lg:p-4 xl:min-h-0'>
-        <div className='grid w-full auto-rows-max grid-cols-1 content-start gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:grid-rows-[minmax(0,1fr)] xl:auto-rows-auto xl:content-normal xl:items-stretch'>
+        <div className='grid w-full auto-rows-max grid-cols-1 content-start gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,3fr)_minmax(0,7fr)] xl:grid-rows-[minmax(0,1fr)] xl:auto-rows-auto xl:content-normal xl:items-stretch'>
           <Card
             data-card-hover='false'
             className='min-w-0 self-start overflow-visible xl:h-full xl:min-h-0 xl:self-auto'
@@ -113,7 +113,7 @@ export function ImageGeneration() {
             <CardHeader className='border-b px-3 sm:px-6'>
               <CardTitle>{t('Generation settings')}</CardTitle>
             </CardHeader>
-            <CardContent className='flex flex-col px-3 sm:px-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[scrollbar-width:none] xl:[&::-webkit-scrollbar]:hidden'>
+            <CardContent className='@container flex flex-col px-3 sm:px-6 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:[scrollbar-width:none] xl:[&::-webkit-scrollbar]:hidden'>
               <GenerationForm
                 disabled={disabled}
                 isLoadingModels={modelsQuery.isLoading}
