@@ -43,6 +43,33 @@ const defaultProps = {
 }
 
 describe('generation result gallery', () => {
+  it('uses the compact grid default after the viewport becomes narrow', () => {
+    const history = [
+      {
+        task_id: 'responsive-gallery',
+        model: 'gemini-nano-banana-2.1',
+        created: 100,
+        images: [{ url: 'https://images.example.com/responsive.png' }],
+      },
+    ]
+    const { rerender } = render(
+      <GenerationResult {...defaultProps} history={history} compact={false} />
+    )
+    const slider = screen.getByRole('group', { name: 'Image grid size' })
+    const range = slider.querySelector('input[type="range"]')
+    expect(range).toHaveAttribute('aria-valuenow', '220')
+
+    rerender(<GenerationResult {...defaultProps} history={history} compact />)
+    expect(range).toHaveAttribute('aria-valuenow', '130')
+
+    fireEvent.change(range as HTMLInputElement, { target: { value: '120' } })
+    expect(range).toHaveAttribute('aria-valuenow', '120')
+    rerender(
+      <GenerationResult {...defaultProps} history={history} compact={false} />
+    )
+    expect(range).toHaveAttribute('aria-valuenow', '120')
+  })
+
   it('shows a flowing twelve-image page on small screens without clipping tiles', () => {
     render(
       <GenerationResult

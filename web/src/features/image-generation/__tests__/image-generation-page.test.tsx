@@ -57,7 +57,7 @@ describe('image generation page', () => {
       settingsCard?.querySelector('[data-slot="card-content"]')
     ).toHaveClass('xl:overflow-y-auto', 'xl:[scrollbar-width:none]')
     expect(resultCard).toHaveAttribute('data-card-hover', 'false')
-    expect(resultCard).toHaveClass('overflow-hidden')
+    expect(resultCard).toHaveClass('overflow-visible', 'xl:overflow-hidden')
     expect(
       screen.queryByRole('heading', { name: 'Image Generation' })
     ).toBeNull()
@@ -84,7 +84,7 @@ describe('image generation page', () => {
     )
   })
 
-  it('switches between mobile creation and results without losing the draft', async () => {
+  it('keeps results below settings on small screens and preserves the draft', async () => {
     const user = userEvent.setup()
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -104,21 +104,19 @@ describe('image generation page', () => {
       await screen.findByText('Your generated images will appear here')
     ).closest('[data-slot="card"]')
 
-    expect(screen.getByRole('tab', { name: 'Generate' })).toHaveAttribute(
-      'aria-selected',
-      'true'
+    expect(settingsCard?.parentElement).toHaveClass(
+      'auto-rows-max',
+      'grid-cols-1',
+      'xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)]'
     )
-    await user.click(screen.getByRole('tab', { name: 'Generated images' }))
-    expect(settingsCard).toHaveClass('hidden', 'xl:flex')
-    expect(resultCard).not.toHaveClass('hidden')
-
-    await user.click(screen.getByRole('tab', { name: 'Generate' }))
+    expect(settingsCard?.nextElementSibling).toBe(resultCard)
     expect(settingsCard).not.toHaveClass('hidden')
-    expect(resultCard).toHaveClass('hidden', 'xl:flex')
+    expect(resultCard).not.toHaveClass('hidden')
+    expect(screen.queryByRole('tab')).toBeNull()
     expect(prompt).toHaveValue('A quiet harbor at dusk')
   })
 
-  it('opens results after submitting a valid mobile draft', async () => {
+  it('keeps the result panel below the settings after submitting', async () => {
     const user = userEvent.setup()
     vi.mocked(getImageGenerationModels).mockResolvedValueOnce([
       {
@@ -148,13 +146,15 @@ describe('image generation page', () => {
     await user.click(screen.getByRole('button', { name: 'Generate image' }))
 
     await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'Generated images' })).toHaveAttribute(
-        'aria-selected',
-        'true'
+      expect(submitImageGeneration).toHaveBeenCalledWith(
+        expect.objectContaining({ prompt: 'Sunrise' })
       )
     )
-    expect(submitImageGeneration).toHaveBeenCalledWith(
-      expect.objectContaining({ prompt: 'Sunrise' })
-    )
+    const settingsCard = screen
+      .getByText('Generation settings')
+      .closest('[data-slot="card"]')
+    const resultCard = settingsCard?.nextElementSibling
+    expect(resultCard).toHaveAttribute('data-slot', 'card')
+    expect(resultCard).not.toHaveClass('hidden')
   })
 })

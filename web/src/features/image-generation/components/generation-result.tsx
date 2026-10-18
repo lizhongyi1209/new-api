@@ -58,7 +58,8 @@ type GenerationResultProps = {
 
 export function GenerationResult(props: GenerationResultProps) {
   const { t } = useTranslation()
-  const [tileSize, setTileSize] = useState(props.compact ? 160 : 220)
+  const [selectedTileSize, setTileSize] = useState<number | null>(null)
+  const tileSize = selectedTileSize ?? (props.compact ? 130 : 220)
   const [page, setPage] = useState(0)
   const [downloadingImage, setDownloadingImage] = useState<string | null>(null)
   const [layout, setLayout] = useState({ columns: 2, capacity: 6 })

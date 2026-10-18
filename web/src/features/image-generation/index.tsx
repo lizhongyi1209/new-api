@@ -27,10 +27,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { handleServerError } from '@/lib/handle-server-error'
-import { cn } from '@/lib/utils'
 
 import {
   getImageGenerationHistory,
@@ -51,7 +49,6 @@ export function ImageGeneration() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [taskId, setTaskId] = useState('')
-  const [mobileView, setMobileView] = useState<'create' | 'results'>('create')
   const isCompact = useMediaQuery('(max-width: 1279px)')
 
   const modelsQuery = useQuery({
@@ -107,49 +104,11 @@ export function ImageGeneration() {
 
   return (
     <div className='bg-muted/20 flex size-full min-h-0 flex-col overflow-x-hidden overflow-y-auto overscroll-y-contain xl:overflow-hidden'>
-      <div className='mx-auto flex min-h-full w-full max-w-[1600px] flex-1 flex-col gap-2 p-2 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:gap-3 sm:p-3 lg:p-4 xl:min-h-0'>
-        <Tabs
-          value={mobileView}
-          onValueChange={(value) =>
-            setMobileView(value === 'results' ? 'results' : 'create')
-          }
-          className='bg-background sticky top-0 z-10 shrink-0 py-1 xl:hidden'
-        >
-          <TabsList
-            aria-label={t('Image Generation')}
-            className='grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto'
-          >
-            <TabsTrigger
-              id='image-generation-create-tab'
-              value='create'
-              aria-controls='image-generation-create-panel'
-              className='min-h-11 min-w-0'
-            >
-              {t('Generate')}
-            </TabsTrigger>
-            <TabsTrigger
-              id='image-generation-results-tab'
-              value='results'
-              aria-controls='image-generation-results-panel'
-              className='min-h-11 min-w-0'
-            >
-              {t('Generated images')}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className='grid min-h-0 flex-1 items-start gap-3 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:items-stretch'>
+      <div className='mx-auto flex min-h-full w-full max-w-[1600px] flex-1 flex-col p-2 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-3 lg:p-4 xl:min-h-0'>
+        <div className='grid w-full auto-rows-max grid-cols-1 content-start gap-3 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(360px,440px)_minmax(0,1fr)] xl:grid-rows-[minmax(0,1fr)] xl:auto-rows-auto xl:content-normal xl:items-stretch'>
           <Card
-            id='image-generation-create-panel'
-            role={isCompact ? 'tabpanel' : undefined}
-            aria-labelledby={
-              isCompact ? 'image-generation-create-tab' : undefined
-            }
-            inert={isCompact && mobileView !== 'create'}
             data-card-hover='false'
-            className={cn(
-              'min-w-0 self-start overflow-visible xl:h-full xl:min-h-0 xl:self-auto',
-              mobileView !== 'create' && 'hidden xl:flex'
-            )}
+            className='min-w-0 self-start overflow-visible xl:h-full xl:min-h-0 xl:self-auto'
           >
             <CardHeader className='border-b px-3 sm:px-6'>
               <CardTitle>{t('Generation settings')}</CardTitle>
@@ -159,26 +118,16 @@ export function ImageGeneration() {
                 disabled={disabled}
                 isLoadingModels={modelsQuery.isLoading}
                 models={modelsQuery.data ?? []}
-                onSubmit={(value, references) => {
-                  setMobileView('results')
+                onSubmit={(value, references) =>
                   generationMutation.mutate({ references, value })
-                }}
+                }
               />
             </CardContent>
           </Card>
 
           <Card
-            id='image-generation-results-panel'
-            role={isCompact ? 'tabpanel' : undefined}
-            aria-labelledby={
-              isCompact ? 'image-generation-results-tab' : undefined
-            }
-            inert={isCompact && mobileView !== 'results'}
             data-card-hover='false'
-            className={cn(
-              'min-h-[55dvh] min-w-0 self-start gap-0 overflow-hidden py-0 xl:h-full xl:min-h-0 xl:self-auto',
-              mobileView !== 'results' && 'hidden xl:flex'
-            )}
+            className='min-h-[55dvh] min-w-0 self-start gap-0 overflow-visible py-0 xl:h-full xl:min-h-0 xl:self-auto xl:overflow-hidden'
           >
             <GenerationResult
               compact={isCompact}
