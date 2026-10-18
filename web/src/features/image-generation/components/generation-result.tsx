@@ -274,35 +274,6 @@ export function GenerationResult(props: GenerationResultProps) {
         </div>
       </div>
 
-      {selectedTiles.length > 0 ? (
-        <div className='flex shrink-0 items-center justify-end gap-2'>
-          <Button
-            type='button'
-            size='sm'
-            variant='outline'
-            disabled={downloadingImage !== null}
-            onClick={() => void downloadSelectedImages()}
-          >
-            {downloadingImage === 'archive' ? (
-              <LoaderCircle className='animate-spin' aria-hidden='true' />
-            ) : (
-              <Download aria-hidden='true' />
-            )}
-            {t('Download selected')}
-            <span className='tabular-nums'>{selectedTiles.length}</span>
-          </Button>
-          <Button
-            type='button'
-            size='icon-sm'
-            variant='ghost'
-            aria-label={t('Clear selection')}
-            onClick={() => setSelectedImageKeys(new Set())}
-          >
-            <X aria-hidden='true' />
-          </Button>
-        </div>
-      ) : null}
-
       {props.task?.status === 'FAILURE' ? (
         <div
           role='alert'
@@ -407,6 +378,43 @@ export function GenerationResult(props: GenerationResultProps) {
             </figure>
           )
         })}
+      </div>
+
+      <div
+        className={cn(
+          'flex min-h-11 shrink-0 items-center justify-center',
+          selectedTiles.length === 0 && 'hidden xl:flex'
+        )}
+      >
+        {selectedTiles.length > 0 ? (
+          <div className='bg-background/95 flex items-center gap-1 rounded-full border p-1 shadow-lg'>
+            <Button
+              type='button'
+              size='sm'
+              className='rounded-full'
+              disabled={downloadingImage !== null}
+              onClick={() => void downloadSelectedImages()}
+            >
+              {downloadingImage === 'archive' ? (
+                <LoaderCircle className='animate-spin' aria-hidden='true' />
+              ) : (
+                <Download aria-hidden='true' />
+              )}
+              {t('Download')}{' '}
+              <span className='tabular-nums'>{selectedTiles.length}</span>
+            </Button>
+            <Button
+              type='button'
+              size='icon-sm'
+              variant='ghost'
+              className='rounded-full'
+              aria-label={t('Clear selection')}
+              onClick={() => setSelectedImageKeys(new Set())}
+            >
+              <X aria-hidden='true' />
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {pageCount > 1 || props.hasMore ? (

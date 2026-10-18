@@ -250,10 +250,13 @@ describe('generation result gallery', () => {
     await user.click(
       screen.getByRole('checkbox', { name: 'Select generated image 7' })
     )
-    expect(
-      screen.getByRole('button', { name: /Download selected/ })
-    ).toHaveTextContent('2')
-    await user.click(screen.getByRole('button', { name: /Download selected/ }))
+    const batchDownload = screen.getByRole('button', { name: 'Download 2' })
+    expect(batchDownload).toHaveTextContent('2')
+    expect(batchDownload.closest('.min-h-11')).toBe(
+      screen.getByRole('img', { name: 'Generated image 7' }).closest('.grid')
+        ?.nextElementSibling
+    )
+    await user.click(batchDownload)
 
     await waitFor(() => {
       expect(createImageDownloadArchive).toHaveBeenCalledWith(
@@ -271,7 +274,7 @@ describe('generation result gallery', () => {
     ).toBeChecked()
     await user.click(screen.getByRole('button', { name: 'Clear selection' }))
     expect(
-      screen.queryByRole('button', { name: /Download selected/ })
+      screen.queryByRole('button', { name: 'Download 2' })
     ).not.toBeInTheDocument()
   })
 
