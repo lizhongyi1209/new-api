@@ -138,6 +138,7 @@ export type ImageGenerationTask = {
 export type ImageGenerationFormValue = {
   aspectRatio: string
   background: 'auto' | 'transparent'
+  count: number
   model: string
   outputFormat: 'jpeg' | 'png' | 'webp'
   prompt: string

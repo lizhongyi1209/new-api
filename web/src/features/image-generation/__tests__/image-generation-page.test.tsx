@@ -163,6 +163,55 @@ describe('image generation page', () => {
     expect(resultCard).not.toHaveClass('hidden')
   })
 
+  it('submits nine separately billed tasks for a count of nine', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getImageGenerationModels).mockResolvedValueOnce([
+      {
+        label: 'gemini-nano-banana-2.1-sp',
+        value: 'gemini-nano-banana-2.1-sp',
+      },
+    ])
+    vi.mocked(submitImageGeneration)
+      .mockClear()
+      .mockImplementation(async () => ({
+        status: 'PENDING',
+        task_id: `count-task-${vi.mocked(submitImageGeneration).mock.calls.length}`,
+      }))
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ImageGeneration />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Model' })).toHaveTextContent(
+        'Nano Banana 2.1'
+      )
+    )
+    await user.click(screen.getByRole('combobox', { name: 'Image count' }))
+    await user.click(screen.getByRole('option', { name: '9' }))
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Sunrise')
+    await user.click(screen.getByRole('button', { name: 'Generate 9 images' }))
+
+    await waitFor(() => expect(submitImageGeneration).toHaveBeenCalledTimes(9))
+    expect(vi.mocked(submitImageGeneration).mock.calls).toEqual(
+      Array.from({ length: 9 }, () => [
+        expect.objectContaining({
+          model: 'gemini-nano-banana-2.1-sp',
+          prompt: 'Sunrise',
+        }),
+      ])
+    )
+    expect(
+      vi
+        .mocked(submitImageGeneration)
+        .mock.calls.every(([request]) => !('n' in request))
+    ).toBe(true)
+  })
+
   it('loads a saved result into the editor and regenerates from its durable URL', async () => {
     const user = userEvent.setup()
     vi.mocked(getImageGenerationModels).mockResolvedValueOnce([

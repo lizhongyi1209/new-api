@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -177,6 +177,34 @@ describe('image generation form', () => {
     })
   })
 
+  it('submits nine images when the output count is set to nine', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(
+      <GenerationForm
+        disabled={false}
+        isLoadingModels={false}
+        models={models}
+        onSubmit={onSubmit}
+      />
+    )
+
+    const count = screen.getByRole('combobox', { name: 'Image count' })
+    expect(count).toHaveTextContent('1')
+    await user.click(count)
+    expect(screen.getAllByRole('option')).toHaveLength(9)
+    await user.click(screen.getByRole('option', { name: '9' }))
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'A lake')
+    await user.click(screen.getByRole('button', { name: 'Generate 9 images' }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.objectContaining({ count: 9 }),
+        [[]]
+      )
+    })
+  })
+
   it('offers only available tiers after changing to a different model series', async () => {
     const user = userEvent.setup()
     render(
@@ -256,5 +284,42 @@ describe('image generation form', () => {
       ['model.png', 'outfit-a.png'],
       ['model.png', 'outfit-b.png'],
     ])
+  })
+
+  it('confirms the total task count when batch alternatives each request nine images', async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:batch-count')
+    render(
+      <GenerationForm
+        disabled={false}
+        isLoadingModels={false}
+        models={models}
+        onSubmit={onSubmit}
+      />
+    )
+
+    await user.click(screen.getByRole('combobox', { name: 'Image count' }))
+    await user.click(screen.getByRole('option', { name: '9' }))
+    await user.click(screen.getByRole('switch', { name: 'Batch mode' }))
+    const batchInput = document.querySelectorAll<HTMLInputElement>(
+      'input[type="file"][multiple]'
+    )[1]
+    await user.upload(batchInput, [
+      new File(['a'], 'outfit-a.png', { type: 'image/png' }),
+      new File(['b'], 'outfit-b.png', { type: 'image/png' }),
+    ])
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Outfits')
+    await user.click(screen.getByRole('button', { name: 'Generate 18 images' }))
+
+    const dialog = screen.getByRole('alertdialog')
+    expect(dialog).toHaveTextContent('18 separately billed image tasks')
+    await user.click(
+      within(dialog).getByRole('button', { name: 'Generate 18 images' })
+    )
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ count: 9 }),
+      expect.arrayContaining([expect.any(Array), expect.any(Array)])
+    )
   })
 })

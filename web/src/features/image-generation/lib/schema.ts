@@ -19,9 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { z } from 'zod'
 
+import { MAX_OUTPUT_COUNT } from './image-generation'
+
 export const imageGenerationSchema = z.object({
   aspectRatio: z.string(),
   background: z.enum(['auto', 'transparent']),
+  count: z.number().int().min(1).max(MAX_OUTPUT_COUNT),
   model: z.string().min(1, 'Select a model'),
   outputFormat: z.enum(['jpeg', 'png', 'webp']),
   prompt: z.string().trim().min(1, 'Enter an image prompt'),

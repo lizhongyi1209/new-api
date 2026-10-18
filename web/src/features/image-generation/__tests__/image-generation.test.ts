@@ -31,6 +31,7 @@ import type { ImageGenerationFormValue } from '../types'
 const baseForm: ImageGenerationFormValue = {
   aspectRatio: '16:9',
   background: 'transparent',
+  count: 1,
   model: 'gemini-3.1-flash-image-c-sp',
   outputFormat: 'png',
   prompt: '  A quiet lake at sunrise  ',

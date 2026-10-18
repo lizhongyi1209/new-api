@@ -49,11 +49,13 @@ import { Textarea } from '@/components/ui/textarea'
 
 import {
   buildBatchReferencePlan,
+  MAX_BATCH_JOBS,
   type BatchReferencePlan,
 } from '../lib/batch-references'
 import {
   getImageModelFamily,
   getImageModelOption,
+  MAX_OUTPUT_COUNT,
   type ImageModelTier,
 } from '../lib/image-generation'
 import { imageGenerationSchema } from '../lib/schema'
@@ -83,6 +85,7 @@ type GenerationFormProps = {
 const defaultValues: ImageGenerationFormValue = {
   aspectRatio: '1:1',
   background: 'auto',
+  count: 1,
   model: '',
   outputFormat: 'png',
   prompt: '',
@@ -90,6 +93,14 @@ const defaultValues: ImageGenerationFormValue = {
   size: '1K',
   thinkingLevel: 'default',
 }
+
+const imageCountOptions = Array.from(
+  { length: MAX_OUTPUT_COUNT },
+  (_, index) => ({
+    label: String(index + 1),
+    value: String(index + 1),
+  })
+)
 
 export function GenerationForm(props: GenerationFormProps) {
   const { t } = useTranslation()
@@ -112,6 +123,7 @@ export function GenerationForm(props: GenerationFormProps) {
     resolver: zodResolver(imageGenerationSchema),
   })
   const selectedModel = useWatch({ control: form.control, name: 'model' })
+  const selectedCount = useWatch({ control: form.control, name: 'count' })
   const selectedOption = getImageModelOption(selectedModel)
   const selectedSeriesId = selectedOption?.seriesId ?? ''
   const family = selectedOption?.family ?? null
@@ -166,6 +178,7 @@ export function GenerationForm(props: GenerationFormProps) {
     : { sets: [references] }
   const referenceSets = batchPlan.sets ?? []
   const batchError = batchEnabled ? batchPlan.error : undefined
+  const totalJobs = referenceSets.length * selectedCount
   const batchErrorMessages = {
     empty_group: t('Add at least one image to each batch group.'),
     group_count: t('Too many batch groups.'),
@@ -179,9 +192,9 @@ export function GenerationForm(props: GenerationFormProps) {
   let submitLabel = t('Generate image')
   if (props.disabled) {
     submitLabel = t('Generating...')
-  } else if (referenceSets.length > 1) {
+  } else if (totalJobs > 1) {
     submitLabel = t('Generate {{count}} images', {
-      count: referenceSets.length,
+      count: totalJobs,
     })
   }
 
@@ -291,8 +304,10 @@ export function GenerationForm(props: GenerationFormProps) {
       <form
         className='flex flex-col gap-4 sm:gap-5 xl:flex-1'
         onSubmit={form.handleSubmit((value) => {
-          if (batchError || referenceSets.length === 0) return
-          if (referenceSets.length > 10) {
+          if (batchError || totalJobs > MAX_BATCH_JOBS || totalJobs === 0) {
+            return
+          }
+          if (totalJobs > 10) {
             setPendingBatchValue(value)
             return
           }
@@ -383,6 +398,41 @@ export function GenerationForm(props: GenerationFormProps) {
               </SelectContent>
             </Select>
           </div>
+
+          <FormField
+            control={form.control}
+            name='count'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Image count')}</FormLabel>
+                <Select
+                  modal={false}
+                  items={imageCountOptions}
+                  value={String(field.value)}
+                  onValueChange={(value) => {
+                    if (value) field.onChange(Number(value))
+                  }}
+                  disabled={props.disabled}
+                >
+                  <FormControl>
+                    <SelectTrigger className='w-full transition-none'>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent alignItemWithTrigger={false} animated={false}>
+                    <SelectGroup>
+                      {imageCountOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
 
         <div className='flex items-center justify-between gap-3'>
@@ -422,9 +472,11 @@ export function GenerationForm(props: GenerationFormProps) {
           />
         )}
 
-        {batchError ? (
+        {batchError || totalJobs > MAX_BATCH_JOBS ? (
           <p className='text-destructive text-xs' role='alert'>
-            {batchErrorMessages[batchError]}
+            {batchError
+              ? batchErrorMessages[batchError]
+              : t('A batch can contain up to 100 generations.')}
           </p>
         ) : null}
 
@@ -465,7 +517,10 @@ export function GenerationForm(props: GenerationFormProps) {
           size='lg'
           className='w-full'
           disabled={
-            props.disabled || props.models.length === 0 || Boolean(batchError)
+            props.disabled ||
+            props.models.length === 0 ||
+            Boolean(batchError) ||
+            totalJobs > MAX_BATCH_JOBS
           }
         >
           {props.disabled ? (
@@ -483,10 +538,10 @@ export function GenerationForm(props: GenerationFormProps) {
         }}
         title={t('Confirm batch generation')}
         desc={t('This will submit {{count}} separately billed image tasks.', {
-          count: referenceSets.length,
+          count: totalJobs,
         })}
         confirmText={t('Generate {{count}} images', {
-          count: referenceSets.length,
+          count: totalJobs,
         })}
         handleConfirm={() => {
           if (pendingBatchValue && referenceSets.length > 0) {

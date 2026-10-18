@@ -46,6 +46,7 @@ import {
   buildImageGenerationRequest,
   isTerminalTaskStatus,
 } from './lib/image-generation'
+import { submitImageGenerationJobs } from './lib/submit-image-jobs'
 import type {
   ImageGenerationFormValue,
   ImageGallerySelection,
@@ -138,17 +139,16 @@ export function ImageGeneration() {
         })
       }
 
-      const submittedIDs: string[] = []
-      for (const set of input.referenceSets) {
+      const requests = input.referenceSets.flatMap((set) => {
         const request = buildImageGenerationRequest(
           input.value,
           set.map((reference) => uploadedURLs.get(reference.id) ?? '')
         )
-        const submission = await submitImageGeneration(request)
-        submittedIDs.push(submission.task_id)
-        setTaskIds([...submittedIDs])
-      }
-      return submittedIDs
+        return Array.from({ length: input.value.count }, () => request)
+      })
+      return submitImageGenerationJobs(requests, (taskId) => {
+        setTaskIds((current) => [...current, taskId])
+      })
     },
     onMutate: () => setTaskIds([]),
     onError: (error) => handleServerError(error, t('Image generation failed')),
@@ -163,6 +163,7 @@ export function ImageGeneration() {
           aspectRatio: options?.aspect_ratio || '1:1',
           background:
             options?.background === 'transparent' ? 'transparent' : 'auto',
+          count: 1,
           model: image.model,
           outputFormat: 'png',
           prompt: image.prompt,
