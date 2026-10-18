@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { zodResolver } from '@hookform/resolvers/zod'
-import { LoaderCircle, Sparkles } from 'lucide-react'
+import { Images, LoaderCircle, Sparkles } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
@@ -476,7 +476,7 @@ export function GenerationForm(props: GenerationFormProps) {
           name='count'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{t('Image count')}</FormLabel>
+              <FormLabel className='sr-only'>{t('Image count')}</FormLabel>
               <Select
                 modal={false}
                 items={imageCountOptions}
@@ -488,6 +488,10 @@ export function GenerationForm(props: GenerationFormProps) {
               >
                 <FormControl>
                   <SelectTrigger className='w-full transition-none'>
+                    <Images
+                      className='text-muted-foreground size-4 shrink-0'
+                      aria-hidden='true'
+                    />
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>

@@ -122,6 +122,11 @@ describe('image generation form', () => {
     })
     const count = screen.getByRole('combobox', { name: 'Image count' })
     const generate = screen.getByRole('button', { name: 'Generate image' })
+    expect(screen.getByText('Image count')).toHaveClass('sr-only')
+    expect(count.querySelector('svg.lucide-images')).toHaveAttribute(
+      'aria-hidden',
+      'true'
+    )
     expect(
       outputSize.compareDocumentPosition(count) &
         Node.DOCUMENT_POSITION_FOLLOWING
