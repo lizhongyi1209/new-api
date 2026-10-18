@@ -29,9 +29,34 @@ const models = [
   { label: 'gemini-nano-banana-2.1', value: 'gemini-nano-banana-2.1' },
 ]
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
 
 describe('image generation form', () => {
+  it('opens batch groups when randomUUID is unavailable on a public HTTP origin', async () => {
+    const user = userEvent.setup()
+    const getRandomValues = globalThis.crypto.getRandomValues.bind(
+      globalThis.crypto
+    )
+    vi.stubGlobal('crypto', { getRandomValues })
+    render(
+      <GenerationForm
+        disabled={false}
+        isLoadingModels={false}
+        models={models}
+        onSubmit={vi.fn()}
+      />
+    )
+
+    await user.click(screen.getByRole('switch', { name: 'Batch mode' }))
+    await user.click(screen.getByRole('button', { name: 'Add group' }))
+    expect(
+      screen.getAllByRole('textbox', { name: /Group .* name/ })
+    ).toHaveLength(2)
+  })
+
   it('keeps the phone prompt compact and stretches it in the desktop panel', () => {
     render(
       <GenerationForm

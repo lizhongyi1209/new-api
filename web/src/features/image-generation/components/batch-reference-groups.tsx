@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { Plus, Trash2 } from 'lucide-react'
+import { nanoid } from 'nanoid'
 import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
@@ -76,7 +77,7 @@ export function BatchReferenceGroups(props: BatchReferenceGroupsProps) {
               props.onGroupsChange([
                 ...props.groups,
                 {
-                  id: crypto.randomUUID(),
+                  id: nanoid(),
                   name: t('Group {{number}}', {
                     number: props.groups.length + 1,
                   }),

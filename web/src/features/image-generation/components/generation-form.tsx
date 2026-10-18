@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { zodResolver } from '@hookform/resolvers/zod'
 import { LoaderCircle, Sparkles } from 'lucide-react'
+import { nanoid } from 'nanoid'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -98,7 +99,7 @@ export function GenerationForm(props: GenerationFormProps) {
   const [batchMode, setBatchMode] = useState<BatchCombinationMode>('all')
   const [batchGroups, setBatchGroups] = useState<BatchReferenceGroup[]>(() => [
     {
-      id: crypto.randomUUID(),
+      id: nanoid(),
       name: t('Group {{number}}', { number: 1 }),
       images: [],
     },
