@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { Download, ImageIcon, LoaderCircle, WandSparkles } from 'lucide-react'
+import {
+  Download,
+  ImageIcon,
+  LoaderCircle,
+  WandSparkles,
+  X,
+} from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -25,12 +31,14 @@ import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Slider } from '@/components/ui/slider'
 import { handleServerError } from '@/lib/handle-server-error'
+import { cn } from '@/lib/utils'
 
 import { getImageGenerationDownload } from '../api'
+import { createImageDownloadArchive } from '../lib/download-archive'
 import {
   calculateImageGridLayout,
   generatedImageSource,
@@ -62,6 +70,9 @@ export function GenerationResult(props: GenerationResultProps) {
   const tileSize = selectedTileSize ?? (props.compact ? 130 : 220)
   const [page, setPage] = useState(0)
   const [downloadingImage, setDownloadingImage] = useState<string | null>(null)
+  const [selectedImageKeys, setSelectedImageKeys] = useState<Set<string>>(
+    () => new Set()
+  )
   const [layout, setLayout] = useState({ columns: 2, capacity: 6 })
   const gridRef = useRef<HTMLDivElement>(null)
   const taskIsActive =
@@ -88,6 +99,9 @@ export function GenerationResult(props: GenerationResultProps) {
       return [{ item, image, index, source }]
     })
   )
+  const selectedTiles = imageTiles.filter(({ item, index }) =>
+    selectedImageKeys.has(`${item.task_id}:${index}`)
+  )
   const totalTiles = imageTiles.length + (taskIsActive ? 1 : 0)
   const pageCapacity = props.compact ? 12 : layout.capacity
   const pageCount = Math.max(1, Math.ceil(totalTiles / pageCapacity))
@@ -112,6 +126,38 @@ export function GenerationResult(props: GenerationResultProps) {
       const link = document.createElement('a')
       link.href = url
       link.download = `generated-image-${item.task_id}-${index + 1}.${image.output_format || 'png'}`
+      document.body.append(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      handleServerError(error)
+    } finally {
+      setDownloadingImage(null)
+    }
+  }
+
+  const downloadSelectedImages = async () => {
+    if (downloadingImage !== null || selectedTiles.length === 0) return
+    if (selectedTiles.length === 1) {
+      const { item, index, image } = selectedTiles[0]
+      await downloadImage(item, index, image)
+      return
+    }
+    setDownloadingImage('archive')
+    try {
+      const blob = await createImageDownloadArchive(
+        selectedTiles.map(({ item, index, image }) => ({
+          taskId: item.task_id,
+          index,
+          outputFormat: image.output_format,
+        })),
+        getImageGenerationDownload
+      )
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'generated-images.zip'
       document.body.append(link)
       link.click()
       link.remove()
@@ -205,22 +251,57 @@ export function GenerationResult(props: GenerationResultProps) {
   return (
     <div className='flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5 xl:h-full'>
       <div className='flex shrink-0 flex-wrap items-center justify-between gap-3'>
-        <div className='min-w-0'>
-          <p className='font-medium'>{t('Generated images')}</p>
-          <p className='text-muted-foreground text-xs'>
-            {t('{{count}} saved images', { count: imageCount })}
-          </p>
-        </div>
-        {taskIsActive ? (
-          <Badge variant='secondary' className='gap-1.5'>
-            <LoaderCircle
-              className='size-3.5 animate-spin'
-              aria-hidden='true'
-            />
-            {t('Generating your image')}
+        <p className='min-w-0 text-base leading-snug font-medium'>
+          {t('Generated images')}
+        </p>
+        <div className='flex items-center gap-2'>
+          {taskIsActive ? (
+            <Badge variant='secondary' className='gap-1.5'>
+              <LoaderCircle
+                className='size-3.5 animate-spin'
+                aria-hidden='true'
+              />
+              {t('Generating your image')}
+            </Badge>
+          ) : null}
+          <Badge
+            variant='secondary'
+            aria-label={t('{{count}} saved images', { count: imageCount })}
+            className='tabular-nums'
+          >
+            {imageCount}
           </Badge>
-        ) : null}
+        </div>
       </div>
+
+      {selectedTiles.length > 0 ? (
+        <div className='flex shrink-0 items-center justify-end gap-2'>
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            disabled={downloadingImage !== null}
+            onClick={() => void downloadSelectedImages()}
+          >
+            {downloadingImage === 'archive' ? (
+              <LoaderCircle className='animate-spin' aria-hidden='true' />
+            ) : (
+              <Download aria-hidden='true' />
+            )}
+            {t('Download selected')}
+            <span className='tabular-nums'>{selectedTiles.length}</span>
+          </Button>
+          <Button
+            type='button'
+            size='icon-sm'
+            variant='ghost'
+            aria-label={t('Clear selection')}
+            onClick={() => setSelectedImageKeys(new Set())}
+          >
+            <X aria-hidden='true' />
+          </Button>
+        </div>
+      ) : null}
 
       {props.task?.status === 'FAILURE' ? (
         <div
@@ -235,8 +316,7 @@ export function GenerationResult(props: GenerationResultProps) {
         </div>
       ) : null}
 
-      <div className='flex shrink-0 flex-wrap items-center justify-between gap-3 border-b pb-3'>
-        <Label htmlFor='image-grid-size'>{t('Image grid size')}</Label>
+      <div className='flex shrink-0 items-center justify-end border-b pb-3'>
         <div className='flex w-full max-w-48 items-center gap-3'>
           <ImageIcon
             className='text-muted-foreground size-4 shrink-0'
@@ -275,36 +355,58 @@ export function GenerationResult(props: GenerationResultProps) {
             aria-label={t('Generating your image')}
           />
         ) : null}
-        {visibleImages.map(({ item, image, index, source }) => (
-          <figure
-            key={`${item.task_id}-${source}`}
-            className='group bg-muted/30 relative aspect-square min-w-0 overflow-hidden rounded-xl border'
-          >
-            <img
-              src={source}
-              alt={t('Generated image {{number}}', { number: index + 1 })}
-              loading='lazy'
-              className='size-full object-contain'
-            />
-            <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'>
-              <Button
-                size='icon-sm'
-                variant='secondary'
-                type='button'
-                aria-label={t('Download')}
-                aria-busy={downloadingImage === `${item.task_id}:${index}`}
-                disabled={downloadingImage !== null}
-                onClick={() => void downloadImage(item, index, image)}
-              >
-                {downloadingImage === `${item.task_id}:${index}` ? (
-                  <LoaderCircle className='animate-spin' aria-hidden='true' />
-                ) : (
-                  <Download aria-hidden='true' />
-                )}
-              </Button>
-            </figcaption>
-          </figure>
-        ))}
+        {visibleImages.map(({ item, image, index, source }) => {
+          const key = `${item.task_id}:${index}`
+          const selected = selectedImageKeys.has(key)
+          return (
+            <figure
+              key={key}
+              className={cn(
+                'group bg-muted/30 relative aspect-square min-w-0 overflow-hidden rounded-xl border',
+                selected && 'ring-primary ring-2'
+              )}
+            >
+              <img
+                src={source}
+                alt={t('Generated image {{number}}', { number: index + 1 })}
+                loading='lazy'
+                className='size-full object-contain'
+              />
+              <Checkbox
+                checked={selected}
+                onCheckedChange={(checked) =>
+                  setSelectedImageKeys((previous) => {
+                    const next = new Set(previous)
+                    if (checked) next.add(key)
+                    else next.delete(key)
+                    return next
+                  })
+                }
+                aria-label={t('Select generated image {{number}}', {
+                  number: index + 1,
+                })}
+                className='bg-background/90 absolute top-2 left-2 z-10 size-6 rounded-full border-2 opacity-0 shadow-sm transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 data-checked:opacity-100 [@media(hover:none)]:opacity-100'
+              />
+              <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'>
+                <Button
+                  size='icon-sm'
+                  variant='secondary'
+                  type='button'
+                  aria-label={t('Download')}
+                  aria-busy={downloadingImage === key}
+                  disabled={downloadingImage !== null}
+                  onClick={() => void downloadImage(item, index, image)}
+                >
+                  {downloadingImage === key ? (
+                    <LoaderCircle className='animate-spin' aria-hidden='true' />
+                  ) : (
+                    <Download aria-hidden='true' />
+                  )}
+                </Button>
+              </figcaption>
+            </figure>
+          )
+        })}
       </div>
 
       {pageCount > 1 || props.hasMore ? (

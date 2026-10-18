@@ -23,12 +23,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { getImageGenerationDownload } from '../api'
 import { GenerationResult } from '../components/generation-result'
+import { createImageDownloadArchive } from '../lib/download-archive'
 
 vi.mock('../api', () => ({ getImageGenerationDownload: vi.fn() }))
+vi.mock('../lib/download-archive', () => ({
+  createImageDownloadArchive: vi.fn(),
+}))
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.mocked(getImageGenerationDownload).mockReset()
+  vi.mocked(createImageDownloadArchive).mockReset()
 })
 
 const defaultProps = {
@@ -56,6 +61,9 @@ describe('generation result gallery', () => {
       <GenerationResult {...defaultProps} history={history} compact={false} />
     )
     const slider = screen.getByRole('group', { name: 'Image grid size' })
+    expect(screen.queryByText('Image grid size')).not.toBeInTheDocument()
+    expect(screen.getByText('Generated images')).toHaveClass('text-base')
+    expect(screen.getByLabelText('1 saved images')).toHaveTextContent('1')
     const range = slider.querySelector('input[type="range"]')
     expect(range).toHaveAttribute('aria-valuenow', '220')
 
@@ -88,9 +96,9 @@ describe('generation result gallery', () => {
       />
     )
 
-    expect(screen.getAllByRole('img', { name: /Generated image/ })).toHaveLength(
-      12
-    )
+    expect(
+      screen.getAllByRole('img', { name: /Generated image/ })
+    ).toHaveLength(12)
     const grid = screen
       .getByRole('img', { name: 'Generated image 1' })
       .closest('.grid')
@@ -206,6 +214,65 @@ describe('generation result gallery', () => {
     })
     expect(createObjectURL).not.toHaveBeenCalled()
     expect(screen.getByRole('img', { name: 'Generated image 1' })).toBeVisible()
+  })
+
+  it('keeps selections across pages and downloads multiple images as a ZIP', async () => {
+    const user = userEvent.setup()
+    const archive = new Blob(['zip-bytes'], { type: 'application/zip' })
+    vi.mocked(createImageDownloadArchive).mockResolvedValue(archive)
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:selected-images')
+    const clickedDownloads: string[] = []
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
+      function (this: HTMLAnchorElement) {
+        clickedDownloads.push(this.download)
+      }
+    )
+    render(
+      <GenerationResult
+        {...defaultProps}
+        history={[
+          {
+            task_id: 'gallery-task',
+            model: 'gpt-image-2',
+            created: 100,
+            images: Array.from({ length: 7 }, (_, index) => ({
+              url: `https://images.example.com/${index + 1}.png`,
+            })),
+          },
+        ]}
+      />
+    )
+
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select generated image 1' })
+    )
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Select generated image 7' })
+    )
+    expect(
+      screen.getByRole('button', { name: /Download selected/ })
+    ).toHaveTextContent('2')
+    await user.click(screen.getByRole('button', { name: /Download selected/ }))
+
+    await waitFor(() => {
+      expect(createImageDownloadArchive).toHaveBeenCalledWith(
+        [
+          { taskId: 'gallery-task', index: 0, outputFormat: undefined },
+          { taskId: 'gallery-task', index: 6, outputFormat: undefined },
+        ],
+        getImageGenerationDownload
+      )
+      expect(clickedDownloads).toEqual(['generated-images.zip'])
+    })
+    await user.click(screen.getByRole('button', { name: 'Previous' }))
+    expect(
+      screen.getByRole('checkbox', { name: 'Select generated image 1' })
+    ).toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Clear selection' }))
+    expect(
+      screen.queryByRole('button', { name: /Download selected/ })
+    ).not.toBeInTheDocument()
   })
 
   it('shows a square preview while a new task runs alongside saved results', () => {
