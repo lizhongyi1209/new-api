@@ -30,7 +30,7 @@ const models = [
 ]
 
 describe('image generation form', () => {
-  it('stretches the prompt by default to fill the settings panel', () => {
+  it('keeps the phone prompt compact and stretches it in the desktop panel', () => {
     render(
       <GenerationForm
         disabled={false}
@@ -41,8 +41,15 @@ describe('image generation form', () => {
     )
 
     const prompt = screen.getByRole('textbox', { name: 'Prompt' })
-    expect(prompt).toHaveClass('field-sizing-fixed', 'h-full', 'max-h-none')
-    expect(prompt.closest('[data-slot="form-item"]')).toHaveClass('flex-1')
+    expect(prompt).toHaveClass(
+      'field-sizing-fixed',
+      'h-36',
+      'xl:h-full',
+      'max-h-none'
+    )
+    expect(prompt.closest('[data-slot="form-item"]')).toHaveClass(
+      'xl:flex-1'
+    )
   })
 
   it('places reference images before model settings without a group selector', () => {

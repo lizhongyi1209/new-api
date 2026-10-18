@@ -19,9 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import { getImageGenerationModels } from '../api'
+import { getImageGenerationModels, submitImageGeneration } from '../api'
 import { ImageGeneration } from '../index'
 
 vi.mock('../api', () => ({
@@ -80,6 +81,80 @@ describe('image generation page', () => {
       'flex-1',
       'items-center',
       'justify-center'
+    )
+  })
+
+  it('switches between mobile creation and results without losing the draft', async () => {
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ImageGeneration />
+      </QueryClientProvider>
+    )
+
+    const prompt = screen.getByRole('textbox', { name: 'Prompt' })
+    await user.type(prompt, 'A quiet harbor at dusk')
+    const settingsCard = screen
+      .getByText('Generation settings')
+      .closest('[data-slot="card"]')
+    const resultCard = (
+      await screen.findByText('Your generated images will appear here')
+    ).closest('[data-slot="card"]')
+
+    expect(screen.getByRole('tab', { name: 'Generate' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+    await user.click(screen.getByRole('tab', { name: 'Generated images' }))
+    expect(settingsCard).toHaveClass('hidden', 'xl:flex')
+    expect(resultCard).not.toHaveClass('hidden')
+
+    await user.click(screen.getByRole('tab', { name: 'Generate' }))
+    expect(settingsCard).not.toHaveClass('hidden')
+    expect(resultCard).toHaveClass('hidden', 'xl:flex')
+    expect(prompt).toHaveValue('A quiet harbor at dusk')
+  })
+
+  it('opens results after submitting a valid mobile draft', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getImageGenerationModels).mockResolvedValueOnce([
+      {
+        label: 'gemini-nano-banana-2.1-sp',
+        value: 'gemini-nano-banana-2.1-sp',
+      },
+    ])
+    vi.mocked(submitImageGeneration).mockResolvedValueOnce({
+      status: 'PENDING',
+      task_id: 'mobile-task',
+    })
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ImageGeneration />
+      </QueryClientProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Model' })).toHaveTextContent(
+        'Nano Banana 2.1'
+      )
+    )
+    await user.type(screen.getByRole('textbox', { name: 'Prompt' }), 'Sunrise')
+    await user.click(screen.getByRole('button', { name: 'Generate image' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Generated images' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+    )
+    expect(submitImageGeneration).toHaveBeenCalledWith(
+      expect.objectContaining({ prompt: 'Sunrise' })
     )
   })
 })

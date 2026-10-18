@@ -279,6 +279,15 @@ Aliases: 图片数量, 图片预扣费, image_count, parameters.n, image reserva
 - Expression quantity input and settlement: `relay/helper/billing_expr_request.go`, `pkg/billingexpr/`, `service/tiered_settle.go`.
 - Contract tests: `relay/image_billing_test.go`, `relay/helper/openai_image_request_test.go`, `service/tiered_settle_test.go`.
 
+## Dashboard image generation
+
+Aliases: 后台图片生成, 移动端图片生成, 生成结果, 参考图上传, `/generation/images`, `/pg/images`.
+
+- Authenticated page route: `web/src/routes/_authenticated/generation/images.tsx`; page state, model list, task polling, and saved history: `web/src/features/image-generation/index.tsx`.
+- Model/tier form, reference upload, responsive result gallery, and download: `web/src/features/image-generation/components/`; request and grid logic: `web/src/features/image-generation/lib/`; feature tests: `web/src/features/image-generation/__tests__/`.
+- Playground image routes: `router/relay-router.go`; submission/upload: `controller/generate_image.go`; saved history and authenticated download: `controller/image_gallery.go`; durable output conversion: `service/generate_image.go`.
+- Styling foundation: `web/package.json`, `web/rsbuild.config.ts`, `web/src/styles/index.css`, and existing Base UI/shadcn components in `web/src/components/ui/`.
+
 ## Image output strategy
 
 Aliases: 图片输出策略, 媒体输出策略, 视频输出策略, image output strategy, media output strategy, 图片落盘, 视频存储, 本机临时图片, temporary image, CF 图片, Cloudflare 图片, ESA 图片, `/tmp/output`, `/async/v1/generateImage`.

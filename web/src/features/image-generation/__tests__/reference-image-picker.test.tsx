@@ -27,6 +27,20 @@ afterEach(() => {
 })
 
 describe('reference image picker', () => {
+  it('shows a tap instruction on touch screens and a drop hint with a pointer', () => {
+    render(
+      <ReferenceImagePicker disabled={false} images={[]} onChange={vi.fn()} />
+    )
+
+    expect(screen.getByText('Add reference images')).toHaveClass(
+      '[@media(hover:hover)]:hidden'
+    )
+    expect(screen.getByText('Drop images here or click to upload')).toHaveClass(
+      'hidden',
+      '[@media(hover:hover)]:block'
+    )
+  })
+
   it('opens the native picker once when the drop zone is clicked', () => {
     const inputClick = vi.spyOn(HTMLInputElement.prototype, 'click')
     render(

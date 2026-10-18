@@ -134,7 +134,10 @@ export function ReferenceImagePicker(props: ReferenceImagePickerProps) {
           className='text-muted-foreground mb-2 size-5'
           aria-hidden='true'
         />
-        <p className='text-sm font-medium'>
+        <p className='text-sm font-medium [@media(hover:hover)]:hidden'>
+          {t('Add reference images')}
+        </p>
+        <p className='hidden text-sm font-medium [@media(hover:hover)]:block'>
           {t('Drop images here or click to upload')}
         </p>
         <p className='text-muted-foreground mt-1 text-xs'>

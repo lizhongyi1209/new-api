@@ -43,6 +43,7 @@ import type {
 } from '../types'
 
 type GenerationResultProps = {
+  compact?: boolean
   history: ImageGenerationHistoryItem[]
   hasMore: boolean
   isError: boolean
@@ -57,7 +58,7 @@ type GenerationResultProps = {
 
 export function GenerationResult(props: GenerationResultProps) {
   const { t } = useTranslation()
-  const [tileSize, setTileSize] = useState(220)
+  const [tileSize, setTileSize] = useState(props.compact ? 160 : 220)
   const [page, setPage] = useState(0)
   const [downloadingImage, setDownloadingImage] = useState<string | null>(null)
   const [layout, setLayout] = useState({ columns: 2, capacity: 6 })
@@ -87,12 +88,13 @@ export function GenerationResult(props: GenerationResultProps) {
     })
   )
   const totalTiles = imageTiles.length + (taskIsActive ? 1 : 0)
-  const pageCount = Math.max(1, Math.ceil(totalTiles / layout.capacity))
+  const pageCapacity = props.compact ? 12 : layout.capacity
+  const pageCount = Math.max(1, Math.ceil(totalTiles / pageCapacity))
   const currentPage = Math.min(page, pageCount - 1)
-  const firstTileIndex = currentPage * layout.capacity
+  const firstTileIndex = currentPage * pageCapacity
   const visibleImages = imageTiles.slice(
     Math.max(0, firstTileIndex - (taskIsActive ? 1 : 0)),
-    Math.max(0, firstTileIndex + layout.capacity - (taskIsActive ? 1 : 0))
+    Math.max(0, firstTileIndex + pageCapacity - (taskIsActive ? 1 : 0))
   )
   const showPreview = taskIsActive && currentPage === 0
 
@@ -121,6 +123,7 @@ export function GenerationResult(props: GenerationResultProps) {
   }
 
   useLayoutEffect(() => {
+    if (props.compact) return
     const grid = gridRef.current
     if (!grid) return
 
@@ -143,7 +146,7 @@ export function GenerationResult(props: GenerationResultProps) {
     const observer = new ResizeObserver(updateLayout)
     observer.observe(grid)
     return () => observer.disconnect()
-  }, [tileSize, totalTiles])
+  }, [props.compact, tileSize, totalTiles])
 
   useEffect(() => setPage(0), [props.task?.task_id])
   useEffect(
@@ -199,7 +202,7 @@ export function GenerationResult(props: GenerationResultProps) {
   const imageCount = imageTiles.length
 
   return (
-    <div className='flex h-full min-h-0 min-w-0 flex-col gap-4 p-3 sm:gap-5 sm:p-5'>
+    <div className='flex min-h-0 min-w-0 flex-1 flex-col gap-4 p-3 sm:gap-5 sm:p-5 xl:h-full'>
       <div className='flex shrink-0 flex-wrap items-center justify-between gap-3'>
         <div className='min-w-0'>
           <p className='font-medium'>{t('Generated images')}</p>
@@ -258,9 +261,11 @@ export function GenerationResult(props: GenerationResultProps) {
 
       <div
         ref={gridRef}
-        className='grid min-h-0 min-w-0 flex-1 content-start gap-3 overflow-hidden'
+        className='grid min-w-0 content-start gap-3 overflow-visible xl:min-h-0 xl:flex-1 xl:overflow-hidden'
         style={{
-          gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
+          gridTemplateColumns: props.compact
+            ? `repeat(auto-fill, minmax(min(100%, ${tileSize}px), 1fr))`
+            : `repeat(${layout.columns}, minmax(0, 1fr))`,
         }}
       >
         {showPreview ? (
@@ -280,7 +285,7 @@ export function GenerationResult(props: GenerationResultProps) {
               loading='lazy'
               className='size-full object-contain'
             />
-            <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100'>
+            <figcaption className='absolute right-2 bottom-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'>
               <Button
                 size='icon-sm'
                 variant='secondary'

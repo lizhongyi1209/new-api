@@ -43,6 +43,36 @@ const defaultProps = {
 }
 
 describe('generation result gallery', () => {
+  it('shows a flowing twelve-image page on small screens without clipping tiles', () => {
+    render(
+      <GenerationResult
+        {...defaultProps}
+        compact
+        history={[
+          {
+            task_id: 'mobile-gallery',
+            model: 'gemini-nano-banana-2.1',
+            created: 100,
+            images: Array.from({ length: 13 }, (_, index) => ({
+              url: `https://images.example.com/${index + 1}.png`,
+            })),
+          },
+        ]}
+      />
+    )
+
+    expect(screen.getAllByRole('img', { name: /Generated image/ })).toHaveLength(
+      12
+    )
+    const grid = screen
+      .getByRole('img', { name: 'Generated image 1' })
+      .closest('.grid')
+    expect(grid).toHaveClass('overflow-visible', 'xl:overflow-hidden')
+    expect(screen.getAllByRole('button', { name: 'Download' })[0]).toHaveClass(
+      'size-7'
+    )
+  })
+
   it('shows saved URL images in square tiles and lets the user resize the grid', () => {
     render(
       <GenerationResult
@@ -199,7 +229,7 @@ describe('generation result gallery', () => {
     const grid = screen
       .getByRole('img', { name: 'Generated image 1' })
       .closest('.grid')
-    expect(grid).toHaveClass('overflow-hidden')
+    expect(grid).toHaveClass('overflow-visible', 'xl:overflow-hidden')
     await user.click(screen.getByRole('button', { name: 'Next' }))
     expect(
       screen.getByRole('img', { name: 'Generated image 7' })
