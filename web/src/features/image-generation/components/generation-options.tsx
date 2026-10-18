@@ -253,24 +253,6 @@ export function GenerationOptions(props: GenerationOptionsProps) {
             )}
           />
 
-          <FormField
-            control={props.control}
-            name='moderation'
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>{t('Moderation')}</FormLabel>
-                <FormControl>
-                  <OptionSelect
-                    disabled={props.disabled}
-                    label={t('Moderation')}
-                    onChange={field.onChange}
-                    options={['auto', 'low']}
-                    value={field.value}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
         </>
       ) : null}
 

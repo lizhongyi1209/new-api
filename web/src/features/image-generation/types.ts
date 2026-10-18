@@ -97,7 +97,6 @@ export type ImageGenerationFormValue = {
   aspectRatio: string
   background: 'auto' | 'transparent'
   model: string
-  moderation: 'auto' | 'low'
   outputFormat: 'jpeg' | 'png' | 'webp'
   prompt: string
   quality: string

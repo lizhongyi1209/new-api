@@ -72,7 +72,6 @@ const defaultValues: ImageGenerationFormValue = {
   aspectRatio: '1:1',
   background: 'auto',
   model: '',
-  moderation: 'auto',
   outputFormat: 'png',
   prompt: '',
   quality: 'auto',
@@ -174,7 +173,6 @@ export function GenerationForm(props: GenerationFormProps) {
     form.setValue('size', nextFamily === 'banana' ? '1K' : 'auto')
     form.setValue('outputFormat', 'png')
     form.setValue('background', 'auto')
-    form.setValue('moderation', 'auto')
     form.setValue('quality', 'auto')
     form.setValue('thinkingLevel', 'default')
   }

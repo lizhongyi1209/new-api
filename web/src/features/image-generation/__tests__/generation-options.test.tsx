@@ -30,7 +30,6 @@ function OptionsFixture(props: { family: ImageModelFamily; model: string }) {
       aspectRatio: '1:1',
       background: 'auto',
       model: props.model,
-      moderation: 'auto',
       outputFormat: 'png',
       prompt: 'test',
       quality: 'auto',
@@ -76,7 +75,7 @@ describe('generation model options', () => {
     )
 
     expect(screen.getByText('Output format')).toBeInTheDocument()
-    expect(screen.getByText('Moderation')).toBeInTheDocument()
+    expect(screen.queryByText('Moderation')).not.toBeInTheDocument()
     expect(screen.queryByText('Google Search')).not.toBeInTheDocument()
   })
 })

@@ -141,7 +141,7 @@ export function buildImageGenerationRequest(
   if (family === 'gpt-image') {
     if (form.quality) request.quality = form.quality
     request.background = form.background
-    request.moderation = form.moderation
+    request.moderation = 'auto'
     request.output_format = form.outputFormat
   }
 
