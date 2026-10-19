@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -48,6 +54,47 @@ const defaultProps = {
 }
 
 describe('generation result gallery', () => {
+  it('opens a large image preview in the current page and closes with Escape', async () => {
+    const user = userEvent.setup()
+    const imageUrl = 'https://images.example.com/images/saved.png'
+    render(
+      <GenerationResult
+        {...defaultProps}
+        history={[
+          {
+            task_id: 'saved-task',
+            model: 'gemini-nano-banana-2.1',
+            created: 100,
+            images: [{ url: imageUrl }],
+          },
+        ]}
+      />
+    )
+
+    const viewButton = screen.getByRole('button', {
+      name: 'Click to view image',
+    })
+    expect(viewButton.querySelector('span')).toHaveClass(
+      'group-hover:opacity-100',
+      '[@media(hover:none)]:opacity-100'
+    )
+    expect(viewButton).toHaveAttribute('type', 'button')
+    await user.click(viewButton)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Image Preview' })
+    expect(
+      within(dialog).getByRole('img', { name: 'Generated image' })
+    ).toHaveAttribute('src', imageUrl)
+    expect(dialog).toHaveClass('sm:max-w-[min(96vw,80rem)]')
+    expect(within(dialog).queryByText(imageUrl)).not.toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    )
+    expect(screen.getByRole('img', { name: 'Generated image 1' })).toBeVisible()
+  })
+
   it('disables regeneration when an older task no longer has its original references', async () => {
     const user = userEvent.setup()
     const onRegenerate = vi.fn()

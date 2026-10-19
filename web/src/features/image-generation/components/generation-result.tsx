@@ -27,6 +27,7 @@ import {
   Trash2,
   WandSparkles,
   X,
+  ZoomIn,
 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -34,6 +35,7 @@ import { useTranslation } from 'react-i18next'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { EmptyState } from '@/components/empty-state'
 import { ErrorState } from '@/components/error-state'
+import { ImageDialog } from '@/components/image-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -90,6 +92,10 @@ export function GenerationResult(props: GenerationResultProps) {
   const tileSize = selectedTileSize ?? (props.compact ? 130 : 220)
   const [page, setPage] = useState(0)
   const [downloadingImage, setDownloadingImage] = useState<string | null>(null)
+  const [previewImage, setPreviewImage] = useState<{
+    key: string
+    source: string
+  } | null>(null)
   const [selectedImageKeys, setSelectedImageKeys] = useState<Set<string>>(
     () => new Set()
   )
@@ -401,12 +407,23 @@ export function GenerationResult(props: GenerationResultProps) {
                 selected && 'ring-primary ring-2'
               )}
             >
-              <img
-                src={source}
-                alt={t('Generated image {{number}}', { number: index + 1 })}
-                loading='lazy'
-                className='size-full object-contain'
-              />
+              <Button
+                type='button'
+                variant='ghost'
+                aria-label={t('Click to view image')}
+                onClick={() => setPreviewImage({ key, source })}
+                className='absolute inset-0 size-full p-0 hover:bg-transparent'
+              >
+                <img
+                  src={source}
+                  alt={t('Generated image {{number}}', { number: index + 1 })}
+                  loading='lazy'
+                  className='size-full object-contain'
+                />
+                <span className='bg-background/90 text-foreground absolute bottom-2 left-2 flex size-7 items-center justify-center rounded-md opacity-0 shadow-sm transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100'>
+                  <ZoomIn aria-hidden='true' />
+                </span>
+              </Button>
               <Checkbox
                 checked={selected}
                 onCheckedChange={(checked) =>
@@ -652,6 +669,17 @@ export function GenerationResult(props: GenerationResultProps) {
             .finally(() => setIsDeleting(false))
         }}
       />
+      {previewImage ? (
+        <ImageDialog
+          key={previewImage.key}
+          imageUrl={previewImage.source}
+          open
+          onOpenChange={(open) => {
+            if (!open) setPreviewImage(null)
+          }}
+          variant='gallery'
+        />
+      ) : null}
     </div>
   )
 }

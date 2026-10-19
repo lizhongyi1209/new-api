@@ -284,7 +284,7 @@ Aliases: 图片数量, 图片预扣费, image_count, parameters.n, image reserva
 Aliases: 后台图片生成, 移动端图片生成, 生成结果, 参考图上传, `/generation/images`, `/pg/images`.
 
 - Authenticated page route: `web/src/routes/_authenticated/generation/images.tsx`; page state, model list, task polling, and saved history: `web/src/features/image-generation/index.tsx`.
-- Model/tier form, durable reference upload, batch reference groups (Cartesian combinations by default), responsive result gallery, and result actions: `web/src/features/image-generation/components/`; batch composition, request and grid logic: `web/src/features/image-generation/lib/`; feature tests: `web/src/features/image-generation/__tests__/`.
+- Model/tier form, durable reference upload, batch reference groups (Cartesian combinations by default), responsive result gallery, and result actions: `web/src/features/image-generation/components/`; shared full-image preview dialog: `web/src/components/image-dialog.tsx`; batch composition, request and grid logic: `web/src/features/image-generation/lib/`; feature tests: `web/src/features/image-generation/__tests__/`.
 - Playground image routes: `router/relay-router.go`; submission/upload: `controller/generate_image.go`; saved history and authenticated download: `controller/image_gallery.go`; durable output conversion: `service/generate_image.go`.
 - Styling foundation: `web/package.json`, `web/rsbuild.config.ts`, `web/src/styles/index.css`, and existing Base UI/shadcn components in `web/src/components/ui/`.
 
