@@ -102,6 +102,13 @@ Aliases: 在线测试, 停止生成, 流式回复, 消息编辑, 未保存提醒
 - Overview guide and header action: `web/src/features/dashboard/components/overview/overview-dashboard.tsx`; existing onboarding state remains in the dashboard hooks.
 - Focused regressions: `features/playground/hooks/use-stream-request.test.ts`, `use-chat-handler.test.ts`, `components/message/__tests__/playground-message-editor.test.tsx` under `web/src/`. Evidence: `docs/reviews/ui-batch-3c-validation-2026-09-14.md`.
 
+## Dashboard image generation
+
+Aliases: 生成, 图片生成, Nano Banana, GPT Image, `/generation/images`, `/pg/images`.
+
+- Session-authenticated dashboard adapters reuse the unified asynchronous image implementation: durable R2 reference upload is `POST /pg/images/uploads` with a 10 MiB per-image limit in `controller/temporary_upload.go` and `service/temporary_upload.go`, submission is `POST /pg/images/generations`, user-scoped polling is `GET /pg/images/tasks/:id`, URL-only gallery history is `GET /pg/images/history`, gallery deletion is `DELETE /pg/images/gallery`, and attachment download is `GET /pg/images/tasks/:id/images/:index/download`; routes live in `router/relay-router.go`, with handlers in `controller/temporary_upload.go`, `controller/generate_image.go`, `controller/async_image.go`, and `controller/image_gallery.go`. Dashboard references use the durable R2 `gallery/input/` prefix and are stored in `model.Task.PrivateData.ImageGalleryReferences` for faithful regeneration. Dashboard results are stored as durable R2 URLs in `model.Task.PrivateData.ImageGalleryResults`, which survives task `data` cleanup; deletion preserves image indices in `model/task_image_gallery.go`, and output processing lives in `service/generate_image.go`.
+- The default frontend route is `web/src/routes/_authenticated/generation/images.tsx`; feature UI, request/polling client, model filtering, and result normalization live under `web/src/features/image-generation/`. Gallery downloads must use the authenticated API client to fetch a Blob before triggering the browser download, because direct links do not carry the dashboard Bearer token. Sidebar and visibility configuration entries are in `web/src/hooks/use-sidebar-data.ts`, `web/src/hooks/use-sidebar-config.ts`, `web/src/features/system-settings/maintenance/`, and `web/src/features/profile/components/sidebar-modules-card.tsx`.
+
 ## Account security, verification, and audit logs
 
 Aliases: 安全与访问, 登录会话, 统一验证, Passkey 验证, 2FA 验证, 访问令牌, 操作审计, Telegram OAuth, `/api/verify`, `/api/audit`.
@@ -290,8 +297,9 @@ Aliases: 图片数量, 图片预扣费, image_count, parameters.n, image reserva
 Aliases: 后台图片生成, 移动端图片生成, 生成结果, 参考图上传, `/generation/images`, `/pg/images`.
 
 - Authenticated page route: `web/src/routes/_authenticated/generation/images.tsx`; page state, model list, task polling, and saved history: `web/src/features/image-generation/index.tsx`.
-- Model/tier form, durable reference upload, batch reference groups, responsive result gallery, and result actions: `web/src/features/image-generation/components/`; shared full-image preview dialog: `web/src/components/image-dialog.tsx`; request and grid logic: `web/src/features/image-generation/lib/`; feature tests: `web/src/features/image-generation/__tests__/`.
+- Model/tier form, durable reference upload, batch reference groups (Cartesian combinations by default), responsive result gallery, and result actions: `web/src/features/image-generation/components/`; shared full-image preview dialog: `web/src/components/image-dialog.tsx`; batch composition, request and grid logic: `web/src/features/image-generation/lib/`; feature tests: `web/src/features/image-generation/__tests__/`.
 - Playground image routes: `router/relay-router.go`; submission/upload: `controller/generate_image.go`; saved history and authenticated download: `controller/image_gallery.go`; durable output conversion: `service/generate_image.go`.
+- Styling foundation: `web/package.json`, `web/rsbuild.config.ts`, `web/src/styles/index.css`, and existing Base UI/shadcn components in `web/src/components/ui/`.
 
 ## Image output strategy
 

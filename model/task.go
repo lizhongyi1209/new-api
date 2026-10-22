@@ -178,6 +178,37 @@ func ListImageGalleryCandidates(userID int, beforeID int64, limit int) ([]Task, 
 	return tasks, err
 }
 
+type TaskImageGalleryResult struct {
+	URL          string `json:"url"`
+	MimeType     string `json:"mime_type,omitempty"`
+	OutputFormat string `json:"output_format,omitempty"`
+	Size         string `json:"size,omitempty"`
+}
+
+type TaskImageGalleryOptions struct {
+	Size          string `json:"size,omitempty"`
+	AspectRatio   string `json:"aspect_ratio,omitempty"`
+	Quality       string `json:"quality,omitempty"`
+	Background    string `json:"background,omitempty"`
+	OutputFormat  string `json:"output_format,omitempty"`
+	ThinkingLevel string `json:"thinking_level,omitempty"`
+}
+
+// ListImageGalleryCandidates reads only metadata, never the potentially large
+// data column. Filtering the private JSON marker is done by the caller so the
+// query stays portable across SQLite, MySQL, and PostgreSQL.
+func ListImageGalleryCandidates(userID int, beforeID int64, limit int) ([]Task, error) {
+	query := DB.Model(&Task{}).
+		Select("id", "task_id", "submit_time", "finish_time", "properties", "private_data").
+		Where("user_id = ? AND platform = ? AND status = ?", userID, constant.TaskPlatformGenerateImage, TaskStatusSuccess)
+	if beforeID > 0 {
+		query = query.Where("id < ?", beforeID)
+	}
+	var tasks []Task
+	err := query.Order("id DESC").Limit(limit).Find(&tasks).Error
+	return tasks, err
+}
+
 // TaskExecutionSnapshot contains only credential-free provenance. Plugin
 // source, request bodies, and channel secrets must never be stored here.
 type TaskExecutionSnapshot struct {
