@@ -2834,7 +2834,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "相关项目",
     "footer.defaultCopyright": "版权所有。",
-    "footer.new\u0061pi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
+    "footer.newapi.projectAttributionSuffix": "版权所有，由项目贡献者设计与开发。",
     "For advanced custom channels this applies only to /v1/responses routes without protocol conversion.": "高级自定义渠道仅对 /v1/responses 且不做协议转换的路由生效。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "对于 2025 年 5 月 10 日之后添加的渠道，在部署时无需从模型名称中移除 \".\"",
     "For private deployments, format: https://fastgpt.run/api/openapi": "对于私有部署，格式为：https://fastgpt.run/api/openapi",
@@ -7338,6 +7338,19 @@
     "Zhipu": "智谱",
     "Zhipu GLM": "智谱GLM",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "A valid site exchange rate is required.": "请先设置有效的站点货币汇率。",
+    "Cache usage is recorded only after the upgrade; historical data is not backfilled.": "缓存用量仅从升级后开始记录，历史数据不回填。",
+    "Divide by exchange rate (÷ {{rate}})": "除以汇率（÷ {{rate}}）",
+    "Exchange rate adjustments: {{count}}": "按汇率调整：{{count}} 个模型",
+    "Final saved price": "最终保存价格",
+    "Keep source price": "保持来源价格",
+    "Multiply by exchange rate (× {{rate}})": "乘以汇率（× {{rate}}）",
+    "Price adjustment for {{model}}": "{{model}} 的价格处理",
+    "Price adjustment for {{model}} from {{source}}": "调整 {{source}} 的 {{model}} 价格",
+    "Set selected prices": "批量设置已选价格",
+    "Show models with matching prices": "显示价格相同的模型",
+    "The adjusted price is outside the supported range.": "换算后的价格超出支持范围。",
+    "This expression cannot be adjusted automatically. Keep the source price or edit it manually.": "此表达式无法自动换算，请保持来源价格或手动编辑。"
   }
 }
