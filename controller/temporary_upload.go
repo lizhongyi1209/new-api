@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -45,6 +46,14 @@ func (parts *remainingTemporaryUploadParts) Read(_ []byte) (int, error) {
 }
 
 func UploadTemporaryInputAttachment(c *gin.Context) {
+	uploadTemporaryInputAttachment(c, service.TemporaryInputMaxFileBytes, service.StoreTemporaryInputAttachment)
+}
+
+func UploadPlaygroundReferenceImage(c *gin.Context) {
+	uploadTemporaryInputAttachment(c, service.PlaygroundReferenceImageMaxFileBytes, service.StorePlaygroundReferenceImage)
+}
+
+func uploadTemporaryInputAttachment(c *gin.Context, maxFileBytes int64, store func(context.Context, io.Reader, string) (*service.TemporaryInputAttachment, error)) {
 	multipartReader, err := c.Request.MultipartReader()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "request must be multipart/form-data"})
@@ -67,7 +76,7 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 		}
 
 		originalFilename := filepath.Base(strings.ReplaceAll(part.FileName(), "\\", "/"))
-		attachment, storeErr := service.StoreTemporaryInputAttachment(c.Request.Context(), io.MultiReader(part, &remainingTemporaryUploadParts{reader: multipartReader}), originalFilename)
+		attachment, storeErr := store(c.Request.Context(), io.MultiReader(part, &remainingTemporaryUploadParts{reader: multipartReader}), originalFilename)
 		_ = part.Close()
 		if storeErr != nil {
 			switch {
@@ -75,7 +84,7 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "file must not be empty"})
 			case errors.Is(storeErr, service.ErrTemporaryInputTooLarge):
 				c.JSON(http.StatusRequestEntityTooLarge, gin.H{
-					"error": fmt.Sprintf("file exceeds the %d MiB limit", service.TemporaryInputMaxFileBytes/(1024*1024)),
+					"error": fmt.Sprintf("file exceeds the %d MiB limit", maxFileBytes/(1024*1024)),
 				})
 			case errors.Is(storeErr, service.ErrTemporaryInputUnsupportedType):
 				c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported attachment type"})
@@ -91,13 +100,16 @@ func UploadTemporaryInputAttachment(c *gin.Context) {
 		}
 		logger.LogInfo(c, fmt.Sprintf("temporary_input_upload provider=r2 content_type=%s bytes=%d", attachment.ContentType, attachment.Size))
 
-		c.JSON(http.StatusOK, gin.H{
+		result := gin.H{
 			"url":          attachment.URL,
 			"filename":     originalFilename,
 			"content_type": attachment.ContentType,
 			"size":         attachment.Size,
-			"expires_at":   attachment.ExpiresAt.Unix(),
-		})
+		}
+		if !attachment.ExpiresAt.IsZero() {
+			result["expires_at"] = attachment.ExpiresAt.Unix()
+		}
+		c.JSON(http.StatusOK, result)
 		return
 	}
 }

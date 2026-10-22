@@ -51,6 +51,10 @@ const DEFAULT_SIDEBAR_MODULES: SidebarModulesAdminConfig = {
     midjourney: true,
     task: true,
   },
+  generation: {
+    enabled: true,
+    image: true,
+  },
   personal: {
     enabled: true,
     topup: true,
@@ -108,6 +112,7 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
   '/usage-logs/audit': { section: 'console', module: 'audit' },
   '/usage-logs/drawing': { section: 'console', module: 'midjourney' },
   '/usage-logs/task': { section: 'console', module: 'task' },
+  '/generation/images': { section: 'generation', module: 'image' },
   '/wallet': { section: 'personal', module: 'topup' },
   '/profile': { section: 'personal', module: 'personal' },
   '/security': { section: 'personal', module: 'security' },

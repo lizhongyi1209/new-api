@@ -324,16 +324,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, taskID stri
 	if root, ok := other["root_info"].(map[string]interface{}); ok {
 		logOther.MergeRoot(root)
 	}
+	AppendClientRequestAuditInfo(c, logOther)
 	appendTaskLogInfo(task, logOther)
+	upstreamTaskID := ""
+	if task != nil {
+		upstreamTaskID = task.GetUpstreamTaskID()
+	}
 	submitLogID := model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
-		ChannelId: info.ChannelId,
-		ModelName: info.OriginModelName,
-		TokenName: tokenName,
-		Quota:     info.PriceData.Quota,
-		Content:   logContent,
-		TokenId:   info.TokenId,
-		Group:     info.UsingGroup,
-		Other:     logOther,
+		ChannelId:         info.ChannelId,
+		UpstreamRequestID: upstreamTaskID,
+		ModelName:         info.OriginModelName,
+		TokenName:         tokenName,
+		Quota:             info.PriceData.Quota,
+		Content:           logContent,
+		TokenId:           info.TokenId,
+		Group:             info.UsingGroup,
+		Other:             logOther,
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
 	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)

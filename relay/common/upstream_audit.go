@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	rootcommon "github.com/QuantumNous/new-api/common"
@@ -73,6 +75,153 @@ func NewUpstreamMultipartRequestSnapshot(method string, path string) *UpstreamRe
 		ContentType:   "multipart/form-data",
 		Parts:         make([]UpstreamRequestPart, 0),
 	}
+}
+
+// NewUpstreamJSONRequestSnapshot creates a bounded audit snapshot for a JSON
+// request. AddJSONFields records only safe scalar parameters; prompts, media,
+// credentials, and structured payloads are retained as hashes and lengths.
+func NewUpstreamJSONRequestSnapshot(method string, path string, contentLength int64) *UpstreamRequestSnapshot {
+	return &UpstreamRequestSnapshot{
+		SchemaVersion: 1,
+		Method:        method,
+		Path:          path,
+		ContentType:   "application/json",
+		ContentLength: contentLength,
+		Parts:         make([]UpstreamRequestPart, 0),
+	}
+}
+
+var safeImageAuditFields = map[string]struct{}{
+	"model": {}, "n": {}, "size": {}, "quality": {}, "background": {},
+	"moderation": {}, "output_format": {}, "output_compression": {},
+	"input_fidelity": {}, "partial_images": {}, "stream": {},
+	"response_format": {}, "aspect_ratio": {}, "style": {},
+	"watermark": {}, "layer_decomposition": {}, "prompt_extend": {},
+}
+
+// AddJSONFields appends a redacted, deterministic representation of top-level
+// JSON request parameters. It intentionally omits prompt and media values so
+// diagnostic logging cannot persist user content or image payloads.
+func (s *UpstreamRequestSnapshot) AddJSONFields(data []byte) error {
+	if s == nil {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if err := rootcommon.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if len(s.Parts) >= 128 {
+			break
+		}
+		s.addJSONField(key, fields[key])
+	}
+	if len(keys) > len(s.Parts) {
+		// Keep the existing snapshot shape and mark truncation without adding a
+		// synthetic field that could be mistaken for a client parameter.
+		s.Parts = s.Parts[:min(len(s.Parts), 128)]
+	}
+	return nil
+}
+
+func (s *UpstreamRequestSnapshot) addJSONField(name string, raw json.RawMessage) {
+	part := UpstreamRequestPart{Kind: "json", Name: name, OriginalBytes: len(raw)}
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if isSensitiveUpstreamAuditField(name) {
+		part.Omitted = true
+		part.OmittedReason = "sensitive"
+		s.Parts = append(s.Parts, part)
+		return
+	}
+	if normalized == "prompt" || normalized == "user" || normalized == "metadata" ||
+		normalized == "image" || normalized == "images" || normalized == "mask" {
+		part.Omitted = true
+		part.OmittedReason = "private_payload"
+		part.SHA256 = upstreamAuditStringHash(string(raw))
+		s.Parts = append(s.Parts, part)
+		return
+	}
+	if normalized == "parameters" {
+		part.Omitted = true
+		part.OmittedReason = "structured_value"
+		part.SHA256 = upstreamAuditStringHash(string(raw))
+		s.Parts = append(s.Parts, part)
+		var nested map[string]json.RawMessage
+		if rootcommon.Unmarshal(raw, &nested) == nil {
+			nestedKeys := make([]string, 0, len(nested))
+			for key := range nested {
+				nestedKeys = append(nestedKeys, key)
+			}
+			sort.Strings(nestedKeys)
+			for _, key := range nestedKeys {
+				if key == "n" || key == "prompt_extend" {
+					s.addJSONField("parameters."+key, nested[key])
+				}
+			}
+		}
+		return
+	}
+
+	fieldName := normalized
+	if strings.HasPrefix(fieldName, "parameters.") {
+		fieldName = strings.TrimPrefix(fieldName, "parameters.")
+	}
+	if _, safe := safeImageAuditFields[fieldName]; !safe {
+		part.Omitted = true
+		part.OmittedReason = "unlisted_field"
+		part.SHA256 = upstreamAuditStringHash(string(raw))
+		s.Parts = append(s.Parts, part)
+		return
+	}
+
+	trimmed := strings.TrimSpace(string(raw))
+	if len(trimmed) == 0 || trimmed == "null" {
+		part.Omitted = true
+		part.OmittedReason = "empty_value"
+		s.Parts = append(s.Parts, part)
+		return
+	}
+	if trimmed[0] == '"' {
+		var value string
+		if rootcommon.Unmarshal(raw, &value) != nil {
+			part.Omitted = true
+			part.OmittedReason = "invalid_string"
+		} else if len(value) > 256 {
+			part.Omitted = true
+			part.OmittedReason = "value_too_large"
+			part.SHA256 = upstreamAuditStringHash(value)
+		} else {
+			part.Value = value
+		}
+	} else if trimmed == "true" || trimmed == "false" || isJSONNumber(trimmed) {
+		part.Value = trimmed
+	} else {
+		part.Omitted = true
+		part.OmittedReason = "structured_value"
+		part.SHA256 = upstreamAuditStringHash(trimmed)
+	}
+	s.Parts = append(s.Parts, part)
+}
+
+func isJSONNumber(value string) bool {
+	if value == "" {
+		return false
+	}
+	for i, ch := range value {
+		if (ch >= '0' && ch <= '9') || ch == '-' || ch == '+' || ch == '.' || ch == 'e' || ch == 'E' {
+			continue
+		}
+		if i == 0 && ch == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (s *UpstreamRequestSnapshot) AddField(name string, value string) {

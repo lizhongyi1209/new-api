@@ -324,6 +324,7 @@ func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *r
 }
 
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	c.Set(model.SeedanceAssetRecoveryContextKey, (*model.SeedanceAssetRecovery)(nil))
 	if request, ok := grokvideo.GetRequest(c); ok {
 		modelName := request.Model
 		if info.IsModelMapped {
@@ -360,6 +361,12 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			return nil, err
 		}
 	}
+	originalImages := make([]string, len(body.Content))
+	for i, item := range body.Content {
+		if item.ImageURL != nil {
+			originalImages[i] = item.ImageURL.URL
+		}
+	}
 	// Seedance MAX v2 accepts public media URLs directly and performs its own
 	// preparation. Existing v1 models keep the legacy asset conversion flow.
 	if !isMiniMaxH3Model(body.Model) && !usesSeedanceV2(body.Model) {
@@ -375,12 +382,14 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		if err != nil {
 			return nil, err
 		}
+		a.captureSeedanceAssetRecovery(c, info, body, originalImages, data)
 		return bytes.NewReader(data), nil
 	}
 	data, err := common.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
+	a.captureSeedanceAssetRecovery(c, info, body, originalImages, data)
 	return bytes.NewReader(data), nil
 }
 
@@ -805,6 +814,10 @@ func (a *TaskAdaptor) ensureDirectImageAsset(ctx context.Context, workflow strin
 	if name != "" {
 		body["Name"] = name
 	}
+	return a.ensureDirectAsset(ctx, workflow, basePath, body)
+}
+
+func (a *TaskAdaptor) ensureDirectAsset(ctx context.Context, workflow string, basePath string, body any) (string, error) {
 
 	var createResponse directAssetAPIResponse
 	_, _, err := a.doJSON(ctx, http.MethodPost, basePath, body, &createResponse)

@@ -389,6 +389,7 @@
         <h3>模型名称</h3>
         <table>
           <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
+          <tr><td>Gemini Nano Banana 2.1</td><td><code>gemini-nano-banana-2.1-sp</code></td><td><code>gemini-nano-banana-2.1-sd</code></td><td><code>gemini-nano-banana-2.1</code></td></tr>
           <tr><td>Gemini 3 Pro Image</td><td><code>gemini-3-pro-image-c-sp</code></td><td><code>gemini-3-pro-image-c-sd</code></td><td><code>gemini-3-pro-image</code></td></tr>
           <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
         </table>
@@ -449,7 +450,7 @@
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "gemini-3.1-flash-image-c-sp",
+    "model": "gemini-nano-banana-2.1-sp",
     "prompt": "生成一张 16:9 的极简科技产品海报",
     "size": "2K",
     "aspect_ratio": "16:9",
@@ -506,7 +507,7 @@
   "status": "SUCCESS",
   "progress": "100%",
   "data": {
-    "model": "gemini-3.1-flash-image-c-sp",
+    "model": "gemini-nano-banana-2.1-sp",
     "created": 1786350000,
     "images": [
       {

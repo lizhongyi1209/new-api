@@ -266,6 +266,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if taskErr := adaptor.ValidateRequestAndSetAction(c, info); taskErr != nil {
 		return nil, taskErr
 	}
+	relaycommon.CaptureClientRequestSnapshot(c)
 
 	// 2. 确定模型名称
 	modelName := info.OriginModelName

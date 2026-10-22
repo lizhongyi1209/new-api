@@ -68,6 +68,10 @@ export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
     midjourney: true,
     task: true,
   },
+  generation: {
+    enabled: true,
+    image: true,
+  },
   personal: {
     enabled: true,
     topup: true,

@@ -632,6 +632,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			return fmt.Errorf("apply video output strategy for task %s: %w", task.TaskID, err)
 		}
 	}
+	if handled, err := recoverMissingSeedanceAsset(ctx, adaptor, ch, task, taskResult); handled || err != nil {
+		return err
+	}
 	return ApplyVideoTaskPollingResult(ctx, adaptor, task, taskResult, responseBody)
 }
 

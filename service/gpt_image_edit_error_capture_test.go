@@ -124,3 +124,33 @@ func TestGPTImageEdit400CaptureRespectsScopeAndDeadline(t *testing.T) {
 	appendGPTImageEdit400Capture(c, info, other)
 	assert.NotContains(t, other.JSONString(), "gpt_image_edit_400_capture")
 }
+
+func TestGPTImageParamCaptureRecordsOnlySafeScalars(t *testing.T) {
+	t.Setenv(gptImageParamCaptureUntilEnv, time.Now().UTC().Add(time.Hour).Format(time.RFC3339))
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	snapshot := relaycommon.NewUpstreamJSONRequestSnapshot(http.MethodPost, "/v1/images/generations", 256)
+	require.NoError(t, snapshot.AddJSONFields([]byte(`{"model":"gpt-image-2.5-flare","prompt":"private prompt","n":0,"size":"1024x1024","quality":"auto","images":["data:image/png;base64,AAAA"]}`)))
+	relaycommon.SetUpstreamRequestSnapshot(c, snapshot)
+	info := &relaycommon.RelayInfo{
+		UsingGroup:      "gpt-image-og",
+		RelayMode:       relayconstant.RelayModeImagesGenerations,
+		OriginModelName: "gpt-image-2.5-flare",
+		ChannelMeta:     &relaycommon.ChannelMeta{UpstreamModelName: "gpt-image-2.5-flare"},
+	}
+	other := model.NewLogOther()
+	appendGPTImageParamCapture(c, info, http.StatusBadRequest, other)
+
+	adminInfo, ok := other.Snapshot()["admin_info"].(map[string]any)
+	require.True(t, ok)
+	capture, ok := adminInfo["gpt_image_param_capture"].(gptImageParamCapture)
+	require.True(t, ok)
+	require.Equal(t, "gpt-image-og", capture.Group)
+	require.Equal(t, http.StatusBadRequest, capture.StatusCode)
+	encoded, err := common.Marshal(capture)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"name":"n"`)
+	require.Contains(t, string(encoded), `"value":"0"`)
+	require.Contains(t, string(encoded), `"name":"size"`)
+	require.NotContains(t, string(encoded), "private prompt")
+	require.NotContains(t, string(encoded), "data:image/png;base64")
+}

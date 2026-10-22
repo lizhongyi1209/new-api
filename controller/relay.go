@@ -95,6 +95,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}()
 
 	request, err := helper.GetAndValidateRequest(c, relayFormat)
+	relaycommon.CaptureClientRequestSnapshot(c)
 	if err != nil {
 		// Map "request body too large" to 413 so clients can handle it correctly
 		if common.IsRequestBodyTooLargeError(err) || errors.Is(err, common.ErrRequestBodyTooLarge) {
@@ -359,6 +360,7 @@ func RelayMidjourney(c *gin.Context) {
 		})
 		return
 	}
+	relaycommon.CaptureClientRequestSnapshot(c)
 
 	var mjErr *taskdto.MidjourneyResponse
 	switch relayInfo.RelayMode {
@@ -644,6 +646,7 @@ func executeTaskSubmissionWith(
 		c.Request.Body = io.NopCloser(bodyStorage)
 
 		stage = "submit"
+		c.Set(model.SeedanceAssetRecoveryContextKey, (*model.SeedanceAssetRecovery)(nil))
 		result, taskErr = submit(c, relayInfo)
 		if requestErr := c.Request.Context().Err(); requestErr != nil {
 			diagnostics.cancelled("after_submit", retryParam.GetRetry()+1)
@@ -717,6 +720,12 @@ func executeTaskSubmissionWith(
 	task := model.InitTask(result.Platform, relayInfo)
 	task.PrivateData.Execution = service.TaskExecutionSnapshotFromContext(c)
 	task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
+	if value, ok := c.Get(model.SeedanceAssetRecoveryContextKey); ok {
+		task.PrivateData.SeedanceAssetRecovery, _ = value.(*model.SeedanceAssetRecovery)
+		if task.PrivateData.SeedanceAssetRecovery != nil {
+			task.PrivateData.UsedChannels = append([]string(nil), c.GetStringSlice("use_channel")...)
+		}
+	}
 	task.PrivateData.BillingSource = relayInfo.BillingSource
 	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 	task.PrivateData.TokenId = relayInfo.TokenId

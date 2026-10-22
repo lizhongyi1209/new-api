@@ -1,0 +1,18 @@
+[Unit]
+Description=new-api request monitor for user %i
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+SupplementaryGroups=docker
+WorkingDirectory=/home/ubuntu/new-api
+UMask=0077
+ExecStart=/usr/bin/python3 /home/ubuntu/new-api/scripts/monitor-user-requests.py --user-id %i --interval 20 --output /home/ubuntu/new-api/.request-monitor/user-%i.jsonl
+Restart=always
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

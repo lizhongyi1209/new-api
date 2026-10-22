@@ -143,6 +143,11 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *type
 				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 			}
 		}
+		// Keep a bounded, redacted copy for temporary GPT image diagnostics.
+		// The raw body remains request-scoped and is never written to the log.
+		snapshot := relaycommon.NewUpstreamJSONRequestSnapshot(c.Request.Method, info.RequestURLPath, int64(len(jsonData)))
+		_ = snapshot.AddJSONFields(jsonData)
+		relaycommon.SetUpstreamRequestSnapshot(c, snapshot)
 
 		logger.LogDebug(c, "image request body: %s", jsonData)
 		body, size, getBody, closer, err := relaycommon.NewOutboundJSONBody(jsonData)

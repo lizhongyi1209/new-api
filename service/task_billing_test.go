@@ -442,6 +442,30 @@ func callLogTaskConsumption(t *testing.T, info *relaycommon.RelayInfo, task *mod
 	return log
 }
 
+func TestLogTaskConsumptionRecordsUpstreamTaskID(t *testing.T) {
+	truncate(t)
+	const userID, channelID = 41, 41
+	seedUser(t, userID, 10_000)
+	seedChannel(t, channelID)
+	task := makeTask(userID, channelID, 100, 0, BillingSourceWallet, 0)
+	task.PrivateData.UpstreamTaskID = "upstream-task-41"
+	info := &relaycommon.RelayInfo{
+		UserId:          userID,
+		OriginModelName: "video-model",
+		UsingGroup:      "default",
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelId: channelID},
+		TaskRelayInfo:   &relaycommon.TaskRelayInfo{Action: "generate"},
+		PriceData: types.PriceData{
+			Quota:          100,
+			ModelRatio:     1,
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1},
+		},
+	}
+
+	log := callLogTaskConsumption(t, info, task)
+	assert.Equal(t, "upstream-task-41", log.UpstreamRequestId)
+}
+
 func TestLogTaskConsumptionIncludesTieredSnapshotUsageFacts(t *testing.T) {
 	truncate(t)
 	const userID, channelID = 40, 40

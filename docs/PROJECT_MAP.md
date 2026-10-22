@@ -51,6 +51,19 @@ Aliases: 渠道自动检测, 仅检测自动禁用渠道, 检测并发, auto_ban
 - Scheduled/manual task dispatch, channel selection, bounded worker pool and health-result handling: `controller/channel-test.go`; existing task runner: `controller/system_task_handlers.go` and `service/system_task.go`.
 - Settings UI: `web/src/features/system-settings/models/routing-reliability-section.tsx`, with page defaults in `features/system-settings/models/index.tsx` and registry mapping in `features/system-settings/models/section-registry.tsx`.
 
+## User request monitoring
+
+Aliases: 用户请求监控, 生图请求监控, user request monitor, per-user task watch.
+
+- Read-only user-scoped task lifecycle and usage-log watcher: `scripts/monitor-user-requests.py`; persistent systemd template: `deploy/newapi-user-request-monitor@.service`. It records task IDs, status, model, channel, timing summary, failure reason, and usage-log metadata without prompts, media, or credentials. Runtime output is under ignored `.request-monitor/`.
+
+## Request body audit snapshots
+
+Aliases: 请求体记录, 请求参数快照, request body audit, request snapshot.
+
+- Bounded request capture and Base64/media/credential filtering: `relay/common/request_audit.go`; capture is attached to relay, task, async-image, and Midjourney submission paths in `controller/relay.go`, `controller/generate_image.go`, `relay/relay_task.go`, and `controller/relay.go`.
+- Administrator-only log projection: `service/log_info_generate.go`, `service/relay_error.go`, `service/task_billing.go`, `service/async_image.go`, and `relay/mjproxy_handler.go`. Query and retention limits: `docs/operations/request-body-audit.md`.
+
 ## Global channel retry policy
 
 Aliases: 最大重试, 重试设置, RetryTimes, Max Retries, `/api/channel/ops`, `/api/option/request_policy`.
@@ -267,10 +280,18 @@ Aliases: 图片数量, 图片预扣费, image_count, parameters.n, image reserva
 - Request quantities and provider parameter validation: `dto/openai_image.go`, `relay/helper/valid_request.go`.
 - Final outbound quantity, overrides and retry preparation: `relay/image_handler.go`; Ali forwarding: `relay/channel/ali/image.go`, `relay/channel/ali/image_wan.go`.
 - Sub2API multipart image-edit compatibility reuses the OpenAI form conversion while retaining Sub2API routing and authentication: `relay/channel/sub2api/adaptor.go`; regression: `relay/channel/sub2api/adaptor_test.go`.
-- Temporary GPT Image edit 400 diagnostics: `service/gpt_image_edit_error_capture.go` records a bounded, redacted upstream multipart snapshot under the administrator error log, gated by the UTC deadline in `docker-compose.yml`; error handling entry: `service/relay_error.go`.
+- Temporary GPT Image diagnostics: `service/gpt_image_edit_error_capture.go` records bounded, redacted upstream multipart/JSON parameter snapshots for `gpt-image-og` 4xx errors under the administrator error log, gated by `GPT_IMAGE_PARAM_CAPTURE_UNTIL` in `docker-compose.yml`; error handling entry: `service/relay_error.go`, outbound JSON snapshot setup: `relay/image_handler.go`, snapshot redaction: `relay/common/upstream_audit.go`; operations and query: `docs/operations/gpt-image-og-monitoring.md`.
 - Per-attempt reservation: `service/image_billing.go`; atomic wallet reservation and full refunds: `service/billing_session.go`, `service/funding_source.go`.
 - Expression quantity input and settlement: `relay/helper/billing_expr_request.go`, `pkg/billingexpr/`, `service/tiered_settle.go`.
 - Contract tests: `relay/image_billing_test.go`, `relay/helper/openai_image_request_test.go`, `service/tiered_settle_test.go`.
+
+## Dashboard image generation
+
+Aliases: 后台图片生成, 移动端图片生成, 生成结果, 参考图上传, `/generation/images`, `/pg/images`.
+
+- Authenticated page route: `web/src/routes/_authenticated/generation/images.tsx`; page state, model list, task polling, and saved history: `web/src/features/image-generation/index.tsx`.
+- Model/tier form, durable reference upload, batch reference groups, responsive result gallery, and result actions: `web/src/features/image-generation/components/`; shared full-image preview dialog: `web/src/components/image-dialog.tsx`; request and grid logic: `web/src/features/image-generation/lib/`; feature tests: `web/src/features/image-generation/__tests__/`.
+- Playground image routes: `router/relay-router.go`; submission/upload: `controller/generate_image.go`; saved history and authenticated download: `controller/image_gallery.go`; durable output conversion: `service/generate_image.go`.
 
 ## Image output strategy
 
@@ -457,6 +478,7 @@ Aliases: Seedance 视频, Seedance task, 查询视频任务, `/v1/video/generati
 - Route and relay-mode selection: `router/video-router.go`, `middleware/distributor.go`.
 - Task submission/query response dispatch: `controller/relay.go`, `relay/relay_task.go`.
 - ServiceInference request conversion, upstream polling, result parsing, and public video conversion: `relay/channel/task/serviceinference/adaptor.go`.
+- Missing-asset recovery only (fixed maximum of three recreations per task): `controller/seedance_asset_proxy.go` retains user-scoped creation sources for 24 hours in `model/seedance_asset_recovery.go`; `relay/channel/task/serviceinference/asset_recovery.go` freezes the private replay request, recreates the missing asset, waits for readiness, and resubmits on the original channel. `service/seedance_asset_recovery.go` runs before terminal failure/refund in `service/task_polling.go`, retaining the public task ID and original quota reservation. Recovery revisions reject concurrent/stale polls; terminal transitions erase private replay data. Historical/unknown sources and other failure types retain normal failure handling. Regression entries: `controller/seedance_asset_recovery_test.go`, `service/seedance_asset_recovery_test.go`, `model/seedance_asset_recovery_test.go`.
 - Channel-editor HC-to-MAX defaults: `web/src/features/channels/lib/channel-type-config.ts`, `web/src/features/channels/lib/channel-form.ts`, `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`.
 - Downstream reference and examples: `docs/api-doc.html#/v1/video/generations`, `docs/seedance-downstream-integration.md`.
 - Response, parameter forwarding, and mapping contract coverage: `relay/channel/task/serviceinference/adaptor_test.go`, `relay/channel/task/serviceinference/seedance_max_test.go`, `web/src/features/channels/lib/__tests__/channel-type-options.test.ts`.

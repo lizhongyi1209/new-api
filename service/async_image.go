@@ -563,6 +563,7 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 	logOther := model.NewLogOther()
 	logOther.MergePublic(other)
 	logOther.MergeAdmin(adminInfo)
+	AppendClientRequestAuditInfo(c, logOther)
 
 	tokenName := ""
 	if task.Properties.TokenId > 0 {
@@ -572,18 +573,19 @@ func RecordAsyncImageSubmitLog(c *gin.Context, task *model.Task, imageReq *dto.A
 	}
 
 	logId := model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
-		ChannelId:        task.ChannelId,
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		ModelName:        imageReq.Model,
-		TokenName:        tokenName,
-		Quota:            quota,
-		Content:          strings.Join(logContent, ", "),
-		TokenId:          task.Properties.TokenId,
-		UseTimeSeconds:   0,
-		IsStream:         false,
-		Group:            task.Group,
-		Other:            logOther,
+		ChannelId:         task.ChannelId,
+		UpstreamRequestID: task.GetUpstreamTaskID(),
+		PromptTokens:      0,
+		CompletionTokens:  0,
+		ModelName:         imageReq.Model,
+		TokenName:         tokenName,
+		Quota:             quota,
+		Content:           strings.Join(logContent, ", "),
+		TokenId:           task.Properties.TokenId,
+		UseTimeSeconds:    0,
+		IsStream:          false,
+		Group:             task.Group,
+		Other:             logOther,
 	})
 
 	task.PrivateData.SubmitLogID = logId
@@ -624,6 +626,7 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 	logOther := model.NewLogOther()
 	logOther.MergePublic(other)
 	logOther.MergeAdmin(adminInfo)
+	AppendClientRequestAuditInfo(c, logOther)
 
 	tokenName := ""
 	if task.Properties.TokenId > 0 {
@@ -633,18 +636,19 @@ func RecordAsyncGeminiSubmitLog(c *gin.Context, task *model.Task, modelName stri
 	}
 
 	logId := model.RecordConsumeLog(c, task.UserId, model.RecordConsumeLogParams{
-		ChannelId:        task.ChannelId,
-		PromptTokens:     0,
-		CompletionTokens: 0,
-		ModelName:        modelName,
-		TokenName:        tokenName,
-		Quota:            quota,
-		Content:          logContent,
-		TokenId:          task.Properties.TokenId,
-		UseTimeSeconds:   0,
-		IsStream:         false,
-		Group:            task.Group,
-		Other:            logOther,
+		ChannelId:         task.ChannelId,
+		UpstreamRequestID: task.GetUpstreamTaskID(),
+		PromptTokens:      0,
+		CompletionTokens:  0,
+		ModelName:         modelName,
+		TokenName:         tokenName,
+		Quota:             quota,
+		Content:           logContent,
+		TokenId:           task.Properties.TokenId,
+		UseTimeSeconds:    0,
+		IsStream:          false,
+		Group:             task.Group,
+		Other:             logOther,
 	})
 
 	task.PrivateData.SubmitLogID = logId

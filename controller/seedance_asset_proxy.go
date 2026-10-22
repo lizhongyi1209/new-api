@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
 )
@@ -171,6 +172,21 @@ func proxySeedanceAssetAPI(c *gin.Context, upstreamPath string, rawQuery string,
 	if rawQuery != "" {
 		upstreamURL += "?" + rawQuery
 	}
+	// Keep a bounded copy only for the direct Seedance creation contracts.
+	// Reconstruct the reader so even larger legacy bodies are forwarded intact.
+	var creationBody []byte
+	if c.Request.Method == http.MethodPost && body != nil &&
+		(upstreamPath == "/v1/sd/assets" || upstreamPath == "/v1/sd-5/assets" || upstreamPath == "/v2/db-sd-max/assets") {
+		prefix, readErr := io.ReadAll(io.LimitReader(body, 16*1024+1))
+		if readErr != nil {
+			common.ApiErrorMsg(c, "读取素材创建请求失败")
+			return
+		}
+		body = io.MultiReader(bytes.NewReader(prefix), body)
+		if len(prefix) <= 16*1024 {
+			creationBody = prefix
+		}
+	}
 
 	req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, upstreamURL, body)
 	if err != nil {
@@ -200,5 +216,38 @@ func proxySeedanceAssetAPI(c *gin.Context, upstreamPath string, rawQuery string,
 	if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
 		c.Header("Retry-After", retryAfter)
 	}
+	if len(creationBody) > 0 && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		prefix, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024+1))
+		if len(prefix) <= 64*1024 {
+			rememberSeedanceAssetCreation(c, upstreamPath, creationBody, prefix)
+		}
+		_, _ = io.Copy(c.Writer, io.MultiReader(bytes.NewReader(prefix), resp.Body))
+		return
+	}
 	_, _ = io.Copy(c.Writer, resp.Body)
+}
+
+func rememberSeedanceAssetCreation(c *gin.Context, path string, requestBody, responseBody []byte) {
+	var request serviceInferenceAssetRequest
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			ID string `json:"Id"`
+		} `json:"data"`
+	}
+	if common.Unmarshal(requestBody, &request) != nil || common.Unmarshal(responseBody, &response) != nil || !response.Success || response.Data.ID == "" {
+		return
+	}
+	sourceURL, err := url.Parse(request.URL)
+	if err != nil || sourceURL.Host == "" || (sourceURL.Scheme != "http" && sourceURL.Scheme != "https") {
+		return
+	}
+	// Store only the documented creation fields, never arbitrary caller data.
+	data, err := common.Marshal(request)
+	if err != nil {
+		return
+	}
+	if err := model.RememberSeedanceAssetSource(c.Request.Context(), c.GetInt("id"), response.Data.ID, model.SeedanceAssetRecreateRequest{Path: path, Body: data}); err != nil {
+		common.SysError("seedance asset recovery: failed to retain creation source")
+	}
 }

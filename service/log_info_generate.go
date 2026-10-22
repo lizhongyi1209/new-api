@@ -126,6 +126,18 @@ func AppendRelayLogAdminInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo,
 	}
 }
 
+// AppendClientRequestAuditInfo attaches the bounded client request snapshot to
+// an administrator-only log. The snapshot never contains media bodies,
+// Base64 payloads, credentials, or values above the configured limits.
+func AppendClientRequestAuditInfo(ctx *gin.Context, other *model.LogOther) {
+	if ctx == nil || other == nil {
+		return
+	}
+	if snapshot := relaycommon.GetClientRequestSnapshot(ctx); snapshot != nil {
+		other.SetAdmin("request_snapshot", snapshot)
+	}
+}
+
 func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, modelRatio, groupRatio, completionRatio float64,
 	cacheTokens int, cacheRatio float64, modelPrice float64, userGroupRatio float64) *model.LogOther {
 	MarkRequestPolicySuccess(ctx, relayInfo.StreamStatus)
@@ -152,6 +164,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendRelayLogAdminInfo(ctx, relayInfo, other)
+	AppendClientRequestAuditInfo(ctx, other)
 	if relayInfo != nil && relayInfo.ResponsesTiming != nil {
 		other.SetAdmin("responses_timing", relayInfo.ResponsesTiming)
 	}

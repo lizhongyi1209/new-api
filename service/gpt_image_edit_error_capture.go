@@ -13,6 +13,7 @@ import (
 )
 
 const imageEdit400CaptureUntilEnv = "GPT_IMAGE_EDIT_400_CAPTURE_UNTIL"
+const gptImageParamCaptureUntilEnv = "GPT_IMAGE_PARAM_CAPTURE_UNTIL"
 
 type imageEdit400CapturePart struct {
 	Kind          string `json:"kind"`
@@ -36,6 +37,19 @@ type imageEdit400Capture struct {
 	OutboundResponseFormatFound bool                      `json:"outbound_response_format_found"`
 	Parts                       []imageEdit400CapturePart `json:"parts"`
 	Truncated                   bool                      `json:"truncated,omitempty"`
+}
+
+type gptImageParamCapture struct {
+	SchemaVersion int                       `json:"schema_version"`
+	CapturedAt    string                    `json:"captured_at"`
+	Group         string                    `json:"group"`
+	UpstreamModel string                    `json:"upstream_model"`
+	UpstreamPath  string                    `json:"upstream_path"`
+	ContentType   string                    `json:"content_type,omitempty"`
+	ContentLength int64                     `json:"content_length"`
+	StatusCode    int                       `json:"status_code"`
+	Parts         []imageEdit400CapturePart `json:"parts"`
+	Truncated     bool                      `json:"truncated,omitempty"`
 }
 
 // appendGPTImageEdit400Capture stores only bounded, non-secret form parameters
@@ -116,4 +130,60 @@ func appendGPTImageEdit400Capture(c *gin.Context, info *relaycommon.RelayInfo, o
 		capture.Parts = append(capture.Parts, part)
 	}
 	other.SetAdmin("gpt_image_edit_400_capture", capture)
+}
+
+// appendGPTImageParamCapture records safe scalar parameters for bad requests
+// routed through gpt-image-og. Prompts, media, credentials, and structured
+// payloads are omitted; this temporary diagnostic is enabled only until the
+// configured UTC deadline.
+func appendGPTImageParamCapture(c *gin.Context, info *relaycommon.RelayInfo, statusCode int, other *model.LogOther) {
+	if c == nil || info == nil || other == nil || info.UsingGroup != "gpt-image-og" ||
+		!relaycommon.IsGPTImage(info) || statusCode < http.StatusBadRequest || statusCode >= http.StatusInternalServerError {
+		return
+	}
+	until, err := time.Parse(time.RFC3339, os.Getenv(gptImageParamCaptureUntilEnv))
+	if err != nil || !time.Now().UTC().Before(until) {
+		return
+	}
+	snapshot := relaycommon.GetUpstreamRequestSnapshot(c)
+	if snapshot == nil {
+		return
+	}
+	parts := make([]imageEdit400CapturePart, 0, min(len(snapshot.Parts), 128))
+	for _, original := range snapshot.Parts {
+		if len(parts) == 128 {
+			break
+		}
+		name := original.Name
+		if len(name) > 128 {
+			name = name[:128]
+		}
+		part := imageEdit400CapturePart{
+			Kind:          original.Kind,
+			Name:          name,
+			Value:         original.Value,
+			OriginalBytes: original.OriginalBytes,
+			ContentType:   original.ContentType,
+			Size:          original.Size,
+			SHA256:        original.SHA256,
+			OmittedReason: original.OmittedReason,
+		}
+		if original.Omitted {
+			part.Value = ""
+		}
+		parts = append(parts, part)
+	}
+	capture := gptImageParamCapture{
+		SchemaVersion: 1,
+		CapturedAt:    time.Now().UTC().Format(time.RFC3339),
+		Group:         info.UsingGroup,
+		UpstreamModel: info.UpstreamModelName,
+		UpstreamPath:  snapshot.Path,
+		ContentType:   snapshot.ContentType,
+		ContentLength: snapshot.ContentLength,
+		StatusCode:    statusCode,
+		Parts:         parts,
+		Truncated:     len(snapshot.Parts) > len(parts),
+	}
+	other.SetAdmin("gpt_image_param_capture", capture)
 }

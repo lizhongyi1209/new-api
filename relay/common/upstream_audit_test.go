@@ -39,6 +39,33 @@ func TestUpstreamMultipartRequestSnapshotOmitsMediaAndSecrets(t *testing.T) {
 	require.Contains(t, string(encoded), `"name":"response_format","value":"b64_json"`)
 }
 
+func TestUpstreamJSONRequestSnapshotKeepsSafeImageScalars(t *testing.T) {
+	snapshot := NewUpstreamJSONRequestSnapshot(http.MethodPost, "/v1/images/generations", 256)
+	body := []byte(`{"model":"gpt-image-2.5-flare","prompt":"private prompt","n":0,"size":"1024x1024","quality":"auto","parameters":{"n":3,"prompt_extend":true},"images":["data:image/png;base64,AAAA"],"api_key":"sk-secret","unknown":"private"}`)
+	require.NoError(t, snapshot.AddJSONFields(body))
+
+	values := make(map[string]string)
+	for _, part := range snapshot.Parts {
+		if !part.Omitted {
+			values[part.Name] = part.Value
+		}
+	}
+	require.Equal(t, "gpt-image-2.5-flare", values["model"])
+	require.Equal(t, "0", values["n"])
+	require.Equal(t, "1024x1024", values["size"])
+	require.Equal(t, "auto", values["quality"])
+	require.Equal(t, "3", values["parameters.n"])
+	require.Equal(t, "true", values["parameters.prompt_extend"])
+	encoded, err := rootcommon.Marshal(snapshot)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "private prompt")
+	require.NotContains(t, string(encoded), "data:image/png;base64")
+	require.NotContains(t, string(encoded), "sk-secret")
+	for _, name := range []string{"prompt", "images", "api_key", "unknown"} {
+		require.Contains(t, string(encoded), `"name":"`+name+`"`)
+	}
+}
+
 func TestSetUpstreamResponseSnapshotSanitizesBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

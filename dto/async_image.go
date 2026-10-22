@@ -33,11 +33,15 @@ type AsyncTaskResponse struct {
 }
 
 type AsyncTaskFetchResponse struct {
-	TaskID   string          `json:"task_id"`
-	Status   string          `json:"status"`
-	Progress string          `json:"progress,omitempty"`
-	Data     json.RawMessage `json:"data,omitempty"`
-	Error    string          `json:"error,omitempty"`
+	TaskID        string          `json:"task_id"`
+	Status        string          `json:"status"`
+	Progress      string          `json:"progress,omitempty"`
+	Prompt        string          `json:"prompt,omitempty"`
+	Options       any             `json:"options,omitempty"`
+	References    []string        `json:"references,omitempty"`
+	CanRegenerate *bool           `json:"can_regenerate,omitempty"`
+	Data          json.RawMessage `json:"data,omitempty"`
+	Error         string          `json:"error,omitempty"`
 }
 
 type AsyncImageResponseData struct {

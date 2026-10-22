@@ -11,6 +11,8 @@ build
 *.db-shm
 *.db-wal
 logs
+.request-monitor/
+__pycache__/
 web/dist
 web/node_modules
 .env

@@ -40,3 +40,10 @@ func TestSetupContextForSelectedChannelUsesRequestBillingGroup(t *testing.T) {
 		})
 	}
 }
+
+func TestIsPlaygroundModelRequestIncludesImageGeneration(t *testing.T) {
+	assert.True(t, isPlaygroundModelRequest("/pg/chat/completions"))
+	assert.True(t, isPlaygroundModelRequest("/pg/images/generations"))
+	assert.False(t, isPlaygroundModelRequest("/pg/images/uploads"))
+	assert.False(t, isPlaygroundModelRequest("/async/v1/generateImage"))
+}
