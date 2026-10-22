@@ -9,9 +9,12 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	hostreasoning "github.com/QuantumNous/new-api/setting/reasoning"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/shopspring/decimal"
 )
 
@@ -19,9 +22,8 @@ import (
 // ModelPricingChange through the existing pricing transaction.
 type ModelPricingConversion struct {
 	ModelPricingDescription
-	Expression        string   `json:"expression,omitempty"`
-	UnsupportedReason string   `json:"unsupported_reason,omitempty"`
-	Warnings          []string `json:"warnings,omitempty"`
+	Expression        string `json:"expression,omitempty"`
+	UnsupportedReason string `json:"unsupported_reason,omitempty"`
 }
 
 // ModelPricingDescription is shared by previews, conversions and snapshot
@@ -125,17 +127,69 @@ const (
 	CacheWriteNone      CacheWriteMode = "none"
 	CacheWriteStandard  CacheWriteMode = "standard"
 	CacheWriteClaudeTTL CacheWriteMode = "claude_ttl"
+	CacheWriteOpenAITTL CacheWriteMode = "openai_ttl"
 )
 
-// ResolveCacheWriteMode describes display and migration only. The local relay
-// includes generic cache-write pricing even without a model override.
+// ResolveCacheWriteMode describes display and migration only. A generic engine
+// fallback is not configured cache-write pricing. Only Claude names inherit the
+// legacy dual-TTL rule; a configured write price on a GPT name also prices the
+// OpenAI 12h write, and other models retain their configured write price.
 func ResolveCacheWriteMode(name string, configured PricingValues) CacheWriteMode {
 	if strings.Contains(strings.ToLower(name), "claude") {
 		return CacheWriteClaudeTTL
 	}
-	// The local relay charges generic cache writes at 1.25 even when no
-	// model override exists. Conversion must retain that default lane.
-	return CacheWriteStandard
+	if _, exists := configured["CreateCacheRatio"]; exists {
+		if strings.Contains(strings.ToLower(name), "gpt") {
+			return CacheWriteOpenAITTL
+		}
+		return CacheWriteStandard
+	}
+	return CacheWriteNone
+}
+
+// declaredEndpointNames resolves the endpoint types declared by one model
+// metadata row. Model metadata accepts two shapes — the map form (custom paths)
+// and the type-array form (declared protocols) — and conversion must honour
+// both. Reading only the map form made array-form metadata look like a broken
+// routing configuration and blocked an otherwise convertible model.
+func declaredEndpointNames(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	var value any
+	if err := common.UnmarshalJsonStr(raw, &value); err != nil {
+		return nil, err
+	}
+	// Normalize whitespace here: the callers match these names against the
+	// endpoint switch, so a padded value such as "image-generation " would
+	// silently fall through and drop the image-count settlement rule.
+	switch endpoints := value.(type) {
+	case []any:
+		names := make([]string, 0, len(endpoints))
+		for _, endpoint := range endpoints {
+			text, ok := endpoint.(string)
+			if !ok {
+				return nil, errors.New("invalid endpoint type")
+			}
+			text = strings.TrimSpace(text)
+			if text == "" {
+				return nil, errors.New("invalid endpoint type")
+			}
+			names = append(names, text)
+		}
+		return names, nil
+	case map[string]any:
+		names := make([]string, 0, len(endpoints))
+		for endpoint := range endpoints {
+			endpoint = strings.TrimSpace(endpoint)
+			if endpoint == "" {
+				continue
+			}
+			names = append(names, endpoint)
+		}
+		return names, nil
+	}
+	return nil, errors.New("invalid endpoints")
 }
 
 func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPricingConversion, error) {
@@ -169,6 +223,14 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		return &ModelPricingConversion{UnsupportedReason: "Gemini and OpenAI audio prices differ for this model. Use separate billing model names to convert them."}, nil
 	}
 
+	generation := jsplugin.DefaultRegistry.Generation()
+	if _, task := generation.GetByModel(name); task {
+		return &ModelPricingConversion{UnsupportedReason: "Task pricing must be converted manually using the task usage schema."}, nil
+	}
+	if _, task := ResolveTaskModelAlias(generation, name); task {
+		return &ModelPricingConversion{UnsupportedReason: "Task pricing must be converted manually using the task usage schema."}, nil
+	}
+
 	// Inspect non-secret routing metadata so aliases cannot disguise a special
 	// settlement path as an ordinary text model.
 	var channels []Channel
@@ -177,16 +239,11 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		return nil, err
 	}
 	names := []string{name}
-	aliPromptExtend, otherImageRoute := false, false
 	for _, channel := range channels {
 		if !slices.Contains(channel.GetModels(), name) {
 			continue
 		}
-		switch channel.Type {
-		case constant.ChannelTypeMidjourney, constant.ChannelTypeMidjourneyPlus, constant.ChannelTypeSunoAPI,
-			constant.ChannelTypeKling, constant.ChannelTypeJimeng, constant.ChannelTypeVidu,
-			constant.ChannelTypeDoubaoVideo, constant.ChannelTypeSora, constant.ChannelTypeTencentVideo,
-			constant.ChannelTypeServiceInferenceVideo, constant.ChannelTypeXinhankr:
+		if channel.Type == constant.ChannelTypeTaskPlugin {
 			return &ModelPricingConversion{UnsupportedReason: "Task pricing must be converted manually using the task usage schema."}, nil
 		}
 		if slices.Contains(common.GetEndpointTypesByChannelType(channel.Type, name), constant.EndpointTypeOpenAIVideo) {
@@ -204,42 +261,28 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 			if err := common.UnmarshalJsonStr(*channel.ModelMapping, &mapping); err != nil {
 				return &ModelPricingConversion{UnsupportedReason: "The model routing configuration could not be verified."}, nil
 			}
-			visited := map[string]bool{name: true}
-			for {
-				next := mapping[upstream]
-				if next == "" || next == upstream {
-					break
+			// Relay also resolves reasoning-suffixed names at any mapping hop.
+			candidates := []string{name}
+			for _, target := range mapping {
+				candidates = append(candidates, target)
+			}
+			for _, candidate := range candidates {
+				if mapping[candidate] == "" {
+					mapping[candidate] = mapping[hostreasoning.BaseModelName(candidate)]
 				}
-				if visited[next] {
-					return &ModelPricingConversion{UnsupportedReason: "The model routing configuration could not be verified."}, nil
-				}
-				visited[next] = true
-				upstream = next
+			}
+			var cycle bool
+			upstream, cycle = followChannelModelMapping(mapping, name)
+			if cycle {
+				return &ModelPricingConversion{UnsupportedReason: "The model routing configuration could not be verified."}, nil
 			}
 			if upstream != name {
 				names = append(names, upstream)
 			}
 		}
-		if channel.Status == common.ChannelStatusEnabled {
-			if channel.Type == constant.ChannelTypeAli && strings.Contains(upstream, "z-image") {
-				aliPromptExtend = true
-			} else {
-				otherImageRoute = true
-			}
-		}
-		if !fixedPrice && !strings.Contains(strings.ToLower(name), "claude") &&
-			(channel.Type == constant.ChannelTypeAnthropic || strings.Contains(strings.ToLower(upstream), "claude")) {
-			return &ModelPricingConversion{UnsupportedReason: "This alias uses Claude cache semantics. Convert its cache TTL prices manually."}, nil
-		}
-		if fixedPrice && upstream != name && strings.HasPrefix(upstream, "dall-e") {
-			return &ModelPricingConversion{UnsupportedReason: "This image alias has model-specific request multipliers. Convert its size and quality rules manually."}, nil
-		}
 	}
 	for _, modelName := range names {
 		lower := strings.ToLower(modelName)
-		if strings.HasPrefix(lower, "veo") || strings.HasPrefix(lower, "sora") || strings.Contains(lower, "-i2v") || strings.Contains(lower, "-t2v") || strings.HasPrefix(lower, "minimax-h3") || effective["VideoCompletionRatio"] != nil {
-			return &ModelPricingConversion{UnsupportedReason: "Video pricing must be converted manually."}, nil
-		}
 		if strings.Contains(lower, "realtime") {
 			return &ModelPricingConversion{UnsupportedReason: "Realtime pricing must be converted manually."}, nil
 		}
@@ -257,11 +300,11 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		if entry.Endpoints == "" || !slices.ContainsFunc(names, entry.MatchesName) {
 			continue
 		}
-		var endpoints map[string]any
-		if err := common.UnmarshalJsonStr(entry.Endpoints, &endpoints); err != nil {
+		endpoints, err := declaredEndpointNames(entry.Endpoints)
+		if err != nil {
 			return &ModelPricingConversion{UnsupportedReason: "The model routing configuration could not be verified."}, nil
 		}
-		for endpoint := range endpoints {
+		for _, endpoint := range endpoints {
 			switch constant.EndpointType(endpoint) {
 			case constant.EndpointTypeImageGeneration:
 				if fixedPrice {
@@ -279,13 +322,7 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		price := effective["ModelPrice"].(float64)
 		expression = `tier("request", fixed(` + decimal.NewFromFloat(price).String() + `))`
 		if preview.BillingDetails.ImageCount {
-			if aliPromptExtend && otherImageRoute {
-				return &ModelPricingConversion{UnsupportedReason: "This model has different image request multipliers across channels. Use separate billing model names to convert them."}, nil
-			}
 			expression = `tier("image", fixed(` + decimal.NewFromFloat(price).String() + `)) * image_count`
-			if aliPromptExtend {
-				preview.BillingDetails.RequestRules = append(preview.BillingDetails.RequestRules, LegacyPricingRule{`param("parameters.prompt_extend") == true`, common.ZImagePromptExtendMultiplier})
-			}
 			for _, rule := range preview.BillingDetails.RequestRules {
 				expression += ` * (` + rule.Condition + ` ? ` + decimal.NewFromFloat(rule.Multiplier).String() + ` : 1)`
 			}
@@ -307,11 +344,13 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		if ordinaryAudio && preview.CacheWriteMode != CacheWriteNone {
 			preview.BillingDetails.AudioTextBranches = true
 		}
+		mergeCacheRead := base.IsZero() || preview.CacheWriteMode == CacheWriteNone && effective["ImageRatio"].(float64) == 1 && (preview.BillingDetails.AudioInputPrice == nil || ordinaryAudio)
 		var expressionBody strings.Builder
 		expressionBody.WriteString(`tier("base", p * `)
 		expressionBody.WriteString(base.String())
-		// Retain explicit zero coefficients for included categories. Only
-		// Claude names inherit the relay's 1h / 5m factor of 6 / 3.75.
+		// Retain explicit zero coefficients for included categories. Claude
+		// names inherit the relay's 1h / 5m factor and GPT names its 12h / 30m
+		// factor.
 		for _, lane := range []struct {
 			variable, key string
 			multiplier    float64
@@ -319,20 +358,24 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 			{"c", "CompletionRatio", 1},
 			{"cr", "CacheRatio", 1},
 			{"cc", "CreateCacheRatio", 1},
-			{"cc1h", "CreateCacheRatio", 6 / 3.75},
+			{"cc1h", "CreateCacheRatio", types.ClaudeCacheCreation1hMultiplier},
+			{"cc12h", "CreateCacheRatio", types.OpenAICacheCreation12hMultiplier},
 			{"img", "ImageRatio", 1},
 		} {
 			if ordinaryAudio && !preview.BillingDetails.AudioTextBranches && lane.variable != "c" {
 				continue
 			}
 			if lane.variable == "cc" && preview.CacheWriteMode == CacheWriteNone ||
-				lane.variable == "cc1h" && preview.CacheWriteMode != CacheWriteClaudeTTL {
+				lane.variable == "cc1h" && preview.CacheWriteMode != CacheWriteClaudeTTL ||
+				lane.variable == "cc12h" && preview.CacheWriteMode != CacheWriteOpenAITTL {
 				continue
 			}
 			multiplier := effective[lane.key].(float64)
-			// Retain even same-price input lanes: the legacy remainder is
-			// clamped after removing all cache/image categories. Folding one
-			// back into p changes the charge when categories overlap.
+			// Same-price input categories stay in p. Keep distinct prices,
+			// including explicit zero, as independently priced terms.
+			if (lane.variable == "img" || lane.variable == "cr" && mergeCacheRead) && multiplier == 1 {
+				continue
+			}
 			expressionBody.WriteString(" + " + lane.variable + " * ")
 			expressionBody.WriteString(base.Mul(decimal.NewFromFloat(multiplier)).Mul(decimal.NewFromFloat(lane.multiplier)).String())
 		}
@@ -361,6 +404,5 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		return nil, err
 	}
 	preview.Expression = expression
-	preview.Warnings = []string{"Expression billing rounds quota instead of truncating it. Small charges may differ by one quota unit; compare representative requests before saving."}
 	return preview, nil
 }

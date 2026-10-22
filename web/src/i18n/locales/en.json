@@ -7351,6 +7351,15 @@
     "Set selected prices": "Set selected prices",
     "Show models with matching prices": "Show models with matching prices",
     "The adjusted price is outside the supported range.": "The adjusted price is outside the supported range.",
-    "This expression cannot be adjusted automatically. Keep the source price or edit it manually.": "This expression cannot be adjusted automatically. Keep the source price or edit it manually."
+    "This expression cannot be adjusted automatically. Keep the source price or edit it manually.": "This expression cannot be adjusted automatically. Keep the source price or edit it manually.",
+    "Cache create (12h) price": "Cache create (12h) price",
+    "Cache Creation (12h)": "Cache Creation (12h)",
+    "Cache Creation (30m)": "Cache Creation (30m)",
+    "Cache Write (12h)": "Cache Write (12h)",
+    "Cache Write (30m)": "Cache Write (30m)",
+    "Configure ordinary OpenAI pricing": "Configure ordinary OpenAI pricing",
+    "Ordinary OpenAI": "Ordinary OpenAI",
+    "Plugin expressions are independent from ordinary OpenAI pricing.": "Plugin expressions are independent from ordinary OpenAI pricing.",
+    "Set ordinary OpenAI prices without changing plugin prices. Changes take effect when you save.": "Set ordinary OpenAI prices without changing plugin prices. Changes take effect when you save."
   }
 }
