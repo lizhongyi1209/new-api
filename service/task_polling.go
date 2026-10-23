@@ -1060,7 +1060,8 @@ func recordPollFailure(ctx context.Context, adaptor TaskPollingAdaptor, task *mo
 		logger.LogWarn(ctx, fmt.Sprintf("task %s poll %s (failures=%d, http=%d): %s", task.TaskID, class, task.PrivateData.PollFailures, statusCode, detail))
 	}
 	// TASK_POLL_MAX_FAILURES <= 0 disables the consecutive-failure cutoff, matching
-	// TASK_TIMEOUT_MINUTES semantics; the 24h sweep remains the only backstop.
+	// TASK_TIMEOUT_MINUTES semantics; the 72h sweep (TASK_TIMEOUT_MINUTES default
+	// 4320) remains the only backstop.
 	if constant.TaskPollMaxFailures > 0 && task.PrivateData.PollFailures >= constant.TaskPollMaxFailures {
 		return failTaskFromPoll(ctx, adaptor, task, fromStatus, pollFailureReason(class, statusCode, detail))
 	}
