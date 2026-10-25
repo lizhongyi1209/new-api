@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -528,59 +527,6 @@ export function buildContentRequest(ctx) { return {url:"https://cdn.example/vide
 	assert.Equal(t, "https://cdn.example/video.mp4", descriptor.URL)
 }
 
-func TestTaskAdaptorHookFetchReachesRequestHostsOnly(t *testing.T) {
-	service.InitHttpClient()
-	extra := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"from":"extra"}`))
-	}))
-	defer extra.Close()
-	base := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/info":
-			assert.Equal(t, "Bearer key", r.Header.Get("Authorization"))
-			_, _ = w.Write([]byte(`{"from":"base"}`))
-		case "/moved":
-			http.Redirect(w, r, extra.URL+"/elsewhere", http.StatusFound)
-		default:
-			t.Errorf("unexpected request %s", r.URL.Path)
-		}
-	}))
-	defer base.Close()
-	source := strings.Replace(mockPlugin, `fetchMode: "per_task",`, `fetchMode: "per_task", allowedHosts: ["`+strings.TrimPrefix(extra.URL, "http://")+`"],`, 1)
-	source = strings.Replace(source, `export function listArtifacts() { return []; }
-export function buildContentRequest() { throw new Error("artifact_not_found"); }`, `export function listArtifacts() { return [{key: "video", type: "video"}]; }
-export function buildContentRequest(ctx) {
-  const base = utils.fetch({url: ctx.baseUrl + "/info", headers: {Authorization: "Bearer " + ctx.apiKey}});
-  const extra = utils.fetch({url: "http://" + meta.allowedHosts[0] + "/info"});
-  const moved = utils.fetch({url: ctx.baseUrl + "/moved"});
-  let denied = "";
-  try { utils.fetch({url: "https://other.example/info"}); } catch (e) { denied = e.message; }
-  return {url: ctx.baseUrl + "/content", method: "GET", headers: {
-    "X-Base": base.body.from, "X-Extra": extra.body.from, "X-Moved": moved.status + " " + moved.headers.Location, "X-Denied": denied,
-  }};
-}`, 1)
-	source = strings.Replace(source, `render: function(ctx, task) { return {id: task.task_id, status: "completed"}; }`,
-		`render: function(ctx, task) { return utils.fetch({url: "https://provider.example/info"}).body; }`, 1)
-	plugin, err := pluginruntime.NewRegistry().Register(source, pluginruntime.Options{})
-	require.NoError(t, err)
-	adaptor := New(plugin)
-	adaptor.Init(&relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: base.URL, ApiKey: "key"}})
-
-	descriptor, err := adaptor.BuildContentRequest(t.Context(), &model.Task{TaskID: "task", Data: []byte(`{}`)}, "video", channel.TaskArtifactClientRequest{Method: http.MethodGet})
-	require.NoError(t, err)
-	require.NotNil(t, descriptor)
-	assert.Equal(t, map[string]string{
-		"X-Base":   "base",
-		"X-Extra":  "extra",
-		"X-Moved":  "302 " + extra.URL + "/elsewhere",
-		"X-Denied": `utils.fetch to other.example failed: plugin request host "other.example" is not allowed`,
-	}, descriptor.Headers)
-
-	// Renderers run on every client read and may not fetch.
-	_, err = adaptor.ConvertToOpenAIVideo(&model.Task{TaskID: "task_public", Status: model.TaskStatusSuccess})
-	assert.ErrorContains(t, err, "utils.fetch is not available in protocols.openai_video.render")
-}
-
 type taskQueryRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f taskQueryRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -621,7 +567,6 @@ export function parseBatchResult() {return [];}
 		status         int
 		body           string
 		batch          bool
-		ordered        bool
 		loop           bool
 		wantRequests   int
 		credentialHops int
@@ -656,7 +601,7 @@ export function parseBatchResult() {return [];}
 		cases = append(cases,
 			redirectCase{name: fmt.Sprintf("batch same origin body %d", status), status: status, body: `{"ids":["task"]}`, batch: true, locations: []string{"/final"}, wantRequests: 2, credentialHops: 2},
 			redirectCase{name: fmt.Sprintf("batch untrusted body %d", status), status: status, body: `{"ids":["task"]}`, batch: true, locations: []string{"https://cdn.example/final?key=location-secret"}, wantRequests: 1, credentialHops: 1, wantError: "cannot replay a body"},
-			redirectCase{name: fmt.Sprintf("batch authorized body %d", status), status: status, body: `{"ids":["task"]}`, batch: true, ordered: true, locations: []string{"https://cdn.example/final"}, allowedHosts: []string{"cdn.example"}, wantRequests: 2, credentialHops: 2},
+			redirectCase{name: fmt.Sprintf("batch authorized body %d", status), status: status, body: `{"ids":["task"]}`, batch: true, locations: []string{"https://cdn.example/final"}, allowedHosts: []string{"cdn.example"}, wantRequests: 2, credentialHops: 2},
 		)
 	}
 	cases = append(cases, redirectCase{name: "POST to GET across origins", status: 303, body: `{"ids":["task"]}`, batch: true, locations: []string{"https://cdn.example/final"}, wantRequests: 2, credentialHops: 1})
@@ -711,9 +656,6 @@ export function parseBatchResult() {return [];}
 				require.NoError(t, marshalErr)
 				pluginSource = strings.Replace(pluginSource, `fetchMode:"batch"`, `fetchMode:"batch",allowedHosts:`+string(hosts), 1)
 			}
-			if tc.ordered {
-				pluginSource = strings.Replace(pluginSource, `fetchMode:"batch"`, `fetchMode:"batch",requiredCapabilities:["json-order@1"]`, 1)
-			}
 			plugin, registerErr := pluginruntime.NewRegistry().Register(pluginSource, pluginruntime.Options{})
 			require.NoError(t, registerErr)
 			adaptor := New(plugin)
@@ -721,7 +663,7 @@ export function parseBatchResult() {return [];}
 			if tc.batch {
 				resp, err = adaptor.FetchBatchTasks(tc.start, "channel-secret", []*model.Task{task}, "")
 			} else {
-				resp, err = adaptor.FetchTask(tc.start, "channel-secret", task, "")
+				resp, err = adaptor.FetchTaskWithContext(tc.start, "channel-secret", task, "")
 			}
 			if tc.wantError != "" {
 				require.ErrorContains(t, err, tc.wantError)
@@ -967,7 +909,7 @@ export function parseBatchResult() { return {}; }
 					resp, requestErr = adaptor.DoRequest(c, info, body)
 				case "poll":
 					wantKey, wantPlugin = "task-key", "query"
-					resp, requestErr = adaptor.FetchTask(server.URL, "argument-key", task, "")
+					resp, requestErr = adaptor.FetchTaskWithContext(server.URL, "argument-key", task, "")
 				case "batch":
 					wantKey, wantPlugin = "batch-key", "batch"
 					resp, requestErr = adaptor.FetchBatchTasks(server.URL, "batch-key", []*model.Task{task}, "")

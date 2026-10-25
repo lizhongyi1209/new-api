@@ -83,6 +83,17 @@ func (info *RelayInfo) SetBillableToolCount(name string, count int) {
 	info.ResponsesUsageInfo.BuiltInTools[name] = &BuildInToolInfo{ToolName: name, CallCount: count}
 }
 
+// ApplyVendorToolUsage replaces protocol counts with the provider's billed
+// counts for keys reported in a completed response.
+func (info *RelayInfo) ApplyVendorToolUsage(raw []byte) {
+	if info == nil || info.VendorToolUsage == nil || len(raw) == 0 {
+		return
+	}
+	for name, count := range info.VendorToolUsage(raw) {
+		info.SetBillableToolCount(name, count)
+	}
+}
+
 const MaxBillableToolCallCount = 10_000
 
 func (info *RelayInfo) incrementBillableToolCall(name string) {

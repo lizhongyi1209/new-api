@@ -38,6 +38,8 @@ func (r *aliImageReservation) Reserve(quota int) error {
 	return nil
 }
 
+func (r *aliImageReservation) ReserveBeforeSubmit(quota int) error { return r.Reserve(quota) }
+
 func (r *aliImageReservation) GetPreConsumedQuota() int { return r.held }
 func (*aliImageReservation) Settle(int) error           { return nil }
 func (*aliImageReservation) Refund(*gin.Context)        {}

@@ -734,6 +734,10 @@ func tryRealtimeFetch(ctx context.Context, task *model.Task, isOpenAIVideoAPI bo
 		baseURL = channelModel.GetBaseURL()
 	}
 	proxy := channelModel.GetSetting().Proxy
+	key := task.PrivateData.Key
+	if key == "" {
+		key = channelModel.Key
+	}
 	adaptor := GetTaskAdaptor(constant.TaskPlatform(strconv.Itoa(channelModel.Type)))
 	if adaptor == nil {
 		return nil
@@ -742,12 +746,12 @@ func tryRealtimeFetch(ctx context.Context, task *model.Task, isOpenAIVideoAPI bo
 		ChannelType:     channelModel.Type,
 		ChannelId:       channelModel.Id,
 		ChannelBaseUrl:  baseURL,
-		ApiKey:          channelModel.Key,
+		ApiKey:          key,
 		ChannelSetting:  channelModel.GetSetting(),
 		HeadersOverride: channelModel.GetHeaderOverride(),
 	}})
 
-	resp, err := adaptor.FetchTask(baseURL, channelModel.Key, map[string]any{
+	resp, err := adaptor.FetchTask(baseURL, key, map[string]any{
 		"task_id":        task.GetUpstreamTaskID(),
 		"action":         task.Action,
 		"model":          task.Properties.OriginModelName,

@@ -630,6 +630,9 @@ func (a *TaskAdaptor) FetchBatchTasks(baseURL, key string, tasks []*model.Task, 
 }
 
 func (a *TaskAdaptor) FetchTaskWithContext(baseURL, key string, task *model.Task, proxy string) (*http.Response, error) {
+	if task != nil && task.PrivateData.Key != "" {
+		key = task.PrivateData.Key
+	}
 	ctx, err := a.queryContext(task, key, baseURL, proxy)
 	if err != nil {
 		return nil, err
@@ -675,7 +678,11 @@ func (a *TaskAdaptor) doFetchDescriptor(baseURL, key, proxy string, value any) (
 	if err := channel.ApplyHeaderOverride(a.headerOverrideInfo(key), nil, req); err != nil {
 		return nil, err
 	}
-	client, err := service.GetHttpClientWithProxySettings(proxy, a.info.ChannelSetting)
+	channelSetting := kitdto.ChannelSettings{}
+	if a.info != nil {
+		channelSetting = a.info.ChannelSetting
+	}
+	client, err := service.GetHttpClientWithProxySettings(proxy, channelSetting)
 	if err != nil {
 		return nil, err
 	}

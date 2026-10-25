@@ -269,6 +269,15 @@ func CountClaudeTokens(c *gin.Context) {
 }
 
 func respondRelayError(c *gin.Context, relayFormat types.RelayFormat, ws *websocket.Conn, relayErr *types.NewAPIError, requestId string) {
+	streamHeaders := strings.HasPrefix(c.Writer.Header().Get("Content-Type"), "text/event-stream")
+	if c.Writer.Size() > 0 && streamHeaders {
+		relayErr.SetMessage(common.MessageWithRequestId(relayErr.Error(), requestId))
+		writeRelayStreamError(c, relayFormat, relayErr)
+		return
+	}
+	if streamHeaders {
+		c.Writer.Header().Del("Content-Type")
+	}
 	upstreamURLs := common.UpstreamAddresses(c)
 	if raw := relayErr.GetRawUpstreamResponse(); raw != nil {
 		body := []byte(common.MaskSensitiveInfo(string(raw.Body), upstreamURLs...))

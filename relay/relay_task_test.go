@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -50,7 +51,11 @@ func setupRelayChannelDB(t *testing.T) *gorm.DB {
 }
 
 func TestRealtimeFetchAppliesChannelHeaderOverrides(t *testing.T) {
+	previousPluginsEnabled := pluginruntime.DefaultRegistry.Enabled()
+	pluginruntime.DefaultRegistry.SetEnabled(false)
+	t.Cleanup(func() { pluginruntime.DefaultRegistry.SetEnabled(previousPluginsEnabled) })
 	database := setupRelayChannelDB(t)
+	require.NoError(t, database.AutoMigrate(&model.Task{}))
 	service.InitHttpClient()
 	requests := make(chan *http.Request, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -71,8 +76,9 @@ func TestRealtimeFetchAppliesChannelHeaderOverrides(t *testing.T) {
 			Key: "saved-key", UpstreamTaskID: base64.RawURLEncoding.EncodeToString([]byte("operations/task-1")),
 		},
 	}
+	require.NoError(t, database.Create(task).Error)
 
-	tryRealtimeFetch(task, true)
+	tryRealtimeFetch(context.Background(), task, true)
 
 	require.Len(t, requests, 1)
 	request := <-requests
@@ -82,6 +88,9 @@ func TestRealtimeFetchAppliesChannelHeaderOverrides(t *testing.T) {
 }
 
 func TestRealtimeFetchRefundsTaskItFindsFailed(t *testing.T) {
+	previousPluginsEnabled := pluginruntime.DefaultRegistry.Enabled()
+	pluginruntime.DefaultRegistry.SetEnabled(false)
+	t.Cleanup(func() { pluginruntime.DefaultRegistry.SetEnabled(previousPluginsEnabled) })
 	database := setupRelayChannelDB(t)
 	require.NoError(t, database.AutoMigrate(&model.Task{}, &model.User{}, &model.Log{}))
 	previousLogDB := model.LOG_DB
@@ -118,7 +127,7 @@ func TestRealtimeFetchRefundsTaskItFindsFailed(t *testing.T) {
 	}
 	require.NoError(t, database.Create(task).Error)
 
-	tryRealtimeFetch(task, true)
+	tryRealtimeFetch(context.Background(), task, true)
 
 	var stored model.Task
 	require.NoError(t, database.First(&stored, task.ID).Error)

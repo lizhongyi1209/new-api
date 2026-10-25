@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -29,6 +30,9 @@ import (
 )
 
 func TestRelayKeepAliveDuringImagePreparation(t *testing.T) {
+	previousPrices := ratio_setting.ModelPrice2JSONString()
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"claude-sonnet-4-20250514":0.001}`))
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(previousPrices)) })
 	settings := operation_setting.GetGeneralSetting()
 	previousEnabled, previousInterval := settings.PingIntervalEnabled, settings.PingIntervalSeconds
 	previousCount, previousMedia := constant.CountToken, constant.GetMediaToken
@@ -236,6 +240,9 @@ func TestStreamKeepAlivePreservesFastHTTPFailures(t *testing.T) {
 }
 
 func TestRelayKeepAliveHonorsStreamSettings(t *testing.T) {
+	previousPrices := ratio_setting.ModelPrice2JSONString()
+	require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"claude-sonnet-4-20250514":0.001}`))
+	t.Cleanup(func() { require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(previousPrices)) })
 	settings := operation_setting.GetGeneralSetting()
 	previousEnabled := settings.PingIntervalEnabled
 	previousCount, previousMedia, previousNonStreamMedia := constant.CountToken, constant.GetMediaToken, constant.GetMediaTokenNotStream

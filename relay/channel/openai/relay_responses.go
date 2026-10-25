@@ -56,6 +56,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			info.CountBillableToolCall(dto.BuildInCallFunctionCall, output.Name)
 		}
 	}
+	info.ApplyVendorToolUsage(responseBody)
 
 	imageCounter := &relaycommon.ImageGenerationCallCounter{}
 	if !relaycommon.IsNonBillableResponsesStatus(responsesResponse.Status) {

@@ -31,9 +31,11 @@ type TaskAdaptor struct {
 	ChannelType int
 	apiKey      string
 	baseURL     string
+	relayInfo   *relaycommon.RelayInfo
 }
 
 func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
+	a.relayInfo = info
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
 	a.apiKey = info.ApiKey
@@ -238,6 +240,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		}
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Authorization", "Bearer "+key)
+		if a.relayInfo != nil {
+			if err := channel.ApplyHeaderOverride(a.relayInfo, nil, req); err != nil {
+				return nil, err
+			}
+		}
 		client, err := service.GetHttpClientWithProxy(proxy)
 		if err != nil {
 			return nil, fmt.Errorf("new proxy http client failed: %w", err)
@@ -260,6 +267,11 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("x-goog-api-key", key)
+	if a.relayInfo != nil {
+		if err := channel.ApplyHeaderOverride(a.relayInfo, nil, req); err != nil {
+			return nil, err
+		}
+	}
 
 	client, err := service.GetHttpClientWithProxy(proxy)
 	if err != nil {

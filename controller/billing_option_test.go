@@ -26,6 +26,7 @@ import (
 )
 
 func TestUpdateOptionRejectsInvalidTaskBillingExpressions(t *testing.T) {
+	modelManagementDB(t, "sqlite", "")
 	const pluginKey = "billing-save-probe"
 	const modelName = "billing-save-model"
 	source := `
@@ -84,6 +85,7 @@ export function parseTaskResult() { return {}; }
 }
 
 func TestUpdateOptionRejectsUsageExpressionWithoutTaskPlugin(t *testing.T) {
+	modelManagementDB(t, "sqlite", "")
 	const modelName = "billing-save-model-without-plugin"
 	expressions, err := common.Marshal(map[string]string{
 		modelName: `u("mode") == "std" ? 1 : 2`,

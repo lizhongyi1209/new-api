@@ -30,6 +30,7 @@ Aliases: 任务插件, 插件市场, 插件广场, 插件上传, 插件版本, �
 - Plugin execution foundation: `pkg/jsplugin/`, independently buildable `relaykit/`, built-in plugin sources under `plugins/`, and task adaptor `relay/channel/task/jsplugin/`; the master switch defaults off. Generic submission/read/artifact routes: `router/task-router.go`; submit preparation: `middleware/task_plugin_submit.go`; submission and billing handoff: `relay/relay_task.go`, `controller/relay.go`; context-aware polling: `service/task_polling.go`. Build checks pass; end-to-end plugin execution remains unverified.
 - Default frontend page and marketplace: `web/src/routes/_authenticated/task-plugins/index.tsx`, `features/task-plugins/`, `hooks/use-sidebar-data.ts` under `web/src/`.
 - Plugin channel binding: `controller/channel.go` checks the `task_plugin.bind` permission and registry metadata; `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx` selects a plugin, while `features/channels/lib/channel-form.ts` persists its key in channel `setting` JSON. Local channel type 62 avoids the existing 61 collision.
+- Built-in Hailuo, Vidu, Google Veo, and Vertex video plugins support binding to New API upstream channels in `plugins/tasks/{hailuo,vidu,google,vertex-ai}/plugin.js`; route and gateway regressions live in `plugins/builtin_plugins_test.go` and provider-specific `plugins/*responses_test.go`.
 - Task provenance and narrow plugin view: `model/task.go`, `dto/task_plugin.go`, `service/task_plugin_audit.go`, `service/task_plugin_view.go`, `controller/relay.go`, and `service/task_billing.go`. Plugin-safe channel selection: `service/channel_select.go`, `model/channel_cache.go`, `model/ability.go`, `middleware/distributor.go`. Artifact access and media proxy: `controller/task.go`, `controller/video_proxy.go`, `middleware/task_artifact_access.go`, `service/task_artifact_access.go`; ordinary image result projection and legacy video action recognition also live in `controller/task.go`, with regressions in `controller/task_generic_test.go`. Public address and access limits: `setting/system_setting/system_setting_old.go`, `setting/system_setting/task_artifact.go`.
 - Task usage pricing: `setting/billing_setting/task_plugin_pricing.go` stores expressions by plugin key and model name in the existing options table; `model/task_plugin_pricing.go`, `controller/model_pricing_config.go`, and `router/api-router.go` validate and save them through versioned `PATCH /api/option/task_plugin_pricing`. Ordinary model prices remain in `model/model_pricing_config.go`; non-task saves reject schema-less `u(...)` expressions, while supported native video models expose and validate their own usage schemas (see Native video usage expressions). `model/pricing.go` exposes public provider variants and an ordinary-channel marker for shared model names. `relay/helper/billing_expr_request.go` freezes referenced scalar request conditions; `relay/relay_task.go` reserves quota using the selected plugin's expression; `service/task_polling.go` settles completion facts from the frozen snapshot. Default frontend editor/matrix: `web/src/features/system-settings/models/task-plugin-pricing-editor.tsx`, `task-usage-pricing-editor.tsx`, `task-pricing-matrix.tsx`; public model detail and examples: `web/src/features/pricing/components/model-details.tsx`, `lib/task-expr.ts`; log display: `web/src/features/usage-logs/components/dialogs/details-dialog.tsx`. Task artifact preview/download: `web/src/features/usage-logs/components/task-artifacts.tsx` via `GET /api/task/:task_id/artifacts`, with attachment response in `controller/task.go` and `controller/video_proxy.go`. Focused storage/billing tests: `model/task_plugin_pricing_test.go`, `pkg/billingexpr/task_usage_settle_test.go`; end-to-end execution remains unverified.
 
@@ -50,6 +51,29 @@ Aliases: 渠道自动检测, 仅检测自动禁用渠道, 检测并发, auto_ban
 - Monitor mode/concurrency defaults and bounds: `setting/operation_setting/monitor_setting.go`; option write validation: `model/option.go`.
 - Scheduled/manual task dispatch, channel selection, bounded worker pool and health-result handling: `controller/channel-test.go`; existing task runner: `controller/system_task_handlers.go` and `service/system_task.go`.
 - Settings UI: `web/src/features/system-settings/models/routing-reliability-section.tsx`, with page defaults in `features/system-settings/models/index.tsx` and registry mapping in `features/system-settings/models/section-registry.tsx`.
+
+## Channel priority drag ordering
+
+Aliases: 渠道拖拽排序, 渠道优先级, drag mode, priority tiers.
+
+- API route and handler: `router/channel-router.go`, `controller/channel_priority.go`; priority planning, conflict checks, and persistence: `model/channel_priority.go`.
+- Frontend table, controls, guide, and reorder hooks: `web/src/features/channels/components/channels-table.tsx`, `channel-priority-controls.tsx`, `channel-priority-guide.tsx`, `web/src/features/channels/hooks/use-channel-priority-drag.ts`, `use-channel-priority-order.ts`. API calls: `web/src/features/channels/api.ts`.
+- Regressions: `model/channel_priority_test.go`, `web/src/features/channels/components/__tests__/priority-order.test.tsx`, `priority-guide.test.tsx`.
+
+## Email delivery and notification preferences
+
+Aliases: Resend, SMTP, 邮件服务商, 通知开关, 余额提醒, 渠道通知.
+
+- Provider selection and delivery: `common/email.go`, `common/email_resend.go`; option defaults and validation: `model/option.go`, `controller/option.go`; admin UI: `web/src/features/system-settings/integrations/email-settings-section.tsx` and `email-settings-schema.ts`.
+- User preferences and localized delivery: `relaykit/dto/user_settings.go`, `dto/user_settings.go`, `controller/user.go`, `service/user_notify.go`, `service/quota.go`, `service/account_security.go`; user UI: `web/src/features/profile/components/tabs/notification-tab.tsx`.
+- Regressions: `controller/email_delivery_test.go`, `service/user_notify_test.go`, `web/src/features/system-settings/integrations/__tests__/email-settings-section.test.tsx`.
+
+## Qwen multimodal embeddings
+
+Aliases: qwen3-vl-embedding, 通义多模态向量, DashScope vision embedding.
+
+- Aliyun native embedding conversion and response usage: `relay/channel/ali/embedding.go`, `relay/channel/ali/adaptor.go`, `relay/channel/ali/dto.go`; shared embedding input: `relaykit/dto/embedding.go`.
+- Regression: `relay/channel/ali/adaptor_test.go`.
 
 ## User request monitoring
 

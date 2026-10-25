@@ -1937,7 +1937,7 @@ test('model configuration is available for a plugin channel without upstream dis
 test('advanced custom edits preview draft connection settings with the saved key', async () => {
   editingChannel = {
     ...editingChannel,
-    type: 58,
+    type: 59,
     settings: JSON.stringify({
       advanced_custom: {
         advanced_routes: [
@@ -1969,7 +1969,7 @@ test('advanced custom edits preview draft connection settings with the saved key
   expect(post).toHaveBeenCalledWith(
     '/api/channel/fetch_models',
     expect.objectContaining({
-      type: 58,
+      type: 59,
       channel_id: 42,
       base_url: 'https://draft.example',
       key: undefined,
@@ -2794,7 +2794,7 @@ test('the header override passthrough template button confirms before filling th
 test('a New API channel binds upstream task plugins and publishes their models', async () => {
   const channel = channelSchema.parse({
     ...editingChannel,
-    type: 60,
+    type: 64,
     base_url: 'https://gateway.example',
     models: 'gpt-5',
     setting: JSON.stringify({ task_extend_plugin_keys: ['video-a'] }),

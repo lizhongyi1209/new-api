@@ -514,28 +514,28 @@ test.each([true, false])(
     for (const category of ['All', 'Built-in', 'Gateways']) {
       await user.click(screen.getByRole('tab', { name: category }))
       expect(
-        screen.getByRole('option', { name: 'New API Built-in #60' })
+        screen.getByRole('option', { name: 'New API Built-in #64' })
       ).toBeVisible()
       expect(
-        screen.getByRole('option', { name: 'Sub2API Built-in #59' })
+        screen.getByRole('option', { name: 'Sub2API Built-in #63' })
       ).toBeVisible()
     }
     expect(screen.getAllByRole('option')).toHaveLength(2)
     await user.click(
-      screen.getByRole('option', { name: 'New API Built-in #60' })
+      screen.getByRole('option', { name: 'New API Built-in #64' })
     )
-    expect(select).toHaveBeenLastCalledWith({ kind: 'builtin', type: 60 })
+    expect(select).toHaveBeenLastCalledWith({ kind: 'builtin', type: 64 })
     const search = screen.getByRole('combobox')
     await user.type(search, 'Sub2API')
     expect(screen.getAllByRole('option')).toHaveLength(1)
     await user.click(
-      screen.getByRole('option', { name: 'Sub2API Built-in #59' })
+      screen.getByRole('option', { name: 'Sub2API Built-in #63' })
     )
-    expect(select).toHaveBeenLastCalledWith({ kind: 'builtin', type: 59 })
+    expect(select).toHaveBeenLastCalledWith({ kind: 'builtin', type: 63 })
     await user.click(screen.getByRole('tab', { name: 'Built-in' }))
     expect(search).toHaveValue('Sub2API')
     expect(
-      screen.getByRole('option', { name: 'Sub2API Built-in #59' })
+      screen.getByRole('option', { name: 'Sub2API Built-in #63' })
     ).toBeVisible()
     await user.click(screen.getByRole('tab', { name: 'Gateways' }))
     await user.clear(search)
@@ -563,7 +563,7 @@ test('custom providers have their own tab and keep the search when switching cat
   const panel = screen.getByRole('tabpanel', { name: 'Custom' })
   expect(within(panel).getAllByRole('option')).toHaveLength(2)
   expect(
-    within(panel).getByRole('option', { name: 'Advanced Custom Built-in #58' })
+    within(panel).getByRole('option', { name: 'Advanced Custom Built-in #59' })
   ).toBeVisible()
   expect(
     within(panel).getByRole('option', { name: 'Custom Built-in #8' })
@@ -577,18 +577,18 @@ test('custom providers have their own tab and keep the search when switching cat
     screen.getByRole('option', { name: 'OpenAI Built-in #1' })
   ).toBeVisible()
   expect(
-    screen.queryByRole('option', { name: 'Advanced Custom Built-in #58' })
+    screen.queryByRole('option', { name: 'Advanced Custom Built-in #59' })
   ).not.toBeInTheDocument()
   expect(
     screen.queryByRole('option', { name: 'Custom Built-in #8' })
   ).not.toBeInTheDocument()
-  await user.type(screen.getByRole('combobox'), '58')
+  await user.type(screen.getByRole('combobox'), '59')
   expect(screen.queryByRole('option')).not.toBeInTheDocument()
   await user.click(within(tabs).getByRole('tab', { name: 'Custom' }))
-  expect(screen.getByRole('combobox')).toHaveValue('58')
+  expect(screen.getByRole('combobox')).toHaveValue('59')
   expect(screen.getAllByRole('option')).toHaveLength(1)
   expect(
-    screen.getByRole('option', { name: 'Advanced Custom Built-in #58' })
+    screen.getByRole('option', { name: 'Advanced Custom Built-in #59' })
   ).toBeVisible()
 })
 
@@ -656,7 +656,7 @@ test('removing plugin binding permission returns an active plugin tab to all pro
     screen.queryByRole('option', { name: /Plugin/ })
   ).not.toBeInTheDocument()
   expect(
-    screen.getByRole('option', { name: 'Advanced Custom Built-in #58' })
+    screen.getByRole('option', { name: 'Advanced Custom Built-in #59' })
   ).toBeVisible()
 })
 
@@ -714,7 +714,7 @@ test('deprecated and flexible integration badges preserve provider selection and
   const view = render(<ChannelProviderPicker {...props} />)
   const custom = screen.getByRole('option', { name: 'Custom Built-in #8' })
   const advanced = screen.getByRole('option', {
-    name: 'Advanced Custom Built-in #58',
+    name: 'Advanced Custom Built-in #59',
   })
   expect(custom).toHaveAccessibleDescription(
     'Deprecated · Legacy full-URL integration; use Advanced Custom for new channels'
@@ -733,7 +733,7 @@ test('deprecated and flexible integration badges preserve provider selection and
     )
   ).toHaveAttribute('title', details)
   await user.click(within(advanced).getByText('Flexible integration'))
-  expect(select).toHaveBeenNthCalledWith(2, { kind: 'builtin', type: 58 })
+  expect(select).toHaveBeenNthCalledWith(2, { kind: 'builtin', type: 59 })
 
   view.rerender(<ChannelProviderPicker {...props} disabled />)
   expect(advanced).toHaveAttribute('aria-disabled', 'true')
