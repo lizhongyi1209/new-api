@@ -51,7 +51,7 @@ Aliases: Kling 4.0, 可灵 4.0, Kling 4.0 文生视频, Kling 4.0 图生视频, 
 
 - Public submission and task lookup routes: `router/video-router.go`; official-body conversion: `middleware/kling_adapter.go`; model routing, validation, upstream submission and `/tasks` polling: `relay/channel/task/kling/adaptor.go`, `video40.go`.
 - Native expression usage and the Kling 4.0 duration meter: `pkg/videoexpr/schema.go`, `usage.go`; task settlement: `service/task_polling.go`; model ratio: `setting/ratio_setting/model_ratio.go`; public task projection: `controller/relay.go`, `relay/relay_task.go`. Video artifact recognition: `controller/task.go` and both frontend task-log action lists.
-- Downstream contract and examples: `docs/kling-4-video.md`; focused coverage: `relay/channel/task/kling/video40_test.go`, `middleware/kling_adapter_test.go`, `pkg/videoexpr/usage_test.go`.
+- Downstream contract and examples: `docs/kling-4-video.md`, public API page `docs/api-doc.html#kling-4`; focused coverage: `relay/channel/task/kling/video40_test.go`, `middleware/kling_adapter_test.go`, `pkg/videoexpr/usage_test.go`.
 
 ## Channel health-check scheduling
 

@@ -1948,44 +1948,191 @@
       <div><h2>Kling VIDEO 4.0</h2></div>
     </div>
 
-    <section class="endpoint-doc" id="/kling/omni-video/kling-4.0" aria-labelledby="kling-4-title">
+    <section class="endpoint-doc" id="kling-4-overview" aria-labelledby="kling-4-title">
       <article class="reference-panel">
-        <h2 id="kling-4-title">Kling 4.0 视频生成</h2>
-        <p>请求体沿用可灵官方结构，由路径确定模型和任务类型，无需传 <code>model</code>。三个入口共用模型 <code>kling-4.0</code> 的渠道和计费配置。</p>
+        <h2 id="kling-4-title">Kling 4.0 视频接口</h2>
+        <p>使用 <code>Authorization: Bearer &lt;API Key&gt;</code> 和 <code>Content-Type: application/json</code>。请求体沿用可灵官方结构，由路径确定任务类型，无需传 <code>model</code>；三个入口共用 <code>kling-4.0</code> 的渠道和计费配置。</p>
+        <div class="callout warn"><b>上游开放状态</b>：<a href="https://kling.ai/document-api/pricing/base/video">可灵预览定价文档</a>将 Kling 4.0 API 标为 Coming Soon。本平台已支持转发下列请求；实际上线状态以可灵公告为准。</div>
         <table>
           <tr><th>类型</th><th>提交</th><th>查询</th></tr>
           <tr><td>文生视频</td><td><code>POST /kling/text-to-video/kling-4.0</code></td><td><code>GET /kling/text-to-video/kling-4.0/{task_id}</code></td></tr>
           <tr><td>图生视频</td><td><code>POST /kling/image-to-video/kling-4.0</code></td><td><code>GET /kling/image-to-video/kling-4.0/{task_id}</code></td></tr>
           <tr><td>Omni</td><td><code>POST /kling/omni-video/kling-4.0</code></td><td><code>GET /kling/omni-video/kling-4.0/{task_id}</code></td></tr>
         </table>
-        <h3>主要参数</h3>
+        <h3>通用设置</h3>
         <table>
-          <tr><th>字段</th><th>说明</th></tr>
-          <tr><td><code>prompt</code></td><td>文生视频必填。图生视频和 Omni 在 <code>contents</code> 中使用 <code>{"type":"prompt","text":"..."}</code>。</td></tr>
-          <tr><td><code>contents</code></td><td>图生视频支持首帧、中间帧、尾帧，最多 10 张图片；Omni 另外支持参考图、参考/编辑视频、元素和声音引用，素材总数最多 15。</td></tr>
-          <tr><td><code>settings.duration</code></td><td>3–30 秒；省略时由上游识别提示词中的时长意图，无意图时默认 10 秒。</td></tr>
-          <tr><td><code>settings.resolution</code></td><td><code>720p</code> 或 <code>1080p</code>，默认 <code>1080p</code>。</td></tr>
-          <tr><td><code>settings.aspect_ratio</code></td><td>文生视频支持 <code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>；Omni 另支持 <code>adaptive</code>。图生视频接口无此参数。</td></tr>
-          <tr><td><code>options</code></td><td>支持 <code>callback_url</code>、<code>external_task_id</code>、<code>watermark_info.enabled</code>。</td></tr>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>settings.duration</code></td><td>integer</td><td>否</td><td>输出时长 3–30 秒。显式设置优先；省略时上游识别提示词时长，Omni 还可沿用 <code>base_video</code> 时长，否则默认 10 秒。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>720p</code> 或 <code>1080p</code>，默认 <code>1080p</code>；不支持 4K。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td>仅文生视频和 Omni：<code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>；Omni 另支持 <code>adaptive</code>。图生视频不能传此字段。</td></tr>
+          <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>上游任务状态变化通知地址。</td></tr>
+          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>调用方自定义任务 ID，须在可灵账号内唯一；本平台查询仍使用提交响应中的 <code>task_id</code>。</td></tr>
+          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>；不支持自定义水印。</td></tr>
         </table>
-        <p>提交返回本平台公开任务 ID。查询返回任务状态、视频地址、时长和本平台结算费用；含视频输入的 Omni 任务可返回 <code>usage.input_duration</code>。文件大小和媒体属性由可灵上游校验。参见 <a href="https://kling.ai/document-api/api/video/4-0/video-omni.md">官方 Omni 文档</a>。</p>
+        <p>提示词中用 <code>@id</code> 引用素材，并写清每项素材的用途。4.0 不使用 3.0 的 <code>settings.audio</code>、<code>settings.multi_shot</code> 参数；音频要求写在提示词中，Omni 可添加 <code>voice</code> 引用。</p>
+        <p>可灵原始接口说明：<a href="https://kling.ai/document-api/api/video/4-0/text-to-video">文生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/image-to-video">图生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/video-omni">Omni</a>。</p>
       </article>
       <aside class="example-panel">
-        <h3>文生视频</h3>
+        <h3>创建响应 · 200</h3>
+        <pre><code>{
+  "id": "task_xxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "kling-4.0",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre>
+        <p class="compact-note">返回的是本平台公开任务 ID，和可灵上游 <code>data.id</code> 不同。</p>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/kling/text-to-video/kling-4.0" aria-labelledby="kling-4-text-title">
+      <article class="reference-panel">
+        <h2 id="kling-4-text-title">文生视频</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/text-to-video/kling-4.0</span></div>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>可包含正向和负向描述。纯英文最多 26,000 字符，纯非英文最多 11,000 字符；混合输入需满足 E/26000 + N/11000 ≤ 1。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>，默认 <code>16:9</code>。</td></tr>
+        </table>
+        <p>还可传上方列出的 <code>settings.duration</code>、<code>settings.resolution</code> 和 <code>options</code>。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/text-to-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"prompt":"A sunrise over a quiet harbor","settings":{"duration":10,"resolution":"1080p","aspect_ratio":"16:9"}}'</code></pre>
-        <h3>图生视频</h3>
+  -d '{
+    "prompt": "A sunrise over a quiet harbor, gentle waves, cinematic camera movement and ambient sound.",
+    "settings": {"duration": 10, "resolution": "1080p", "aspect_ratio": "16:9"},
+    "options": {"watermark_info": {"enabled": false}}
+  }'</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/kling/image-to-video/kling-4.0" aria-labelledby="kling-4-image-title">
+      <article class="reference-panel">
+        <h2 id="kling-4-image-title">图生视频 · 多关键帧</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/image-to-video/kling-4.0</span></div>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>至少 1 张关键帧图片，可附提示词；图片最多 10 张。</td></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>middle_frame</code>、<code>last_frame</code>。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td><code>type=prompt</code> 时必填，字符限制与文生视频 <code>prompt</code> 相同。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片项必填；可传公开 URL 或 Base64。</td></tr>
+          <tr><td><code>contents[].id</code></td><td>string</td><td>否</td><td>任务内唯一，在提示词中用 <code>@id</code> 引用；多个 <code>middle_frame</code> 时应为每张图指定 ID。</td></tr>
+        </table>
+        <p>图片格式 JPG、JPEG、PNG；单张不超过 30 MB，宽高均不小于 300px，宽高比为 2:5 至 5:2。文件属性由可灵上游校验。图生视频不支持 <code>refer_image</code>、视频、元素、声音和 <code>settings.aspect_ratio</code>；需要这些素材请使用 Omni。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例 · 首帧 + 中间帧 + 尾帧</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/image-to-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"contents":[{"type":"prompt","text":"Move smoothly from @first to @middle"},{"type":"first_frame","url":"https://cdn.example.com/first.png","id":"first"},{"type":"middle_frame","url":"https://cdn.example.com/middle.png","id":"middle"}],"settings":{"duration":10}}'</code></pre>
-        <h3>Omni</h3>
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Transition smoothly from @first through @middle to @last; keep the character consistent."},
+      {"type": "first_frame", "url": "https://cdn.example.com/first.png", "id": "first"},
+      {"type": "middle_frame", "url": "https://cdn.example.com/middle.png", "id": "middle"},
+      {"type": "last_frame", "url": "https://cdn.example.com/last.png", "id": "last"}
+    ],
+    "settings": {"resolution": "1080p", "duration": 12}
+  }'</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/kling/omni-video/kling-4.0" aria-labelledby="kling-4-omni-title">
+      <article class="reference-panel">
+        <h2 id="kling-4-omni-title">Omni 多素材生成与视频编辑</h2>
+        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-4.0</span></div>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>提示词、图片、视频、元素、声音引用的集合。</td></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>middle_frame</code>、<code>last_frame</code>、<code>refer_image</code>、<code>feature_video</code>、<code>base_video</code>、<code>element</code>、<code>voice</code>。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td>提示词项必填，字符限制与文生视频 <code>prompt</code> 相同。说明各素材用途，以及要修改和保留的内容。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片或视频项必填；图片可传公开 URL 或 Base64，视频传公开 URL。</td></tr>
+          <tr><td><code>contents[].element_id</code></td><td>string</td><td>条件</td><td><code>type=element</code> 时必填，来自元素管理接口。</td></tr>
+          <tr><td><code>contents[].voice_id</code></td><td>string</td><td>条件</td><td><code>type=voice</code> 时必填，可使用自定义或系统预设声音 ID。</td></tr>
+          <tr><td><code>contents[].id</code></td><td>string</td><td>条件</td><td>任务内唯一，供 <code>@id</code> 引用；<code>element</code> 和 <code>voice</code> 必填，多个中间帧或参考图时也必填。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>、<code>adaptive</code>；默认 <code>adaptive</code>。省略或设为 <code>adaptive</code> 时，上游优先使用提示词中的比例，再参考基础视频、关键帧及其他视频，最后默认 16:9。</td></tr>
+        </table>
+        <h3>素材限制</h3>
+        <ul>
+          <li>图片最多 10 张；单张 JPG/JPEG/PNG 不超过 30 MB，宽高均不小于 300px，宽高比为 2:5 至 5:2。</li>
+          <li>参考视频最多 5 个，其中 <code>base_video</code> 最多 1 个；视频角色元素与参考视频合计最多 5 个。视频 MP4/MOV 单个不超过 300 MB，每个及输入视频合计时长均为 3–30 秒（含视频角色元素）；输入帧率 24–60 fps。视频宽高各为 700–4553px，总像素数不超过 8,294,400，宽高比为 2:5 至 5:2。</li>
+          <li>元素最多 7 个，其中视频角色元素最多 3 个；声音引用最多 3 个；图片、视频、元素、声音总数最多 15 个。</li>
+          <li>本平台先校验字段、枚举、ID 和数量。文件大小、分辨率、输入视频时长和元素类型等媒体属性由可灵上游校验。</li>
+        </ul>
+      </article>
+      <aside class="example-panel">
+        <h3>参考视频 + 参考图</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"contents":[{"type":"prompt","text":"Follow the motion of @video_1 and use @image_1 as the character"},{"type":"feature_video","url":"https://cdn.example.com/motion.mp4","id":"video_1"},{"type":"refer_image","url":"https://cdn.example.com/person.png","id":"image_1"}],"settings":{"duration":15,"aspect_ratio":"adaptive"}}'</code></pre>
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Follow the movement rhythm in @video_1; preserve the character appearance from @image_1, not the video background."},
+      {"type": "feature_video", "url": "https://cdn.example.com/motion.mp4", "id": "video_1"},
+      {"type": "refer_image", "url": "https://cdn.example.com/person.png", "id": "image_1"}
+    ],
+    "settings": {"duration": 15, "resolution": "1080p", "aspect_ratio": "adaptive"}
+  }'</code></pre>
+        <h3>编辑视频 + 元素</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Edit @video_1: place @element_1 inside the box at the end. Preserve the earlier shots and background."},
+      {"type": "base_video", "url": "https://cdn.example.com/source.mp4", "id": "video_1"},
+      {"type": "element", "element_id": "164", "id": "element_1"}
+    ],
+    "settings": {"duration": 10, "resolution": "1080p"}
+  }'</code></pre>
+        <h3>声音引用</h3>
+        <pre><code>{
+  "contents": [
+    {"type": "prompt", "text": "Use @image_1 as the character. She says 'Excuse me' using @voice_1, with accurate lip sync."},
+    {"type": "refer_image", "url": "https://cdn.example.com/person.png", "id": "image_1"},
+    {"type": "voice", "voice_id": "829826751244537879", "id": "voice_1"}
+  ],
+  "settings": {"duration": 5, "aspect_ratio": "9:16"}
+}</code></pre>
+      </aside>
+    </section>
+
+    <section class="endpoint-doc" id="/kling/omni-video/kling-4.0/{task_id}" aria-labelledby="kling-4-query-title">
+      <article class="reference-panel">
+        <h2 id="kling-4-query-title">查询 Kling 4.0 任务</h2>
+        <p>在对应的文生视频、图生视频或 Omni 查询路径中，使用提交响应返回的本平台 <code>task_id</code>。查询需要同一用户的 API Key；本平台负责轮询可灵的 <code>GET /tasks?task_ids=...</code>。</p>
+        <table>
+          <tr><th>响应字段</th><th>说明</th></tr>
+          <tr><td><code>status</code></td><td>常见值为 <code>SUBMITTED</code>、<code>QUEUED</code>、<code>IN_PROGRESS</code>、<code>SUCCESS</code> 或 <code>FAILURE</code>。</td></tr>
+          <tr><td><code>video_url</code></td><td>任务成功后的视频地址；可灵结果链接通常保留 30 天，请及时保存。</td></tr>
+          <tr><td><code>duration</code></td><td>上游返回的实际输出视频时长，单位为秒。</td></tr>
+          <tr><td><code>usage.input_duration</code></td><td>上游返回的输入视频总时长；仅 Kling 4.0 视频输入任务完成且上游提供该字段时出现。</td></tr>
+          <tr><td><code>cost</code></td><td>本平台任务结算后的收费金额，不是可灵原始 <code>billing[].amount</code>。</td></tr>
+          <tr><td><code>request_id</code></td><td>上游请求 ID，用于问题追踪。</td></tr>
+        </table>
+        <p>创建或查询失败时返回本平台错误结构；可灵官方提交响应的 <code>code</code>、<code>data.id</code> 与查询响应的 <code>outputs</code>、<code>billing</code> 不会原样返回。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>请求示例 · Omni</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>成功响应</h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxx",
+  "status": "SUCCESS",
+  "video_url": "https://cdn.example.com/result.mp4",
+  "duration": 15,
+  "model": "kling-4.0",
+  "cost": "12.5",
+  "request_id": "req_xxxxxxxxxx",
+  "usage": {"input_duration": "8.03"}
+}</code></pre>
+        <p class="compact-note">任务 ID、链接和费用数值仅为示例。</p>
       </aside>
     </section>
 
