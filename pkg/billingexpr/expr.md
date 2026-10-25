@@ -39,6 +39,14 @@ provider response and settles against the snapshot. Legacy `OtherRatios`, curren
 current model ratios and adaptor price adjustments are not applied again. Existing non-expression
 tasks and historical snapshots keep their previous paths.
 
+Kling 4.0 uses a separate `kling_4_0` meter with output seconds, total input video seconds,
+video-input presence and resolution. Input duration includes video-character Elements. A request
+with video or Element content reserves the provider's 30-second input maximum because input media
+duration and Element type are unavailable locally; omitted output duration reserves 30 seconds.
+Completion overlays `outputs[].duration` and `usage.input_duration` from the official task query.
+The pricing expression supplies per-second USD rates and the `max(input + output, 2 * output)`
+video-input rule; preview prices are documented in `docs/kling-4-video.md`, not embedded in the meter.
+
 Usage-token expressions use actual USD prices divided by 1,000,000, e.g.
 `tier("video", u("tokens") * 37 / 1000000)`; this differs from the engine's ordinary `p * 37` token syntax.
 Seconds/count/credit quantities use their direct unit price. Completion parsing distinguishes omitted

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Progress, Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
+import { Avatar, Progress, Space, Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
 import {
   Music,
   FileText,
@@ -42,12 +42,14 @@ import {
   TASK_ACTION_REMIX_GENERATE,
   TASK_ACTION_MOTION_CONTROL,
   TASK_ACTION_OMNI_VIDEO,
+  TASK_ACTION_KLING40_TEXT,
+  TASK_ACTION_KLING40_IMAGE,
+  TASK_ACTION_KLING40_OMNI,
   TASK_ACTION_VIDEO_EDIT,
   TASK_ACTION_VIDEO_EXTEND,
 } from '../../../constants/common.constant';
 import { CHANNEL_OPTIONS } from '../../../constants/channel.constants';
 import { stringToColor } from '../../../helpers/render';
-import { Avatar, Space } from '@douyinfe/semi-ui';
 
 const colors = [
   'amber',
@@ -84,7 +86,8 @@ const renderTimestamp = (timestampInSeconds) => {
 function renderDuration(submit_time, finishTime, getColor) {
   if (!submit_time || !finishTime) return 'N/A';
   const durationSec = finishTime - submit_time;
-  const color = getColor ? getColor(durationSec) : (durationSec > 60 ? 'red' : 'green');
+  let color = durationSec > 60 ? 'red' : 'green';
+  if (getColor) color = getColor(durationSec);
 
   // 返回带有样式的颜色标签
   return (
@@ -109,12 +112,14 @@ const renderType = (type, t) => {
         </Tag>
       );
     case TASK_ACTION_GENERATE:
+    case TASK_ACTION_KLING40_IMAGE:
       return (
         <Tag color='blue' shape='circle' prefixIcon={<Sparkles size={14} />}>
           {t('图生视频')}
         </Tag>
       );
     case TASK_ACTION_TEXT_GENERATE:
+    case TASK_ACTION_KLING40_TEXT:
       return (
         <Tag color='blue' shape='circle' prefixIcon={<Sparkles size={14} />}>
           {t('文生视频')}
@@ -136,6 +141,12 @@ const renderType = (type, t) => {
       return (
         <Tag color='blue' shape='circle' prefixIcon={<Sparkles size={14} />}>
           {t('视频Remix')}
+        </Tag>
+      );
+    case TASK_ACTION_KLING40_OMNI:
+      return (
+        <Tag color='blue' shape='circle' prefixIcon={<Sparkles size={14} />}>
+          Kling 4.0 Omni
         </Tag>
       );
     default:
@@ -269,7 +280,7 @@ export const getTaskLogsColumns = ({
       title: t('花费时间'),
       dataIndex: 'finish_time',
       render: (finish, record) => {
-        return <>{finish ? renderDuration(record.submit_time, finish, getDurationColor) : '-'}</>;
+        return finish ? renderDuration(record.submit_time, finish, getDurationColor) : '-';
       },
     },
     {
@@ -291,7 +302,7 @@ export const getTaskLogsColumns = ({
             </Tag>
           </div>
         ) : (
-          <></>
+          null
         );
       },
     },
@@ -301,7 +312,7 @@ export const getTaskLogsColumns = ({
       dataIndex: 'username',
       render: (userId, record, index) => {
         if (!isAdminUser) {
-          return <></>;
+          return null;
         }
         const displayText = String(record.username || userId || '?');
         return (
@@ -423,6 +434,9 @@ export const getTaskLogsColumns = ({
           record.action === TASK_ACTION_REMIX_GENERATE ||
           record.action === TASK_ACTION_MOTION_CONTROL ||
           record.action === TASK_ACTION_OMNI_VIDEO ||
+          record.action === TASK_ACTION_KLING40_TEXT ||
+          record.action === TASK_ACTION_KLING40_IMAGE ||
+          record.action === TASK_ACTION_KLING40_OMNI ||
           record.action === TASK_ACTION_VIDEO_EDIT ||
           record.action === TASK_ACTION_VIDEO_EXTEND;
         const isSuccess = record.status === 'SUCCESS';

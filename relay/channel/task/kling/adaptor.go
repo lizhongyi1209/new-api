@@ -301,6 +301,59 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
+	if strings.HasSuffix(c.Request.URL.Path, "/kling-4.0") {
+		var action string
+		switch {
+		case strings.Contains(c.Request.URL.Path, "/text-to-video/"):
+			action = constant.TaskActionKling40Text
+		case strings.Contains(c.Request.URL.Path, "/image-to-video/"):
+			action = constant.TaskActionKling40Image
+		case strings.Contains(c.Request.URL.Path, "/omni-video/"):
+			action = constant.TaskActionKling40Omni
+		default:
+			return service.TaskErrorWrapperLocal(fmt.Errorf("unsupported Kling 4.0 route"), "invalid_request", http.StatusBadRequest)
+		}
+		var validationErr *dto.TaskError
+		if action == constant.TaskActionKling40Text {
+			validationErr = relaycommon.ValidateBasicTaskRequest(c, info, action)
+		} else {
+			validationErr = relaycommon.ValidateTaskRequestWithOptionalPrompt(c, info, action)
+		}
+		if validationErr != nil {
+			return validationErr
+		}
+		req, err := relaycommon.GetTaskRequest(c)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		shapeAction := "omni"
+		if action == constant.TaskActionKling40Text {
+			shapeAction = "text"
+		} else if action == constant.TaskActionKling40Image {
+			shapeAction = "image"
+		}
+		if err := validateVideo40Shape(req.Metadata, shapeAction); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if action == constant.TaskActionKling40Text {
+			var body video40TextRequest
+			if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
+				err = validateVideo40Prompt(body.Prompt)
+			}
+			if err == nil {
+				err = validateVideo40Settings(body.Settings, "text")
+			}
+		} else {
+			var body video40ContentsRequest
+			if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
+				err = validateVideo40Contents(body, action == constant.TaskActionKling40Image)
+			}
+		}
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		return nil
+	}
 	if strings.Contains(c.Request.URL.Path, "kling-3.0-omni") {
 		if taskErr := relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30); taskErr != nil {
 			return taskErr
@@ -345,6 +398,12 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	var path string
 	switch info.Action {
+	case constant.TaskActionKling40Text:
+		path = "/text-to-video/kling-4.0"
+	case constant.TaskActionKling40Image:
+		path = "/image-to-video/kling-4.0"
+	case constant.TaskActionKling40Omni:
+		path = "/omni-video/kling-4.0"
 	case constant.TaskActionOmniVideo30:
 		path = "/omni-video/kling-3.0-omni"
 	case constant.TaskActionMotionControl30:
@@ -387,6 +446,22 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, fmt.Errorf("request not found in context")
 	}
 	req := v.(relaycommon.TaskSubmitReq)
+	if info.Action == constant.TaskActionKling40Text {
+		var body video40TextRequest
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+			return nil, err
+		}
+		data, err := common.Marshal(body)
+		return bytes.NewReader(data), err
+	}
+	if info.Action == constant.TaskActionKling40Image || info.Action == constant.TaskActionKling40Omni {
+		var body video40ContentsRequest
+		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+			return nil, err
+		}
+		data, err := common.Marshal(body)
+		return bytes.NewReader(data), err
+	}
 	if info.Action == constant.TaskActionOmniVideo30 || info.Action == constant.TaskActionMotionControl30 {
 		if info.Action == constant.TaskActionMotionControl30 {
 			var body motionControl30Request
@@ -452,7 +527,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 
 	resolvedTaskID := kResp.Data.TaskId
-	if resolvedTaskID == "" && (info.Action == constant.TaskActionOmniVideo30 || info.Action == constant.TaskActionMotionControl30) {
+	if resolvedTaskID == "" && (info.Action == constant.TaskActionOmniVideo30 || info.Action == constant.TaskActionMotionControl30 || info.Action == constant.TaskActionKling40Text || info.Action == constant.TaskActionKling40Image || info.Action == constant.TaskActionKling40Omni) {
 		var omniResp omniVideo30SubmitResponse
 		if err := common.Unmarshal(responseBody, &omniResp); err == nil {
 			if omniResp.Code != 0 {
@@ -514,7 +589,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 	var path string
 	switch action {
-	case constant.TaskActionOmniVideo30, constant.TaskActionMotionControl30:
+	case constant.TaskActionOmniVideo30, constant.TaskActionMotionControl30, constant.TaskActionKling40Text, constant.TaskActionKling40Image, constant.TaskActionKling40Omni:
 		path = "/tasks"
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
@@ -526,7 +601,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		path = "/v1/videos/text2video"
 	}
 	requestURL := fmt.Sprintf("%s%s/%s", baseUrl, path, taskID)
-	if action == constant.TaskActionOmniVideo30 || action == constant.TaskActionMotionControl30 {
+	if action == constant.TaskActionOmniVideo30 || action == constant.TaskActionMotionControl30 || action == constant.TaskActionKling40Text || action == constant.TaskActionKling40Image || action == constant.TaskActionKling40Omni {
 		requestURL = fmt.Sprintf("%s%s?task_ids=%s", baseUrl, path, url.QueryEscape(taskID))
 	}
 	if isNewAPIRelay(key) {
@@ -555,7 +630,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
-	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3", "kling-video-o1", "kling-v3-omni", "kling-3.0-omni", "kling-3.0"}
+	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3", "kling-video-o1", "kling-v3-omni", "kling-3.0-omni", "kling-3.0", "kling-4.0"}
 }
 
 func (a *TaskAdaptor) GetChannelName() string {

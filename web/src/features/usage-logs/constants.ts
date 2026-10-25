@@ -188,6 +188,9 @@ export const TASK_ACTIONS = {
   FIRST_TAIL_GENERATE: 'firstTailGenerate', // 首尾生视频
   REFERENCE_GENERATE: 'referenceGenerate', // 参照生视频
   REMIX_GENERATE: 'remixGenerate', // 视频 Remix
+  KLING40_TEXT: 'kling40Text',
+  KLING40_IMAGE: 'kling40Image',
+  KLING40_OMNI: 'kling40Omni',
 } as const
 
 /**
@@ -304,6 +307,9 @@ export const TASK_ACTION_MAPPINGS: Record<string, StatusMapping> = {
     label: 'Video Remix',
     variant: 'blue',
   },
+  [TASK_ACTIONS.KLING40_TEXT]: { label: 'Text to Video', variant: 'blue' },
+  [TASK_ACTIONS.KLING40_IMAGE]: { label: 'Image to Video', variant: 'blue' },
+  [TASK_ACTIONS.KLING40_OMNI]: { label: 'Omni Video', variant: 'blue' },
 }
 
 /**

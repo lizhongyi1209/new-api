@@ -149,6 +149,44 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 		// Resource deductions are unknown until completion. Reserve a conservative
 		// credit estimate without consulting a mutable currency price or ratio.
 		facts["units"] = seconds * 2
+	case Kling40:
+		if duration := body.Get("settings.duration"); duration.Exists() {
+			n, parseErr := numeric(duration)
+			if parseErr != nil {
+				return nil, fmt.Errorf("invalid settings.duration: %w", parseErr)
+			}
+			if n != math.Trunc(n) || n < 3 || n > 30 {
+				return nil, fmt.Errorf("settings.duration must be an integer between 3 and 30")
+			}
+			seconds = n
+		}
+		if seconds == 0 {
+			// The prompt or base video may determine the output duration.
+			seconds = 30
+		}
+		if seconds < 3 || seconds > 30 {
+			return nil, fmt.Errorf("Kling 4.0 output duration must be between 3 and 30 seconds")
+		}
+		if configured := body.Get("settings.resolution"); configured.Exists() {
+			res = configured.String()
+		}
+		if res == "" {
+			res = "1080p"
+		}
+		input := "none"
+		inputSeconds := 0.0
+		if hasVideo {
+			input, inputSeconds = "video", 30
+		}
+		for _, content := range body.Get("contents").Array() {
+			switch content.Get("type").String() {
+			case "feature_video", "base_video", "element":
+				// Element type and URL video duration are not known locally. The
+				// upstream caps their combined duration at 30 seconds.
+				input, inputSeconds = "video", 30
+			}
+		}
+		facts = map[string]any{"seconds": seconds, "input_video_seconds": inputSeconds, "video_input": input, "resolution": normalizeEnum(res, meta.Schema["resolution"].Enum)}
 	case H3, H3Max, H3MaxTurbo:
 		if seconds == 0 {
 			seconds = 5
@@ -278,6 +316,44 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 				sum = n
 			}
 			facts["units"] = sum
+		}
+	case Kling40:
+		foundOutputDuration := false
+		for _, output := range root.Get("data.0.outputs").Array() {
+			if output.Get("type").String() != "video" {
+				continue
+			}
+			duration := output.Get("duration")
+			if !duration.Exists() {
+				return nil, fmt.Errorf("Kling 4.0 output duration is missing")
+			}
+			n, err := numeric(duration)
+			if err != nil || n < 3 || n > 30 {
+				return nil, fmt.Errorf("invalid Kling 4.0 output duration")
+			}
+			facts["seconds"] = n
+			foundOutputDuration = true
+			break
+		}
+		if !foundOutputDuration {
+			return nil, fmt.Errorf("Kling 4.0 video output duration is missing")
+		}
+		if duration := root.Get("data.0.usage.input_duration"); duration.Exists() {
+			n, err := numeric(duration)
+			if err != nil || n > 30 || n < 0 {
+				return nil, fmt.Errorf("invalid Kling 4.0 input duration")
+			}
+			facts["input_video_seconds"] = n
+			if n > 0 {
+				facts["video_input"] = "video"
+			} else {
+				facts["video_input"] = "none"
+			}
+		} else if submitted["video_input"] == "video" {
+			// Video-character Elements may be indistinguishable from image
+			// Elements at submission. Keep the reservation until the upstream
+			// reports the total video input duration.
+			return nil, fmt.Errorf("Kling 4.0 input video duration is missing")
 		}
 	case H3, H3Max, H3MaxTurbo:
 		if !usage.IsObject() {

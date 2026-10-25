@@ -373,6 +373,9 @@ func legacyVideoAvailable(task *model.Task) bool {
 		constant.TaskActionMotionControl30,
 		constant.TaskActionOmniVideo,
 		constant.TaskActionOmniVideo30,
+		constant.TaskActionKling40Text,
+		constant.TaskActionKling40Image,
+		constant.TaskActionKling40Omni,
 		constant.TaskActionVideoEdit,
 		constant.TaskActionVideoExtend:
 		return true

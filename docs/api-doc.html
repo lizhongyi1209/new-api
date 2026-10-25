@@ -148,6 +148,7 @@
         <option value="minimax-h3">MiniMax H3 / H3 Max</option>
         <option value="gemini-omni">Gemini Omni</option>
         <option value="grok-video">Grok 视频</option>
+        <option value="kling-4">Kling 4.0</option>
         <option value="kling-3">Kling 3.0</option>
       </select>
       <button type="button" class="copy-agent" id="copy-agent-doc" title="复制所选范围的全部参数和示例">复制给 Agent</button>
@@ -168,6 +169,7 @@
       <a href="#minimax-h3" data-section="minimax-h3">MiniMax H3 / H3 Max</a>
       <a href="#gemini-omni" data-section="gemini-omni">Gemini Omni</a>
       <a href="#grok-video" data-section="grok-video">Grok 视频</a>
+      <a href="#kling-4" data-section="kling-4">Kling 4.0</a>
       <a href="#kling-3" data-section="kling-3">Kling 3.0</a>
     </nav>
   </aside>
@@ -389,7 +391,7 @@
         <h3>模型名称</h3>
         <table>
           <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
-          <tr><td>Gemini Nano Banana 2.1</td><td><code>gemini-nano-banana-2.1-sp</code></td><td><code>gemini-nano-banana-2.1-sd</code></td><td><code>gemini-nano-banana-2.1</code></td></tr>
+          <tr><td>Gemini Nano Banana 2.1</td><td><code>gemini-nano-banana-2.1-sp</code></td><td><code>gemini-nano-banana-2.1-sd</code></td><td><code>gemini-nano-banana-2.1-sp</code></td></tr>
           <tr><td>Gemini 3 Pro Image</td><td><code>gemini-3-pro-image-c-sp</code></td><td><code>gemini-3-pro-image-c-sd</code></td><td><code>gemini-3-pro-image</code></td></tr>
           <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
         </table>
@@ -402,9 +404,7 @@
           <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。单张参考图也必须放入数组，不要使用 <code>image</code>。</td></tr>
           <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>1K</code>、<code>2K</code> 或 <code>4K</code>，必须使用大写 <code>K</code>。默认 <code>1K</code>。</td></tr>
           <tr><td><code>aspect_ratio</code></td><td class="opt">否</td><td>string</td><td>输出宽高比，支持范围见下表。</td></tr>
-          <tr><td><code>media_resolution</code></td><td class="opt">否</td><td>string</td><td>媒体解析级别，例如 <code>MEDIA_RESOLUTION_HIGH</code>。</td></tr>
-          <tr><td><code>google_search</code></td><td class="opt">否</td><td>boolean</td><td>传 <code>true</code> 时启用 Google Search grounding。</td></tr>
-          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>仅 Gemini 3.1 Flash Image 支持，可选 <code>minimal</code> 或 <code>high</code>。</td></tr>
+          <tr><td><code>thinking_level</code></td><td class="opt">否</td><td>string</td><td>Gemini Nano Banana 2.1 系列支持 <code>medium</code>（中等）；Gemini 3.1 Flash Image 支持 <code>minimal</code> 或 <code>high</code>。</td></tr>
           <tr><td><code>include_thoughts</code></td><td class="opt">否</td><td>boolean</td><td>是否请求返回思考内容。任务查询结果仅返回图片。</td></tr>
           <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td><code>["IMAGE"]</code> 或 <code>["TEXT","IMAGE"]</code>。不要仅传 <code>["TEXT"]</code>。</td></tr>
         </table>
@@ -1941,6 +1941,51 @@
 
         <h3>响应</h3>
         <pre><code>{"request_id": "task_grok_extend_xxxxxxxxxx"}</code></pre>
+      </aside>
+    </section>
+
+    <div class="section-heading" id="kling-4">
+      <div><h2>Kling VIDEO 4.0</h2></div>
+    </div>
+
+    <section class="endpoint-doc" id="/kling/omni-video/kling-4.0" aria-labelledby="kling-4-title">
+      <article class="reference-panel">
+        <h2 id="kling-4-title">Kling 4.0 视频生成</h2>
+        <p>请求体沿用可灵官方结构，由路径确定模型和任务类型，无需传 <code>model</code>。三个入口共用模型 <code>kling-4.0</code> 的渠道和计费配置。</p>
+        <table>
+          <tr><th>类型</th><th>提交</th><th>查询</th></tr>
+          <tr><td>文生视频</td><td><code>POST /kling/text-to-video/kling-4.0</code></td><td><code>GET /kling/text-to-video/kling-4.0/{task_id}</code></td></tr>
+          <tr><td>图生视频</td><td><code>POST /kling/image-to-video/kling-4.0</code></td><td><code>GET /kling/image-to-video/kling-4.0/{task_id}</code></td></tr>
+          <tr><td>Omni</td><td><code>POST /kling/omni-video/kling-4.0</code></td><td><code>GET /kling/omni-video/kling-4.0/{task_id}</code></td></tr>
+        </table>
+        <h3>主要参数</h3>
+        <table>
+          <tr><th>字段</th><th>说明</th></tr>
+          <tr><td><code>prompt</code></td><td>文生视频必填。图生视频和 Omni 在 <code>contents</code> 中使用 <code>{"type":"prompt","text":"..."}</code>。</td></tr>
+          <tr><td><code>contents</code></td><td>图生视频支持首帧、中间帧、尾帧，最多 10 张图片；Omni 另外支持参考图、参考/编辑视频、元素和声音引用，素材总数最多 15。</td></tr>
+          <tr><td><code>settings.duration</code></td><td>3–30 秒；省略时由上游识别提示词中的时长意图，无意图时默认 10 秒。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td><code>720p</code> 或 <code>1080p</code>，默认 <code>1080p</code>。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>文生视频支持 <code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>；Omni 另支持 <code>adaptive</code>。图生视频接口无此参数。</td></tr>
+          <tr><td><code>options</code></td><td>支持 <code>callback_url</code>、<code>external_task_id</code>、<code>watermark_info.enabled</code>。</td></tr>
+        </table>
+        <p>提交返回本平台公开任务 ID。查询返回任务状态、视频地址、时长和本平台结算费用；含视频输入的 Omni 任务可返回 <code>usage.input_duration</code>。文件大小和媒体属性由可灵上游校验。参见 <a href="https://kling.ai/document-api/api/video/4-0/video-omni.md">官方 Omni 文档</a>。</p>
+      </article>
+      <aside class="example-panel">
+        <h3>文生视频</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/text-to-video/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"A sunrise over a quiet harbor","settings":{"duration":10,"resolution":"1080p","aspect_ratio":"16:9"}}'</code></pre>
+        <h3>图生视频</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/image-to-video/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"contents":[{"type":"prompt","text":"Move smoothly from @first to @middle"},{"type":"first_frame","url":"https://cdn.example.com/first.png","id":"first"},{"type":"middle_frame","url":"https://cdn.example.com/middle.png","id":"middle"}],"settings":{"duration":10}}'</code></pre>
+        <h3>Omni</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"contents":[{"type":"prompt","text":"Follow the motion of @video_1 and use @image_1 as the character"},{"type":"feature_video","url":"https://cdn.example.com/motion.mp4","id":"video_1"},{"type":"refer_image","url":"https://cdn.example.com/person.png","id":"image_1"}],"settings":{"duration":15,"aspect_ratio":"adaptive"}}'</code></pre>
       </aside>
     </section>
 

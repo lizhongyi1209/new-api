@@ -1020,7 +1020,7 @@ func BuildDoubaoVideoTaskResponse(task *model.Task) map[string]any {
 }
 
 // BuildKlingVideo30TaskResponse exposes only the client-facing fields shared by
-// Kling's official 3.0 APIs. Cost is the amount charged by this platform after
+// Kling's official 3.0 and 4.0 APIs. Cost is the amount charged by this platform after
 // settlement (including the task's frozen user-group ratio), not Kling's raw
 // billing[].amount.
 func BuildKlingVideo30TaskResponse(task *model.Task) map[string]any {
@@ -1032,6 +1032,9 @@ func BuildKlingVideo30TaskResponse(task *model.Task) map[string]any {
 	var upstream struct {
 		RequestID string `json:"request_id"`
 		Data      []struct {
+			Usage *struct {
+				InputDuration string `json:"input_duration"`
+			} `json:"usage"`
 			Outputs []struct {
 				Type     string `json:"type"`
 				Duration string `json:"duration"`
@@ -1062,7 +1065,7 @@ func BuildKlingVideo30TaskResponse(task *model.Task) map[string]any {
 			Mul(decimal.NewFromFloat(exchangeRate))
 	}
 
-	return map[string]any{
+	response := map[string]any{
 		"task_id":    task.TaskID,
 		"status":     string(task.Status),
 		"video_url":  task.GetResultURL(),
@@ -1071,4 +1074,8 @@ func BuildKlingVideo30TaskResponse(task *model.Task) map[string]any {
 		"cost":       cost.String(),
 		"request_id": upstream.RequestID,
 	}
+	if modelName == "kling-4.0" && len(upstream.Data) > 0 && upstream.Data[0].Usage != nil && upstream.Data[0].Usage.InputDuration != "" {
+		response["usage"] = map[string]string{"input_duration": upstream.Data[0].Usage.InputDuration}
+	}
+	return response
 }

@@ -72,3 +72,17 @@ func TestBuildKlingMotionControl30TaskResponseHidesInternalData(t *testing.T) {
 	assert.NotContains(t, response, "data")
 	assert.Len(t, response, 7)
 }
+
+func TestBuildKling40TaskResponseIncludesInputVideoDuration(t *testing.T) {
+	task := &model.Task{
+		TaskID:      "task_public",
+		Status:      model.TaskStatusSuccess,
+		Properties:  model.Properties{OriginModelName: "kling-4.0"},
+		PrivateData: model.TaskPrivateData{ResultURL: "https://example.com/result.mp4"},
+		Data:        []byte(`{"request_id":"request-40","data":[{"outputs":[{"type":"video","duration":"10"}],"usage":{"input_duration":"8.03"}}]}`),
+	}
+	response := BuildKlingVideo30TaskResponse(task)
+	assert.Equal(t, map[string]string{"input_duration": "8.03"}, response["usage"])
+	assert.Equal(t, 10.0, response["duration"])
+	assert.NotContains(t, response, "data")
+}

@@ -232,6 +232,55 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 	}
 }
 
+// KlingVideo40Convert preserves the official request in metadata while exposing
+// the model and bounded request dimensions to the shared task pipeline.
+func KlingVideo40Convert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		if c.Request.Method == http.MethodGet {
+			prepareKling30TaskFetch(c, "kling-4.0")
+			return
+		}
+		var metadata map[string]any
+		if err := common.UnmarshalBodyReusable(c, &metadata); err != nil {
+			c.Next()
+			return
+		}
+		prompt, _ := metadata["prompt"].(string)
+		if contents, ok := metadata["contents"].([]any); ok {
+			for _, value := range contents {
+				item, ok := value.(map[string]any)
+				if ok && item["type"] == "prompt" {
+					prompt, _ = item["text"].(string)
+					break
+				}
+			}
+		}
+		unifiedReq := map[string]any{"model": "kling-4.0", "prompt": prompt, "metadata": metadata}
+		if settings, ok := metadata["settings"].(map[string]any); ok {
+			if duration, ok := settings["duration"].(float64); ok && duration >= 3 && duration <= 30 && duration == float64(int(duration)) {
+				unifiedReq["duration"] = int(duration)
+			}
+			if ratio, ok := settings["aspect_ratio"].(string); ok {
+				unifiedReq["size"] = ratio
+			}
+			if resolution, ok := settings["resolution"].(string); ok {
+				unifiedReq["mode"] = resolution
+			}
+		}
+		jsonData, err := common.Marshal(unifiedReq)
+		if err != nil {
+			c.Next()
+			return
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(jsonData))
+		if storage, err := common.CreateBodyStorage(jsonData); err == nil {
+			c.Set(common.KeyBodyStorage, storage)
+		}
+		c.Set(common.KeyRequestBody, jsonData)
+		c.Next()
+	}
+}
+
 // KlingMotionControl30Convert accepts Kling's current contents/settings/options
 // contract and promotes the prompt/model fields needed by the common task flow.
 func KlingMotionControl30Convert() func(c *gin.Context) {

@@ -107,3 +107,35 @@ func TestKlingMotionControl30ConvertPreservesOfficialRequest(t *testing.T) {
 
 	assert.Equal(t, http.StatusNoContent, response.Code)
 }
+
+func TestKlingVideo40ConvertPromotesOfficialRequestAndFetchModel(t *testing.T) {
+	router := gin.New()
+	router.Use(KlingVideo40Convert())
+	router.POST("/kling/text-to-video/kling-4.0", func(c *gin.Context) {
+		var request relaycommon.TaskSubmitReq
+		require.NoError(t, common.UnmarshalBodyReusable(c, &request))
+		assert.Equal(t, "kling-4.0", request.Model)
+		assert.Equal(t, "A cinematic lake", request.Prompt)
+		assert.Equal(t, 30, request.Duration)
+		assert.Equal(t, "21:9", request.Size)
+		assert.Equal(t, "1080p", request.Mode)
+		assert.Equal(t, "A cinematic lake", request.Metadata["prompt"])
+		c.Status(http.StatusNoContent)
+	})
+	router.GET("/kling/text-to-video/kling-4.0/:task_id", func(c *gin.Context) {
+		var request relaycommon.TaskSubmitReq
+		require.NoError(t, common.UnmarshalBodyReusable(c, &request))
+		assert.Equal(t, "kling-4.0", request.Model)
+		c.Status(http.StatusNoContent)
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/kling/text-to-video/kling-4.0", strings.NewReader(`{"prompt":"A cinematic lake","settings":{"duration":30,"aspect_ratio":"21:9","resolution":"1080p"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	assert.Equal(t, http.StatusNoContent, response.Code)
+
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kling/text-to-video/kling-4.0/task-1", nil))
+	assert.Equal(t, http.StatusNoContent, response.Code)
+}

@@ -12,6 +12,7 @@ import (
 const (
 	Seedance   = "seedance"
 	Kling      = "kling"
+	Kling40    = "kling_4_0"
 	H3         = "minimax_h3"
 	H3Max      = "minimax_h3_max"
 	H3MaxTurbo = "minimax_h3_max_turbo"
@@ -54,6 +55,9 @@ func ForModel(channelType int, model string) Metadata {
 	case constant.ChannelTypeKling, constant.ChannelTypeTencentVideo:
 		if strings.HasPrefix(name, "kling-") {
 			meter = Kling
+		}
+		if channelType == constant.ChannelTypeKling && name == "kling-4.0" {
+			meter = Kling40
 		}
 	case constant.ChannelTypeMiniMax:
 		if name == "minimax-h3" {
@@ -121,6 +125,15 @@ func ForMeter(meter string) Metadata {
 	case Kling:
 		meta.Schema["units"] = number("credit", "Kling credit units", "可灵资源包单位")
 		meta.Examples = []jsplugin.UsageExample{{Label: "1 credit", Facts: map[string]any{"units": 1}}, {Label: "3.5 credits", Facts: map[string]any{"units": 3.5}}}
+	case Kling40:
+		meta.Schema["seconds"] = number("second", "Output video duration", "输出视频时长")
+		meta.Schema["input_video_seconds"] = number("second", "Total input video and video-character Element duration", "输入视频及视频角色主体的总时长")
+		meta.Schema["video_input"] = jsplugin.UsageFieldSchema{Enum: []string{"none", "video"}, Description: jsplugin.LocalizedText{"en": "Video input", "zh": "视频输入"}, EnumLabels: map[string]jsplugin.LocalizedText{"none": {"en": "No video input", "zh": "无视频输入"}, "video": {"en": "With video input", "zh": "有视频输入"}}}
+		meta.Schema["resolution"] = resolution("720p", "1080p")
+		meta.Examples = []jsplugin.UsageExample{
+			{Label: "1080p · 10s · no video", Facts: map[string]any{"seconds": 10, "input_video_seconds": 0, "video_input": "none", "resolution": "1080p"}},
+			{Label: "1080p · 3s + 30s input", Facts: map[string]any{"seconds": 3, "input_video_seconds": 30, "video_input": "video", "resolution": "1080p"}},
+		}
 	case H3, H3Max, H3MaxTurbo:
 		meta.Schema["seconds"] = number("second", "Output video duration", "输出视频时长")
 		meta.Schema["resolution"] = resolution("768P", "2K")

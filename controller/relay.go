@@ -524,7 +524,7 @@ func RelayDoubaoVideoTaskFetch(c *gin.Context) {
 }
 
 // RelayKlingVideo30TaskFetch returns the compact public contract shared by
-// Kling 3.0 task endpoints. Internal task fields and raw upstream billing data
+// Kling 3.0 and 4.0 task endpoints. Internal task fields and raw upstream billing data
 // must not be exposed to clients.
 func RelayKlingVideo30TaskFetch(c *gin.Context) {
 	taskID := c.Param("task_id")

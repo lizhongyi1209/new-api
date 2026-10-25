@@ -45,6 +45,14 @@ Aliases: 原生视频表达式计费, Seedance 定价, 视频价格矩阵, nativ
 - Frontend reuses `web/src/features/system-settings/models/model-pricing-sheet.tsx`, `task-usage-pricing-editor.tsx`, and `task-pricing-matrix.tsx`; the admin panel forwards usage examples from `web/src/features/model-pricing/model-pricing-panel.tsx`.
 - Scope, configuration examples, and local validation: `docs/native-video-expression-pricing.md`; regressions: `pkg/videoexpr/usage_test.go`, `model/native_video_pricing_test.go`, `relay/native_video_expression_test.go`, `relay/helper/native_video_request_test.go`, `service/native_video_billing_test.go`.
 
+## Kling 4.0 video generation
+
+Aliases: Kling 4.0, 可灵 4.0, Kling 4.0 文生视频, Kling 4.0 图生视频, Kling 4.0 Omni, `/kling/omni-video/kling-4.0`.
+
+- Public submission and task lookup routes: `router/video-router.go`; official-body conversion: `middleware/kling_adapter.go`; model routing, validation, upstream submission and `/tasks` polling: `relay/channel/task/kling/adaptor.go`, `video40.go`.
+- Native expression usage and the Kling 4.0 duration meter: `pkg/videoexpr/schema.go`, `usage.go`; task settlement: `service/task_polling.go`; model ratio: `setting/ratio_setting/model_ratio.go`; public task projection: `controller/relay.go`, `relay/relay_task.go`. Video artifact recognition: `controller/task.go` and both frontend task-log action lists.
+- Downstream contract and examples: `docs/kling-4-video.md`; focused coverage: `relay/channel/task/kling/video40_test.go`, `middleware/kling_adapter_test.go`, `pkg/videoexpr/usage_test.go`.
+
 ## Channel health-check scheduling
 
 Aliases: 渠道自动检测, 仅检测自动禁用渠道, 检测并发, auto_ban_only, channel_test_concurrency.

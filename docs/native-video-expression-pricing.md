@@ -12,6 +12,7 @@
 | 61 Xinhankr | seedance-2.0、Fast、Mini | 同上 |
 | 50 Kling | v2.6、v3、v3 Omni、3.0，标准/专业/音频/4K/时长/动作控制变体 | `units`，保留上游资源扣减的小数精度 |
 | 58 Tencent Video | kling-v2-6-t、kling-v3-t、Omni、动作控制变体 | `units` |
+| 50 Kling 4.0 | kling-4.0 文生视频、图生视频、Omni | `seconds`、`input_video_seconds`、`video_input`、`resolution`；预览公式见 `docs/kling-4-video.md` |
 | 35 MiniMax、60 TokenMart | MiniMax-H3 / MiniMax-H3-MAX | `seconds`、`input_video_seconds`、`input_images`、`resolution` |
 | 48 xAI、60 TokenMart、1 OpenAI 兼容 | grok-imagine-video、1.0、1.5、1.5-preview | `seconds`、`input_images`、`resolution`、`operation` |
 | 24 Gemini | gemini-omni-flash-preview | `input_tokens`、`text_output_tokens`、`video_output_tokens` |
@@ -97,7 +98,7 @@ tier("omni", (u("input_tokens") * 1.5 + u("text_output_tokens") * 9 + u("video_o
 
 - 提交按经校验的请求估算用量。Seedance 用分辨率与时长估算 Token，参考视频预留 15 秒输入；`duration=-1`
   按映射后的模型上限预留，2.0 MAX 为 15 秒、2.5 MAX 为 30 秒。
-  Kling 暂按每请求秒 2 个资源点预留；实际资源扣减完成后结算。MiniMax 参考视频同样预留 15 秒。
+  旧版 Kling 暂按每请求秒 2 个资源点预留；实际资源扣减完成后结算。Kling 4.0 用独立计量器，未指定输出时长或无法读取输入视频时长时，分别按 30 秒上限预留；完成后用上游返回的时长结算。MiniMax 参考视频同样预留 15 秒。
   这些是预扣估算，不是供应商的精确报价，也不能保证覆盖任意管理员定义的条件表达式。
 - 请求里的 `usage` 不会成为用量；秒数、图片数、Token 和资源点先校验范围，再作为乘数。
 - 提交时冻结表达式、分组倍率、额度换算参数、用量维度和引用的标量条件/允许的请求头/时间。
