@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"net/http"

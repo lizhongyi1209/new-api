@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -674,7 +675,7 @@ func (a *TaskAdaptor) doFetchDescriptor(baseURL, key, proxy string, value any) (
 	if err := channel.ApplyHeaderOverride(a.headerOverrideInfo(key), nil, req); err != nil {
 		return nil, err
 	}
-	client, err := service.GetHttpClientWithProxySettings(proxy, a.channelSetting())
+	client, err := service.GetHttpClientWithProxySettings(proxy, a.info.ChannelSetting)
 	if err != nil {
 		return nil, err
 	}

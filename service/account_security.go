@@ -37,7 +37,7 @@ func AccountMailLanguage(c *gin.Context, userId int) string {
 	if lang := model.GetUserLanguage(userId); lang != "" {
 		return lang
 	}
-	return i18n.StatedLang(c)
+	return i18n.GetLangFromContext(c)
 }
 
 // NotifyAccountSecurityChange never includes credentials or tokens. The caller

@@ -453,11 +453,11 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 	if common.DataExportEnabled {
 		var cacheReadTokens, cacheCreationTokens int
-		if other != nil {
-			cacheReadTokens, _ = other.public["cache_tokens"].(int)
+		if params.Other != nil {
+			cacheReadTokens, _ = params.Other.public["cache_tokens"].(int)
 			// The settlement path already normalizes the cache creation total.
 			// Do not add the 5m/1h breakdown again or infer tokens from prices.
-			cacheCreationTokens, _ = other.public["cache_write_tokens"].(int)
+			cacheCreationTokens, _ = params.Other.public["cache_write_tokens"].(int)
 		}
 		LogQuotaData(QuotaDataLogParams{
 			UserID:              userId,

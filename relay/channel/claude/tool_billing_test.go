@@ -111,7 +111,8 @@ func TestCountClaudeStreamBillableToolsServerToolKeys(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			info := &relaycommon.RelayInfo{OriginModelName: "claude-3-7-sonnet", WebSearchBillingKey: tt.billingKey, WebFetchBillingKey: tt.fetchKey}
-			countClaudeStreamBillableTools(info, &dto.ClaudeResponse{
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			countClaudeStreamBillableTools(c, info, &dto.ClaudeResponse{
 				Type:  "message_delta",
 				Usage: &dto.ClaudeUsage{ServerToolUse: &tt.usage},
 			})
@@ -151,13 +152,14 @@ func TestClaudeSearchResultBlocksBillVendorSearch(t *testing.T) {
 				var blocks []dto.ClaudeMediaMessage
 				require.NoError(t, common.UnmarshalJsonStr("["+tt.blocks+"]", &blocks))
 				if stream {
+					c, _ := gin.CreateTestContext(httptest.NewRecorder())
 					for i := range blocks {
-						countClaudeStreamBillableTools(info, &dto.ClaudeResponse{Type: "content_block_start", ContentBlock: &blocks[i]})
+						countClaudeStreamBillableTools(c, info, &dto.ClaudeResponse{Type: "content_block_start", ContentBlock: &blocks[i]})
 					}
 					if tt.usage != "" {
 						var usage dto.ClaudeUsage
 						require.NoError(t, common.UnmarshalJsonStr(tt.usage, &usage))
-						countClaudeStreamBillableTools(info, &dto.ClaudeResponse{Type: "message_delta", Usage: &usage})
+						countClaudeStreamBillableTools(c, info, &dto.ClaudeResponse{Type: "message_delta", Usage: &usage})
 					}
 				} else {
 					usage := cmp.Or(tt.usage, `{"input_tokens":1,"output_tokens":1}`)

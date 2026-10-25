@@ -71,7 +71,7 @@ func (info *RelayInfo) SetBillableToolCount(name string, count int) {
 		return
 	}
 	if count > MaxBillableToolCallCount {
-		common.SysError(common.LogText("billable tool count clamped: tool=%s count=%d", name, count))
+		common.SysError(fmt.Sprintf("billable tool count clamped: tool=%s count=%d", name, count))
 		count = MaxBillableToolCallCount
 	}
 	if info.ResponsesUsageInfo == nil {

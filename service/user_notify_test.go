@@ -101,6 +101,7 @@ func TestQuotaReminderFiresOncePerDrop(t *testing.T) {
 // on, in that administrator's saved language. Until an administrator chooses,
 // root receives them and other administrators do not; other users never do.
 func TestChannelNoticesFollowEachAdministratorsSwitch(t *testing.T) {
+	require.NoError(t, i18n.Init())
 	previousDB := model.DB
 	previousCache, previousRedis := common.MemoryCacheEnabled, common.RedisEnabled
 	previousNotifyLimit := constant.NotifyLimitCount

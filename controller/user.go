@@ -1321,7 +1321,7 @@ func UpdateUserSetting(c *gin.Context) {
 
 	// 验证预警阈值，0 表示使用系统默认阈值
 	if req.QuotaWarningThreshold < 0 {
-		common.ApiErrorT(c, "Reminder threshold cannot be negative")
+		common.ApiErrorMsg(c, "Reminder threshold cannot be negative")
 		return
 	}
 
