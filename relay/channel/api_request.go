@@ -308,6 +308,56 @@ func ApplyHeaderOverride(info *common.RelayInfo, c *gin.Context, req *http.Reque
 	return nil
 }
 
+// DoTaskFetchRequest applies polling headers and keeps credentials on the
+// original origin when a provider redirects a task lookup.
+func DoTaskFetchRequest(req *http.Request, proxy string, info *common.RelayInfo) (*http.Response, error) {
+	if info != nil {
+		if err := ApplyHeaderOverride(info, nil, req); err != nil {
+			return nil, err
+		}
+	}
+	client, err := service.GetHttpClientWithProxy(proxy)
+	if err != nil {
+		return nil, err
+	}
+	queryClient := *client
+	credentialsStripped := false
+	queryClient.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if len(via) == 0 {
+			return errors.New("task fetch redirect has no origin")
+		}
+		if strings.EqualFold(via[len(via)-1].URL.Scheme, "https") && !strings.EqualFold(next.URL.Scheme, "https") {
+			return errors.New("task fetch redirect cannot downgrade HTTPS")
+		}
+		origin := via[0].URL
+		if !strings.EqualFold(next.URL.Scheme, origin.Scheme) || !strings.EqualFold(next.URL.Host, origin.Host) {
+			credentialsStripped = true
+		}
+		if credentialsStripped {
+			if next.Body != nil && next.Body != http.NoBody {
+				return errors.New("task fetch redirect cannot replay a body to another origin")
+			}
+			for name := range next.Header {
+				switch http.CanonicalHeaderKey(name) {
+				case "Accept", "Accept-Language":
+				default:
+					delete(next.Header, name)
+				}
+			}
+			next.Host = ""
+			next.URL.User = nil
+		}
+		if client.CheckRedirect != nil {
+			return client.CheckRedirect(next, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return queryClient.Do(req)
+}
+
 func applyHeaderOverrideToRequest(req *http.Request, headerOverride map[string]string) {
 	if req == nil {
 		return

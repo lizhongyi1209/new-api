@@ -240,16 +240,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		}
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("Authorization", "Bearer "+key)
-		if a.relayInfo != nil {
-			if err := channel.ApplyHeaderOverride(a.relayInfo, nil, req); err != nil {
-				return nil, err
-			}
-		}
-		client, err := service.GetHttpClientWithProxy(proxy)
-		if err != nil {
-			return nil, fmt.Errorf("new proxy http client failed: %w", err)
-		}
-		return client.Do(req)
+		return channel.DoTaskFetchRequest(req, proxy, a.relayInfo)
 	}
 
 	upstreamName, err := taskcommon.DecodeLocalTaskID(taskID)
@@ -267,17 +258,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("x-goog-api-key", key)
-	if a.relayInfo != nil {
-		if err := channel.ApplyHeaderOverride(a.relayInfo, nil, req); err != nil {
-			return nil, err
-		}
-	}
-
-	client, err := service.GetHttpClientWithProxy(proxy)
-	if err != nil {
-		return nil, fmt.Errorf("new proxy http client failed: %w", err)
-	}
-	return client.Do(req)
+	return channel.DoTaskFetchRequest(req, proxy, a.relayInfo)
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
