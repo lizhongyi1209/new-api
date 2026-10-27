@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/QuantumNous/new-api/common"
 	kitreasoning "github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
@@ -20,6 +21,22 @@ import (
 )
 
 var negativeIndexRegexp = regexp.MustCompile(`\.(-\d+)`)
+
+// Param override rules are re-parsed for every request, so compiled patterns are
+// shared by pattern text instead of being stored on the parsed operations.
+var paramOverrideRegexCache sync.Map // map[string]*regexp.Regexp
+
+func getParamOverrideRegex(pattern string) (*regexp.Regexp, error) {
+	if cached, ok := paramOverrideRegexCache.Load(pattern); ok {
+		return cached.(*regexp.Regexp), nil
+	}
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	actual, _ := paramOverrideRegexCache.LoadOrStore(pattern, compiled)
+	return actual.(*regexp.Regexp), nil
+}
 
 const (
 	paramOverrideContextRequestHeaders = "request_headers"
@@ -1929,7 +1946,7 @@ func regexReplaceStringValue(data []byte, path, pattern, replacement string) ([]
 	if pattern == "" {
 		return data, fmt.Errorf("regex pattern is required")
 	}
-	re, err := regexp.Compile(pattern)
+	re, err := getParamOverrideRegex(pattern)
 	if err != nil {
 		return data, err
 	}
