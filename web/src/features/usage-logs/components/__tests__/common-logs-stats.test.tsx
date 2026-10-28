@@ -82,6 +82,12 @@ it('shows the returned refund total to a root administrator', async () => {
   expect(screen.getByText(formatLogQuota(250000))).toBeVisible()
 })
 
+it('shows the returned refund total to a regular user', async () => {
+  renderStats(ROLE.USER)
+  expect(await screen.findByText('Refund quota')).toBeVisible()
+  expect(screen.getByText(formatLogQuota(250000))).toBeVisible()
+})
+
 it('keeps the refund total hidden from an ordinary administrator', async () => {
   renderStats(ROLE.ADMIN)
   expect(await screen.findByText('Usage')).toBeVisible()

@@ -93,7 +93,7 @@ export function CommonLogsStats() {
         value={sensitiveVisible ? formatLogQuota(stats?.quota || 0) : '••••'}
         accent='bg-sky-500/70'
       />
-      {isRootView && (
+      {(!isAdmin || isRootView) && (
         <StatBadge
           label={t('Refund quota')}
           value={
