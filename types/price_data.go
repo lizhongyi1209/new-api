@@ -34,6 +34,7 @@ type PriceData struct {
 	ImageRatio            float64
 	AudioRatio            float64
 	AudioCompletionRatio  float64
+	VideoCompletionRatio  float64
 	otherRatios           map[string]float64
 	UsePrice              bool
 	Quota                 int // 按次计费的最终额度（MJ / Task）

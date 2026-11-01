@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 

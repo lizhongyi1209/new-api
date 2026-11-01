@@ -48,6 +48,8 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 		cc = float64(split5m)
 		cc1h = float64(split1h)
 	}
+	hasClaudeCacheSplit := isClaudeUsageSemantic &&
+		(usage.ClaudeCacheCreation5mTokens > 0 || usage.ClaudeCacheCreation1hTokens > 0)
 
 	img := float64(usage.PromptTokensDetails.ImageTokens)
 	imgCR := float64(0)
@@ -94,18 +96,24 @@ func BuildTieredTokenParams(usage *dto.Usage, isClaudeUsageSemantic bool, usedVa
 	}
 
 	if isClaudeUsageSemantic {
-		// Anthropic input excludes cache reads and writes. When they have no
-		// separate price, merge those tokens into the input category instead.
+		// Anthropic input excludes cache reads. When cr has no separate price,
+		// merge it into the input category; cache-write lanes retain their
+		// explicit counts for the expression's fallback behavior.
 		if !usedVars["cr"] {
 			p += cr
 		}
-		if !usedVars["cc1h"] {
-			cc += cc1h * hosttypes.ClaudeCacheCreation1hMultiplier
-			cc1h = 0
-		}
-		if !usedVars["cc"] {
-			p += cc
-			cc = 0
+		// When the provider supplied an explicit TTL split, an unpriced write
+		// lane falls back to the ordinary input price. Keep the legacy aggregate
+		// behavior when only the total cache-creation field is available.
+		if hasClaudeCacheSplit {
+			if !usedVars["cc1h"] {
+				cc += cc1h * hosttypes.ClaudeCacheCreation1hMultiplier
+				cc1h = 0
+			}
+			if !usedVars["cc"] {
+				p += cc
+				cc = 0
+			}
 		}
 	} else {
 		if usedVars["cr"] {

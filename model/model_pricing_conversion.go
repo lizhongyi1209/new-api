@@ -22,8 +22,9 @@ import (
 // ModelPricingChange through the existing pricing transaction.
 type ModelPricingConversion struct {
 	ModelPricingDescription
-	Expression        string `json:"expression,omitempty"`
-	UnsupportedReason string `json:"unsupported_reason,omitempty"`
+	Expression        string   `json:"expression,omitempty"`
+	UnsupportedReason string   `json:"unsupported_reason,omitempty"`
+	Warnings          []string `json:"warnings,omitempty"`
 }
 
 // ModelPricingDescription is shared by previews, conversions and snapshot
@@ -144,7 +145,10 @@ func ResolveCacheWriteMode(name string, configured PricingValues) CacheWriteMode
 		}
 		return CacheWriteStandard
 	}
-	return CacheWriteNone
+	// Preserve the legacy relay default for models without an explicit
+	// cache-write override. The conversion preview must remain equivalent to
+	// the current ratio billing settings.
+	return CacheWriteStandard
 }
 
 // declaredEndpointNames resolves the endpoint types declared by one model
@@ -280,9 +284,15 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 				names = append(names, upstream)
 			}
 		}
+		if !fixedPrice && (channel.Type == constant.ChannelTypeAnthropic || strings.Contains(strings.ToLower(upstream), "claude")) && !strings.Contains(strings.ToLower(name), "claude") {
+			return &ModelPricingConversion{UnsupportedReason: "This alias uses Claude cache semantics. Convert its cache TTL prices manually."}, nil
+		}
 	}
 	for _, modelName := range names {
 		lower := strings.ToLower(modelName)
+		if strings.HasPrefix(lower, "veo") || strings.HasPrefix(lower, "sora") || strings.Contains(lower, "-i2v") || strings.Contains(lower, "-t2v") || strings.HasPrefix(lower, "minimax-h3") || effective["VideoCompletionRatio"] != nil {
+			return &ModelPricingConversion{UnsupportedReason: "Video pricing must be converted manually."}, nil
+		}
 		if strings.Contains(lower, "realtime") {
 			return &ModelPricingConversion{UnsupportedReason: "Realtime pricing must be converted manually."}, nil
 		}
@@ -373,7 +383,7 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 			multiplier := effective[lane.key].(float64)
 			// Same-price input categories stay in p. Keep distinct prices,
 			// including explicit zero, as independently priced terms.
-			if (lane.variable == "img" || lane.variable == "cr" && mergeCacheRead) && multiplier == 1 {
+			if lane.variable == "cr" && mergeCacheRead && multiplier == 1 {
 				continue
 			}
 			expressionBody.WriteString(" + " + lane.variable + " * ")
@@ -404,5 +414,6 @@ func PreviewModelPricingConversion(name string, draft PricingValues) (*ModelPric
 		return nil, err
 	}
 	preview.Expression = expression
+	preview.Warnings = []string{"Expression billing rounds quota instead of truncating it. Small charges may differ by one quota unit; compare representative requests before saving."}
 	return preview, nil
 }

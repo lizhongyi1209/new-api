@@ -7,6 +7,7 @@ package convmeta
 import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"strings"
 )
 
 // Meta is the only view of the relay session that format converters may use.
@@ -39,6 +40,8 @@ type Meta interface {
 	// instance must be returned for the lifetime of one streaming session; a
 	// nil receiver may return a temporary initialized state.
 	EnsureClaudeConvertInfo() *ClaudeConvertInfo
+	ResponsesToolState() *ResponsesToolState
+	SetResponsesToolState(state *ResponsesToolState)
 
 	// GetSendResponseCount / IncrSendResponseCount expose the shared
 	// downstream-chunk counter (the host may also increment it).
@@ -72,6 +75,40 @@ type ClaudeConvertInfo struct {
 // ClaudeStreamToolCall tracks one OpenAI tool_calls entry while it is encoded
 // as a Claude tool_use content block. Chat tool indexes and Claude content
 // block indexes are separate domains, so the mapping must remain explicit.
+type ResponsesToolState struct {
+	CustomToolNames map[string]struct{}
+	Namespaces      map[string]string
+}
+
+const CustomToolInputArgument = "input"
+const DefaultResponsesToolNamespace = "functions"
+
+func NamespacedToolName(namespace, name string) string {
+	if namespace == "" || namespace == DefaultResponsesToolNamespace {
+		return name
+	}
+	return namespace + "__" + name
+}
+
+func (s *ResponsesToolState) IsCustomTool(name string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.CustomToolNames[name]
+	return ok
+}
+
+func (s *ResponsesToolState) ResponsesToolName(upstreamName string) (string, string) {
+	if s == nil {
+		return "", upstreamName
+	}
+	ns, ok := s.Namespaces[upstreamName]
+	if !ok {
+		return "", upstreamName
+	}
+	return ns, strings.TrimPrefix(upstreamName, ns+"__")
+}
+
 type ClaudeStreamToolCall struct {
 	BlockIndex       int
 	ID               string
@@ -101,6 +138,7 @@ type Values struct {
 	EstimatePromptTokens int
 
 	ClaudeConvertInfo *ClaudeConvertInfo
+	ResponsesTools    *ResponsesToolState
 	SendResponseCount int
 	ConversionChain   []types.RelayFormat
 
@@ -180,6 +218,19 @@ func (v *Values) EnsureClaudeConvertInfo() *ClaudeConvertInfo {
 		v.ClaudeConvertInfo = &ClaudeConvertInfo{LastMessagesType: LastMessageTypeNone}
 	}
 	return v.ClaudeConvertInfo
+}
+
+func (v *Values) ResponsesToolState() *ResponsesToolState {
+	if v == nil {
+		return nil
+	}
+	return v.ResponsesTools
+}
+
+func (v *Values) SetResponsesToolState(state *ResponsesToolState) {
+	if v != nil {
+		v.ResponsesTools = state
+	}
 }
 
 func (v *Values) GetSendResponseCount() int {
