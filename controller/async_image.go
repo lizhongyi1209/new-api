@@ -34,7 +34,7 @@ func AsyncImageSubmit(c *gin.Context) {
 		return
 	}
 
-	if err := service.ValidateAsyncImageReferences(&req); err != nil {
+	if err := service.ValidateAsyncImageRequest(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": gin.H{
 				"message": err.Error(),

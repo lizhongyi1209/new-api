@@ -157,11 +157,14 @@ var generateImageOutputFormatValues = map[string]struct{}{
 	"png":  {},
 	"jpeg": {},
 	"webp": {},
+	"svg":  {},
+	"gif":  {},
 }
 
 var generateImageBackgroundValues = map[string]struct{}{
 	"auto":        {},
 	"transparent": {},
+	"opaque":      {},
 }
 
 var generateImageModerationValues = map[string]struct{}{
@@ -195,11 +198,8 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 			return fmt.Errorf("quality must be one of low, medium, high, xhigh, max, auto, standard, hd")
 		}
 		if req.Quality == "xhigh" || req.Quality == "max" {
-			modelName := strings.ToLower(strings.TrimSpace(req.Model))
-			sunburst := modelName == "gpt-image-2.5-sunburst" || strings.HasPrefix(modelName, "gpt-image-2.5-sunburst-")
-			flare := modelName == "gpt-image-2.5-flare" || strings.HasPrefix(modelName, "gpt-image-2.5-flare-")
-			if !sunburst && !flare {
-				return fmt.Errorf("quality %s is only supported by GPT Image 2.5 Sunburst and Flare", req.Quality)
+			if !kitdto.SupportsExtendedImageQuality(req.Model) {
+				return fmt.Errorf("quality %s is only supported by GPT Image 2.5 and later", req.Quality)
 			}
 		}
 	}
@@ -207,7 +207,7 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	if req.OutputFormat != nil {
 		outputFormat := strings.ToLower(strings.TrimSpace(*req.OutputFormat))
 		if _, ok := generateImageOutputFormatValues[outputFormat]; !ok {
-			return fmt.Errorf("output_format must be one of png, jpeg, webp")
+			return fmt.Errorf("output_format must be one of png, jpeg, webp, svg, gif")
 		}
 		*req.OutputFormat = outputFormat
 	}
@@ -215,7 +215,7 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	if req.Background != nil {
 		background := strings.ToLower(strings.TrimSpace(*req.Background))
 		if _, ok := generateImageBackgroundValues[background]; !ok {
-			return fmt.Errorf("background must be one of auto, transparent")
+			return fmt.Errorf("background must be one of auto, transparent, opaque")
 		}
 		if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Model)), "gpt-image") {
 			if isGeminiImageModelName(req.Model) {
@@ -276,7 +276,9 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 			}
 		}
 		if req.Quality != "" || req.AspectRatio != "" || req.Mask != nil || len(req.ResponseModalities) > 0 ||
-			req.MediaResolution != "" || req.GoogleSearch != nil || req.ThinkingLevel != nil || req.IncludeThoughts != nil {
+			req.MediaResolution != "" || req.GoogleSearch != nil || req.ThinkingLevel != nil || req.IncludeThoughts != nil ||
+			req.Markup != nil || req.Complexity != nil || req.FrameCount != nil || req.FrameDurationMs != nil ||
+			req.PartialImages != nil || req.OutputCompression != nil || req.InputFidelity != nil {
 			return fmt.Errorf("Seedream 5.0 Pro only supports prompt, images, n, size, output_format, watermark, and layer_decomposition on the unified endpoint")
 		}
 	} else if req.LayerDecomposition != nil {
@@ -286,10 +288,61 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 	if err := validateGenerateImageMask(req.Mask); err != nil {
 		return err
 	}
+	if err := validateGenerateImageMarkup(req.Markup); err != nil {
+		return err
+	}
 	for i := range req.Images {
 		if err := validateGenerateImageInput(&req.Images[i]); err != nil {
 			return fmt.Errorf("images[%d]: %w", i, err)
 		}
+	}
+
+	// The documented GPT Image contract covers model-specific tiers, output
+	// formats, stream/preview limits and resolution bounds. Non-GPT models are
+	// exempt from the gpt-image-specific rules inside Validate.
+	background, outputFormat, complexity := "", "", ""
+	if req.Background != nil {
+		background = *req.Background
+	}
+	if req.OutputFormat != nil {
+		outputFormat = *req.OutputFormat
+	}
+	if req.Complexity != nil {
+		complexity = *req.Complexity
+	}
+	options := kitdto.ImageGenerationOptions{
+		Model:             req.Model,
+		Target:            kitdto.ImageTargetGenerations,
+		N:                 req.N,
+		Size:              req.Size,
+		Quality:           req.Quality,
+		Background:        background,
+		OutputFormat:      outputFormat,
+		OutputCompression: req.OutputCompression,
+		PartialImages:     req.PartialImages,
+		Markup:            req.Markup != nil,
+		Mask:              req.Mask != nil,
+		Complexity:        complexity,
+		FrameCount:        req.FrameCount,
+		FrameDurationMs:   req.FrameDurationMs,
+	}
+	if len(req.Images) > 0 {
+		options.Target = kitdto.ImageTargetEdits
+	}
+	if err := options.Validate(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateGenerateImageMarkup applies the same reference contract as mask: an
+// annotation layer arrives as exactly one of file_id or image_url.
+func validateGenerateImageMarkup(markup *dto.ImageReference) error {
+	if markup == nil {
+		return nil
+	}
+	if err := validateGenerateImageMask(markup); err != nil {
+		return fmt.Errorf("markup: %w", err)
 	}
 	return nil
 }

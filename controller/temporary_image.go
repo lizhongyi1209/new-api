@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/service"
@@ -36,5 +38,11 @@ func ServeTemporaryOutputImage(c *gin.Context) {
 	c.Header("Cache-Control", fmt.Sprintf("public, max-age=%d, s-maxage=%d, must-revalidate", remainingSeconds, remainingSeconds))
 	c.Header("Expires", expiresAt.UTC().Format(http.TimeFormat))
 	c.Header("X-Content-Type-Options", "nosniff")
+	// Generated SVG is stored and served from this origin. A sandboxed CSP keeps
+	// any script or external reference inside the document inert, so an SVG that
+	// slips past generation-time constraints cannot run as same-origin JavaScript.
+	if strings.EqualFold(filepath.Ext(info.Name()), ".svg") {
+		c.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	}
 	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), file)
 }

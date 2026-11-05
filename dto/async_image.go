@@ -12,6 +12,11 @@ type AsyncImageRequest struct {
 	Moderation         *string         `json:"moderation,omitempty"`
 	ResponseFormat     string          `json:"response_format,omitempty"`
 	OutputFormat       *string         `json:"output_format,omitempty"`
+	OutputCompression  *int            `json:"output_compression,omitempty"`
+	PartialImages      *int            `json:"partial_images,omitempty"`
+	Complexity         *string         `json:"complexity,omitempty"`
+	FrameCount         *int            `json:"frame_count,omitempty"`
+	FrameDurationMs    *int            `json:"frame_duration_ms,omitempty"`
 	Watermark          *bool           `json:"watermark,omitempty"`
 	LayerDecomposition *bool           `json:"layer_decomposition,omitempty"`
 	Style              json.RawMessage `json:"style,omitempty"`
@@ -25,6 +30,8 @@ type AsyncImageRequest struct {
 	Image           json.RawMessage `json:"image,omitempty"`
 	Images          []string        `json:"images,omitempty"`
 	Mask            *ImageReference `json:"mask,omitempty"`
+	Markup          *ImageReference `json:"markup,omitempty"`
+	InputFidelity   *string         `json:"input_fidelity,omitempty"`
 }
 
 type AsyncTaskResponse struct {

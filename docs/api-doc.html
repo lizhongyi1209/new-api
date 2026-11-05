@@ -3,181 +3,320 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>O1Key API接口文档</title>
+<title>O1Key API 接口文档</title>
 <style>
   :root{
     color-scheme:light dark;
-    --bg:#f7f8fa;--surface:#fcfcfd;--surface-muted:#f0f2f5;--line:#d9dde4;--line-strong:#c4c9d2;
-    --text:#17191f;--muted:#626873;--accent:#2859c5;--accent-soft:#edf2ff;
-    --success:#16794a;--warn:#94600d;--danger:#bf3b3b;--code:#171a21;--code-text:#e8ebf0;
+    --bg:#f3f5f8;--panel:#fff;--panel-2:#fafbfd;--panel-3:#f1f4f8;
+    --line:#e5e9f0;--line-2:#d7dde7;
+    --ink:#12151b;--ink-2:#39414e;--ink-3:#69717f;
+    --accent:#2f5fd0;--accent-2:#eaf0ff;--accent-3:#cddafb;
+    --ok:#0d7a4c;--ok-bg:#e4f6ed;--warn:#8a5a09;--warn-bg:#fdf2df;--bad:#b73838;--bad-bg:#fdeaea;
+    --code:#13161d;--code-ink:#e5e9f0;
+    --r-lg:16px;--r-md:12px;--r-sm:8px;
+    --sh-1:0 1px 2px rgba(16,24,40,.04),0 1px 3px rgba(16,24,40,.06);
+    --sh-2:0 12px 32px -12px rgba(16,24,40,.18);
+    --mono:"SFMono-Regular",ui-monospace,Consolas,"Liberation Mono",Menlo,monospace;
+    --sans:"SF Pro Text","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
   }
   *{box-sizing:border-box}
   [hidden]{display:none!important}
-  html{scroll-behavior:smooth;scroll-padding-top:72px}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:"SF Pro Text","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;font-size:14px;line-height:1.58;text-rendering:optimizeLegibility}
+  html{scroll-behavior:smooth;scroll-padding-top:88px}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.65;-webkit-font-smoothing:antialiased}
   a{color:inherit;text-decoration:none}
   button{font:inherit}
-  header.top{position:sticky;top:0;z-index:20;height:58px;background:color-mix(in srgb,var(--bg) 94%,transparent);border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
-  header.top .wrap{max-width:1680px;height:100%;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:16px}
-  header.top h1{margin:0;font-size:15px;font-weight:680;letter-spacing:-.01em}
-  .header-actions{margin-left:auto;display:flex;align-items:center;gap:10px}
-  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-  .copy-scope{min-width:130px;border:1px solid var(--line-strong);background:var(--surface);color:var(--text);border-radius:8px;padding:5px 28px 5px 9px;font-size:12px;line-height:1.5;cursor:pointer}
-  .copy-scope:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 30%,transparent);outline-offset:2px}
-  .copy-agent{appearance:none;border:1px solid var(--accent);background:var(--accent);color:#f8faff;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:650;cursor:pointer;transition:filter .14s ease,transform .14s ease}
-  .copy-agent:hover{filter:brightness(.94)}
-  .copy-agent:active,.copy-code:active,.example-tab:active{transform:translateY(1px)}
-  .copy-agent:focus-visible,.copy-code:focus-visible,.example-tab:focus-visible,.sidebar a:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 30%,transparent);outline-offset:2px}
-  .copy-agent.copied{background:var(--success);border-color:var(--success)}
-  .copy-status{font-size:11px;color:var(--muted)}
-  .docs-shell{max-width:1680px;margin:0 auto;padding:34px 28px 96px;display:grid;grid-template-columns:172px minmax(0,1fr);gap:44px;align-items:start}
-  aside.sidebar{position:sticky;top:82px;max-height:calc(100dvh - 108px);overflow-x:hidden;overflow-y:auto;padding:0 14px 0 0;border-right:1px solid var(--line);scrollbar-width:thin}
-  aside.sidebar::-webkit-scrollbar{width:4px;height:0}
-  .sidebar-title{margin:0 0 10px;padding:0 10px;color:var(--muted);font-size:11px;font-weight:650}
-  .sidebar nav{display:flex;flex-direction:column;gap:1px}
-  .sidebar a{display:block;padding:7px 10px;border-right:2px solid transparent;color:var(--muted);font-size:12px;font-weight:560;line-height:1.35;transition:color .14s ease,background .14s ease,border-color .14s ease}
-  .sidebar a:hover{color:var(--text);background:var(--surface-muted)}
-  .sidebar a[aria-current="true"]{color:var(--accent);border-right-color:var(--accent);background:var(--accent-soft)}
-  main.api-grid{min-width:0;display:grid;grid-template-columns:1fr;gap:0}
-  .page-intro,.section-heading,.model-heading,.wide-panel,.endpoint-doc{min-width:0}
-  .page-intro{padding:0 0 34px;border-bottom:1px solid var(--line-strong)}
-  .page-intro h2{margin:0 0 16px;font-size:26px;letter-spacing:-.025em}
-  .lead{display:none}
-  .section-heading{padding:64px 0 20px;scroll-margin-top:58px}
-  .section-heading h2{margin:0;font-size:26px;font-weight:700;letter-spacing:-.025em}
-  .section-heading p{max-width:68ch;margin:7px 0 0;color:var(--muted);font-size:13px}
-  .model-heading{padding:36px 0 16px;border-top:1px solid var(--line-strong);scroll-margin-top:72px}
-  .model-heading:first-of-type{border-top:0}
-  .model-heading h2{margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em}
-  .model-heading p{max-width:72ch;margin:6px 0 0;color:var(--muted);font-size:13px}
-  .endpoint-doc{display:grid;grid-template-columns:minmax(0,1fr) minmax(420px,.88fr);gap:40px;padding:34px 0 54px;border-top:1px solid var(--line);scroll-margin-top:76px}
-  .reference-panel,.example-panel,.wide-panel{min-width:0;padding:0;background:transparent}
-  .example-panel{padding-left:40px;border-left:1px solid var(--line)}
-  .wide-panel{margin-top:56px;padding-top:34px;border-top:1px solid var(--line)}
-  h2{margin:0 0 10px;font-size:20px;font-weight:680;letter-spacing:-.016em}
-  h3{margin:28px 0 10px;color:var(--text);font-size:13px;font-weight:700}
-  h3:first-child{margin-top:0}
-  h4{margin:20px 0 8px;color:var(--muted);font-size:11px;font-weight:650}
-  h4:first-child{margin-top:0}
-  p{max-width:76ch;margin:8px 0;color:var(--muted)}
-  .endpoint{display:flex;align-items:center;gap:9px;margin:12px 0 18px;padding:8px 10px;background:var(--surface-muted);border-left:2px solid var(--accent);font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:12px;line-height:1.4;flex-wrap:wrap}
-  .method{font-size:10px;font-weight:760;letter-spacing:.045em}
-  .method.get{color:var(--success)}.method.post{color:var(--accent)}.method.put{color:var(--warn)}
-  .path{overflow-wrap:anywhere;color:var(--text)}
-  table{width:100%;margin:10px 0 0;border-collapse:collapse;font-size:12px}
-  th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
-  th{background:var(--surface-muted);color:var(--muted);font-size:11px;font-weight:650;white-space:nowrap}
-  td{color:var(--text)}
-  td code,p code,li code{padding:1px 4px;background:var(--accent-soft);color:var(--accent);border-radius:4px;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:11px;overflow-wrap:anywhere}
-  .code-block{position:relative;margin:8px 0 16px}
-  pre{margin:0;padding:15px 16px;background:var(--code);border:1px solid color-mix(in srgb,var(--code-text) 14%,transparent);border-radius:8px;overflow:auto}
-  pre code{color:var(--code-text);font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:11px;line-height:1.62;white-space:pre}
-  .copy-code{position:absolute;top:7px;right:7px;z-index:2;appearance:none;border:1px solid #404650;background:#242933;color:#cbd0d9;border-radius:6px;padding:4px 7px;font-size:10px;cursor:pointer;transition:background .14s ease,color .14s ease,transform .14s ease}
-  .copy-code:hover{background:#303641;color:#f3f5f8}
-  .copy-code.copied{background:#17603f;border-color:#2a8a60;color:#f3fff8}
-  .example-switcher{margin:8px 0 18px}
-  .example-tabs{display:flex;gap:18px;margin:0 0 10px;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
-  .example-tabs::-webkit-scrollbar{display:none}
-  .example-tab{flex:0 0 auto;appearance:none;margin-bottom:-1px;padding:6px 0 7px;border:0;border-bottom:2px solid transparent;background:transparent;color:var(--muted);font-size:11px;font-weight:620;white-space:nowrap;cursor:pointer;transition:color .14s ease,border-color .14s ease,transform .14s ease}
-  .example-tab:hover{color:var(--text)}
-  .example-tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
-  .example-panels{display:grid;min-width:0}
-  .example-tab-panel{grid-area:1/1;min-width:0;visibility:hidden;opacity:0;pointer-events:none}
-  .example-tab-panel.is-active{visibility:visible;opacity:1;pointer-events:auto}
-  .seedance-request-examples .example-tabs{flex-wrap:wrap;gap:0 12px}
-  .seedance-request-examples .example-panels{display:block}
-  .seedance-request-examples .example-tab-panel{display:none}
-  .seedance-request-examples .example-tab-panel.is-active{display:block}
-  .example-tab-panel h4{margin-top:0}
-  .compact-note{margin:5px 0 9px;color:var(--muted);font-size:11px}
-  .callout{margin:13px 0;padding:7px 0 7px 11px;border-left:2px solid var(--line-strong);color:var(--muted);font-size:12px}
-  .callout b{color:var(--text)}
-  .callout.info{border-left-color:var(--accent)}.callout.warn{border-left-color:var(--warn)}.callout.danger{border-left-color:var(--danger)}
-  .pill{display:inline-block;margin-left:4px;padding:0 5px;border:1px solid var(--line-strong);border-radius:4px;color:var(--muted);font-size:10px;font-weight:600}
-  .pill.success{border-color:color-mix(in srgb,var(--success) 45%,var(--line));color:var(--success)}
-  .pill.danger{border-color:color-mix(in srgb,var(--danger) 45%,var(--line));color:var(--danger)}
-  .req{color:var(--danger);font-weight:650}.opt{color:var(--muted)}
-  ul{margin:8px 0;padding-left:18px;color:var(--muted)}li{margin:3px 0}
-  footer{max-width:1680px;margin:0 auto;padding:20px 28px;color:var(--muted);font-size:11px;border-top:1px solid var(--line)}
+  ::selection{background:var(--accent-3)}
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--bg) 86%,transparent);backdrop-filter:blur(16px) saturate(1.6);border-bottom:1px solid var(--line)}
+  .topbar-inner{max-width:1520px;margin:0 auto;height:64px;padding:0 26px;display:flex;align-items:center;gap:18px}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:750;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+  .brand-mark{width:26px;height:26px;border-radius:8px;background:linear-gradient(140deg,var(--accent),color-mix(in srgb,var(--accent) 55%,#7aa2ff));display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800;box-shadow:0 2px 8px -2px color-mix(in srgb,var(--accent) 60%,transparent)}
+  .brand small{color:var(--ink-3);font-weight:550;font-size:11.5px;padding-left:9px;margin-left:3px;border-left:1px solid var(--line-2)}
+  .search{position:relative;flex:0 1 340px;margin-left:8px}
+  .search input{width:100%;height:36px;border-radius:10px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink);padding:0 12px 0 34px;font-size:12.5px;outline:none;transition:border-color .15s,box-shadow .15s}
+  .search input::placeholder{color:var(--ink-3)}
+  .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-2)}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--ink-3);pointer-events:none}
+  .top-actions{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .scope{height:36px;border-radius:10px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink);padding:0 30px 0 11px;font-size:12px;cursor:pointer;box-shadow:var(--sh-1);transition:border-color .15s}
+  .scope:hover{border-color:var(--accent)}
+  .btn{height:36px;display:inline-flex;align-items:center;gap:7px;padding:0 14px;border-radius:10px;border:1px solid transparent;background:var(--accent);color:#fff;font-size:12.5px;font-weight:650;cursor:pointer;box-shadow:0 1px 2px rgba(16,24,40,.12);transition:background .15s,transform .1s}
+  .btn:hover{background:color-mix(in srgb,var(--accent) 86%,#000)}
+  .btn:active{transform:translateY(1px)}
+  .btn.is-done{background:var(--ok)}
+  .status{font-size:11.5px;color:var(--ink-3);min-width:0}
+  :where(.btn,.scope,.nav a,.api-card .tab,.copy-mini):focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 30%,transparent);outline-offset:2px}
+
+  /* ---------- 布局 ---------- */
+  .shell{max-width:1520px;margin:0 auto;padding:26px 26px 120px;display:grid;grid-template-columns:216px minmax(0,1fr);gap:26px;align-items:start}
+  .sidenav{position:sticky;top:90px;max-height:calc(100dvh - 116px);overflow-y:auto;overscroll-behavior:contain;padding:16px 12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1);scrollbar-width:thin}
+  .sidenav::-webkit-scrollbar{width:4px}
+  .sidenav::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px}
+  .nav-group + .nav-group{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .nav-label{margin:0 0 8px;padding:0 10px;color:var(--ink-3);font-size:10px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+  .nav{display:flex;flex-direction:column;gap:2px}
+  .nav a{position:relative;display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;color:var(--ink-2);font-size:12.5px;font-weight:550;line-height:1.45;transition:background .14s,color .14s}
+  .nav a:hover{background:var(--panel-3);color:var(--ink)}
+  .nav a[aria-current="true"]{background:var(--accent-2);color:var(--accent);font-weight:680}
+  .nav a .dot{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.28;flex:0 0 auto;transition:opacity .14s,transform .14s}
+  .nav a:hover .dot{opacity:.55}
+  .nav a[aria-current="true"] .dot{opacity:1;transform:scale(1.15)}
+  .nav-empty{padding:10px 10px;color:var(--ink-3);font-size:12px}
+
+  /* ---------- 内容卡片 ---------- */
+  .content{min-width:0;display:flex;flex-direction:column;gap:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1)}
+
+  /* Hero */
+  .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:0;overflow:hidden}
+  .hero-main{padding:28px 30px 30px}
+  .eyebrow{margin:0 0 8px;color:var(--accent);font-size:10.5px;font-weight:750;letter-spacing:.1em;text-transform:uppercase}
+  .hero h2{margin:0 0 10px;font-size:28px;line-height:1.2;letter-spacing:-.03em;font-weight:740}
+  .hero-lead{max-width:56ch;margin:0;color:var(--ink-2);font-size:13.5px}
+  .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:22px}
+  .step{display:flex;gap:10px;padding:12px 13px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel-2)}
+  .step-n{flex:0 0 20px;width:20px;height:20px;border-radius:6px;background:var(--accent-2);color:var(--accent);font-size:11px;font-weight:750;display:grid;place-items:center}
+  .step b{display:block;font-size:12.5px;font-weight:680;margin-bottom:2px}
+  .step p{margin:0;color:var(--ink-3);font-size:11.5px;line-height:1.5}
+  .hero-side{padding:24px 26px;background:var(--panel-2);border-left:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px}
+  .hero-side h3{margin:14px 0 6px;font-size:11px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+  .hero-side h3:first-child{margin-top:0}
+
+  /* Provider section */
+  .provider{display:flex;flex-direction:column;gap:14px;scroll-margin-top:88px}
+  .provider-head{padding:6px 2px 0}
+  .provider-head h2{margin:0;font-size:22px;font-weight:730;letter-spacing:-.026em}
+  .provider-head p{max-width:76ch;margin:7px 0 0;color:var(--ink-3);font-size:13px}
+
+  /* API card */
+  .api-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-1);scroll-margin-top:88px;transition:box-shadow .18s,border-color .18s}
+  .api-card:hover{box-shadow:var(--sh-2);border-color:var(--line-2)}
+  .api-head{display:flex;align-items:flex-start;gap:14px;padding:18px 22px 16px;border-bottom:1px solid var(--line);background:var(--panel-2);border-radius:var(--r-lg) var(--r-lg) 0 0}
+  .api-head-main{min-width:0;flex:1}
+  .api-title{margin:0;font-size:16.5px;font-weight:700;letter-spacing:-.018em}
+  .api-endpoints{margin-top:9px;display:flex;flex-direction:column;gap:6px}
+  .api-endpoints .endpoint{margin:0}
+  .anchor-btn{flex:0 0 auto;width:28px;height:28px;border-radius:8px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink-3);font-size:13px;font-weight:700;cursor:pointer;opacity:0;transition:opacity .15s,color .15s,border-color .15s}
+  .api-card:hover .anchor-btn,.anchor-btn:focus-visible{opacity:1}
+  .anchor-btn:hover{color:var(--accent);border-color:var(--accent)}
+  .anchor-btn.is-done{color:var(--ok);border-color:var(--ok)}
+
+  .api-body{display:grid;grid-template-columns:minmax(0,1fr);gap:0}
+  .api-body.with-examples{grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr)}
+  .api-main{padding:20px 22px 22px;min-width:0}
+  .api-examples{border-left:1px solid var(--line);background:var(--panel-2);min-width:0;border-radius:0 0 var(--r-lg) 0}
+  .api-examples-inner{padding:18px 20px 20px;position:sticky;top:88px;max-height:calc(100dvh - 116px);overflow:auto;scrollbar-width:thin}
+  .api-examples-inner::-webkit-scrollbar{width:4px}
+  .api-examples-inner::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:2px}
+
+  /* Endpoint pill */
+  .endpoint{display:inline-flex;align-items:center;gap:8px;max-width:100%;padding:5px 10px 5px 5px;border:1px solid var(--line);border-radius:8px;background:var(--panel);font-family:var(--mono);font-size:12px}
+  .method{flex:0 0 auto;padding:2px 7px;border-radius:5px;font-size:9.5px;font-weight:800;letter-spacing:.06em}
+  .method.get{color:var(--ok);background:var(--ok-bg)}
+  .method.post{color:var(--accent);background:var(--accent-2)}
+  .method.put{color:var(--warn);background:var(--warn-bg)}
+  .method.delete{color:var(--bad);background:var(--bad-bg)}
+  .path{overflow-wrap:anywhere;color:var(--ink);font-weight:560}
+
+  /* Typography inside cards */
+  .api-main h3.sub,.hero-side h3,.api-examples h3{position:relative}
+  .api-main h3.sub{margin:24px 0 10px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;font-weight:720;letter-spacing:.02em;color:var(--ink)}
+  .api-main h3.sub:first-child{margin-top:0;padding-top:0;border-top:0}
+  .api-examples h3{margin:18px 0 8px;font-size:10.5px;font-weight:750;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+  .api-examples h3:first-child{margin-top:0}
+  h4{margin:16px 0 7px;color:var(--ink-3);font-size:11px;font-weight:680}
+  .api-main p{max-width:78ch;margin:8px 0;color:var(--ink-2);font-size:13px}
+  .api-main p:first-child{margin-top:0}
+  .api-main ul{margin:8px 0;padding-left:17px;color:var(--ink-2);font-size:13px}
+  .api-main li{margin:4px 0}
+  .compact-note{margin:6px 0 10px;color:var(--ink-3);font-size:11.5px}
+
+  /* Tables */
+  .api-main table{width:100%;margin:10px 0 4px;border-collapse:separate;border-spacing:0;font-size:12.5px;border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden;background:var(--panel)}
+  .api-main th,.api-main td{padding:9px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+  .api-main tr:last-child th,.api-main tr:last-child td{border-bottom:0}
+  .api-main th{background:var(--panel-3);color:var(--ink-3);font-size:11px;font-weight:720;letter-spacing:.02em;white-space:nowrap}
+  .api-main td{color:var(--ink-2)}
+  .api-main tr:hover td{background:color-mix(in srgb,var(--accent-2) 55%,transparent)}
+  code{font-family:var(--mono);font-size:11.5px;padding:1px 5px;border-radius:5px;background:var(--panel-3);border:1px solid var(--line);color:var(--accent);overflow-wrap:anywhere}
+  th code{white-space:nowrap}
+
+  /* Code */
+  .code-block{position:relative;margin:8px 0 14px}
+  pre{margin:0;padding:14px 15px;background:var(--code);border:1px solid rgba(255,255,255,.09);border-radius:var(--r-md);overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+  pre code{padding:0;border:0;background:none;color:var(--code-ink);font-size:11.5px;line-height:1.66;white-space:pre}
+  .copy-mini{position:absolute;top:8px;right:8px;z-index:2;padding:3px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#c9cfda;font-size:10px;font-weight:620;cursor:pointer;opacity:0;backdrop-filter:blur(6px);transition:opacity .14s,background .14s,color .14s}
+  .code-block:hover .copy-mini,.copy-mini:focus-visible{opacity:1}
+  .copy-mini:hover{background:rgba(255,255,255,.17);color:#fff}
+  .copy-mini.is-done{background:var(--ok);border-color:var(--ok);color:#fff;opacity:1}
+
+  /* Tabs */
+  .example-switcher{margin:8px 0 14px}
+  .tabs,.example-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px;padding:3px;background:var(--panel-3);border-radius:9px}
+  .tab,.example-tab{appearance:none;padding:4px 10px;border:0;border-radius:6px;background:transparent;color:var(--ink-3);font-size:11.5px;font-weight:620;cursor:pointer;white-space:nowrap;transition:background .14s,color .14s,box-shadow .14s}
+  .tab:hover,.example-tab:hover{color:var(--ink)}
+  .tab[aria-selected="true"],.example-tab[aria-selected="true"]{background:var(--panel);color:var(--accent);box-shadow:var(--sh-1)}
+  .panels,.example-panels{display:grid;min-width:0}
+  .panel,.example-tab-panel{grid-area:1/1;min-width:0;visibility:hidden;opacity:0;pointer-events:none}
+  .panel.is-active,.example-tab-panel.is-active{visibility:visible;opacity:1;pointer-events:auto}
+  .seedance-request-examples .panels,.seedance-request-examples .example-panels{display:block}
+  .seedance-request-examples .panel,.seedance-request-examples .example-tab-panel{display:none}
+  .seedance-request-examples .panel.is-active,.seedance-request-examples .example-tab-panel.is-active{display:block}
+
+  /* Callouts / pills */
+  .callout{margin:12px 0;padding:10px 13px;border-radius:var(--r-md);border:1px solid var(--line);border-left:3px solid var(--line-2);background:var(--panel-2);color:var(--ink-2);font-size:12.5px}
+  .callout b{color:var(--ink);font-weight:680}
+  .callout.info{border-color:var(--accent-3);border-left-color:var(--accent);background:var(--accent-2)}
+  .callout.warn{border-color:color-mix(in srgb,var(--warn) 24%,var(--line));border-left-color:var(--warn);background:var(--warn-bg)}
+  .callout.danger{border-color:color-mix(in srgb,var(--bad) 24%,var(--line));border-left-color:var(--bad);background:var(--bad-bg)}
+  .pill{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:5px;border:1px solid var(--line-2);background:var(--panel-3);color:var(--ink-3);font-size:10px;font-weight:680;vertical-align:middle}
+  .pill.success{border-color:transparent;background:var(--ok-bg);color:var(--ok)}
+  .pill.danger{border-color:transparent;background:var(--bad-bg);color:var(--bad)}
+  .req{color:var(--bad);font-weight:680}
+  .opt{color:var(--ink-3)}
+  .yes{color:var(--ok);font-weight:680}
+  .no{color:var(--ink-3)}
+
+  .foot{max-width:1520px;margin:0 auto;padding:22px 26px 40px;color:var(--ink-3);font-size:11.5px;display:flex;gap:10px;align-items:center}
+  .foot .sep{opacity:.4}
+
+  /* ---------- 深色 ---------- */
   @media(prefers-color-scheme:dark){
-    :root{--bg:#101216;--surface:#15181d;--surface-muted:#1c2026;--line:#2c3139;--line-strong:#3a404a;--text:#e7e9ed;--muted:#9ba2ad;--accent:#81a5ff;--accent-soft:#202a40;--success:#68c994;--warn:#d7a85a;--danger:#ef8585;--code:#0b0d11;--code-text:#e3e7ee}
-    .copy-agent{color:#101625}.copy-code{background:#20242b;border-color:#3b414b}.copy-code:hover{background:#2a3039}
+    :root{
+      --bg:#0c0e13;--panel:#15181f;--panel-2:#191d25;--panel-3:#1e232c;
+      --line:#262b35;--line-2:#333a46;
+      --ink:#e9ecf1;--ink-2:#bcc3cf;--ink-3:#8b93a1;
+      --accent:#8aabff;--accent-2:#1a2436;--accent-3:#2f4166;
+      --ok:#63c894;--ok-bg:#122a1f;--warn:#d9ab60;--warn-bg:#2a2113;--bad:#ef8686;--bad-bg:#2b1616;
+      --code:#080a0e;--code-ink:#e2e6ee;
+      --sh-1:0 1px 2px rgba(0,0,0,.5);
+      --sh-2:0 14px 36px -14px rgba(0,0,0,.7);
+    }
+    .brand-mark{color:#0b1020}
+    .btn{color:#0b1020}
+    .copy-mini{background:rgba(255,255,255,.07)}
+    .copy-mini:hover{background:rgba(255,255,255,.14)}
   }
-  @media(max-width:1180px){
-    .endpoint-doc{grid-template-columns:1fr;gap:30px}
-    .example-panel{padding:30px 0 0;border-left:0;border-top:1px solid var(--line)}
+
+  /* ---------- 响应式 ---------- */
+  @media(max-width:1200px){
+    .api-body.with-examples{grid-template-columns:minmax(0,1fr)}
+    .api-examples{border-left:0;border-top:1px solid var(--line);border-radius:0 0 var(--r-lg) var(--r-lg)}
+    .api-examples-inner{position:static;max-height:none}
+    .hero{grid-template-columns:minmax(0,1fr)}
+    .hero-side{border-left:0;border-top:1px solid var(--line)}
   }
-  @media(max-width:820px){
-    header.top{height:auto;min-height:54px}header.top .wrap{padding:9px 16px;flex-wrap:wrap}
-    .docs-shell{grid-template-columns:1fr;gap:24px;padding:22px 16px 72px}
-    aside.sidebar{position:static;max-height:none;padding:0 0 12px;border-right:0;border-bottom:1px solid var(--line);overflow-x:auto;overflow-y:hidden;scrollbar-width:none}
-    aside.sidebar::-webkit-scrollbar{display:none}
-    .sidebar-title{display:none}.sidebar nav{flex-direction:row;gap:6px;width:max-content}
-    .sidebar a{margin:0;padding:6px 9px;border:1px solid var(--line);border-radius:6px;white-space:nowrap}
-    .sidebar a[aria-current="true"]{border-color:var(--accent)}
-    .section-heading{padding-top:48px}.model-heading{padding-top:30px}.endpoint-doc{padding:28px 0 44px}
+  @media(max-width:960px){
+    .shell{grid-template-columns:minmax(0,1fr);padding:18px 16px 90px;gap:16px}
+    .sidenav{position:static;max-height:none;overflow:visible}
+    .nav{flex-direction:row;flex-wrap:wrap}
+    .nav a{padding:6px 10px;border:1px solid var(--line);border-radius:8px}
+    .nav a[aria-current="true"]::before{display:none}
+    .nav-group + .nav-group{margin-top:12px}
+    .search{display:none}
+    .topbar-inner{padding:0 16px;gap:12px;flex-wrap:wrap;height:auto;min-height:60px}
+    .top-actions{width:100%;order:3;padding-bottom:10px}
+    .steps{grid-template-columns:minmax(0,1fr)}
   }
   @media(max-width:560px){
-    .header-actions{width:100%;flex-wrap:wrap}.copy-scope{flex:1;min-width:0}.copy-agent{white-space:nowrap}.copy-status{width:100%}
-    .page-intro h2,.section-heading h2{font-size:22px}.model-heading h2{font-size:20px}
-    table{font-size:11px}th,td{padding:6px}
-    pre{padding:13px}.copy-code{top:6px;right:6px}
+    .hero h2{font-size:23px}
+    .provider-head h2{font-size:19px}
+    .api-main,.api-examples-inner{padding:16px}
+    .api-head{padding:14px 16px}
+    .api-main table{font-size:11.5px}
+    .api-main th,.api-main td{padding:7px 9px}
+    code{white-space:normal}
+    .api-main th{white-space:normal}
   }
   @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
   @media print{
-    :root{color-scheme:light;--bg:#fcfcfd;--text:#111;--muted:#555;--line:#ddd;--line-strong:#bbb;--surface-muted:#f4f4f4;--accent:#234ca5;--accent-soft:#eef2fa;--code:#f5f5f5;--code-text:#111}
-    body{background:#fcfcfd}.top{position:static}.docs-shell{display:block;padding:0}.sidebar,.header-actions{display:none}
-    .endpoint-doc{display:block}.reference-panel,.example-panel,.wide-panel{margin:0 0 24px;break-inside:avoid}.example-panel{padding:20px 0 0;border-left:0}
-    .copy-code{display:none}
+    :root{color-scheme:light;--bg:#fff;--panel:#fff;--panel-2:#fff;--panel-3:#f5f5f5;--line:#e2e2e2;--line-2:#ccc;--ink:#111;--ink-2:#333;--ink-3:#555;--accent:#234ca5;--accent-2:#eef2fa;--code:#f5f5f5;--code-ink:#111;--sh-1:none;--sh-2:none}
+    .topbar,.sidenav,.foot{display:none}
+    .shell{display:block;padding:0;max-width:none}
+    .api-card{break-inside:avoid;margin-bottom:16px}
+    .api-examples-inner{max-height:none;position:static}
+    .copy-mini,.anchor-btn{display:none}
   }
+
 </style>
 </head>
 <body>
-<header class="top">
-  <div class="wrap">
-    <h1>O1Key API接口文档</h1>
-    <div class="header-actions">
-      <label for="copy-scope" class="sr-only">复制范围</label>
-      <select class="copy-scope" id="copy-scope" title="选择复制范围">
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#quickstart">
+      <span class="brand-mark">O</span>
+      O1Key
+      <small>API 文档</small>
+    </a>
+    <div class="search">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="m13.2 13.2 3.3 3.3" stroke-linecap="round"/></svg>
+      <label class="sr-only" for="nav-filter" hidden>筛选接口</label>
+      <input id="nav-filter" type="search" placeholder="筛选接口，例如 kling、gpt、视频" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="top-actions">
+      <label class="sr-only" for="copy-scope" hidden>复制范围</label>
+      <select class="scope" id="copy-scope" title="选择复制范围">
         <option value="all">全文</option>
-        <option value="temporary-upload">临时素材上传</option>
-        <option value="image-nano-banana">Nano Banana</option>
-        <option value="image-gpt-image">GPT Image</option>
-        <option value="image-seedream">Seedream</option>
-        <option value="seedance">Seedance</option>
-        <option value="minimax-h3">MiniMax H3 / H3 Max</option>
-        <option value="gemini-omni">Gemini Omni</option>
-        <option value="grok-video">Grok 视频</option>
-        <option value="kling-4">Kling 4.0</option>
-        <option value="kling-3">Kling 3.0</option>
       </select>
-      <button type="button" class="copy-agent" id="copy-agent-doc" title="复制所选范围的全部参数和示例">复制给 Agent</button>
-      <span class="copy-status" id="copy-status" aria-live="polite"></span>
+      <button type="button" class="btn" id="copy-agent-doc" title="把所选范围的全部参数和示例复制为 Markdown">复制给 Agent</button>
+      <span class="status" id="copy-status" aria-live="polite"></span>
     </div>
   </div>
 </header>
 
-<div class="docs-shell">
-  <aside class="sidebar" aria-label="接口导航">
-    <p class="sidebar-title">目录</p>
-    <nav>
-      <a href="#temporary-upload" data-section="temporary-upload" aria-current="true">素材上传</a>
-      <a href="#image-nano-banana" data-section="image-nano-banana">Nano Banana</a>
-      <a href="#image-gpt-image" data-section="image-gpt-image">GPT Image</a>
-      <a href="#image-seedream" data-section="image-seedream">Seedream</a>
-      <a href="#seedance" data-section="seedance">Seedance</a>
-      <a href="#minimax-h3" data-section="minimax-h3">MiniMax H3 / H3 Max</a>
-      <a href="#gemini-omni" data-section="gemini-omni">Gemini Omni</a>
-      <a href="#grok-video" data-section="grok-video">Grok 视频</a>
-      <a href="#kling-4" data-section="kling-4">Kling 4.0</a>
-      <a href="#kling-3" data-section="kling-3">Kling 3.0</a>
-    </nav>
+<div class="shell">
+  <aside class="sidenav" aria-label="接口导航">
+      <div class="nav-group">
+        <p class="nav-label">开始</p>
+        <div class="nav">
+          <a href="#quickstart" data-target="quickstart"><span class="dot"></span>快速开始</a>
+        </div>
+      </div>
+      <div class="nav-group">
+        <p class="nav-label">图片生成</p>
+        <div class="nav">
+          <a href="#temporary-upload" data-target="temporary-upload"><span class="dot"></span>素材上传</a>
+          <a href="#image-gpt-image" data-target="image-gpt-image"><span class="dot"></span>GPT Image</a>
+          <a href="#image-nano-banana" data-target="image-nano-banana"><span class="dot"></span>Nano Banana</a>
+          <a href="#image-seedream" data-target="image-seedream"><span class="dot"></span>Seedream</a>
+        </div>
+      </div>
+      <div class="nav-group">
+        <p class="nav-label">视频生成</p>
+        <div class="nav">
+          <a href="#seedance" data-target="seedance"><span class="dot"></span>Seedance</a>
+          <a href="#minimax-h3" data-target="minimax-h3"><span class="dot"></span>MiniMax H3</a>
+          <a href="#gemini-omni" data-target="gemini-omni"><span class="dot"></span>Gemini Omni</a>
+          <a href="#grok-video" data-target="grok-video"><span class="dot"></span>Grok 视频</a>
+          <a href="#kling-4" data-target="kling-4"><span class="dot"></span>Kling 4.0</a>
+          <a href="#kling-3" data-target="kling-3"><span class="dot"></span>Kling 3.0</a>
+        </div>
+      </div>
+      <div class="nav-group">
+        <p class="nav-label">附录</p>
+        <div class="nav">
+          <a href="#appendix" data-target="appendix"><span class="dot"></span>上传限制</a>
+        </div>
+      </div>
   </aside>
 
-  <main class="api-grid">
-    <section class="page-intro">
-      <h2>接入</h2>
-      <h3>Base URL</h3>
+  <main class="content" id="doc-content">
+
+    <section class="hero card" id="quickstart">
+      <div class="hero-main">
+        <p class="eyebrow">快速开始</p>
+        <h2>接入 O1Key API</h2>
+        <p class="hero-lead">所有接口共用一套 Bearer 鉴权。先上传参考素材取得公网地址，再提交生成任务，最后按 <code>task_id</code> 轮询结果。</p>
+        <div class="steps">
+          <div class="step"><span class="step-n">1</span><div><b>上传素材</b><p>本地文件先换取公网 URL，线上素材可直接使用。</p></div></div>
+          <div class="step"><span class="step-n">2</span><div><b>提交任务</b><p>选择模型与参数，拿到 <code>task_id</code>。</p></div></div>
+          <div class="step"><span class="step-n">3</span><div><b>轮询结果</b><p>查询至 <code>SUCCESS</code> 或 <code>FAILED</code>，再下载产物。</p></div></div>
+        </div>
+      </div>
+      <div class="hero-side">
+<h3>Base URL</h3>
       <table>
         <tr><th>入口</th><th>Base URL</th><th>说明</th></tr>
         <tr><td>国内加速 <span class="pill success">推荐</span></td><td><code>https://api.o1key.cn</code></td><td>流式请求最长 300 秒</td></tr>
@@ -185,21 +324,30 @@
         <tr><td>美国直连</td><td><code>https://api.o1key.com</code></td><td>适合长连接</td></tr>
       </table>
       <div class="callout info"><b>鉴权</b>：<code>Authorization: Bearer &lt;API Key&gt;</code></div>
+      </div>
     </section>
 
-    <div class="section-heading" id="temporary-upload">
-      <div><h2>临时素材上传</h2></div>
-    </div>
-
-    <section class="endpoint-doc" id="temporary-upload-endpoint" aria-labelledby="temporary-upload-title">
-      <article class="reference-panel">
-        <h2 id="temporary-upload-title">上传文件</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
-        <p><code>Authorization: Bearer &lt;API Key&gt;</code> · <code>multipart/form-data</code></p>
+    <section class="provider" id="temporary-upload" data-section="temporary-upload">
+      <header class="provider-head">
+        <h2>临时素材上传</h2>
+      </header>
+      <article class="api-card" id="temporary-upload-endpoint">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">上传文件</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/o1key/uploads</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="temporary-upload-endpoint" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p><code>Authorization: Bearer &lt;API Key&gt;</code> · <code>multipart/form-data</code></p>
         <p><strong>参数</strong>：<code>file</code>（必填，每次 1 个文件，最大 20 MiB）。多个文件请分别上传。</p>
         <p>新上传的素材保存在 R2，返回的图片 URL 可作为生图参考图。本机读取自己签发的 R2 临时图片时直接通过 R2 SDK 获取。</p>
 
-        <h3>支持的文件格式</h3>
+        <h3 id="h-1" class="sub">支持的文件格式</h3>
         <table>
           <tr><th>类型</th><th>扩展名</th></tr>
           <tr><td>图片</td><td><code>png</code>、<code>jpg</code>、<code>jpeg</code>、<code>webp</code></td></tr>
@@ -208,10 +356,10 @@
           <tr><td>文档</td><td><code>pdf</code>、<code>txt</code>、<code>md</code></td></tr>
         </table>
         <p><strong>常见错误</strong>：<code>400</code> 文件无效、格式不支持或传入多个文件 · <code>401</code> 鉴权失败 · <code>413</code> 超过大小限制</p>
-      </article>
-
-      <aside class="example-panel" aria-label="临时素材上传请求和响应示例">
-        <h3>请求</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求</h3>
         <pre><code>curl -X POST "$BASE_URL/v1/o1key/uploads" \
   -H "Authorization: Bearer $API_KEY" \
   -F "file=@./reference.png"</code></pre>
@@ -229,166 +377,252 @@
         <pre><code>{
   "error": "unsupported attachment type"
 }</code></pre>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div class="section-heading" id="legacy-seedream-sync" hidden>
-      <div><h2>Seedream 5.0 Pro</h2><p>通过同步图片接口完成文生图、图生图、图片编辑和多图融合。</p></div>
-    </div>
-
-    <section class="endpoint-doc" id="legacy-seedream-sync-endpoint" aria-labelledby="seedream-5-pro-title" hidden>
-      <article class="reference-panel">
-        <h2 id="seedream-5-pro-title">Seedream 5.0 Pro 同步图片生成</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/images/generations</span></div>
-        <p>请求会保持连接直到图片生成完成。纯文生图不传 <code>image</code>；图生图、图片编辑和多图融合通过同一个接口传入 <code>image</code>。</p>
-
-        <h3>模型名称</h3>
+    <section class="provider" id="image-gpt-image" data-section="image-gpt-image">
+      <header class="provider-head">
+        <h2>GPT Image</h2>
+        <p>图片生成、透明背景输出和参考图编辑。</p>
+      </header>
+      <article class="api-card" id="async-generate-image-gpt">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">提交 GPT Image 任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="async-generate-image-gpt" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<h3 id="h-2" class="sub">模型名称</h3>
         <table>
-          <tr><th>使用位置</th><th>模型 ID</th></tr>
-          <tr><td>O1Key 请求</td><td><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
-          <tr><td>对应官方版本</td><td><code>dola-seedream-5-0-pro-260628</code></td></tr>
+          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
+          <tr><td>GPT Image 2.6 Sunburst</td><td><code>gpt-image-2.6-sunburst-sp</code></td><td><code>gpt-image-2.6-sunburst-sd</code></td><td><code>gpt-image-2.6-sunburst</code></td></tr>
+          <tr><td>GPT Image 2.6 Flare</td><td><code>gpt-image-2.6-flare-sp</code></td><td><code>gpt-image-2.6-flare-sd</code></td><td><code>gpt-image-2.6-flare</code></td></tr>
+          <tr><td>GPT Image 2.5 Sunburst</td><td><code>gpt-image-2.5-sunburst-sp</code></td><td><code>gpt-image-2.5-sunburst-sd</code></td><td><code>gpt-image-2.5-sunburst</code></td></tr>
+          <tr><td>GPT Image 2.5 Flare</td><td><code>gpt-image-2.5-flare-sp</code></td><td><code>gpt-image-2.5-flare-sd</code></td><td><code>gpt-image-2.5-flare</code></td></tr>
+          <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
         </table>
-        <div class="callout info"><b>调用时</b>：请始终填写带 <code>-ep</code> 的 O1Key 模型名称；上游模型映射由服务端处理。</div>
+        <div class="callout info"><b>怎么选</b>：<code>Sunburst</code> 偏精修与细节还原，<code>Flare</code> 偏快速出图；2.6 在 2.5 基础上增加了复杂度控制、标注图编辑、SVG 与 GIF 输出。</div>
 
-        <h3>模型能力</h3>
+        <h3 id="h-3" class="sub">能力矩阵</h3>
         <table>
-          <tr><th>能力</th><th>支持情况</th><th>说明</th></tr>
-          <tr><td>文生图</td><td>支持</td><td>文本输入，单图输出</td></tr>
-          <tr><td>单图 / 多图生图</td><td>支持</td><td>最多输入 10 张参考图，单图输出</td></tr>
-          <tr><td>交互式编辑</td><td>支持</td><td>可在参考图中使用坐标、框选、箭头或涂鸦标记编辑区域</td></tr>
-          <tr><td>多图输出</td><td>不支持</td><td>不要传入 <code>n</code> 或组图生成参数</td></tr>
-          <tr><td>流式输出</td><td>不支持</td><td>不要传入 <code>stream: true</code></td></tr>
+          <tr><th>能力</th><th>GPT Image 2</th><th>2.5 系列</th><th>2.6 系列</th></tr>
+          <tr><td><code>quality</code> 扩展档位 <code>xhigh</code> / <code>max</code></td><td class="no">—</td><td class="yes">支持</td><td class="yes">支持</td></tr>
+          <tr><td><code>complexity</code> 复杂度控制</td><td class="no">—</td><td class="no">—</td><td class="yes">支持</td></tr>
+          <tr><td><code>markup</code> 标注图编辑</td><td class="no">—</td><td class="yes">支持</td><td class="yes">支持</td></tr>
+          <tr><td><code>output_format</code> 为 <code>svg</code> / <code>gif</code></td><td class="no">—</td><td class="no">—</td><td class="yes">支持</td></tr>
+          <tr><td><code>frame_count</code> / <code>frame_duration_ms</code></td><td class="no">—</td><td class="no">—</td><td class="yes">仅 GIF</td></tr>
+          <tr><td><code>input_fidelity</code></td><td class="no">不要传</td><td class="yes">可传</td><td class="yes">可传</td></tr>
         </table>
 
-        <h3>请求参数</h3>
+        <h3 id="h-4" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>固定使用 <code>dola-seedream-5-0-pro-260628-ep</code>。</td></tr>
-          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>生成或编辑指令。建议用连贯自然语言说明主体、动作、环境、风格、构图和需要保持不变的内容。</td></tr>
-          <tr><td><code>image</code></td><td class="opt">否</td><td>string | string[]</td><td>图生图参考图片的 URL；单图可传字符串，多图传数组，最多 10 张。纯文生图省略。</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>推荐并应显式使用 <code>1K</code> 或 <code>2K</code>；也可传小写 <code>x</code> 分隔的具体像素尺寸，例如 <code>2048x2048</code>。官方基线的省略默认值为 <code>1024x1024</code>，但渠道默认值可能不同，生产调用不要依赖省略行为。</td></tr>
-          <tr><td><code>response_format</code></td><td class="opt">否</td><td>string</td><td><code>url</code> 返回临时下载地址；<code>b64_json</code> 在 JSON 中返回 Base64 图片数据。建议显式填写。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td>输出文件格式，可选 <code>png</code> 或 <code>jpeg</code>。</td></tr>
-          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td><code>true</code> 在右下角添加“AI 生成”水印；<code>false</code> 不添加。建议显式填写。</td></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。支持 URL、Data URI、原始 Base64、<code>fileData</code> 和 <code>inlineData</code>。第一张是编辑目标。</td></tr>
+          <tr><td><code>markup</code></td><td class="opt">否</td><td>object</td><td>2.5+ 标注图编辑。传 <code>{"image_url": "..."}</code>，与 <code>images</code> 等宽等高、透明底，标注层不叠加在原图上。与 <code>prompt</code> 一起说明「改什么」和「保留什么」。</td></tr>
+          <tr><td><code>mask</code></td><td class="opt">否</td><td>object</td><td>蒙版局部重绘。传 <code>{"image_url": "..."}</code>，需带 alpha 通道；<b>与 <code>markup</code> 互斥</b>。蒙版仅作用于第一张参考图。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>生成图片数量，1–128，默认 1。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>WIDTHxHEIGHT</code>；常用尺寸见下表。</td></tr>
+          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>通用：<code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>；2.5 / 2.6 额外支持 <code>xhigh</code>、<code>max</code>。</td></tr>
+          <tr><td><code>complexity</code></td><td class="opt">否</td><td>string</td><td>仅 2.6：<code>low</code>、<code>medium</code>、<code>high</code>（默认 <code>high</code>）。控制渲染前的规划强度，越高越慢、改动幅度越大。</td></tr>
+          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td><code>auto</code>、<code>transparent</code> 或 <code>opaque</code>。透明背景要求 PNG 或 WebP。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code>（默认）、<code>jpeg</code>、<code>webp</code>；仅 2.6 额外支持 <code>svg</code>、<code>gif</code>。</td></tr>
+          <tr><td><code>output_compression</code></td><td class="opt">否</td><td>integer</td><td>0–100，仅对 <code>jpeg</code> / <code>webp</code> 生效。SVG 与 GIF 不支持。</td></tr>
+          <tr><td><code>partial_images</code></td><td class="opt">否</td><td>integer</td><td>0–3，渐进预览帧数，每帧额外计费。SVG 与 GIF 不支持。</td></tr>
+          <tr><td><code>frame_count</code></td><td class="opt">否</td><td>integer</td><td>仅 GIF：2–64 帧，默认 9。</td></tr>
+          <tr><td><code>frame_duration_ms</code></td><td class="opt">否</td><td>integer</td><td>仅 GIF：每帧 20–2000 毫秒，默认 200，按 10ms 取整。</td></tr>
+          <tr><td><code>input_fidelity</code></td><td class="opt">否</td><td>string</td><td>2.5 / 2.6 可传。<b>GPT Image 2 必须省略</b>，该系列始终高保真处理输入图。</td></tr>
+          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>low</code>。</td></tr>
         </table>
 
-        <h3>计费说明</h3>
-        <p>基础价格与火山引擎中国区官方价格对齐：单图输出不超过 261 万像素时为 <code>¥0.30 / 张</code>，超过 261 万像素时为 <code>¥0.60 / 张</code>；首张输入参考图免费，从第 2 张起每张增加 <code>¥0.02</code>。最终用户价格还会乘以所选分组倍率，并以实际成功输出和消费记录为准。</p>
-        <div class="callout info"><b>建议</b>：显式传入 <code>size</code>。系统会在请求阶段按安全上限预扣，响应后依据实际输出档位结算并退补差额。</div>
-
-        <h3>输出尺寸</h3>
-        <p>使用 <code>1K</code> 或 <code>2K</code> 时，在 <code>prompt</code> 中说明宽高比、版式或用途，模型会决定最终尺寸。常见宽高比对应的参考像素如下，实际支持范围不限于这些比例。</p>
+        <h3 id="h-5" class="sub">常用尺寸</h3>
         <table>
-          <tr><th>宽高比</th><th><code>1K</code></th><th><code>2K</code></th></tr>
-          <tr><td><code>1:1</code></td><td><code>1024x1024</code></td><td><code>2048x2048</code></td></tr>
-          <tr><td><code>4:3</code></td><td><code>1152x864</code></td><td><code>2368x1776</code></td></tr>
-          <tr><td><code>3:4</code></td><td><code>864x1152</code></td><td><code>1776x2368</code></td></tr>
-          <tr><td><code>16:9</code></td><td><code>1424x800</code></td><td><code>2816x1584</code></td></tr>
-          <tr><td><code>9:16</code></td><td><code>800x1424</code></td><td><code>1584x2816</code></td></tr>
-          <tr><td><code>3:2</code></td><td><code>1248x832</code></td><td><code>2496x1664</code></td></tr>
-          <tr><td><code>2:3</code></td><td><code>832x1248</code></td><td><code>1664x2496</code></td></tr>
-          <tr><td><code>21:9</code></td><td><code>1568x672</code></td><td><code>3136x1344</code></td></tr>
+          <tr><th>分辨率</th><th>正方形</th><th>横版</th><th>竖版</th></tr>
+          <tr><td>自动</td><td colspan="3"><code>auto</code></td></tr>
+          <tr><td>1K</td><td><code>1024x1024</code></td><td><code>1536x1024</code>、<code>1360x1024</code>、<code>1824x1024</code></td><td><code>1024x1536</code>、<code>1024x1360</code>、<code>1024x1824</code></td></tr>
+          <tr><td>2K</td><td><code>2048x2048</code></td><td><code>3072x2048</code>、<code>2736x2048</code>、<code>3648x2048</code></td><td><code>2048x3072</code>、<code>2048x2736</code>、<code>2048x3648</code></td></tr>
+          <tr><td>4K</td><td><code>2880x2880</code></td><td><code>3504x2336</code>、<code>3264x2448</code>、<code>3840x2160</code></td><td><code>2336x3504</code>、<code>2448x3264</code>、<code>2160x3840</code></td></tr>
         </table>
-        <div class="callout warn"><b>自定义像素尺寸</b>：总像素必须在 921,600 至 4,624,220 之间，宽高比必须在 <code>1:16</code> 至 <code>16:1</code> 之间。尺寸中的乘号只接受小写 <code>x</code>，不要使用 <code>×</code>。</div>
-
-        <h3>参考图限制</h3>
-        <table>
-          <tr><th>项目</th><th>限制</th></tr>
-          <tr><td>数量</td><td>最多 10 张</td></tr>
-          <tr><td>格式</td><td>JPEG、PNG、WebP、BMP、TIFF、GIF、HEIC、HEIF</td></tr>
-          <tr><td>文件大小</td><td>每张不超过 30MB</td></tr>
-          <tr><td>尺寸</td><td>宽和高均大于 14px；单张总像素不超过 36,000,000</td></tr>
-          <tr><td>宽高比</td><td><code>1:16</code> 至 <code>16:1</code></td></tr>
-        </table>
-        <p>本接口的 <code>image</code> 使用可公开读取的 HTTPS URL。本地图片可先通过“临时素材上传”接口取得 URL，再用于当前请求。</p>
-        <div class="callout info"><b>提示词建议</b>：多图输入时明确使用“图一”“图二”等称呼，并分别写清需要替换、组合或参考的对象；编辑任务同时说明哪些内容必须保持不变。</div>
-
-        <h3>响应字段</h3>
-        <table>
-          <tr><th>字段</th><th>说明</th></tr>
-          <tr><td><code>created</code></td><td>响应创建时间，Unix 秒级时间戳。</td></tr>
-          <tr><td><code>data[].url</code></td><td><code>response_format: "url"</code> 时返回的临时图片地址。</td></tr>
-          <tr><td><code>data[].b64_json</code></td><td><code>response_format: "b64_json"</code> 时返回的 Base64 图片数据。</td></tr>
-          <tr><td><code>data[].size</code></td><td>实际输出图片尺寸；是否返回取决于上游响应。</td></tr>
-          <tr><td><code>usage</code></td><td>上游返回的实际用量信息；具体字段可能随模型版本调整。</td></tr>
-        </table>
-        <div class="callout warn"><b>结果保存</b>：上游生成的图片 URL 仅保留 24 小时，请在成功后及时下载或转存。使用 <code>b64_json</code> 会显著增大响应体。</div>
-      </article>
-
-      <aside class="example-panel" aria-label="Seedream 5.0 Pro 请求和响应示例">
-        <h3>请求示例</h3>
+        <div class="callout warn"><b>自定义尺寸</b>：使用小写 <code>x</code>；宽高均须为 16 的倍数，比例介于 <code>1:3</code> 与 <code>3:1</code>，单边不超过 3840 像素，总像素为 655,360–8,294,400。超出范围会在提交阶段直接返回 400。</div>
+        <div class="callout warn"><b>SVG / GIF 限制</b>：仅 2.6 支持，且只在 <code>/v1/images/generations</code> 这类纯生成请求中可用；编辑请求不支持矢量与动图输出。SVG 要求 <code>n</code> 为 1，两者都不支持流式、<code>partial_images</code> 与 <code>output_compression</code>。</div>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="Seedream 5.0 Pro 请求场景">
-            <button type="button" class="example-tab" id="seedream-text-tab" role="tab" aria-selected="true" aria-controls="seedream-text">文生图</button>
-            <button type="button" class="example-tab" id="seedream-image-tab" role="tab" aria-selected="false" aria-controls="seedream-image">多图融合</button>
+          <div class="example-tabs" role="tablist" aria-label="GPT Image 请求类型">
+            <button type="button" class="example-tab" id="gpt-text-tab" role="tab" aria-selected="true" aria-controls="gpt-text">文生图</button>
+            <button type="button" class="example-tab" id="gpt-image-tab" role="tab" aria-selected="false" aria-controls="gpt-image">参考图编辑</button>
+            <button type="button" class="example-tab" id="gpt-markup-tab" role="tab" aria-selected="false" aria-controls="gpt-markup">标注图编辑</button>
+            <button type="button" class="example-tab" id="gpt-gif-tab" role="tab" aria-selected="false" aria-controls="gpt-gif">GIF 动图</button>
+            <button type="button" class="example-tab" id="gpt-svg-tab" role="tab" aria-selected="false" aria-controls="gpt-svg">SVG 矢量</button>
           </div>
           <div class="example-panels">
-            <div class="example-tab-panel is-active" id="seedream-text" role="tabpanel" aria-labelledby="seedream-text-tab" aria-hidden="false">
-              <pre><code>curl --fail-with-body \
-  -X POST https://api.o1key.cn/v1/images/generations \
+            <div class="example-tab-panel is-active" id="gpt-text" role="tabpanel" aria-labelledby="gpt-text-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "dola-seedream-5-0-pro-260628-ep",
-    "prompt": "生成一张 16:9 横版科技产品海报：深蓝背景，一台透明玻璃质感的智能音箱位于画面中央，边缘轮廓光，简洁高级，标题文字为‘未来已来’",
-    "size": "1K",
-    "response_format": "url",
+    "model": "gpt-image-2.6-sunburst-sp",
+    "prompt": "生成一枚蓝色玻璃徽章",
+    "size": "1024x1024",
+    "quality": "max",
+    "complexity": "high",
+    "background": "transparent",
     "output_format": "png",
-    "watermark": false
+    "moderation": "low"
   }'</code></pre>
             </div>
-            <div class="example-tab-panel" id="seedream-image" role="tabpanel" aria-labelledby="seedream-image-tab" aria-hidden="true">
-              <p class="compact-note"><code>image</code> 数组顺序与提示词中的“图一”“图二”“图三”一一对应。</p>
-              <pre><code>curl --fail-with-body \
-  -X POST https://api.o1key.cn/v1/images/generations \
+            <div class="example-tab-panel" id="gpt-image" role="tabpanel" aria-labelledby="gpt-image-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "dola-seedream-5-0-pro-260628-ep",
-    "prompt": "保留图一人物的姿势和面部特征，将服装替换为图二的套装，将帽子替换为图三的帽子，其余画面保持不变",
-    "image": [
-      "https://upload.o1key.com/uploads/subject.png",
-      "https://upload.o1key.com/uploads/outfit.png",
-      "https://upload.o1key.com/uploads/hat.png"
-    ],
-    "size": "2K",
-    "response_format": "url",
-    "output_format": "png",
-    "watermark": false
+    "model": "gpt-image-2.6-flare-sd",
+    "prompt": "保留主体结构，将材质改为磨砂金属",
+    "images": ["https://upload.o1key.com/uploads/product.png"],
+    "size": "1536x1024",
+    "quality": "xhigh",
+    "output_format": "png"
   }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="gpt-markup" role="tabpanel" aria-labelledby="gpt-markup-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-sunburst",
+    "prompt": "把红圈标注的花瓶改成青瓷，其余部分保持不变",
+    "images": ["https://upload.o1key.com/uploads/room.png"],
+    "markup": {"image_url": "https://upload.o1key.com/uploads/room-markup.png"},
+    "quality": "high",
+    "output_format": "png"
+  }'</code></pre>
+              <p class="compact-note">标注层是独立透明 PNG，尺寸与第一张参考图一致，不要把它叠在原图上。</p>
+            </div>
+            <div class="example-tab-panel" id="gpt-gif" role="tabpanel" aria-labelledby="gpt-gif-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-flare",
+    "prompt": "一盏灯笼轻微摇曳，循环回到起始姿态",
+    "size": "1024x1024",
+    "quality": "medium",
+    "output_format": "gif",
+    "frame_count": 9,
+    "frame_duration_ms": 200
+  }'</code></pre>
+              <p class="compact-note">9 帧 × 200ms ≈ 1.8 秒循环。</p>
+            </div>
+            <div class="example-tab-panel" id="gpt-svg" role="tabpanel" aria-labelledby="gpt-svg-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-sunburst",
+    "prompt": "一个极简线性风格的云朵图标，单色",
+    "size": "1024x1024",
+    "quality": "high",
+    "output_format": "svg",
+    "n": 1
+  }'</code></pre>
+              <p class="compact-note">输出是可编辑路径的矢量图，只支持静态内容，<code>n</code> 必须为 1。</p>
             </div>
           </div>
         </div>
-
-        <h3>成功响应</h3>
+        <h3>提交成功 <span class="pill success">200</span></h3>
         <pre><code>{
-  "created": 1788364800,
-  "data": [
-    {
-      "url": "https://cdn.example.com/seedream-result.png",
-      "size": "2048x2048"
-    }
-  ],
-  "usage": {
-    "generated_images": 1
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+        <h3>提交失败 <span class="pill danger">400</span></h3>
+        <pre><code>{
+  "error": {
+    "message": "complexity is only supported by GPT Image 2.6 and later",
+    "type": "invalid_request_error"
   }
 }</code></pre>
-        <div class="callout info"><code>response_format</code> 改为 <code>b64_json</code> 后，从 <code>data[0].b64_json</code> 读取结果，不再读取 <code>data[0].url</code>。</div>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
+
+      <article class="api-card" id="async-task-gpt-image">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询 GPT Image 任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="async-task-gpt-image" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
+        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>生成成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "gpt-image-2.5-sunburst-sp",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/example.png",
+        "mime_type": "image/png"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>生成失败 <span class="pill danger">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "上游未返回图片数据"
+}</code></pre>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div id="image-generation" aria-hidden="true"></div>
-
-    <div class="section-heading" id="image-nano-banana">
-      <div><h2>Nano Banana</h2><p>原生 Gemini 图片生成、参考图编辑和多图融合。</p></div>
-    </div>
-
-    <section class="endpoint-doc" id="async-generate-image-nano-banana" aria-labelledby="nano-banana-title">
-      <article class="reference-panel">
-        <h2 id="nano-banana-title">提交 Nano Banana 任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
-
-        <h3>模型名称</h3>
+    <section class="provider" id="image-nano-banana" data-section="image-nano-banana">
+      <header class="provider-head">
+        <h2>Nano Banana</h2>
+        <p>原生 Gemini 图片生成、参考图编辑和多图融合。</p>
+      </header>
+      <article class="api-card" id="async-generate-image-nano-banana">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">提交 Nano Banana 任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="async-generate-image-nano-banana" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<h3 id="h-6" class="sub">模型名称</h3>
         <table>
           <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
           <tr><td>Gemini Nano Banana 2.1</td><td><code>gemini-nano-banana-2.1-sp</code></td><td><code>gemini-nano-banana-2.1-sd</code></td><td><code>gemini-nano-banana-2.1-sp</code></td></tr>
@@ -396,7 +630,7 @@
           <tr><td>Gemini 3.1 Flash Image</td><td><code>gemini-3.1-flash-image-c-sp</code></td><td><code>gemini-3.1-flash-image-c-sd</code></td><td><code>gemini-3.1-flash-image</code></td></tr>
         </table>
 
-        <h3>请求参数</h3>
+        <h3 id="h-7" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
           <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
@@ -409,7 +643,7 @@
           <tr><td><code>response_modalities</code></td><td class="opt">否</td><td>string[]</td><td><code>["IMAGE"]</code> 或 <code>["TEXT","IMAGE"]</code>。不要仅传 <code>["TEXT"]</code>。</td></tr>
         </table>
 
-        <h3>宽高比</h3>
+        <h3 id="h-8" class="sub">宽高比</h3>
         <table>
           <tr><th><code>aspect_ratio</code></th><th>方向</th><th>Gemini 3 Pro</th><th>Gemini 3.1 Flash</th></tr>
           <tr><td><code>1:1</code></td><td>正方形</td><td>支持</td><td>支持</td></tr>
@@ -427,7 +661,7 @@
         </table>
         <div class="callout info"><b>省略宽高比</b>：有参考图时优先沿用输入比例，纯文生图通常使用 <code>1:1</code>。</div>
 
-        <h3>参考图格式</h3>
+        <h3 id="h-9" class="sub">参考图格式</h3>
         <table>
           <tr><th>格式</th><th>写法</th><th>说明</th></tr>
           <tr><td><code>fileData</code></td><td><code>{"fileData":{"mimeType":"image/jpeg","fileUri":"https://..."}}</code></td><td>公网 HTTP(S) 图片地址。</td></tr>
@@ -435,10 +669,10 @@
           <tr><td>兼容字符串</td><td><code>https://...</code> 或 Data URI</td><td>已有客户端可继续使用，新接入建议显式声明格式。</td></tr>
         </table>
         <div class="callout warn"><b>请求大小</b>：使用 <code>inlineData</code> 时，最终 Gemini JSON 请求体不得超过 20MiB。URL 必须保持公网可访问，直至任务完成。</div>
-      </article>
-
-      <aside class="example-panel" aria-label="Nano Banana 提交请求和响应示例">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="Nano Banana 请求类型">
             <button type="button" class="example-tab" id="nano-text-tab" role="tab" aria-selected="true" aria-controls="nano-text">文生图</button>
@@ -488,17 +722,28 @@
     "type": "invalid_request_error"
   }
 }</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="async-task-nano-banana" aria-labelledby="nano-banana-task-title">
-      <article class="reference-panel">
-        <h2 id="nano-banana-task-title">查询 Nano Banana 任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
-        <p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+          </div>
+        </aside>
+        </div>
       </article>
-      <aside class="example-panel" aria-label="Nano Banana 任务查询和结果示例">
-        <h3>请求示例</h3>
+
+      <article class="api-card" id="async-task-nano-banana">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询 Nano Banana 任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="async-task-nano-banana" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>生成成功 <span class="pill success">200</span></h3>
@@ -524,155 +769,36 @@
   "progress": "100%",
   "error": "上游未返回图片数据"
 }</code></pre>
-      </aside>
-    </section>
-
-    <div class="section-heading" id="image-gpt-image">
-      <div><h2>GPT Image</h2><p>图片生成、透明背景输出和参考图编辑。</p></div>
-    </div>
-
-    <section class="endpoint-doc" id="async-generate-image-gpt" aria-labelledby="gpt-image-title">
-      <article class="reference-panel">
-        <h2 id="gpt-image-title">提交 GPT Image 任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
-
-        <h3>模型名称</h3>
-        <table>
-          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
-          <tr><td>GPT Image 2.5 Sunburst</td><td><code>gpt-image-2.5-sunburst-sp</code></td><td><code>gpt-image-2.5-sunburst-sd</code></td><td><code>gpt-image-2.5-sunburst</code></td></tr>
-          <tr><td>GPT Image 2.5 Flare</td><td><code>gpt-image-2.5-flare-sp</code></td><td><code>gpt-image-2.5-flare-sd</code></td><td><code>gpt-image-2.5-flare</code></td></tr>
-          <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
-        </table>
-
-        <h3>请求参数</h3>
-        <table>
-          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
-          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
-          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。支持 URL、Data URI、原始 Base64、<code>fileData</code> 和 <code>inlineData</code>。</td></tr>
-          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>生成图片数量。</td></tr>
-          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>WIDTHxHEIGHT</code>；常用尺寸见下表。</td></tr>
-          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>2.5：<code>low</code>、<code>medium</code>、<code>high</code>、<code>xhigh</code>、<code>max</code>、<code>auto</code>；GPT Image 2：<code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>。</td></tr>
-          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>transparent</code>。透明背景要求 PNG 或 WebP。</td></tr>
-          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>low</code>。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code>、<code>jpeg</code> 或 <code>webp</code>。</td></tr>
-        </table>
-
-        <h3>常用尺寸</h3>
-        <table>
-          <tr><th>分辨率</th><th>正方形</th><th>横版</th><th>竖版</th></tr>
-          <tr><td>自动</td><td colspan="3"><code>auto</code></td></tr>
-          <tr><td>1K</td><td><code>1024x1024</code></td><td><code>1536x1024</code>、<code>1360x1024</code>、<code>1824x1024</code></td><td><code>1024x1536</code>、<code>1024x1360</code>、<code>1024x1824</code></td></tr>
-          <tr><td>2K</td><td><code>2048x2048</code></td><td><code>3072x2048</code>、<code>2736x2048</code>、<code>3648x2048</code></td><td><code>2048x3072</code>、<code>2048x2736</code>、<code>2048x3648</code></td></tr>
-          <tr><td>4K</td><td><code>2880x2880</code></td><td><code>3504x2336</code>、<code>3264x2448</code>、<code>3840x2160</code></td><td><code>2336x3504</code>、<code>2448x3264</code>、<code>2160x3840</code></td></tr>
-        </table>
-        <div class="callout warn"><b>自定义尺寸</b>：使用小写 <code>x</code>；宽高均须为 16 的倍数，比例不超过 <code>3:1</code>，单边不超过 3840 像素，总像素为 655,360–8,294,400。</div>
-      </article>
-
-      <aside class="example-panel" aria-label="GPT Image 提交请求和响应示例">
-        <h3>请求示例</h3>
-        <div class="example-switcher" data-example-switcher>
-          <div class="example-tabs" role="tablist" aria-label="GPT Image 请求类型">
-            <button type="button" class="example-tab" id="gpt-text-tab" role="tab" aria-selected="true" aria-controls="gpt-text">文生图</button>
-            <button type="button" class="example-tab" id="gpt-image-tab" role="tab" aria-selected="false" aria-controls="gpt-image">参考图编辑</button>
           </div>
-          <div class="example-panels">
-            <div class="example-tab-panel is-active" id="gpt-text" role="tabpanel" aria-labelledby="gpt-text-tab" aria-hidden="false">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2.5-sunburst-sp",
-    "prompt": "生成一枚蓝色玻璃徽章",
-    "size": "1024x1024",
-    "quality": "max",
-    "background": "transparent",
-    "output_format": "png",
-    "moderation": "low"
-  }'</code></pre>
-            </div>
-            <div class="example-tab-panel" id="gpt-image" role="tabpanel" aria-labelledby="gpt-image-tab" aria-hidden="true">
-              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
-  -H "Authorization: Bearer $API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2.5-flare-sd",
-    "prompt": "保留主体结构，将材质改为磨砂金属",
-    "images": ["https://upload.o1key.com/uploads/product.png"],
-    "size": "1536x1024",
-    "quality": "xhigh",
-    "output_format": "png"
-  }'</code></pre>
-            </div>
-          </div>
+        </aside>
         </div>
-        <h3>提交成功 <span class="pill success">200</span></h3>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUBMITTED"
-}</code></pre>
-        <h3>提交失败 <span class="pill danger">400</span></h3>
-        <pre><code>{
-  "error": {
-    "message": "output_format must be png or webp when background is transparent",
-    "type": "invalid_request_error"
-  }
-}</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="async-task-gpt-image" aria-labelledby="gpt-image-task-title">
-      <article class="reference-panel">
-        <h2 id="gpt-image-task-title">查询 GPT Image 任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
-        <p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
       </article>
-      <aside class="example-panel" aria-label="GPT Image 任务查询和结果示例">
-        <h3>请求示例</h3>
-        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
-  -H "Authorization: Bearer $API_KEY"</code></pre>
-        <h3>生成成功 <span class="pill success">200</span></h3>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "SUCCESS",
-  "progress": "100%",
-  "data": {
-    "model": "gpt-image-2.5-sunburst-sp",
-    "created": 1786350000,
-    "images": [
-      {
-        "url": "https://assetcache.o1key.com/images/example.png",
-        "mime_type": "image/png"
-      }
-    ]
-  }
-}</code></pre>
-        <h3>生成失败 <span class="pill danger">200</span></h3>
-        <pre><code>{
-  "task_id": "task_xxxxxxxxxxxxxxxx",
-  "status": "FAILURE",
-  "progress": "100%",
-  "error": "上游未返回图片数据"
-}</code></pre>
-      </aside>
     </section>
 
-    <div class="section-heading" id="image-seedream">
-      <div><h2>Seedream</h2><p>单图生成、参考图编辑、多图融合和图层拆分。</p></div>
-    </div>
-
-    <section class="endpoint-doc" id="async-generate-image-seedream" aria-labelledby="seedream-async-title">
-      <article class="reference-panel">
-        <h2 id="seedream-async-title">提交 Seedream 任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
-
-        <h3>模型名称</h3>
+    <section class="provider" id="image-seedream" data-section="image-seedream">
+      <header class="provider-head">
+        <h2>Seedream</h2>
+        <p>单图生成、参考图编辑、多图融合和图层拆分。</p>
+      </header>
+      <article class="api-card" id="async-generate-image-seedream">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">提交 Seedream 任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/async/v1/generateImage</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="async-generate-image-seedream" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<h3 id="h-10" class="sub">模型名称</h3>
         <table>
           <tr><th>模型系列</th><th>模型名称</th></tr>
           <tr><td>Seedream 5.0 Pro</td><td><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
         </table>
 
-        <h3>请求参数</h3>
+        <h3 id="h-11" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
           <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>固定使用 <code>dola-seedream-5-0-pro-260628-ep</code>。</td></tr>
@@ -685,7 +811,7 @@
           <tr><td><code>layer_decomposition</code></td><td class="opt">否</td><td>boolean</td><td>图层拆分开关，默认 <code>false</code>。设为 <code>true</code> 时，将输入图拆解为 1 张底图和最多 16 个带透明通道的 PNG 图层。</td></tr>
         </table>
 
-        <h3>图层拆分</h3>
+        <h3 id="h-12" class="sub">图层拆分</h3>
         <table>
           <tr><th>规则</th><th>说明</th></tr>
           <tr><td>输入</td><td><code>images</code> 必须且只能包含 1 张待拆分图片。</td></tr>
@@ -695,7 +821,7 @@
           <tr><td>数量上限</td><td>提示词要求的图层数量超过上限时，超出部分可能不会返回。</td></tr>
         </table>
 
-        <h3>尺寸</h3>
+        <h3 id="h-13" class="sub">尺寸</h3>
         <table>
           <tr><th>宽高比</th><th><code>1K</code></th><th><code>2K</code></th></tr>
           <tr><td><code>1:1</code></td><td><code>1024x1024</code></td><td><code>2048x2048</code></td></tr>
@@ -709,7 +835,7 @@
         </table>
         <div class="callout warn"><b>自定义尺寸</b>：总像素必须在 921,600 至 4,624,220 之间，宽高比必须在 <code>1:16</code> 至 <code>16:1</code> 之间。尺寸只接受小写 <code>x</code>。</div>
 
-        <h3>参考图限制</h3>
+        <h3 id="h-14" class="sub">参考图限制</h3>
         <table>
           <tr><th>项目</th><th>限制</th></tr>
           <tr><td>数量</td><td>最多 10 张</td></tr>
@@ -719,12 +845,12 @@
           <tr><td>宽高比</td><td><code>1:16</code> 至 <code>16:1</code></td></tr>
         </table>
 
-        <h3>计费</h3>
+        <h3 id="h-15" class="sub">计费</h3>
         <p>基础价格按火山引擎中国区官方价格及实际输出结算：图片生成模式不超过 261 万像素为 <code>¥0.30 / 张</code>，超过 261 万像素为 <code>¥0.60 / 张</code>；图层拆分模式按每张实际返回图片计费，底图计入数量，不超过 261 万像素为 <code>¥0.15 / 张</code>，超过 261 万像素为 <code>¥0.30 / 张</code>。图片生成模式首张参考图免费，从第 2 张起每张增加 <code>¥0.02</code>。最终价格乘以调用密钥所属分组的倍率。</p>
-      </article>
-
-      <aside class="example-panel" aria-label="Seedream 提交请求和响应示例">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="Seedream 请求类型">
             <button type="button" class="example-tab" id="seedream-async-text-tab" role="tab" aria-selected="true" aria-controls="seedream-async-text">文生图</button>
@@ -789,17 +915,28 @@
     "type": "invalid_request_error"
   }
 }</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="/async/v1/tasks/{task_id}" aria-labelledby="image-task-title">
-      <article class="reference-panel">
-        <h2 id="image-task-title">查询 Seedream 任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
-        <p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+          </div>
+        </aside>
+        </div>
       </article>
-      <aside class="example-panel" aria-label="Seedream 任务查询和结果示例">
-        <h3>请求示例</h3>
+
+      <article class="api-card" id="/async/v1/tasks/{task_id}">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询 Seedream 任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/async/v1/tasks/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/async/v1/tasks/{task_id}" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>生成成功 <span class="pill success">200</span></h3>
@@ -857,20 +994,32 @@
   "progress": "100%",
   "error": "upstream image generation failed"
 }</code></pre>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div class="section-heading" id="seedance">
-      <div><h2>Seedance 素材与视频</h2><p>提交视频任务，保存任务 ID，再查询结果。参考素材可直接传 URL，需要复用时再预上传。</p></div>
-    </div>
-
-    <section class="endpoint-doc" id="/v1/video/generations" aria-labelledby="video-create-title">
-      <article class="reference-panel">
-        <h2 id="video-create-title">Seedance 多模态视频生成</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
-        <div class="callout info"><b>接入步骤</b>：使用本站 API Key 提交请求 → 保存响应中的 <code>id</code> / <code>task_id</code> → 调用查询接口，直到 <code>completed</code> 或 <code>failed</code>。</div>
+    <section class="provider" id="seedance" data-section="seedance">
+      <header class="provider-head">
+        <h2>Seedance 素材与视频</h2>
+        <p>提交视频任务，保存任务 ID，再查询结果。参考素材可直接传 URL，需要复用时再预上传。</p>
+      </header>
+      <article class="api-card" id="/v1/video/generations">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">Seedance 多模态视频生成</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/v1/video/generations" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<div class="callout info"><b>接入步骤</b>：使用本站 API Key 提交请求 → 保存响应中的 <code>id</code> / <code>task_id</code> → 调用查询接口，直到 <code>completed</code> 或 <code>failed</code>。</div>
         <p>下表适用于 Doubao MAX 和本站 HC 对应的 Dreamina MAX 能力。实际可用模型以本站 <code>GET /v1/models</code> 返回的名称为准；请求使用本站公开模型名。</p>
-        <h3>顶层参数</h3>
+        <h3 id="h-16" class="sub">顶层参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>支持值与说明</th></tr>
           <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>模型名称，取值见下方模型表</td></tr>
@@ -888,7 +1037,7 @@
           <tr><td><code>omni_reference_task_type</code></td><td class="opt">否</td><td>string</td><td>仅 2.5：<code>auto</code>（默认）、<code>reference</code>、<code>edit</code>、<code>extend</code>；用于引导参考、编辑或延长模式，并校验对应参数限制。提示词意图仍须与所选模式一致</td></tr>
         </table>
         <p>可选参数未填写时使用上游默认值。<code>false</code> 和 <code>0</code> 使用 JSON 原生类型，不能写成字符串；未列出的扩展字段不保证转发。</p>
-        <h3>模型与分辨率</h3>
+        <h3 id="h-17" class="sub">模型与分辨率</h3>
         <table>
           <tr><th>模型</th><th>支持分辨率</th><th>时长</th></tr>
           <tr><td><code>dreamina-seedance-2-0-hc</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code>、<code>4k</code></td><td>4–15 秒或 -1</td></tr>
@@ -900,7 +1049,7 @@
           <tr><td><code>doubao-seedance-2-0-mini-260615-max</code></td><td><code>480p</code>、<code>720p</code></td><td>4–15 秒或 -1</td></tr>
           <tr><td><code>doubao-seedance-2-5-260628-max</code></td><td><code>480p</code>、<code>720p</code>、<code>1080p</code></td><td>4–30 秒或 -1</td></tr>
         </table>
-        <h3><code>content</code> 多模态项目</h3>
+        <h3 id="h-18" class="sub"><code>content</code> 多模态项目</h3>
         <table>
           <tr><th><code>type</code></th><th>字段</th><th><code>role</code></th><th>说明</th></tr>
           <tr><td><code>text</code></td><td><code>text</code></td><td>不填</td><td>提示词，例如 <code>{"type":"text","text":"..."}</code></td></tr>
@@ -911,7 +1060,7 @@
           <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>参考音频：2.0 需同时传图片或视频；2.5 允许音频作为唯一参考素材，仍需提示词</td></tr>
         </table>
         <p><code>@Image1</code> 是数组中第一张参考图，<code>@Video1</code> 是第一段参考视频，分别按出现顺序编号。本站保留素材顺序；首尾帧图不计入参考图编号。</p>
-        <h3>按生成场景选择参数</h3>
+        <h3 id="h-19" class="sub">按生成场景选择参数</h3>
         <p>以下六种场景均调用 <code>POST /v1/video/generations</code>。通过 <code>content</code> 中的素材角色和 2.5 的 <code>omni_reference_task_type</code> 区分场景。</p>
         <table>
           <tr><th>场景</th><th>请求内容</th><th>适用模型</th></tr>
@@ -924,7 +1073,7 @@
         </table>
         <p>2.5 编辑提示词应明确增删改意图，例如“修改 @Video1 的背景”；延长提示词应明确方向与目标，例如“向后延长 @Video1”。仅填写任务类型不能替代明确的提示词。场景限制依据 <a href="https://docs.volcengine.com/docs/ark/seedance-2-5?lang=zh" target="_blank" rel="noopener noreferrer">火山引擎 Seedance 2.5 官方教程</a>；请求仍使用本站路径、模型名和 API Key。</p>
         <div class="callout info">首尾帧模式不能与 <code>reference_*</code> 素材混用。<code>content</code> 中的 <code>last_frame</code> 是输入的目标结束画面；<code>return_last_frame: true</code> 用于导出生成视频的尾帧，完成后从 <code>metadata.last_frame_url</code> 读取。</div>
-        <h3>参考素材数量</h3>
+        <h3 id="h-20" class="sub">参考素材数量</h3>
         <table>
           <tr><th>素材</th><th>2.0 / fast / mini</th><th>2.5</th></tr>
           <tr><td>参考图片</td><td>最多 9 张</td><td>最多 30 张</td></tr>
@@ -933,12 +1082,13 @@
         </table>
         <p>图片支持 JPEG、PNG、WebP、BMP、TIFF、GIF、HEIC、HEIF，单张 &lt; 30 MB；视频支持 MP4 / MOV，单段 ≤ 200 MB；音频支持 WAV / MP3，单段 ≤ 15 MB。图片 / 视频边长为 300–6000 px，图片宽高比为 0.4–2.5；请求体 ≤ 64 MB。</p>
         <p>素材 URL 需公网可下载，不依赖登录、Cookie 或防盗链。带素材的请求可能先被受理，再因下载、规格或内容审核失败；请查询最终状态和 <code>error.message</code>。含真人人脸的参考素材可能被隐私审核拒绝。</p>
-        <h3>完成通知与任务关联</h3>
+        <h3 id="h-21" class="sub">完成通知与任务关联</h3>
         <p><code>callback_url</code> 会原样转发，上游直接向该地址 POST 状态通知。回调体是 <code>{"task": {...}}</code>，其中 <code>task.id</code> 是上游任务标识；本站查询接口返回 <code>task_...</code> 和 <code>object: "video"</code>。</p>
         <p>建议在回调 URL 带上自己的业务 ID（如 <code>?job_id=123</code>），提交成功后保存业务 ID 与本站 <code>task_id</code> 的关联。收到通知后用本站任务 ID 查询确认结果；保留轮询作为兜底。</p>
-      </article>
-      <aside class="example-panel" aria-label="Seedance 视频请求和响应示例">
-        <h3>按场景选择请求</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>按场景选择请求</h3>
         <p class="compact-note">使用本站 API Key，并将素材 URL 替换为自己的公网地址。HC 模型使用相同请求结构，修改 model 即可；已有素材可将对应 URL 替换为预上传返回的 Ref。</p>
         <div class="example-switcher seedance-request-examples" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="Seedance 视频请求场景">
@@ -1170,14 +1320,24 @@
   "created_at": 1786350000
 }</code></pre></div>
 </div></div>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/v1/video/generations/{task_id}" aria-labelledby="video-query-title">
-      <article class="reference-panel">
-        <h2 id="video-query-title">查询视频任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/video/generations/{task_id}</span></div>
-        <p>使用创建响应中的本站任务 ID（<code>task_...</code>）查询进度和结果，携带同一个本站 API Key。</p>
+      <article class="api-card" id="/v1/video/generations/{task_id}">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询视频任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/video/generations/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/v1/video/generations/{task_id}" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用创建响应中的本站任务 ID（<code>task_...</code>）查询进度和结果，携带同一个本站 API Key。</p>
         <table>
           <tr><th>状态</th><th>说明</th></tr>
           <tr><td><code>queued</code></td><td>已提交，等待生成</td></tr>
@@ -1185,7 +1345,7 @@
           <tr><td><code>completed</code></td><td>生成完成，从结果字段取下载地址</td></tr>
           <tr><td><code>failed</code></td><td>生成失败，读取 <code>error.message</code></td></tr>
         </table>
-        <h3>结果读取</h3>
+        <h3 id="h-22" class="sub">结果读取</h3>
         <table>
           <tr><th>字段</th><th>用途</th></tr>
           <tr><td><code>result_url</code> / <code>metadata.url</code></td><td>视频下载地址，两者兼容；完整输出列表在 <code>metadata.outputs</code></td></tr>
@@ -1197,12 +1357,13 @@
         </table>
         <p>建议每 5–10 秒查询一次，直到进入终态。素材准备属于正常处理过程，收到 <code>in_progress</code> 后继续查询即可。</p>
         <p>默认透传的上游视频 / 尾帧签名链接通常有效 24 小时，无需鉴权即可下载；需要长期保存时请及时转存。</p>
-        <h3>请求失败处理</h3>
+        <h3 id="h-23" class="sub">请求失败处理</h3>
         <p>提交返回 400 时按错误说明修正参数；带素材的请求也可能在受理后失败。429 按 <code>Retry-After</code> 退避，503 稍后重试。反馈问题时附上响应的 <code>request_id</code> / <code>x-request-id</code>。</p>
         <p>已取得 <code>task_id</code> 后只需查询。创建请求发生超时时，先检查业务记录，避免重复提交并重复计费。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>查询请求</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>查询请求</h3>
 <pre><code>curl https://cf-api.o1key.com/v1/video/generations/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>查询响应</h3>
@@ -1269,14 +1430,24 @@
   }
 }</code></pre></div>
 </div></div>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/v1/seedance/assets" aria-labelledby="asset-create-title">
-      <article class="reference-panel">
-        <h2 id="asset-create-title">创建素材</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/seedance/assets</span></div>
-        <p>通过公开 URL 创建可复用素材。仅使用一次的素材可直接在视频请求中传入 URL。</p>
+      <article class="api-card" id="/v1/seedance/assets">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">创建素材</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/seedance/assets</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/v1/seedance/assets" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>通过公开 URL 创建可复用素材。仅使用一次的素材可直接在视频请求中传入 URL。</p>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
           <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>；须与视频模型对应</td></tr>
@@ -1287,9 +1458,10 @@
         </table>
         <p>Doubao 素材有效期为 7 天。状态变为 <code>Active</code> 后，使用响应中的 <code>Ref</code> 生成视频。上传素材免费。</p>
         <p>本节预上传示例使用 <code>type: "doubao"</code>。Dreamina MAX / HC 视频推荐直接传公开 URL；<code>type: "hc"</code>、<code>type: "df"</code> 保留原有素材接口。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -1310,14 +1482,24 @@
     "Error": null
   }
 }</code></pre>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/v1/seedance/assets/{asset_id}" aria-labelledby="asset-query-title">
-      <article class="reference-panel">
-        <h2 id="asset-query-title">查询素材</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/seedance/assets/{asset_id}?type={type}</span></div>
-        <table>
+      <article class="api-card" id="/v1/seedance/assets/{asset_id}">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询素材</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/seedance/assets/{asset_id}?type={type}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/v1/seedance/assets/{asset_id}" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<table>
           <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
           <tr><td><code>asset_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>data.Id</code></td></tr>
           <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>，须与创建时一致</td></tr>
@@ -1329,9 +1511,10 @@
           <tr><td><code>Failed</code></td><td>处理失败，原因见 <code>Error</code></td></tr>
         </table>
         <p>建议每 1-2 秒查询一次，直到状态变为 <code>Active</code> 或 <code>Failed</code>。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-e144dfc364a647f1?type=doubao" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>响应示例</h3>
@@ -1346,20 +1529,32 @@
     "Error": null
   }
 }</code></pre>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div class="section-heading" id="minimax-h3">
-      <div><h2>MiniMax H3 / H3 Max / H3 Max Turbo 视频生成</h2><p>通过统一异步接口创建任务，并使用任务 ID 查询生成结果。</p></div>
-    </div>
+    <section class="provider" id="minimax-h3" data-section="minimax-h3">
+      <header class="provider-head">
+        <h2>MiniMax H3 / H3 Max / H3 Max Turbo 视频生成</h2>
+        <p>通过统一异步接口创建任务，并使用任务 ID 查询生成结果。</p>
+      </header>
+      <article class="api-card" id="minimax-h3-create">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">创建 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="minimax-h3-create" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>创建成功后立即返回 <code>task_id</code>。视频在后台生成，无需保持请求连接。</p>
 
-    <section class="endpoint-doc" id="minimax-h3-create" aria-labelledby="minimax-h3-create-title">
-      <article class="reference-panel">
-        <h2 id="minimax-h3-create-title">创建 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/video/generations</span></div>
-        <p>创建成功后立即返回 <code>task_id</code>。视频在后台生成，无需保持请求连接。</p>
-
-        <h3>模型能力</h3>
+        <h3 id="h-24" class="sub">模型能力</h3>
         <table>
           <tr><th>模型</th><th>支持场景</th><th>分辨率</th><th>时长</th></tr>
           <tr><td><code>MiniMax-H3</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频、图片/视频/音频多模态参考</td><td><code>768P</code>、<code>2K</code></td><td>4-15 秒</td></tr>
@@ -1368,7 +1563,7 @@
         </table>
         <div class="callout info">需要 <code>2K</code> 或多模态参考时请选择 <code>MiniMax-H3</code>；H3 Max 和 H3 Max Turbo 不支持 <code>reference_*</code> 素材。需要 <code>1080P</code> 时请选择 <code>minimax-h3-max-turbo</code>。</div>
 
-        <h3>请求参数</h3>
+        <h3 id="h-25" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>model</code></td><td>string</td><td>是</td><td><code>MiniMax-H3</code>、<code>MiniMax-H3-MAX</code> 或 <code>minimax-h3-max-turbo</code>。</td></tr>
@@ -1379,7 +1574,7 @@
           <tr><td><code>callback_url</code></td><td>string</td><td>否</td><td>任务状态回调地址。建议同时保留查询任务的兜底逻辑。</td></tr>
         </table>
 
-        <h3><code>content</code> 项</h3>
+        <h3 id="h-26" class="sub"><code>content</code> 项</h3>
         <table>
           <tr><th><code>type</code></th><th>数据字段</th><th><code>role</code></th><th>适用模型</th></tr>
           <tr><td><code>text</code></td><td><code>text</code></td><td>不填</td><td>全部；提示词最多 7000 个字符</td></tr>
@@ -1389,7 +1584,7 @@
           <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>仅 H3</td></tr>
         </table>
 
-        <h3>素材限制</h3>
+        <h3 id="h-27" class="sub">素材限制</h3>
         <table>
           <tr><th>素材</th><th>格式与大小</th><th>其他限制</th></tr>
           <tr><td>图片</td><td>JPG、JPEG、PNG、WEBP、HEIC、HEIF；单张不超过 30MB</td><td>宽高 256-5760px，宽高比 0.4-2.5</td></tr>
@@ -1402,12 +1597,12 @@
           <li><code>first_frame</code>/<code>last_frame</code> 不能与任一 <code>reference_*</code> 素材混用。</li>
         </ul>
 
-        <h3>计费说明</h3>
+        <h3 id="h-28" class="sub">计费说明</h3>
         <p>H3 按输出视频秒数计费；参考视频按输入秒数计费；参考音频免费；参考图片前 5 张免费，超出部分按张计费。H3 Max 和 H3 Max Turbo 仅按输出视频秒数计费。创建任务时会预扣额度，完成后按实际用量结算，最终费用以消费记录为准。</p>
-      </article>
-
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="MiniMax H3 请求场景">
             <button type="button" class="example-tab" id="h3-text-tab" role="tab" aria-selected="true" aria-controls="h3-text">文生视频</button>
@@ -1507,14 +1702,24 @@
   "progress": 0,
   "created_at": 1786350000
 }</code></pre>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="minimax-h3-query" aria-labelledby="minimax-h3-query-title">
-      <article class="reference-panel">
-        <h2 id="minimax-h3-query-title">查询 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
-        <p>使用创建接口返回的 <code>task_id</code> 查询。建议每 10-20 秒轮询一次，直到任务变为 <code>completed</code> 或 <code>failed</code>。</p>
+      <article class="api-card" id="minimax-h3-query">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="minimax-h3-query" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用创建接口返回的 <code>task_id</code> 查询。建议每 10-20 秒轮询一次，直到任务变为 <code>completed</code> 或 <code>failed</code>。</p>
         <table>
           <tr><th>状态</th><th>处理方式</th></tr>
           <tr><td><code>queued</code> / <code>in_progress</code></td><td>任务排队或生成中，继续轮询。</td></tr>
@@ -1523,7 +1728,7 @@
           <tr><td><code>unknown</code></td><td>任务刚创建时可能短暂出现，按 <code>queued</code> 处理。</td></tr>
         </table>
 
-        <h3>响应字段</h3>
+        <h3 id="h-29" class="sub">响应字段</h3>
         <table>
           <tr><th>响应字段</th><th>说明</th></tr>
           <tr><td><code>id</code> / <code>task_id</code></td><td>任务 ID，两个字段值相同。</td></tr>
@@ -1534,9 +1739,10 @@
           <tr><td><code>error</code></td><td>失败信息，仅在任务失败时返回。</td></tr>
         </table>
         <div class="callout info">处理中可能没有 <code>result_url</code>、<code>metadata</code> 或完整用量信息，仅在 <code>completed</code> 后读取结果地址。</div>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
 
@@ -1565,21 +1771,32 @@
     }
   }
 }</code></pre>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div class="section-heading" id="gemini-omni">
-      <div><h2>Gemini Omni 视频</h2></div>
-    </div>
-
-    <section class="endpoint-doc" id="gemini-omni-create" aria-labelledby="gemini-omni-create-title">
-      <article class="reference-panel">
-        <h2 id="gemini-omni-create-title">创建 Gemini Omni 视频任务</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/videos</span></div>
-        <p>固定使用 <code>gemini-omni-flash-preview</code>。返回公开任务 ID。</p>
+    <section class="provider" id="gemini-omni" data-section="gemini-omni">
+      <header class="provider-head">
+        <h2>Gemini Omni 视频</h2>
+      </header>
+      <article class="api-card" id="gemini-omni-create">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">创建 Gemini Omni 视频任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/videos</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="gemini-omni-create" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>固定使用 <code>gemini-omni-flash-preview</code>。返回公开任务 ID。</p>
         <div class="callout warn"><b>媒体输入</b>：仅接受 Base64 Data URI 或原始 Base64，不接受远程 URL。</div>
 
-        <h3>请求参数</h3>
+        <h3 id="h-30" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>model</code></td><td>string</td><td>是</td><td>固定为 <code>gemini-omni-flash-preview</code>。</td></tr>
@@ -1594,7 +1811,7 @@
           <tr><td><code>metadata.thinking_summaries</code></td><td>string</td><td>否</td><td><code>auto</code> 或 <code>none</code>，默认 <code>auto</code>。</td></tr>
         </table>
 
-        <h3>模式约束</h3>
+        <h3 id="h-31" class="sub">模式约束</h3>
         <table>
           <tr><th><code>mode</code></th><th>输入要求</th><th>不允许的输入</th></tr>
           <tr><td><code>text_to_video</code></td><td>非空 <code>prompt</code></td><td>图片、视频</td></tr>
@@ -1603,12 +1820,12 @@
           <tr><td><code>edit</code></td><td>一个 Base64 视频，可带提示词</td><td>图片、时长、比例和尺寸参数</td></tr>
         </table>
 
-        <h3>计费说明</h3>
+        <h3 id="h-32" class="sub">计费说明</h3>
         <p>系统读取上游返回的输入、文本输出、思考和视频模态 Token 分别结算。720p 视频按每秒 5,792 个视频 Token 计量；最终扣费以上游实际用量为准，不按请求中的预估时长直接结算。</p>
-      </article>
-
-      <aside class="example-panel" aria-label="Gemini Omni 请求和响应示例">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="Gemini Omni 请求模式">
             <button type="button" class="example-tab" id="omni-text-tab" role="tab" aria-selected="true" aria-controls="omni-text">文生视频</button>
@@ -1696,19 +1913,31 @@
     "type": "new_api_error"
   }
 }</code></pre>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="gemini-omni-result" aria-labelledby="gemini-omni-result-title">
-      <article class="reference-panel">
-        <h2 id="gemini-omni-result-title">查询与下载 Gemini Omni 视频</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
-        <p>状态：<code>queued</code>、<code>in_progress</code>、<code>completed</code>、<code>failed</code>。</p>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}/content</span></div>
-        <p><code>completed</code> 后调用内容接口下载 MP4。</p>
+          </div>
+        </aside>
+        </div>
       </article>
-      <aside class="example-panel">
-        <h3>查询状态</h3>
+
+      <article class="api-card" id="gemini-omni-result">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询与下载 Gemini Omni 视频</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}/content</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="gemini-omni-result" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>状态：<code>queued</code>、<code>in_progress</code>、<code>completed</code>、<code>failed</code>。</p>
+        
+        <p><code>completed</code> 后调用内容接口下载 MP4。</p>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>查询状态</h3>
         <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
 
@@ -1727,28 +1956,39 @@
         <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt;/content \
   -H "Authorization: Bearer $API_KEY" \
   --output gemini-omni-result.mp4</code></pre>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div class="section-heading" id="grok-video">
-      <div><h2>Grok 视频生成</h2></div>
-      <p>支持视频生成、视频编辑和视频延长三种操作。三个接口共用同一查询端点。</p>
-    </div>
+    <section class="provider" id="grok-video" data-section="grok-video">
+      <header class="provider-head">
+        <h2>Grok 视频生成</h2>
+        <p>支持视频生成、视频编辑和视频延长三种操作。三个接口共用同一查询端点。</p>
+      </header>
+      <article class="api-card" id="grok-video-create">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">视频生成</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/generations</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="grok-video-create" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>从文本、图片或多模态参考素材生成视频。</p>
 
-    <section class="endpoint-doc" id="grok-video-create" aria-labelledby="grok-video-create-title">
-      <article class="reference-panel">
-        <h2 id="grok-video-create-title">视频生成</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/generations</span></div>
-        <p>从文本、图片或多模态参考素材生成视频。</p>
-
-        <h3>模型</h3>
+        <h3 id="h-33" class="sub">模型</h3>
         <table>
           <tr><th>模型名称</th><th>最高分辨率</th><th>说明</th></tr>
           <tr><td><code>grok-imagine-video</code></td><td>720p</td><td>支持文生、图生和多参考素材生成</td></tr>
           <tr><td><code>grok-imagine-video-1.5</code></td><td>1080p</td><td>文生和图生支持 1080p；多参考素材上限 720p</td></tr>
         </table>
 
-        <h3>请求参数</h3>
+        <h3 id="h-34" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
@@ -1762,10 +2002,10 @@
         </table>
 
         <div class="callout warn"><b>互斥规则</b>：<code>image</code> 和 <code>reference_images</code> 不能同时使用。</div>
-      </article>
-
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="Grok 视频请求场景">
             <button type="button" class="example-tab" id="grok-text-tab" role="tab" aria-selected="true" aria-controls="grok-text">文生视频</button>
@@ -1818,14 +2058,24 @@
 
         <h3>响应</h3>
         <pre><code>{"request_id": "task_grok_xxxxxxxxxx"}</code></pre>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="grok-video-query" aria-labelledby="grok-video-query-title">
-      <article class="reference-panel">
-        <h2 id="grok-video-query-title">查询任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/grok/v1/videos/{task_id}</span></div>
-        <p>使用创建接口返回的 <code>request_id</code> 查询任务状态和结果。</p>
+      <article class="api-card" id="grok-video-query">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/grok/v1/videos/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="grok-video-query" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用创建接口返回的 <code>request_id</code> 查询任务状态和结果。</p>
         <table>
           <tr><th>响应字段</th><th>说明</th></tr>
           <tr><td><code>status</code></td><td><code>pending</code>（处理中）、<code>done</code>（完成）、<code>failed</code>（失败）、<code>expired</code>（过期）</td></tr>
@@ -1835,9 +2085,10 @@
           <tr><td><code>video.duration</code></td><td>视频时长（秒）</td></tr>
           <tr><td><code>error</code></td><td>失败时的错误信息</td></tr>
         </table>
-      </article>
-      <aside class="example-panel">
-        <h3>请求</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求</h3>
         <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
 
@@ -1873,17 +2124,27 @@
 }</code></pre></div>
           </div>
         </div>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="grok-video-edit" aria-labelledby="grok-video-edit-title">
-      <article class="reference-panel">
-        <h2 id="grok-video-edit-title">视频编辑</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/edits</span></div>
-        <p>基于提示词编辑输入视频。输出保持输入的时长和宽高比，分辨率上限 720p。</p>
+      <article class="api-card" id="grok-video-edit">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">视频编辑</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/edits</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="grok-video-edit" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>基于提示词编辑输入视频。输出保持输入的时长和宽高比，分辨率上限 720p。</p>
         <div class="callout warn"><b>时长限制</b>：输入视频不超过 8.7 秒。</div>
 
-        <h3>请求参数</h3>
+        <h3 id="h-35" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
@@ -1891,10 +2152,10 @@
           <tr><td><code>video</code></td><td>object</td><td>是</td><td>输入视频，填 <code>url</code> 或 <code>file_id</code>；公网 URL 或 Base64</td></tr>
         </table>
         <p><strong>不支持的参数</strong>：<code>duration</code>、<code>aspect_ratio</code>、<code>resolution</code>、<code>image</code>、<code>reference_images</code>、<code>reference_audios</code></p>
-      </article>
-
-      <aside class="example-panel">
-        <h3>请求</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求</h3>
         <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/edits \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -1906,16 +2167,26 @@
 
         <h3>响应</h3>
         <pre><code>{"request_id": "task_grok_edit_xxxxxxxxxx"}</code></pre>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="grok-video-extend" aria-labelledby="grok-video-extend-title">
-      <article class="reference-panel">
-        <h2 id="grok-video-extend-title">视频延长</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/extensions</span></div>
-        <p>延长输入视频。<code>duration</code> 参数控制延长部分的时长，输出总时长 = 输入时长 + duration。</p>
+      <article class="api-card" id="grok-video-extend">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">视频延长</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/grok/v1/videos/extensions</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="grok-video-extend" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>延长输入视频。<code>duration</code> 参数控制延长部分的时长，输出总时长 = 输入时长 + duration。</p>
 
-        <h3>请求参数</h3>
+        <h3 id="h-36" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
@@ -1924,10 +2195,10 @@
           <tr><td><code>duration</code></td><td>integer</td><td>否</td><td>延长部分时长 2-10 秒，默认 6 秒</td></tr>
         </table>
         <p><strong>不支持的参数</strong>：<code>aspect_ratio</code>、<code>resolution</code>、<code>image</code>、<code>reference_images</code>、<code>reference_audios</code></p>
-      </article>
-
-      <aside class="example-panel">
-        <h3>请求</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求</h3>
         <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/extensions \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -1941,17 +2212,26 @@
 
         <h3>响应</h3>
         <pre><code>{"request_id": "task_grok_extend_xxxxxxxxxx"}</code></pre>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div class="section-heading" id="kling-4">
-      <div><h2>Kling VIDEO 4.0</h2></div>
-    </div>
-
-    <section class="endpoint-doc" id="kling-4-overview" aria-labelledby="kling-4-title">
-      <article class="reference-panel">
-        <h2 id="kling-4-title">Kling 4.0 视频接口</h2>
-        <p>使用 <code>Authorization: Bearer &lt;API Key&gt;</code> 和 <code>Content-Type: application/json</code>。请求体沿用可灵官方结构，由路径确定任务类型，无需传 <code>model</code>；三个入口共用 <code>kling-4.0</code> 的渠道和计费配置。</p>
+    <section class="provider" id="kling-4" data-section="kling-4">
+      <header class="provider-head">
+        <h2>Kling VIDEO 4.0</h2>
+      </header>
+      <article class="api-card" id="kling-4-overview">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">Kling 4.0 视频接口</h3>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="kling-4-overview" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用 <code>Authorization: Bearer &lt;API Key&gt;</code> 和 <code>Content-Type: application/json</code>。请求体沿用可灵官方结构，由路径确定任务类型，无需传 <code>model</code>；三个入口共用 <code>kling-4.0</code> 的渠道和计费配置。</p>
         <div class="callout warn"><b>上游开放状态</b>：<a href="https://kling.ai/document-api/pricing/base/video">可灵预览定价文档</a>将 Kling 4.0 API 标为 Coming Soon。本平台已支持转发下列请求；实际上线状态以可灵公告为准。</div>
         <table>
           <tr><th>类型</th><th>提交</th><th>查询</th></tr>
@@ -1959,7 +2239,7 @@
           <tr><td>图生视频</td><td><code>POST /kling/image-to-video/kling-4.0</code></td><td><code>GET /kling/image-to-video/kling-4.0/{task_id}</code></td></tr>
           <tr><td>Omni</td><td><code>POST /kling/omni-video/kling-4.0</code></td><td><code>GET /kling/omni-video/kling-4.0/{task_id}</code></td></tr>
         </table>
-        <h3>通用设置</h3>
+        <h3 id="h-37" class="sub">通用设置</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>settings.duration</code></td><td>integer</td><td>否</td><td>输出时长 3–30 秒。显式设置优先；省略时上游识别提示词时长，Omni 还可沿用 <code>base_video</code> 时长，否则默认 10 秒。</td></tr>
@@ -1971,9 +2251,10 @@
         </table>
         <p>提示词中用 <code>@id</code> 引用素材，并写清每项素材的用途。4.0 不使用 3.0 的 <code>settings.audio</code>、<code>settings.multi_shot</code> 参数；音频要求写在提示词中，Omni 可添加 <code>voice</code> 引用。</p>
         <p>可灵原始接口说明：<a href="https://kling.ai/document-api/api/video/4-0/text-to-video">文生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/image-to-video">图生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/video-omni">Omni</a>。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>创建响应 · 200</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>创建响应 · 200</h3>
         <pre><code>{
   "id": "task_xxxxxxxxxx",
   "task_id": "task_xxxxxxxxxx",
@@ -1984,22 +2265,33 @@
   "created_at": 1786350000
 }</code></pre>
         <p class="compact-note">返回的是本平台公开任务 ID，和可灵上游 <code>data.id</code> 不同。</p>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/kling/text-to-video/kling-4.0" aria-labelledby="kling-4-text-title">
-      <article class="reference-panel">
-        <h2 id="kling-4-text-title">文生视频</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/text-to-video/kling-4.0</span></div>
-        <table>
+      <article class="api-card" id="/kling/text-to-video/kling-4.0">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">文生视频</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/text-to-video/kling-4.0</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/text-to-video/kling-4.0" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>可包含正向和负向描述。纯英文最多 26,000 字符，纯非英文最多 11,000 字符；混合输入需满足 E/26000 + N/11000 ≤ 1。</td></tr>
           <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>，默认 <code>16:9</code>。</td></tr>
         </table>
         <p>还可传上方列出的 <code>settings.duration</code>、<code>settings.resolution</code> 和 <code>options</code>。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/text-to-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -2008,14 +2300,24 @@
     "settings": {"duration": 10, "resolution": "1080p", "aspect_ratio": "16:9"},
     "options": {"watermark_info": {"enabled": false}}
   }'</code></pre>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/kling/image-to-video/kling-4.0" aria-labelledby="kling-4-image-title">
-      <article class="reference-panel">
-        <h2 id="kling-4-image-title">图生视频 · 多关键帧</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/image-to-video/kling-4.0</span></div>
-        <table>
+      <article class="api-card" id="/kling/image-to-video/kling-4.0">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">图生视频 · 多关键帧</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/image-to-video/kling-4.0</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/image-to-video/kling-4.0" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>contents</code></td><td>array</td><td>是</td><td>至少 1 张关键帧图片，可附提示词；图片最多 10 张。</td></tr>
           <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>middle_frame</code>、<code>last_frame</code>。</td></tr>
@@ -2024,9 +2326,10 @@
           <tr><td><code>contents[].id</code></td><td>string</td><td>否</td><td>任务内唯一，在提示词中用 <code>@id</code> 引用；多个 <code>middle_frame</code> 时应为每张图指定 ID。</td></tr>
         </table>
         <p>图片格式 JPG、JPEG、PNG；单张不超过 30 MB，宽高均不小于 300px，宽高比为 2:5 至 5:2。文件属性由可灵上游校验。图生视频不支持 <code>refer_image</code>、视频、元素、声音和 <code>settings.aspect_ratio</code>；需要这些素材请使用 Omni。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例 · 首帧 + 中间帧 + 尾帧</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例 · 首帧 + 中间帧 + 尾帧</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/image-to-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -2039,14 +2342,24 @@
     ],
     "settings": {"resolution": "1080p", "duration": 12}
   }'</code></pre>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/kling/omni-video/kling-4.0" aria-labelledby="kling-4-omni-title">
-      <article class="reference-panel">
-        <h2 id="kling-4-omni-title">Omni 多素材生成与视频编辑</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-4.0</span></div>
-        <table>
+      <article class="api-card" id="/kling/omni-video/kling-4.0">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">Omni 多素材生成与视频编辑</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-4.0</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/omni-video/kling-4.0" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>contents</code></td><td>array</td><td>是</td><td>提示词、图片、视频、元素、声音引用的集合。</td></tr>
           <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>middle_frame</code>、<code>last_frame</code>、<code>refer_image</code>、<code>feature_video</code>、<code>base_video</code>、<code>element</code>、<code>voice</code>。</td></tr>
@@ -2057,16 +2370,17 @@
           <tr><td><code>contents[].id</code></td><td>string</td><td>条件</td><td>任务内唯一，供 <code>@id</code> 引用；<code>element</code> 和 <code>voice</code> 必填，多个中间帧或参考图时也必填。</td></tr>
           <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>、<code>adaptive</code>；默认 <code>adaptive</code>。省略或设为 <code>adaptive</code> 时，上游优先使用提示词中的比例，再参考基础视频、关键帧及其他视频，最后默认 16:9。</td></tr>
         </table>
-        <h3>素材限制</h3>
+        <h3 id="h-38" class="sub">素材限制</h3>
         <ul>
           <li>图片最多 10 张；单张 JPG/JPEG/PNG 不超过 30 MB，宽高均不小于 300px，宽高比为 2:5 至 5:2。</li>
           <li>参考视频最多 5 个，其中 <code>base_video</code> 最多 1 个；视频角色元素与参考视频合计最多 5 个。视频 MP4/MOV 单个不超过 300 MB，每个及输入视频合计时长均为 3–30 秒（含视频角色元素）；输入帧率 24–60 fps。视频宽高各为 700–4553px，总像素数不超过 8,294,400，宽高比为 2:5 至 5:2。</li>
           <li>元素最多 7 个，其中视频角色元素最多 3 个；声音引用最多 3 个；图片、视频、元素、声音总数最多 15 个。</li>
           <li>本平台先校验字段、枚举、ID 和数量。文件大小、分辨率、输入视频时长和元素类型等媒体属性由可灵上游校验。</li>
         </ul>
-      </article>
-      <aside class="example-panel">
-        <h3>参考视频 + 参考图</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>参考视频 + 参考图</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -2099,13 +2413,21 @@
   ],
   "settings": {"duration": 5, "aspect_ratio": "9:16"}
 }</code></pre>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/kling/omni-video/kling-4.0/{task_id}" aria-labelledby="kling-4-query-title">
-      <article class="reference-panel">
-        <h2 id="kling-4-query-title">查询 Kling 4.0 任务</h2>
-        <p>在对应的文生视频、图生视频或 Omni 查询路径中，使用提交响应返回的本平台 <code>task_id</code>。查询需要同一用户的 API Key；本平台负责轮询可灵的 <code>GET /tasks?task_ids=...</code>。</p>
+      <article class="api-card" id="/kling/omni-video/kling-4.0/{task_id}">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询 Kling 4.0 任务</h3>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/omni-video/kling-4.0/{task_id}" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>在对应的文生视频、图生视频或 Omni 查询路径中，使用提交响应返回的本平台 <code>task_id</code>。查询需要同一用户的 API Key；本平台负责轮询可灵的 <code>GET /tasks?task_ids=...</code>。</p>
         <table>
           <tr><th>响应字段</th><th>说明</th></tr>
           <tr><td><code>status</code></td><td>常见值为 <code>SUBMITTED</code>、<code>QUEUED</code>、<code>IN_PROGRESS</code>、<code>SUCCESS</code> 或 <code>FAILURE</code>。</td></tr>
@@ -2116,9 +2438,10 @@
           <tr><td><code>request_id</code></td><td>上游请求 ID，用于问题追踪。</td></tr>
         </table>
         <p>创建或查询失败时返回本平台错误结构；可灵官方提交响应的 <code>code</code>、<code>data.id</code> 与查询响应的 <code>outputs</code>、<code>billing</code> 不会原样返回。</p>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例 · Omni</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例 · Omni</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>成功响应</h3>
@@ -2133,20 +2456,31 @@
   "usage": {"input_duration": "8.03"}
 }</code></pre>
         <p class="compact-note">任务 ID、链接和费用数值仅为示例。</p>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <div class="section-heading" id="kling-3">
-      <div><h2>Kling VIDEO 3.0</h2></div>
-    </div>
+    <section class="provider" id="kling-3" data-section="kling-3">
+      <header class="provider-head">
+        <h2>Kling VIDEO 3.0</h2>
+      </header>
+      <article class="api-card" id="/kling/omni-video/kling-3.0-omni">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">Kling 3.0 Omni 视频生成</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-3.0-omni</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/omni-video/kling-3.0-omni" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用官方 <code>contents</code>、<code>settings</code>、<code>options</code> 结构。无需传 <code>model</code>。</p>
 
-    <section class="endpoint-doc" id="/kling/omni-video/kling-3.0-omni" aria-labelledby="kling-omni-title">
-      <article class="reference-panel">
-        <h2 id="kling-omni-title">Kling 3.0 Omni 视频生成</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-3.0-omni</span></div>
-        <p>使用官方 <code>contents</code>、<code>settings</code>、<code>options</code> 结构。无需传 <code>model</code>。</p>
-
-        <h3>请求参数</h3>
+        <h3 id="h-39" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>contents</code></td><td>array</td><td>是</td><td>提示词、图片和视频输入集合。</td></tr>
@@ -2165,7 +2499,7 @@
           <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
         </table>
 
-        <h3>素材与组合规则</h3>
+        <h3 id="h-40" class="sub">素材与组合规则</h3>
         <ul>
           <li>图片支持 JPG、JPEG、PNG，单文件不超过 50MB；宽高均不低于 300px，宽高比在 1:2.5 至 2.5:1 之间。</li>
           <li>首尾帧仅支持“仅首帧”或“首帧 + 尾帧”，不支持只传尾帧。</li>
@@ -2174,10 +2508,10 @@
           <li><code>base_video</code> 用作视频编辑：不能同时传首尾帧，<code>multi_shot</code> 必须为 <code>false</code>，<code>audio</code> 可用 <code>original</code> 或 <code>off</code>。</li>
           <li>多镜头提示词写法为“镜头序号, 秒数, 描述;”，支持 1-6 个镜头；各镜头时长之和必须等于 <code>settings.duration</code>。</li>
         </ul>
-      </article>
-
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="Kling Omni 请求场景">
             <button type="button" class="example-tab" id="omni-prompt-tab" role="tab" aria-selected="true" aria-controls="omni-prompt">纯文本</button>
@@ -2353,14 +2687,24 @@
 }</code></pre></div>
           </div>
         </div>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/kling/omni-video/kling-3.0-omni/{task_id}" aria-labelledby="kling-omni-query-title">
-      <article class="reference-panel">
-        <h2 id="kling-omni-query-title">查询 Kling 3.0 Omni 任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/kling/omni-video/kling-3.0-omni/{task_id}</span></div>
-        <p>使用创建接口返回的 <code>task_id</code> 查询。常见状态为 <code>SUBMITTED</code>、<code>IN_PROGRESS</code>、<code>SUCCESS</code>、<code>FAILURE</code>。</p>
+      <article class="api-card" id="/kling/omni-video/kling-3.0-omni/{task_id}">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询 Kling 3.0 Omni 任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/kling/omni-video/kling-3.0-omni/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/omni-video/kling-3.0-omni/{task_id}" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用创建接口返回的 <code>task_id</code> 查询。常见状态为 <code>SUBMITTED</code>、<code>IN_PROGRESS</code>、<code>SUCCESS</code>、<code>FAILURE</code>。</p>
         <table>
           <tr><th>响应字段</th><th>说明</th></tr>
           <tr><td><code>video_url</code></td><td>成功后的视频地址。</td></tr>
@@ -2368,9 +2712,10 @@
           <tr><td><code>cost</code></td><td>本平台任务结算后的收费金额，不是 Kling 原始账单字段。</td></tr>
           <tr><td><code>request_id</code></td><td>用于问题追踪的上游请求 ID。</td></tr>
         </table>
-      </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>响应示例</h3>
@@ -2410,16 +2755,26 @@
 }</code></pre></div>
           </div>
         </div>
-      </aside>
-    </section>
+          </div>
+        </aside>
+        </div>
+      </article>
 
-    <section class="endpoint-doc" id="/kling/motion-control/kling-3.0" aria-labelledby="kling-motion-title">
-      <article class="reference-panel">
-        <h2 id="kling-motion-title">Kling 3.0 动作模仿</h2>
-        <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/motion-control/kling-3.0</span></div>
-        <p>请求体沿用 Kling 3.0 Motion Control 官方结构。每个任务提供 1 张角色外观参考图和 1 个动作参考视频；模型已由路径确定。</p>
+      <article class="api-card" id="/kling/motion-control/kling-3.0">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">Kling 3.0 动作模仿</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/motion-control/kling-3.0</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/motion-control/kling-3.0" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>请求体沿用 Kling 3.0 Motion Control 官方结构。每个任务提供 1 张角色外观参考图和 1 个动作参考视频；模型已由路径确定。</p>
 
-        <h3>请求参数</h3>
+        <h3 id="h-41" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>contents</code></td><td>array</td><td>是</td><td>由提示词、角色图片和动作视频组成。</td></tr>
@@ -2434,7 +2789,7 @@
           <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
         </table>
 
-        <h3>素材规则</h3>
+        <h3 id="h-42" class="sub">素材规则</h3>
         <ul>
           <li>必须且只能传 1 个 <code>image</code> 和 1 个 <code>video</code>。</li>
           <li>图片支持 JPG、JPEG、PNG，最大 50MB；宽高均不低于 300px，宽高比在 1:2.5 至 2.5:1 之间。</li>
@@ -2442,10 +2797,10 @@
           <li><code>character_orientation=video</code> 时动作视频可为 3-30 秒；设为 <code>image</code> 时可为 3-10 秒。</li>
           <li><code>video</code> 更适合复杂动作；<code>image</code> 保持参考图朝向，并更适合通过提示词控制镜头运动。</li>
         </ul>
-      </article>
-
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <div class="example-switcher" data-example-switcher>
           <div class="example-tabs" role="tablist" aria-label="Kling 动作模仿请求场景">
             <button type="button" class="example-tab" id="motion-video-tab" role="tab" aria-selected="true" aria-controls="motion-video">朝向跟随视频</button>
@@ -2536,17 +2891,28 @@
 }</code></pre></div>
           </div>
         </div>
-      </aside>
-    </section>
-
-    <section class="endpoint-doc" id="/kling/motion-control/kling-3.0/{task_id}" aria-labelledby="kling-motion-query-title">
-      <article class="reference-panel">
-        <h2 id="kling-motion-query-title">查询 Kling 3.0 动作模仿任务</h2>
-        <div class="endpoint"><span class="method get">GET</span><span class="path">/kling/motion-control/kling-3.0/{task_id}</span></div>
-        <p>使用动作模仿创建接口返回的 <code>task_id</code> 查询。响应字段与 Kling 3.0 Omni 查询接口一致，<code>model</code> 固定为 <code>kling-3.0</code>。</p>
+          </div>
+        </aside>
+        </div>
       </article>
-      <aside class="example-panel">
-        <h3>请求示例</h3>
+
+      <article class="api-card" id="/kling/motion-control/kling-3.0/{task_id}">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询 Kling 3.0 动作模仿任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/kling/motion-control/kling-3.0/{task_id}</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="/kling/motion-control/kling-3.0/{task_id}" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>使用动作模仿创建接口返回的 <code>task_id</code> 查询。响应字段与 Kling 3.0 Omni 查询接口一致，<code>model</code> 固定为 <code>kling-3.0</code>。</p>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>响应示例</h3>
@@ -2586,225 +2952,236 @@
 }</code></pre></div>
           </div>
         </div>
-      </aside>
+          </div>
+        </aside>
+        </div>
+      </article>
     </section>
 
-    <section class="wide-panel">
-      <h2>上传限制</h2>
+    <section class="provider" id="appendix" data-section="appendix">
+      <header class="provider-head">
+        <h2>附录</h2>
+        <p>通用上传限制与约定。</p>
+      </header>
+      <article class="api-card">
+        <div class="api-body">
+          <div class="api-main">
+
       <table>
         <tr><th>项目</th><th>规则</th></tr>
         <tr><td>类型</td><td><code>image/*</code>、<code>video/*</code>、<code>audio/*</code></td></tr>
         <tr><td>大小</td><td>图片 / 音频 ≤ 50MB；视频 ≤ 100MB</td></tr>
         <tr><td>上传地址</td><td>15 分钟有效</td></tr>
       </table>
+          </div>
+        </div>
+      </article>
     </section>
   </main>
 </div>
 
-<footer>O1Key API接口文档</footer>
+<footer class="foot">
+  <span>O1Key API 接口文档</span>
+  <span class="sep">·</span>
+  <span>内容以实际线上返回为准</span>
+</footer>
+
 <script>
-  (() => {
-    const copyText = async text => {
-      if (navigator.clipboard && window.isSecureContext) {
-        try {
-          await navigator.clipboard.writeText(text);
-          return;
-        } catch {
-          // Fall back to document selection when clipboard permission is unavailable.
-        }
-      }
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.setAttribute('readonly', '');
-      textarea.setAttribute('aria-hidden', 'true');
-      textarea.style.position = 'fixed';
-      textarea.style.left = '-100000px';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      textarea.setSelectionRange(0, textarea.value.length);
-      const copied = document.execCommand('copy');
-      textarea.remove();
-      if (!copied) throw new Error('copy failed');
-    };
+(() => {
+  'use strict';
 
-    document.querySelectorAll('pre').forEach(pre => {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'code-block';
-      pre.parentNode.insertBefore(wrapper, pre);
-      wrapper.appendChild(pre);
+  const copyText = async text => {
+    if (navigator.clipboard && window.isSecureContext) {
+      try { await navigator.clipboard.writeText(text); return; } catch {}
+    }
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.setAttribute('aria-hidden', 'true');
+    area.style.cssText = 'position:fixed;left:-100000px;top:0;opacity:0';
+    document.body.appendChild(area);
+    area.select();
+    area.setSelectionRange(0, area.value.length);
+    const ok = document.execCommand('copy');
+    area.remove();
+    if (!ok) throw new Error('copy failed');
+  };
 
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'copy-code';
-      button.setAttribute('aria-label', '复制代码示例');
-      button.title = '复制代码';
-      button.textContent = '复制';
-      wrapper.appendChild(button);
+  const flash = (el, text, doneText) => {
+    const original = el.textContent;
+    el.textContent = doneText;
+    el.classList.add('is-done');
+    window.setTimeout(() => { el.textContent = original; el.classList.remove('is-done'); }, 1600);
+  };
 
-      button.addEventListener('click', async () => {
-        try {
-          await copyText(pre.querySelector('code').textContent);
-          button.classList.add('copied');
-          button.textContent = '已复制';
-          window.setTimeout(() => {
-            button.classList.remove('copied');
-            button.textContent = '复制';
-          }, 1800);
-        } catch {
-          button.textContent = '复制失败';
-        }
-      });
-    });
+  /* ---- 代码复制 ---- */
+  document.querySelectorAll('pre').forEach(pre => {
+    const wrap = document.createElement('div');
+    wrap.className = 'code-block';
+    pre.parentNode.insertBefore(wrap, pre);
+    wrap.appendChild(pre);
 
-    document.querySelectorAll('[data-example-switcher]').forEach(switcher => {
-      const tabs = Array.from(switcher.querySelectorAll('[role="tab"]'));
-      const panels = Array.from(switcher.querySelectorAll('[role="tabpanel"]'));
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'copy-mini';
+    btn.textContent = '复制';
+    btn.setAttribute('aria-label', '复制代码示例');
+    wrap.appendChild(btn);
 
-      const activateTab = (nextTab, moveFocus = false) => {
-        tabs.forEach(tab => {
-          const active = tab === nextTab;
-          tab.setAttribute('aria-selected', String(active));
-          tab.tabIndex = active ? 0 : -1;
-        });
-        panels.forEach(panel => {
-          const active = panel.id === nextTab.getAttribute('aria-controls');
-          panel.classList.toggle('is-active', active);
-          panel.setAttribute('aria-hidden', String(!active));
-        });
-        if (moveFocus) nextTab.focus();
-      };
-
-      tabs.forEach((tab, index) => {
-        tab.addEventListener('click', () => activateTab(tab));
-        tab.addEventListener('keydown', event => {
-          let nextIndex = index;
-          if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
-          else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
-          else if (event.key === 'Home') nextIndex = 0;
-          else if (event.key === 'End') nextIndex = tabs.length - 1;
-          else return;
-          event.preventDefault();
-          activateTab(tabs[nextIndex], true);
-        });
-      });
-
-      const selectedTab = tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0];
-      if (selectedTab) activateTab(selectedTab);
-    });
-
-    const sectionLinks = Array.from(document.querySelectorAll('.sidebar nav a[data-section]'));
-    const setCurrentSection = sectionId => {
-      sectionLinks.forEach(link => {
-        const active = link.dataset.section === sectionId;
-        if (active) link.setAttribute('aria-current', 'true');
-        else link.removeAttribute('aria-current');
-      });
-    };
-    const sectionObserver = new IntersectionObserver(entries => {
-      const current = entries
-        .filter(entry => entry.isIntersecting)
-        .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0];
-      if (current) setCurrentSection(current.target.id);
-    }, {rootMargin: '-72px 0px -68% 0px', threshold: 0});
-    sectionLinks.forEach(link => {
-      const section = document.getElementById(link.dataset.section);
-      if (section) sectionObserver.observe(section);
-      link.addEventListener('click', () => setCurrentSection(link.dataset.section));
-    });
-    if (location.hash) setCurrentSection(decodeURIComponent(location.hash.slice(1)));
-
-    const agentButton = document.getElementById('copy-agent-doc');
-    const copyScope = document.getElementById('copy-scope');
-    const status = document.getElementById('copy-status');
-    const main = document.querySelector('main');
-    agentButton.addEventListener('click', async () => {
-      const scopeId = copyScope.value;
-      const scopeLabel = copyScope.options[copyScope.selectedIndex].textContent;
-      let copySource;
-
-      if (scopeId === 'all') {
-        copySource = main.cloneNode(true);
-      } else {
-        const sectionHeading = document.getElementById(scopeId);
-        if (!sectionHeading) {
-          status.textContent = '未找到所选板块';
-          return;
-        }
-
-        copySource = document.createElement('div');
-        let sectionNode = sectionHeading;
-        while (sectionNode) {
-          if (sectionNode !== sectionHeading && sectionNode.classList.contains('section-heading')) break;
-          if (sectionNode !== sectionHeading && sectionNode.classList.contains('wide-panel')) break;
-          copySource.appendChild(sectionNode.cloneNode(true));
-          sectionNode = sectionNode.nextElementSibling;
-        }
-      }
-
-      copySource.querySelectorAll('.copy-code').forEach(button => button.remove());
-      copySource.querySelectorAll('[data-example-switcher]').forEach(switcher => {
-        const tabLabels = new Map(
-          Array.from(switcher.querySelectorAll('[role="tab"]')).map(tab => [tab.id, tab.textContent.trim()]),
-        );
-        const tabList = switcher.querySelector('.example-tabs');
-        if (tabList) tabList.remove();
-
-        const panels = switcher.querySelector('.example-panels');
-        if (panels) panels.style.display = 'block';
-        switcher.querySelectorAll('[role="tabpanel"]').forEach(panel => {
-          const label = tabLabels.get(panel.getAttribute('aria-labelledby'));
-          if (label) {
-            const heading = document.createElement('h4');
-            heading.textContent = label;
-            panel.prepend(heading);
-          }
-          panel.classList.add('is-active');
-          panel.removeAttribute('aria-hidden');
-          panel.style.display = 'block';
-          panel.style.visibility = 'visible';
-          panel.style.opacity = '1';
-          panel.style.pointerEvents = 'auto';
-        });
-      });
-      copySource.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
-
-      const copyStage = document.createElement('div');
-      copyStage.style.cssText = 'position:fixed;left:-100000px;top:0;width:1200px;opacity:0;pointer-events:none;';
-      copyStage.appendChild(copySource);
-      document.body.appendChild(copyStage);
-      const documentText = copyStage.innerText
-        .split('\n')
-        .map(line => line.trimEnd())
-        .join('\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-      copyStage.remove();
-
-      const text = [
-        '# O1Key API接口文档',
-        '',
-        '复制范围：' + scopeLabel,
-        '文档地址：' + location.origin + location.pathname,
-        '',
-        documentText,
-      ].join('\n');
+    btn.addEventListener('click', async () => {
       try {
-        await copyText(text);
-        agentButton.textContent = '已复制';
-        agentButton.classList.add('copied');
-        status.textContent = '已复制：' + scopeLabel;
-        window.setTimeout(() => {
-          agentButton.textContent = '复制给 Agent';
-          agentButton.classList.remove('copied');
-          status.textContent = '';
-        }, 2400);
+        await copyText(pre.querySelector('code').textContent);
+        flash(btn, null, '已复制');
+      } catch { btn.textContent = '复制失败'; }
+    });
+  });
+
+  /* ---- 卡片锚点 ---- */
+  document.querySelectorAll('.anchor-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.anchor;
+      const url = location.origin + location.pathname + '#' + id;
+      history.replaceState(null, '', '#' + id);
+      try { await copyText(url); flash(btn, null, '✓'); } catch {}
+    });
+  });
+
+  /* ---- 选项卡 ---- */
+  document.querySelectorAll('[data-example-switcher]').forEach(switcher => {
+    const tabs = Array.from(switcher.querySelectorAll('[role="tab"]'));
+    const panels = Array.from(switcher.querySelectorAll('[role="tabpanel"]'));
+    const activate = (next, focus) => {
+      tabs.forEach(tab => {
+        const on = tab === next;
+        tab.setAttribute('aria-selected', String(on));
+        tab.tabIndex = on ? 0 : -1;
+      });
+      panels.forEach(panel => {
+        const on = panel.id === next.getAttribute('aria-controls');
+        panel.classList.toggle('is-active', on);
+        panel.setAttribute('aria-hidden', String(!on));
+      });
+      if (focus) next.focus();
+    };
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', () => activate(tab));
+      tab.addEventListener('keydown', e => {
+        let next = i;
+        if (e.key === 'ArrowRight') next = (i + 1) % tabs.length;
+        else if (e.key === 'ArrowLeft') next = (i - 1 + tabs.length) % tabs.length;
+        else if (e.key === 'Home') next = 0;
+        else if (e.key === 'End') next = tabs.length - 1;
+        else return;
+        e.preventDefault();
+        activate(tabs[next], true);
+      });
+    });
+    const selected = tabs.find(t => t.getAttribute('aria-selected') === 'true') || tabs[0];
+    if (selected) activate(selected);
+  });
+
+  /* ---- 侧栏高亮 ---- */
+  const links = Array.from(document.querySelectorAll('.nav a[data-target]'));
+  const setCurrent = id => links.forEach(a => {
+    if (a.dataset.target === id) a.setAttribute('aria-current', 'true');
+    else a.removeAttribute('aria-current');
+  });
+  const targets = links.map(a => document.getElementById(a.dataset.target)).filter(Boolean);
+  const observer = new IntersectionObserver(entries => {
+    const visible = entries.filter(e => e.isIntersecting)
+      .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+    if (visible) setCurrent(visible.target.id);
+  }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+  targets.forEach(t => observer.observe(t));
+  links.forEach(a => a.addEventListener('click', () => setCurrent(a.dataset.target)));
+  if (location.hash) setCurrent(decodeURIComponent(location.hash.slice(1)));
+
+  /* ---- 侧栏筛选 ---- */
+  const filter = document.getElementById('nav-filter');
+  if (filter) {
+    filter.addEventListener('input', () => {
+      const q = filter.value.trim().toLowerCase();
+      links.forEach(a => {
+        const hit = !q || a.textContent.toLowerCase().includes(q) || (a.dataset.target || '').toLowerCase().includes(q);
+        a.parentElement && (a.style.display = hit ? '' : 'none');
+      });
+      document.querySelectorAll('.nav-group').forEach(group => {
+        const any = Array.from(group.querySelectorAll('a')).some(a => a.style.display !== 'none');
+        group.style.display = any ? '' : 'none';
+      });
+    });
+  }
+
+  /* ---- 复制给 Agent ---- */
+  const agentBtn = document.getElementById('copy-agent-doc');
+  const scopeSel = document.getElementById('copy-scope');
+  const statusEl = document.getElementById('copy-status');
+  const content = document.getElementById('doc-content');
+
+  // 复制范围：每个 provider 分区
+  const sections = Array.from(content.querySelectorAll('[data-section]'));
+  sections.forEach(sec => {
+    const head = sec.querySelector('.provider-head h2');
+    const opt = document.createElement('option');
+    opt.value = sec.dataset.section;
+    opt.textContent = head ? head.textContent.trim() : sec.dataset.section;
+    scopeSel.appendChild(opt);
+  });
+
+  const flatten = root => {
+    const clone = root.cloneNode(true);
+    clone.querySelectorAll('.copy-mini,.anchor-btn').forEach(el => el.remove());
+    clone.querySelectorAll('[data-example-switcher]').forEach(sw => {
+      const labels = new Map(Array.from(sw.querySelectorAll('[role="tab"]')).map(t => [t.id, t.textContent.trim()]));
+      const tabs = sw.querySelector('.tabs, .example-tabs');
+      if (tabs) tabs.remove();
+      sw.querySelectorAll('[role="tabpanel"]').forEach(p => {
+        const label = labels.get(p.getAttribute('aria-labelledby'));
+        if (label) {
+          const h = document.createElement('h4');
+          h.textContent = label;
+          p.prepend(h);
+        }
+        p.classList.add('is-active');
+        p.removeAttribute('aria-hidden');
+      });
+    });
+    clone.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+    return clone;
+  };
+
+  if (agentBtn) {
+    agentBtn.addEventListener('click', async () => {
+      const scope = scopeSel.value;
+      let source;
+      if (scope === 'all') {
+        source = content.cloneNode(true);
+      } else {
+        const sec = content.querySelector('[data-section="' + scope + '"]');
+        if (!sec) { statusEl.textContent = '未找到所选板块'; return; }
+        source = sec;
+      }
+      const stage = document.createElement('div');
+      stage.style.cssText = 'position:fixed;left:-100000px;top:0;width:1200px;opacity:0;pointer-events:none';
+      stage.appendChild(flatten(source));
+      document.body.appendChild(stage);
+      const text = stage.innerText.split('\n').map(l => l.trimEnd()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      stage.remove();
+
+      const label = scope === 'all' ? '全文' : scopeSel.options[scopeSel.selectedIndex].textContent;
+      const markdown = ['# O1Key API 接口文档', '', '复制范围：' + label, '文档地址：' + location.origin + location.pathname, '', text].join('\n');
+      try {
+        await copyText(markdown);
+        agentBtn.textContent = '已复制';
+        agentBtn.classList.add('is-done');
+        statusEl.textContent = '已复制：' + label;
+        window.setTimeout(() => { agentBtn.textContent = '复制给 Agent'; agentBtn.classList.remove('is-done'); statusEl.textContent = ''; }, 2400);
       } catch {
-        status.textContent = '复制失败，请手动选择正文';
+        statusEl.textContent = '复制失败，请手动选择正文';
       }
     });
-  })();
+  }
+})();
 </script>
 </body>
 </html>

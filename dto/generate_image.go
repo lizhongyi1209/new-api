@@ -37,8 +37,20 @@ type GenerateImageRequest struct {
 	// Gemini 原生：thinkingConfig.includeThoughts。
 	IncludeThoughts *bool `json:"include_thoughts,omitempty"`
 
-	OutputFormat *string `json:"output_format,omitempty"` // "png" / "jpeg" / "webp"
+	OutputFormat *string `json:"output_format,omitempty"` // "png" / "jpeg" / "webp" / "svg" / "gif"
 	Watermark    *bool   `json:"watermark,omitempty"`
+	// GPT Image 2.5+ markup-guided edits: an annotation layer uploaded beside
+	// the source image, or a reference carrying image_url / file_id.
+	Markup *ImageReference `json:"markup,omitempty"`
+	// GPT Image 2.6 complexity hint: "low" / "medium" / "high".
+	Complexity *string `json:"complexity,omitempty"`
+	// GIF output shape; only valid with output_format "gif".
+	FrameCount      *int `json:"frame_count,omitempty"`
+	FrameDurationMs *int `json:"frame_duration_ms,omitempty"`
+	// GPT Image: progressive preview count, and JPEG/WebP compression percent.
+	PartialImages     *int    `json:"partial_images,omitempty"`
+	OutputCompression *int    `json:"output_compression,omitempty"`
+	InputFidelity     *string `json:"input_fidelity,omitempty"`
 	// Seedream 5.0 Pro：将单张输入图拆解为底图和最多 16 个透明图层。
 	LayerDecomposition *bool           `json:"layer_decomposition,omitempty"`
 	Mask               *ImageReference `json:"mask,omitempty"`

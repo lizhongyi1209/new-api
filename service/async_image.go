@@ -98,6 +98,12 @@ func newAsyncOpenAIImageRequest(asyncReq *dto.AsyncImageRequest, resolvedImage, 
 		Moderation:         stringPtrToRawMessage(asyncReq.Moderation),
 		ResponseFormat:     asyncReq.ResponseFormat,
 		OutputFormat:       stringPtrToRawMessage(asyncReq.OutputFormat),
+		OutputCompression:  intPtrToRawMessage(asyncReq.OutputCompression),
+		PartialImages:      intPtrToRawMessage(asyncReq.PartialImages),
+		Complexity:         stringPtrToRawMessage(asyncReq.Complexity),
+		FrameCount:         intPtrToRawMessage(asyncReq.FrameCount),
+		FrameDurationMs:    intPtrToRawMessage(asyncReq.FrameDurationMs),
+		InputFidelity:      stringPtrToRawMessage(asyncReq.InputFidelity),
 		Watermark:          asyncReq.Watermark,
 		LayerDecomposition: asyncReq.LayerDecomposition,
 		Style:              asyncReq.Style,
@@ -105,7 +111,21 @@ func newAsyncOpenAIImageRequest(asyncReq *dto.AsyncImageRequest, resolvedImage, 
 		Image:              resolvedImage,
 		Images:             resolvedImages,
 		Mask:               imageReferenceToRawMessage(asyncReq.Mask),
+		Markup:             imageReferenceToRawMessage(asyncReq.Markup),
 	}
+}
+
+// intPtrToRawMessage keeps an explicit zero value visible: unset stays nil and
+// an explicit 0 still marshals as 0.
+func intPtrToRawMessage(value *int) json.RawMessage {
+	if value == nil {
+		return nil
+	}
+	raw, err := common.Marshal(*value)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 func newAsyncSeedreamImageRequest(asyncReq *dto.AsyncImageRequest) (*dto.ImageRequest, error) {
@@ -131,7 +151,10 @@ func asyncImageRequestUsesEdits(imageReq *dto.ImageRequest) bool {
 	if imageReq == nil {
 		return false
 	}
-	return hasJSONRawValue(imageReq.Image) || hasJSONRawValue(imageReq.Images) || hasJSONRawValue(imageReq.Mask)
+	// Markup is an edit-only feature: it annotates the first input image, so its
+	// presence means the request must go through the edits endpoint.
+	return hasJSONRawValue(imageReq.Image) || hasJSONRawValue(imageReq.Images) ||
+		hasJSONRawValue(imageReq.Mask) || hasJSONRawValue(imageReq.Markup)
 }
 
 func asyncOpenAIImageRelayMode(imageReq *dto.ImageRequest) int {
@@ -191,6 +214,14 @@ func prepareAsyncOpenAIImageRequest(imageReq *dto.ImageRequest, relayInfo *relay
 	}
 	if relaycommon.IsGPTImage(relayInfo) {
 		upstreamReq.ResponseFormat = ""
+	}
+	// The async edit path builds its own multipart body from these fields, so the
+	// same provider-specific stripping the sync path applies belongs here.
+	if relaycommon.RequiresOmittedInputFidelity(relayInfo) {
+		upstreamReq.InputFidelity = nil
+	}
+	if !relayInfo.GetChannelOtherSettings().AllowSafetyIdentifier {
+		upstreamReq.SafetyIdentifier = nil
 	}
 	if relayInfo == nil || relayInfo.RelayMode != relayconstant.RelayModeImagesEdits {
 		return upstreamReq
@@ -283,7 +314,6 @@ func buildAsyncOpenAIImageEditMultipartBody(c *gin.Context, imageReq *dto.ImageR
 			return nil, fmt.Errorf("write image %d failed: %w", i, err)
 		}
 	}
-
 	masks, err := asyncImageValuesFromRaw(imageReq.Mask)
 	if err != nil {
 		return nil, fmt.Errorf("parse mask field failed: %w", err)
@@ -291,6 +321,16 @@ func buildAsyncOpenAIImageEditMultipartBody(c *gin.Context, imageReq *dto.ImageR
 	if len(masks) > 0 {
 		if err := writeAsyncImageMultipartPart(writer, "mask", "mask", masks[0]); err != nil {
 			return nil, fmt.Errorf("write mask failed: %w", err)
+		}
+	}
+
+	markups, err := asyncImageValuesFromRaw(imageReq.Markup)
+	if err != nil {
+		return nil, fmt.Errorf("parse markup field failed: %w", err)
+	}
+	if len(markups) > 0 {
+		if err := writeAsyncImageMultipartPart(writer, "markup", "markup", markups[0]); err != nil {
+			return nil, fmt.Errorf("write markup failed: %w", err)
 		}
 	}
 
@@ -341,6 +381,10 @@ func writeAsyncImageEditFields(writer *multipart.Writer, imageReq *dto.ImageRequ
 		{name: "output_compression", value: imageReq.OutputCompression},
 		{name: "partial_images", value: imageReq.PartialImages},
 		{name: "input_fidelity", value: imageReq.InputFidelity},
+		{name: "complexity", value: imageReq.Complexity},
+		{name: "frame_count", value: imageReq.FrameCount},
+		{name: "frame_duration_ms", value: imageReq.FrameDurationMs},
+		{name: "safety_identifier", value: imageReq.SafetyIdentifier},
 	} {
 		if err := writeAsyncImageRawField(writer, field.name, field.value); err != nil {
 			return err
@@ -454,6 +498,10 @@ func asyncImageExtension(mimeType string) string {
 		return "jpg"
 	case "image/webp":
 		return "webp"
+	case "image/gif":
+		return "gif"
+	case "image/svg+xml":
+		return "svg"
 	default:
 		return "png"
 	}
@@ -463,6 +511,50 @@ func asyncImageExtension(mimeType string) string {
 // serialized request-body limit. URL bytes sent as fileData are not part of the
 // generateContent JSON body.
 const AsyncImageMaxURLSizeMB = 50
+
+// ValidateAsyncImageRequest validates both the reference encoding and the
+// documented GPT Image parameter contract for the legacy async image endpoint.
+// The endpoint reaches upstream through the same edits/generations split as the
+// sync route, so it must apply the same rules before any quota is reserved.
+func ValidateAsyncImageRequest(req *dto.AsyncImageRequest) error {
+	if err := ValidateAsyncImageReferences(req); err != nil {
+		return err
+	}
+
+	background, outputFormat, complexity := "", "", ""
+	if req.Background != nil {
+		background = *req.Background
+	}
+	if req.OutputFormat != nil {
+		outputFormat = *req.OutputFormat
+	}
+	if req.Complexity != nil {
+		complexity = *req.Complexity
+	}
+
+	target := kitdto.ImageTargetGenerations
+	if len(req.Images) > 0 || len(req.Image) > 0 || req.Mask != nil || req.Markup != nil {
+		target = kitdto.ImageTargetEdits
+	}
+
+	options := kitdto.ImageGenerationOptions{
+		Model:             req.Model,
+		Target:            target,
+		N:                 req.N,
+		Size:              req.Size,
+		Quality:           req.Quality,
+		Background:        background,
+		OutputFormat:      outputFormat,
+		OutputCompression: req.OutputCompression,
+		PartialImages:     req.PartialImages,
+		Markup:            req.Markup != nil,
+		Mask:              req.Mask != nil,
+		Complexity:        complexity,
+		FrameCount:        req.FrameCount,
+		FrameDurationMs:   req.FrameDurationMs,
+	}
+	return options.Validate()
+}
 
 // ValidateAsyncImageReferences validates reference encoding and URL safety.
 // Gemini request size is checked only after the final upstream body has been
@@ -480,6 +572,28 @@ func ValidateAsyncImageReferences(req *dto.AsyncImageRequest) error {
 	for i, img := range req.Images {
 		if err := validateSingleImageReference(img); err != nil {
 			return fmt.Errorf("images[%d] 验证失败: %w", i, err)
+		}
+	}
+
+	// Mask and markup are single-image references that the edit multipart body
+	// forwards as dedicated file parts.
+	for _, reference := range []struct {
+		field string
+		value *dto.ImageReference
+	}{
+		{field: "mask", value: req.Mask},
+		{field: "markup", value: req.Markup},
+	} {
+		if reference.value == nil {
+			continue
+		}
+		if (reference.value.FileID != nil) == (reference.value.ImageURL != nil) {
+			return fmt.Errorf("%s must provide exactly one of file_id or image_url", reference.field)
+		}
+		if reference.value.ImageURL != nil {
+			if err := validateSingleImageReference(*reference.value.ImageURL); err != nil {
+				return fmt.Errorf("%s 验证失败: %w", reference.field, err)
+			}
 		}
 	}
 
@@ -1030,6 +1144,10 @@ func detectImageMimeType(b64 string) string {
 	decoded, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil || len(decoded) < 12 {
 		return "image/png"
+	}
+	// SVG output is XML, which content sniffing reports as text/plain.
+	if isSVGImageBytes(decoded) {
+		return "image/svg+xml"
 	}
 	ct := http.DetectContentType(decoded[:512])
 	if ct == "application/octet-stream" {

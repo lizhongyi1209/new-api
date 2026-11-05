@@ -495,6 +495,17 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 	if relaycommon.IsGPTImage(info) {
 		request.ResponseFormat = ""
 	}
+	// gpt-image-2 processes every image input at high fidelity automatically and
+	// rejects an explicit input_fidelity, so an inherited client value must not
+	// reach the upstream.
+	if relaycommon.RequiresOmittedInputFidelity(info) {
+		request.InputFidelity = nil
+	}
+	// Mirror the text path's privacy default: report the caller's identity only
+	// when the channel opts in.
+	if !info.GetChannelOtherSettings().AllowSafetyIdentifier {
+		request.SafetyIdentifier = nil
+	}
 
 	switch info.RelayMode {
 	case relayconstant.RelayModeImagesEdits:
@@ -526,6 +537,14 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		if mf != nil {
 			for key, values := range mf.Value {
 				if key == "model" || (key == "response_format" && relaycommon.IsGPTImage(info)) {
+					continue
+				}
+				// The multipart form is rebuilt from the client's fields, so the
+				// same filtering the struct path applies must happen here too.
+				if key == "input_fidelity" && relaycommon.RequiresOmittedInputFidelity(info) {
+					continue
+				}
+				if key == "safety_identifier" && !info.GetChannelOtherSettings().AllowSafetyIdentifier {
 					continue
 				}
 				for _, value := range values {
@@ -631,6 +650,37 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 					return nil, errors.New("close mask file failed")
 				}
 				snapshot.AddFile("mask", maskFiles[0].Filename, mimeType, written, hex.EncodeToString(hasher.Sum(nil)))
+			}
+
+			// Markup-guided edits ship the annotation layer as a separate,
+			// un-flattened PNG beside the source image.
+			if markupFiles, exists := mf.File["markup"]; exists && len(markupFiles) > 0 {
+				markupFile, err := markupFiles[0].Open()
+				if err != nil {
+					return nil, errors.New("failed to open markup file")
+				}
+
+				mimeType := detectImageMimeType(markupFiles[0].Filename)
+
+				h := make(textproto.MIMEHeader)
+				h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="markup"; filename="%s"`, markupFiles[0].Filename))
+				h.Set("Content-Type", mimeType)
+
+				markupPart, err := writer.CreatePart(h)
+				if err != nil {
+					return nil, errors.New("create form file failed for markup")
+				}
+
+				hasher := sha256.New()
+				written, copyErr := io.Copy(io.MultiWriter(markupPart, hasher), markupFile)
+				closeErr := markupFile.Close()
+				if copyErr != nil {
+					return nil, errors.New("copy markup file failed")
+				}
+				if closeErr != nil {
+					return nil, errors.New("close markup file failed")
+				}
+				snapshot.AddFile("markup", markupFiles[0].Filename, mimeType, written, hex.EncodeToString(hasher.Sum(nil)))
 			}
 		} else {
 			return nil, errors.New("no multipart form data found")

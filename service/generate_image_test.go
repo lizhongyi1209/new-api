@@ -305,7 +305,7 @@ func TestValidateGenerateImageRequestGPTImage25Quality(t *testing.T) {
 			req := &dto.GenerateImageRequest{Model: model, Prompt: "draw a cat", Quality: "max"}
 			err := ValidateGenerateImageRequest(req)
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "only supported by GPT Image 2.5 Sunburst and Flare")
+			assert.Contains(t, err.Error(), "only supported by GPT Image 2.5 and later")
 		})
 	}
 }
@@ -439,16 +439,26 @@ func TestValidateGenerateImageRequestRejectsInvalidEnums(t *testing.T) {
 			req: &dto.GenerateImageRequest{
 				Model:        "gpt-image-1",
 				Prompt:       "draw a cat",
-				OutputFormat: testStringPtr("gif"),
+				OutputFormat: testStringPtr("tiff"),
 			},
 			wantErr: "output_format must be one of",
+		},
+		{
+			// gif and svg belong to the 2.6 series; earlier models reject them.
+			name: "output format gif on 2.5",
+			req: &dto.GenerateImageRequest{
+				Model:        "gpt-image-2.5-flare",
+				Prompt:       "draw a cat",
+				OutputFormat: testStringPtr("gif"),
+			},
+			wantErr: "only supported by GPT Image 2.6",
 		},
 		{
 			name: "background value",
 			req: &dto.GenerateImageRequest{
 				Model:      "gpt-image-2",
 				Prompt:     "draw a cat",
-				Background: testStringPtr("opaque"),
+				Background: testStringPtr("checkerboard"),
 			},
 			wantErr: "background must be one of",
 		},

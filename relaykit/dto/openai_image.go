@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strings"
 
 	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -13,6 +14,23 @@ import (
 // MaxImageN caps the image generation count. Without this bound a huge or
 // wrapped-negative n overflows quota calculation into a negative charge.
 const MaxImageN = 128
+
+// Image generation bounds taken from the GPT Image guide. They guard the
+// multipliers and media sizes that reach upstream, so an invalid request fails
+// locally instead of after a quota reservation.
+const (
+	MaxImageOutputCompression = 100
+	MinImagePartialImages     = 0
+	MaxImagePartialImages     = 3
+	MinImageFrameCount        = 2
+	MaxImageFrameCount        = 64
+	MinImageFrameDurationMs   = 20
+	MaxImageFrameDurationMs   = 2000
+
+	imageMaxEdgePixels  = 3840
+	imageMinTotalPixels = 655360
+	imageMaxTotalPixels = 8294400
+)
 
 // ImageBillingParameters contains only the provider scalars parsed by request
 // validation. Keep this separate from the complete provider request payload.
@@ -43,6 +61,17 @@ type ImageRequest struct {
 	InputFidelity      json.RawMessage `json:"input_fidelity,omitempty"`
 	Watermark          *bool           `json:"watermark,omitempty"`
 	LayerDecomposition *bool           `json:"layer_decomposition,omitempty"`
+	// GPT Image 2.5+ markup-guided edits: an annotation layer uploaded beside
+	// the source image, or a JSON object carrying image_url / file_id.
+	Markup json.RawMessage `json:"markup,omitempty"`
+	// GPT Image 2.6 complexity hint controlling pre-render planning effort.
+	Complexity json.RawMessage `json:"complexity,omitempty"`
+	// GIF output shape. Only meaningful when output_format is gif.
+	FrameCount      json.RawMessage `json:"frame_count,omitempty"`
+	FrameDurationMs json.RawMessage `json:"frame_duration_ms,omitempty"`
+	// SafetyIdentifier lets an application correlate abuse reports. Filtered
+	// by the channel's allow_safety_identifier setting, like the text path.
+	SafetyIdentifier json.RawMessage `json:"safety_identifier,omitempty"`
 	// zhipu 4v
 	WatermarkEnabled json.RawMessage `json:"watermark_enabled,omitempty"`
 	UserId           json.RawMessage `json:"user_id,omitempty"`
@@ -50,6 +79,60 @@ type ImageRequest struct {
 	// 用匿名参数接收额外参数
 	Extra             map[string]json.RawMessage `json:"-"`
 	BillingParameters *ImageBillingParameters    `json:"-"`
+}
+
+// GenerationOptions projects the documented GPT Image parameters into the shape
+// used for cross-field validation. Values that are absent stay nil.
+func (i *ImageRequest) GenerationOptions(target ImageGenerationTarget) ImageGenerationOptions {
+	return ImageGenerationOptions{
+		Model:             i.Model,
+		Target:            target,
+		N:                 i.N,
+		Size:              i.Size,
+		Quality:           i.Quality,
+		Background:        rawString(i.Background),
+		OutputFormat:      rawString(i.OutputFormat),
+		OutputCompression: rawInt(i.OutputCompression),
+		PartialImages:     rawInt(i.PartialImages),
+		Stream:            i.Stream != nil && *i.Stream,
+		Markup:            rawPresent(i.Markup),
+		Mask:              rawPresent(i.Mask),
+		Complexity:        rawString(i.Complexity),
+		FrameCount:        rawInt(i.FrameCount),
+		FrameDurationMs:   rawInt(i.FrameDurationMs),
+	}
+}
+
+// rawPresent reports whether a raw JSON parameter carries a usable value.
+func rawPresent(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed != "" && trimmed != "null"
+}
+
+// rawString reads an optional string parameter, tolerating a non-string value by
+// treating it as absent. The caller validates the resulting value.
+func rawString(raw json.RawMessage) string {
+	if !rawPresent(raw) {
+		return ""
+	}
+	var value string
+	if err := kitutil.Unmarshal(raw, &value); err != nil {
+		return ""
+	}
+	return value
+}
+
+// rawInt reads an optional integer parameter. A non-numeric value yields nil so
+// the caller reports the same "must be an integer" style error as the schema.
+func rawInt(raw json.RawMessage) *int {
+	if !rawPresent(raw) {
+		return nil
+	}
+	var value int
+	if err := kitutil.Unmarshal(raw, &value); err != nil {
+		return nil
+	}
+	return &value
 }
 
 // ImageCount resolves the validated request quantity. Top-level zero retains
@@ -197,4 +280,6 @@ type ImageData struct {
 	Url           string `json:"url"`
 	B64Json       string `json:"b64_json"`
 	RevisedPrompt string `json:"revised_prompt"`
+	Size          string `json:"size,omitempty"`
+	OutputFormat  string `json:"output_format,omitempty"`
 }

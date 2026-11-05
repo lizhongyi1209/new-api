@@ -319,6 +319,11 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		Moderation:         req.Moderation,
 		AspectRatio:        req.AspectRatio,
 		OutputFormat:       req.OutputFormat,
+		OutputCompression:  req.OutputCompression,
+		PartialImages:      req.PartialImages,
+		Complexity:         req.Complexity,
+		FrameCount:         req.FrameCount,
+		FrameDurationMs:    req.FrameDurationMs,
 		Watermark:          req.Watermark,
 		LayerDecomposition: req.LayerDecomposition,
 		ResponseModalities: req.ResponseModalities,
@@ -327,6 +332,8 @@ func generateImageToAsyncRequest(req *dto.GenerateImageRequest) *dto.AsyncImageR
 		IncludeThoughts:    req.IncludeThoughts,
 		Images:             images,
 		Mask:               req.Mask,
+		Markup:             req.Markup,
+		InputFidelity:      req.InputFidelity,
 	}
 }
 

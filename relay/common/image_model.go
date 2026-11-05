@@ -1,6 +1,10 @@
 package common
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/relaykit/dto"
+)
 
 // IsGPTImage reports whether the client-facing or mapped upstream model
 // starts with gpt-image.
@@ -14,21 +18,28 @@ func IsGPTImage(info *RelayInfo) bool {
 	return info.ChannelMeta != nil && strings.HasPrefix(strings.ToLower(strings.TrimSpace(info.UpstreamModelName)), "gpt-image")
 }
 
-// IsGPTImage2 reports whether either the client-facing model or its mapped
-// upstream model belongs to the gpt-image-2 family.
+// IsGPTImage2 reports whether either the client-facing or its mapped upstream
+// model belongs to the gpt-image-2 family: gpt-image-2 and its aliases, plus
+// the 2.5 and 2.6 series.
 func IsGPTImage2(info *RelayInfo) bool {
 	if info == nil {
 		return false
 	}
-	models := []string{info.OriginModelName}
-	if info.ChannelMeta != nil {
-		models = append(models, info.UpstreamModelName)
+	if dto.IsGPTImage2FamilyModel(info.OriginModelName) {
+		return true
 	}
-	for _, model := range models {
-		model = strings.ToLower(strings.TrimSpace(model))
-		if model == "gpt-image-2" || strings.HasPrefix(model, "gpt-image-2-") {
-			return true
-		}
+	return info.ChannelMeta != nil && dto.IsGPTImage2FamilyModel(info.UpstreamModelName)
+}
+
+// RequiresOmittedInputFidelity reports whether input_fidelity must be dropped
+// before forwarding. The base gpt-image-2 model always processes image inputs at
+// high fidelity and rejects an explicit value.
+func RequiresOmittedInputFidelity(info *RelayInfo) bool {
+	if info == nil {
+		return false
 	}
-	return false
+	if dto.RequiresOmittedInputFidelity(info.OriginModelName) {
+		return true
+	}
+	return info.ChannelMeta != nil && dto.RequiresOmittedInputFidelity(info.UpstreamModelName)
 }

@@ -904,6 +904,16 @@ func (info *RelayInfo) GetUpstreamModelName() string {
 
 func (info *RelayInfo) HasChannelMeta() bool { return info != nil && info.ChannelMeta != nil }
 
+// GetChannelOtherSettings returns the channel's other settings, or a zero value
+// when the channel meta has not been initialized yet. ChannelMeta is an embedded
+// pointer, so reading the promoted field directly panics on a bare RelayInfo.
+func (info *RelayInfo) GetChannelOtherSettings() dto.ChannelOtherSettings {
+	if info == nil || info.ChannelMeta == nil {
+		return dto.ChannelOtherSettings{}
+	}
+	return info.ChannelOtherSettings
+}
+
 func (info *RelayInfo) GetChannelID() int {
 	if info == nil || info.ChannelMeta == nil {
 		return 0

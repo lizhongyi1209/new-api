@@ -250,6 +250,35 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 			if imageValue := formData.Get("image"); imageValue != "" {
 				imageRequest.Image, _ = common.Marshal(imageValue)
 			}
+			// The remaining provider scalars arrive as form strings. Keep them as
+			// raw JSON so the multipart rebuild can forward them unchanged.
+			for _, field := range []struct {
+				name string
+				dest *json.RawMessage
+			}{
+				{name: "background", dest: &imageRequest.Background},
+				{name: "output_format", dest: &imageRequest.OutputFormat},
+				{name: "output_compression", dest: &imageRequest.OutputCompression},
+				{name: "partial_images", dest: &imageRequest.PartialImages},
+				{name: "input_fidelity", dest: &imageRequest.InputFidelity},
+				{name: "complexity", dest: &imageRequest.Complexity},
+				{name: "frame_count", dest: &imageRequest.FrameCount},
+				{name: "frame_duration_ms", dest: &imageRequest.FrameDurationMs},
+				{name: "safety_identifier", dest: &imageRequest.SafetyIdentifier},
+			} {
+				if value := formData.Get(field.name); value != "" {
+					*field.dest, _ = common.Marshal(value)
+				}
+			}
+			// Mask and markup are file parts, not values. Record their presence so
+			// the cross-field rule (markup excludes mask) can see them; the
+			// multipart rebuild forwards the files themselves from the form.
+			if len(form.File["mask"]) > 0 {
+				imageRequest.Mask = json.RawMessage(`"present"`)
+			}
+			if len(form.File["markup"]) > 0 {
+				imageRequest.Markup = json.RawMessage(`"present"`)
+			}
 
 			if imageRequest.Model == "gpt-image-1" {
 				if imageRequest.Quality == "" {
@@ -330,7 +359,7 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 				imageRequest.Size = "1024x1024"
 			}
 		} else if imageRequest.Model == "gpt-image-1" || imageRequest.Model == "gpt-image-1.5" ||
-			imageRequest.Model == "gpt-image-1-mini" || imageRequest.Model == "gpt-image-2" ||
+			imageRequest.Model == "gpt-image-1-mini" || dto.IsGPTImage2FamilyModel(imageRequest.Model) ||
 			imageRequest.Model == "chatgpt-image-latest" {
 			if imageRequest.Quality == "" {
 				imageRequest.Quality = "auto"
@@ -380,6 +409,14 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 		imageRequest.BillingParameters = parameters
 	}
 	if _, err := imageRequest.ImageCount(common.GetContextKeyInt(c, constant.ContextKeyChannelType) == constant.ChannelTypeAli); err != nil {
+		return nil, err
+	}
+
+	target := dto.ImageTargetGenerations
+	if relayMode == relayconstant.RelayModeImagesEdits {
+		target = dto.ImageTargetEdits
+	}
+	if err := imageRequest.GenerationOptions(target).Validate(); err != nil {
 		return nil, err
 	}
 

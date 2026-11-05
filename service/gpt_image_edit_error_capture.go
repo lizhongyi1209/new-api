@@ -120,7 +120,7 @@ func appendGPTImageEdit400Capture(c *gin.Context, info *relaycommon.RelayInfo, o
 				part.OmittedReason = "value_too_large"
 			} else {
 				switch key {
-				case "model", "n", "size", "quality", "background", "moderation", "output_format", "output_compression", "input_fidelity", "partial_images", "stream", "response_format", "aspect_ratio", "style":
+				case "model", "n", "size", "quality", "background", "moderation", "output_format", "output_compression", "input_fidelity", "partial_images", "stream", "response_format", "aspect_ratio", "style", "complexity", "frame_count", "frame_duration_ms":
 					part.Value = original.Value
 				default:
 					part.OmittedReason = "unlisted_field"

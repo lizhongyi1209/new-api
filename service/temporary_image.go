@@ -45,7 +45,11 @@ func UploadBase64ImageToTemporaryOutput(mimeType, base64Data, publicBaseURL stri
 	}
 	if _, _, err := image.DecodeConfig(bytes.NewReader(uploadBytes)); err != nil {
 		if _, webpErr := webp.DecodeConfig(bytes.NewReader(uploadBytes)); webpErr != nil {
-			return "", fmt.Errorf("temporary output is not a supported image: %w", err)
+			// SVG output from the GPT Image 2.6 series is XML, not a raster. The
+			// upload format detector already accepted it, so keep it servable.
+			if ext != "svg" {
+				return "", fmt.Errorf("temporary output is not a supported image: %w", err)
+			}
 		}
 	}
 
@@ -177,7 +181,7 @@ func isTemporaryImageFilename(filename string) bool {
 		return false
 	}
 	ext := strings.ToLower(filepath.Ext(filename))
-	if ext != ".png" && ext != ".jpg" && ext != ".webp" && ext != ".gif" {
+	if ext != ".png" && ext != ".jpg" && ext != ".webp" && ext != ".gif" && ext != ".svg" {
 		return false
 	}
 	_, err := uuid.Parse(strings.TrimSuffix(filename, filepath.Ext(filename)))

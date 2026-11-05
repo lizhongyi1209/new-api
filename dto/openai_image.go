@@ -49,6 +49,17 @@ type ImageRequest struct {
 	InputFidelity      json.RawMessage `json:"input_fidelity,omitempty"`
 	Watermark          *bool           `json:"watermark,omitempty"`
 	LayerDecomposition *bool           `json:"layer_decomposition,omitempty"`
+	// GPT Image 2.5+ markup-guided edits: an annotation layer uploaded beside
+	// the source image, or a JSON object carrying image_url / file_id.
+	Markup json.RawMessage `json:"markup,omitempty"`
+	// GPT Image 2.6 complexity hint controlling pre-render planning effort.
+	Complexity json.RawMessage `json:"complexity,omitempty"`
+	// GIF output shape. Only meaningful when output_format is gif.
+	FrameCount      json.RawMessage `json:"frame_count,omitempty"`
+	FrameDurationMs json.RawMessage `json:"frame_duration_ms,omitempty"`
+	// SafetyIdentifier lets an application correlate abuse reports. Filtered
+	// by the channel's allow_safety_identifier setting, like the text path.
+	SafetyIdentifier json.RawMessage `json:"safety_identifier,omitempty"`
 	// zhipu 4v
 	WatermarkEnabled json.RawMessage `json:"watermark_enabled,omitempty"`
 	UserId           json.RawMessage `json:"user_id,omitempty"`

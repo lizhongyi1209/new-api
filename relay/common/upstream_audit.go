@@ -97,6 +97,7 @@ var safeImageAuditFields = map[string]struct{}{
 	"input_fidelity": {}, "partial_images": {}, "stream": {},
 	"response_format": {}, "aspect_ratio": {}, "style": {},
 	"watermark": {}, "layer_decomposition": {}, "prompt_extend": {},
+	"complexity": {}, "frame_count": {}, "frame_duration_ms": {},
 }
 
 // AddJSONFields appends a redacted, deterministic representation of top-level

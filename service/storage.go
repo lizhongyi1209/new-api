@@ -599,6 +599,12 @@ func detectImageUploadFormat(imgBytes []byte) (string, string, error) {
 		return "", "", fmt.Errorf("image data is empty")
 	}
 
+	// SVG is a text document, so the raster decoders below cannot read it. The
+	// GPT Image API returns it the same way it returns bitmaps: base64 bytes.
+	if isSVGImageBytes(imgBytes) {
+		return "svg", "image/svg+xml", nil
+	}
+
 	_, format, imageErr := image.DecodeConfig(bytes.NewReader(imgBytes))
 	if format == "" {
 		if _, err := webp.DecodeConfig(bytes.NewReader(imgBytes)); err == nil {
@@ -626,6 +632,44 @@ func detectImageUploadFormat(imgBytes []byte) (string, string, error) {
 		return "", "", fmt.Errorf("unsupported image format: %s", format)
 	}
 	return format, contentType, nil
+}
+
+// isSVGImageBytes reports whether the bytes are a well-formed XML document
+// rooted at an svg element. The leading check keeps the parse off arbitrary
+// binary payloads.
+func isSVGImageBytes(data []byte) bool {
+	trimmed := bytes.TrimSpace(data)
+	if !bytes.HasPrefix(trimmed, []byte("<")) {
+		return false
+	}
+	// Skip an XML declaration or leading comments before the root element.
+	root := trimmed
+	for {
+		if bytes.HasPrefix(root, []byte("<?")) {
+			end := bytes.Index(root, []byte("?>"))
+			if end < 0 {
+				return false
+			}
+			root = bytes.TrimSpace(root[end+2:])
+			continue
+		}
+		if bytes.HasPrefix(root, []byte("<!--")) {
+			end := bytes.Index(root, []byte("-->"))
+			if end < 0 {
+				return false
+			}
+			root = bytes.TrimSpace(root[end+3:])
+			continue
+		}
+		break
+	}
+	lower := bytes.ToLower(root)
+	if !bytes.HasPrefix(lower, []byte("<svg")) {
+		return false
+	}
+	// The element name must end there: "<svgfoo" is not an svg root.
+	rest := lower[len("<svg"):]
+	return len(rest) > 0 && (rest[0] == '>' || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' || rest[0] == '\r' || rest[0] == '/')
 }
 
 func firstNonEmptyString(values ...string) string {
