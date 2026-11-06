@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -66,6 +67,15 @@ func vodMJSubAppID(channel *model.Channel) int64 {
 // four images for a single charge, and the tier (1k or 2k) is decided by the
 // "--hd" prompt flag, which only the upstream result can confirm.
 func processGenerateImageVodMJ(ctx context.Context, c *gin.Context, task *model.Task, asyncReq *dto.AsyncImageRequest) {
+	// Only one goroutine may drive a task at a time. The submit path and the
+	// resume sweep both reach this function, so without the claim a task in
+	// flight would be polled twice and the duplicate would cancel it.
+	if !claimVodMJTask(task.TaskID) {
+		logger.LogInfo(ctx, fmt.Sprintf("generate_image(vodmj): 任务已在处理中，跳过重复调度 task=%s", task.TaskID))
+		return
+	}
+	defer releaseVodMJTask(task.TaskID)
+
 	if asyncReq == nil {
 		if err := task.GetData(&asyncReq); err != nil {
 			failGenerateImageTask(task, fmt.Sprintf("解析任务数据失败: %v", err))
@@ -405,6 +415,23 @@ func validateGenerateImageVodMJ(req *dto.GenerateImageRequest) error {
 }
 
 
+// vodMJActiveTasks records the tasks a goroutine in this process is already
+// polling. The resume sweep runs on every polling pass, so without this marker
+// it starts a second poller for a task that is still in flight; the two then
+// race over the same row and the loser reports the task as cancelled.
+var vodMJActiveTasks sync.Map
+
+// claimVodMJTask marks a task as in flight. It returns false when another
+// goroutine already owns it, so a duplicate dispatch becomes a no-op.
+func claimVodMJTask(taskID string) bool {
+	_, loaded := vodMJActiveTasks.LoadOrStore(taskID, struct{}{})
+	return !loaded
+}
+
+func releaseVodMJTask(taskID string) {
+	vodMJActiveTasks.Delete(taskID)
+}
+
 func resumeVodMJTasks(ctx context.Context, limit int) {
 	tasks := model.GetUnfinishedTasksByAction("vodMJGenerate", limit)
 	resumed := 0
@@ -414,8 +441,14 @@ func resumeVodMJTasks(ctx context.Context, limit int) {
 		if task.PrivateData.UpstreamTaskID == "" {
 			continue
 		}
+		if _, active := vodMJActiveTasks.Load(task.TaskID); active {
+			continue
+		}
 		resumed++
-		taskContext := context.WithValue(ctx, "gin_context", newAsyncGinContext(task))
+		// Detach from the polling pass context: it is cancelled as soon as the
+		// pass ends, which would abort a resumed poll that legitimately
+		// outlives a single pass.
+		taskContext := context.WithValue(context.WithoutCancel(ctx), "gin_context", newAsyncGinContext(task))
 		go func(t *model.Task) {
 			ProcessGenerateImageTask(taskContext, t)
 		}(task)
