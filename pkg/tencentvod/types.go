@@ -167,10 +167,20 @@ func (e *APIError) Error() string {
 
 // Resolution tiers the gateway prices differently. The tier is decided by the
 // "--hd" prompt flag, not by any request parameter.
+//
+// v8.2 only reaches 2k in practice: --hd doubles the output to 2048x2048 and
+// OutputConfig.Resolution is ignored. 4k is reserved so a future upstream tier
+// prices correctly without a code change.
 const (
 	ResolutionTier1K = "1k"
 	ResolutionTier2K = "2k"
+	ResolutionTier4K = "4k"
 )
+
+// ResolutionTiers lists the priced tiers from lowest to highest. The last
+// entry is the reserved worst case, which is what a pre-charge uses before the
+// upstream reports the actual tier.
+var ResolutionTiers = []string{ResolutionTier1K, ResolutionTier2K, ResolutionTier4K}
 
 // ResolutionTier extracts the tier from a Specification value such as
 // "MJv8.2_1k". It returns an empty string for an unrecognised shape so the
@@ -183,11 +193,10 @@ func (u OutputUsage) ResolutionTier() string {
 	if spec == "" {
 		return ""
 	}
-	if strings.HasSuffix(spec, "_"+ResolutionTier1K) {
-		return ResolutionTier1K
-	}
-	if strings.HasSuffix(spec, "_"+ResolutionTier2K) {
-		return ResolutionTier2K
+	for _, tier := range ResolutionTiers {
+		if strings.HasSuffix(spec, "_"+tier) {
+			return tier
+		}
 	}
 	return ""
 }

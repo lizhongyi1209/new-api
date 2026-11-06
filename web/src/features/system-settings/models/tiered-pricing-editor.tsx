@@ -762,6 +762,14 @@ function CostEstimator({ effectiveExpr, fullExpr, currency }: EstimatorProps) {
       evalExprLocally(effectiveExpr, promptTokens, completionTokens, extras, {
         tokens,
         now: billingTime === undefined ? undefined : new Date(billingTime),
+        // The estimator has no real request, but the expression may read one
+        // via param()/header(). Supplying an explicitly empty request keeps
+        // those expressions evaluable instead of failing with a missing
+        // context error: param() then resolves to null, so a conditional falls
+        // through to its fallback leaf, which is the reserved (worst-case)
+        // price the gateway pre-charges before the upstream reports the actual
+        // request facts.
+        request: { body: {}, headers: {} },
       }),
     [effectiveExpr, promptTokens, completionTokens, extras, tokens, billingTime]
   )

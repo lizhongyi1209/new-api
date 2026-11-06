@@ -222,7 +222,7 @@ func TestResolutionTierRejectsUnknownShapes(t *testing.T) {
 	}{
 		{name: "no usages", usage: OutputUsage{}},
 		{name: "empty specification", usage: OutputUsage{SpecificationUsages: []SpecificationUsage{{Category: "aigc_image_mjv82_4k"}}}},
-		{name: "unrecognised tier", usage: OutputUsage{SpecificationUsages: []SpecificationUsage{{Specification: "MJv8.2_4k"}}}},
+		{name: "unrecognised tier", usage: OutputUsage{SpecificationUsages: []SpecificationUsage{{Specification: "MJv8.2_8k"}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Empty(t, tc.usage.ResolutionTier(),

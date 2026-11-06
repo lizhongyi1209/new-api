@@ -584,3 +584,32 @@ describe('visual billing document', () => {
     ).toBeNull()
   })
 })
+
+describe('estimator handles request-dependent expressions', () => {
+  test('param() resolves instead of failing when the estimator has no request', () => {
+    // A per-task provider prices by a value the upstream reports only after
+    // completion, so the frozen request body carries no tier at pre-charge
+    // time. The estimator stubs an empty request, which makes param() resolve
+    // to null and the conditional fall through to its fallback leaf. That leaf
+    // is the reserved (worst-case) price the gateway pre-charges.
+    const expression =
+      'param("_upstream_resolution_tier") == "1k" ? tier("1k", fixed(0.4)) : tier("2k", fixed(0.8))'
+
+    const reserved = evalExprLocally(expression, 0, 0, extras, {
+      request: { body: {}, headers: {} },
+    })
+    expect(reserved.error).toBeNull()
+    expect(reserved.matchedTier).toBe('2k')
+    expect(reserved.billingUnit).toBe('request')
+
+    // Without the stub the same expression cannot be previewed at all.
+    expect(evalExprLocally(expression, 0, 0, extras).error).toBeTruthy()
+
+    // Once the request carries the reported tier, the 1k leaf applies.
+    const settled = evalExprLocally(expression, 0, 0, extras, {
+      request: { body: { _upstream_resolution_tier: '1k' }, headers: {} },
+    })
+    expect(settled.error).toBeNull()
+    expect(settled.matchedTier).toBe('1k')
+  })
+})
