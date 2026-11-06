@@ -1037,6 +1037,28 @@ type asyncImageDataCandidate struct {
 // at most once, avoiding MVCC dead-tuple churn from repeated rewrites.
 //
 // Returns the number of rows blanked across all internal batches.
+// GetUnfinishedTasksByAction returns unfinished tasks for one action, oldest
+// first. It backs the per-provider resume sweeps: image tasks are excluded from
+// the shared poller (they are finished by their own request path), so a process
+// restart would otherwise leave them at IN_PROGRESS until the timeout refunds
+// them.
+func GetUnfinishedTasksByAction(action string, limit int) []*Task {
+	if limit <= 0 {
+		limit = 100
+	}
+	var tasks []*Task
+	err := DB.Where("action = ?", action).
+		Where("progress != ?", "100%").
+		Where("status NOT IN ?", []TaskStatus{TaskStatusFailure, TaskStatusSuccess}).
+		Order("id").
+		Limit(limit).
+		Find(&tasks).Error
+	if err != nil {
+		return nil
+	}
+	return tasks
+}
+
 func ClearAsyncImageDataWindow(since, cutoff int64, batchSize int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = 500

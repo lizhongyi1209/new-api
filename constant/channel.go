@@ -64,6 +64,7 @@ const (
 	ChannelTypeNewAPI                = 64
 	ChannelTypeVLLM                  = 65
 	ChannelTypeSGLang                = 66
+	ChannelTypeTencentVodMJ          = 67
 	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
 
 )
@@ -138,6 +139,7 @@ var ChannelBaseURLs = []string{
 	"",                                          //64
 	"",                                          //65
 	"",                                          //66
+	"https://vod.tencentcloudapi.com",           //67
 }
 
 func GetChannelBaseURL(channelType int) string {
@@ -211,6 +213,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeNewAPI:                "New API",
 	ChannelTypeVLLM:                  "vLLM",
 	ChannelTypeSGLang:                "SGLang",
+	ChannelTypeTencentVodMJ:          "TencentVodMJ",
 }
 
 func GetChannelTypeName(channelType int) string {

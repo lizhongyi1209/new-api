@@ -305,6 +305,15 @@ export const channelFormSchema = z
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
     upstream_model_update_ignored_models: z.string().optional(),
+    // Tencent VOD Midjourney: the VOD application id. It is an identifier
+    // rather than a secret, and the key field holds SecretId|SecretKey.
+    tencent_vod_sub_app_id: z
+      .string()
+      .optional()
+      .refine(
+        (value) => !value || /^\d+$/.test(value.trim()),
+        'SubAppId must be numeric'
+      ),
   })
   .superRefine((data, ctx) => {
     if (
@@ -500,6 +509,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
   advanced_custom: '',
+  tencent_vod_sub_app_id: '',
 }
 
 // ============================================================================
@@ -577,6 +587,7 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
+  let tencentVodSubAppId = ''
 
   if (channel.settings) {
     try {
@@ -616,6 +627,10 @@ export function transformChannelToFormDefaults(
       if (parsed.advanced_custom) {
         advancedCustom = stringifyAdvancedCustomConfig(parsed.advanced_custom)
       }
+      tencentVodSubAppId =
+        parsed.tencent_vod_sub_app_id != null
+          ? String(parsed.tencent_vod_sub_app_id)
+          : ''
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -672,6 +687,7 @@ export function transformChannelToFormDefaults(
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
     advanced_custom: advancedCustom,
+    tencent_vod_sub_app_id: tencentVodSubAppId,
   }
 }
 
@@ -884,6 +900,20 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     }
   } else if ('advanced_custom' in settingsObj) {
     delete settingsObj.advanced_custom
+  }
+
+  // Tencent VOD Midjourney (type 67): the VOD application id the requests are
+  // billed to. It is required, so an empty value removes the key and the
+  // backend rejects the channel with a clear message.
+  if (formData.type === 67) {
+    const subAppId = formData.tencent_vod_sub_app_id?.trim()
+    if (subAppId) {
+      settingsObj.tencent_vod_sub_app_id = Number(subAppId)
+    } else {
+      delete settingsObj.tencent_vod_sub_app_id
+    }
+  } else if ('tencent_vod_sub_app_id' in settingsObj) {
+    delete settingsObj.tencent_vod_sub_app_id
   }
 
   return JSON.stringify(settingsObj)

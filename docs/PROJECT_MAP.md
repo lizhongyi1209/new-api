@@ -437,6 +437,18 @@ Aliases: Seedream 5.0 Pro, `dola-seedream-5-0-pro-260628-ep`, `/async/v1/generat
 - Public examples and parameter reference: `docs/api-doc.html#image-seedream`.
 - Regression coverage: `service/generate_image_test.go`, `controller/generate_image_test.go`, `service/task_billing_test.go`.
 
+## Tencent VOD Midjourney image generation
+
+Aliases: MJ, Midjourney, 腾讯云 MJ, VOD 生图, `mj-v8.2`, `/async/v1/generateImage`, VOD AIGC, `CreateAigcImageTask`, `DescribeTaskDetail`.
+
+- Only `POST /async/v1/generateImage` (and the dashboard gallery submit) serves these models. There is no synchronous `/v1/images/generations` path: one upstream task takes 60-100 seconds, which an in-request image call cannot hold.
+- Client model names start with `mj-`; the upstream `ModelName` is always `MJ` and `ModelVersion` comes from the suffix (`mj-v8.2` -> `v8.2`).
+- VOD client, TC3-HMAC-SHA256 signing, response-envelope unwrapping, and result/usage types: `pkg/tencentvod/`. Base64 reference images must use `gateway.vod-qcloud.com`; text-to-image and every query use `vod.tencentcloudapi.com` (`SubmitHost`).
+- Submission, polling, result mapping, and the restart-resume sweep: `service/generate_image_vodmj.go`. Dispatch is registered in `imageRoutes` (`service/generate_image.go`) as action `vodMJGenerate`, gated on channel type 67 so a normal channel that declares the same model name is never routed here.
+- Channel requirements: type 67 (`ChannelTypeTencentVodMJ`), key in `SecretId|SecretKey` form, and `tencent_vod_sub_app_id` in the channel settings. Only image generation is advertised for this channel type (`common/endpoint_type.go`).
+- Billing is per task, not per image: one task always returns four images for a single charge. The price tier (1k or 2k) is decided by the prompt's `--hd` flag and is only known from the upstream `Output.Usage.SpecificationUsages` entry (`MJv8.2_1k` / `MJv8.2_2k`). `OutputConfig.Resolution` is accepted and echoed by the API but has no effect on the MJ tier, so it is never used for pricing. Settlement exposes the reported tier to the billing expression as `_upstream_resolution_tier` in `service/task_billing.go`.
+- Upstream facts pinned by tests: `CreateTime`/`FinishTime` live on the outer `DescribeTaskDetail` object, not inside `AigcImageTask`; `FileType` is empty so the format comes from the URL suffix; there is no request parameter for image count. Regression coverage: `pkg/tencentvod/client_test.go`, `service/generate_image_vodmj_test.go`.
+
 ## OpenAI Responses timing observability
 
 Aliases: Responses 耗时, 首字耗时, 上游耗时, SSE 耗时, `/v1/responses`, responses timing.

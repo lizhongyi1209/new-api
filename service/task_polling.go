@@ -157,6 +157,10 @@ func RunTaskPollingOnce(ctx context.Context, report func(processed, total int)) 
 
 	common.SysLog("任务进度轮询开始")
 	sweepTimedOutTasks(ctx)
+	// Image tasks are excluded from the shared poller below, so each
+	// provider that owns an in-request polling loop resumes its own
+	// survivors here after a restart.
+	resumeVodMJTasks(ctx, constant.TaskQueryLimit)
 	allTasks := model.GetAllUnFinishSyncTasks(constant.TaskQueryLimit)
 	summary.UnfinishedTasks = len(allTasks)
 	platformTask := make(map[constant.TaskPlatform][]*model.Task)

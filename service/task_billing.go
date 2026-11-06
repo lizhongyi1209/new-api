@@ -998,6 +998,15 @@ func SettleAsyncImageTaskBilling(ctx context.Context, task *model.Task, promptTo
 			}
 			requestBody["_"+key] = value
 		}
+		// The resolution tier of a per-task provider is only known after the
+		// upstream reports it, and it is the authoritative price input: for
+		// Midjourney the tier comes from the prompt's "--hd" flag, so the
+		// frozen request body carries no reliable value. Exposing it under a
+		// reserved key lets the expression price by actual tier instead of
+		// trusting the request.
+		if tier, ok := tokenDetails["upstream_resolution_tier"].(string); ok && tier != "" {
+			requestBody["_upstream_resolution_tier"] = tier
+		}
 		if enrichedBody, err := common.Marshal(requestBody); err == nil {
 			requestInput.Body = enrichedBody
 		}

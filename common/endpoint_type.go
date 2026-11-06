@@ -43,6 +43,10 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
 	case constant.ChannelTypeXinhankr:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIVideo}
+	case constant.ChannelTypeTencentVodMJ:
+		// The VOD MJ channel only serves image generation; without this it
+		// would fall through to the text endpoint and never be selectable.
+		endpointTypes = []constant.EndpointType{constant.EndpointTypeImageGeneration}
 	default:
 		if IsOpenAIResponseOnlyModel(modelName) {
 			endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIResponse}

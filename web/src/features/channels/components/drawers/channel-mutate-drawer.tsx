@@ -3986,6 +3986,37 @@ export function ChannelMutateDrawer({
               </Alert>
             )}
 
+            {/* Tencent VOD Midjourney (type 67) */}
+            {currentType === 67 && (
+              <>
+                <FormField
+                  control={form.control}
+                  name='tencent_vod_sub_app_id'
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{t('VOD SubAppId')}</FormLabel>
+                      <FormControl>
+                        <Input placeholder={t('e.g., 1500070444')} {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        {t(
+                          'Tencent Cloud VOD application ID. The channel key must be in SecretId|SecretKey format.'
+                        )}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <Alert>
+                  <AlertDescription>
+                    {t(
+                      'Midjourney returns four images per task and has no count or size parameter. Control the aspect ratio with --ar and 2K output with --hd inside the prompt.'
+                    )}
+                  </AlertDescription>
+                </Alert>
+              </>
+            )}
+
             {/* Vertex AI (type 41) */}
             {currentType === 41 && (
               <>

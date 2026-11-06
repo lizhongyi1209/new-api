@@ -93,6 +93,10 @@ type ChannelOtherSettings struct {
 	ServiceInferenceAssetPollIntervalMS   int                   `json:"service_inference_asset_poll_interval_ms,omitempty"`
 	ServiceInferenceAssetPollAttempts     int                   `json:"service_inference_asset_poll_attempts,omitempty"`
 	AdvancedCustom                        *AdvancedCustomConfig `json:"advanced_custom,omitempty"`
+	// TencentVodSubAppID is the VOD application id for the Tencent VOD
+	// Midjourney channel. It is an identifier, not a secret, so it stays with
+	// the other channel settings while the key field holds SecretId|SecretKey.
+	TencentVodSubAppID *int64 `json:"tencent_vod_sub_app_id,omitempty"`
 }
 
 const (

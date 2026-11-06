@@ -44,6 +44,7 @@ type imageProvider string
 const (
 	imageProviderGeminiNative imageProvider = "gemini_native"
 	imageProviderOpenAIImage  imageProvider = "openai_image"
+	imageProviderTencentVodMJ imageProvider = "tencent_vod_mj"
 )
 
 const imageRetryActionResubmit = "resubmit"
@@ -89,6 +90,14 @@ type imageRoute struct {
 var imageRoutes = []imageRoute{
 	{match: isGeminiImageModelName, provider: imageProviderGeminiNative, action: "generateContent"},
 	{match: isSeedream5ProModelName, provider: imageProviderOpenAIImage, action: "seedreamGenerate"},
+	{match: isTencentVodMJModelName, provider: imageProviderTencentVodMJ, action: "vodMJGenerate"},
+}
+
+// isTencentVodMJModelName reports whether the model belongs to the Tencent VOD
+// Midjourney family. Those models are driven by the VOD AIGC image API, which
+// takes MJ prompt flags rather than the OpenAI image schema.
+func isTencentVodMJModelName(modelName string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelName)), "mj-")
 }
 
 // isGeminiImageModelName 判定模型是否走 Gemini 原生生图路径。
@@ -118,6 +127,7 @@ func isSeedream5ProModelName(modelName string) bool {
 
 // resolveImageRoute 根据模型名 + 渠道类型选出处理路径。
 // Gemini 原生路径要求渠道本身是 Gemini/Vertex；否则即使模型名匹配也回退到通用 OpenAI image 路径。
+// VOD MJ 路径同样要求渠道类型匹配，避免普通渠道声明同名模型时被误路由。
 func resolveImageRoute(modelName string, channelType int) imageRoute {
 	isGeminiChannel := channelType == constant.ChannelTypeGemini || channelType == constant.ChannelTypeVertexAi
 	for _, r := range imageRoutes {
@@ -125,6 +135,9 @@ func resolveImageRoute(modelName string, channelType int) imageRoute {
 			continue
 		}
 		if r.provider == imageProviderGeminiNative && !isGeminiChannel {
+			continue
+		}
+		if r.provider == imageProviderTencentVodMJ && channelType != constant.ChannelTypeTencentVodMJ {
 			continue
 		}
 		return r
@@ -251,6 +264,10 @@ func ValidateGenerateImageRequest(req *dto.GenerateImageRequest) error {
 			return fmt.Errorf("thinking_level must not be empty")
 		}
 		*req.ThinkingLevel = thinkingLevel
+	}
+
+	if isTencentVodMJModelName(req.Model) {
+		return validateGenerateImageVodMJ(req)
 	}
 
 	if isSeedream5ProModelName(req.Model) {
@@ -1175,6 +1192,12 @@ func ProcessGenerateImageTask(ctx context.Context, task *model.Task, requestData
 			nativeReq, _ = requestData[0].(map[string]interface{})
 		}
 		processGenerateImageGemini(ctx, c, task, nativeReq)
+	case "vodMJGenerate":
+		var asyncReq *dto.AsyncImageRequest
+		if len(requestData) > 0 {
+			asyncReq, _ = requestData[0].(*dto.AsyncImageRequest)
+		}
+		processGenerateImageVodMJ(ctx, c, task, asyncReq)
 	default:
 		var asyncReq *dto.AsyncImageRequest
 		if len(requestData) > 0 {
