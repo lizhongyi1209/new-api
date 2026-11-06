@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -85,7 +86,9 @@ func processGenerateImageVodMJ(ctx context.Context, c *gin.Context, task *model.
 
 	client, subAppID, err := vodMJClientFor(task)
 	if err != nil {
-		failGenerateImageTask(task, err.Error())
+		// Channel misconfiguration is an operator problem; the customer must
+		// not be told which provider the gateway calls or how it is configured.
+		failVodMJTask(ctx, task, "图像服务暂时不可用，请稍后重试", err)
 		return
 	}
 
@@ -95,7 +98,15 @@ func processGenerateImageVodMJ(ctx context.Context, c *gin.Context, task *model.
 	if upstreamTaskID == "" {
 		upstreamTaskID, err = submitVodMJTask(ctx, client, subAppID, task, asyncReq)
 		if err != nil {
-			failGenerateImageTask(task, fmt.Sprintf("提交上游任务失败: %v", err))
+			// Local validation errors are actionable and safe to show. Anything
+			// the provider returned is masked, so the operator's upstream stays
+			// private while the customer still learns whether to fix the request
+			// or retry later.
+			if errors.Is(err, errVodMJProvider) {
+				failVodMJTask(ctx, task, vodMJFailureMessage(err), err)
+				return
+			}
+			failGenerateImageTask(task, err.Error())
 			return
 		}
 		// Persist before polling: a crash between submit and poll must not lose
@@ -110,13 +121,13 @@ func processGenerateImageVodMJ(ctx context.Context, c *gin.Context, task *model.
 
 	detail, err := waitVodMJTask(ctx, client, subAppID, task, upstreamTaskID)
 	if err != nil {
-		failGenerateImageTask(task, err.Error())
+		failVodMJTask(ctx, task, vodMJFailureMessage(err), err)
 		return
 	}
 
 	images := vodMJImages(detail)
 	if len(images) == 0 {
-		failGenerateImageTask(task, "上游任务完成但未返回图片")
+		failVodMJTask(ctx, task, "生成失败，未获得图片，请稍后重试", fmt.Errorf("完成但无图片 task=%s", task.TaskID))
 		return
 	}
 
@@ -159,6 +170,40 @@ func processGenerateImageVodMJ(ctx context.Context, c *gin.Context, task *model.
 		relayInfo.UpstreamModelName, relayInfo.IsModelMapped, tencentvod.ModelVersionV82)
 }
 
+// errVodMJProvider marks an error that came from the image provider rather
+// than from the customer's request. Those messages describe the operator's
+// upstream, so they are masked before reaching a task's fail_reason.
+var errVodMJProvider = errors.New("image provider error")
+
+// failVodMJTask records a failure with a customer-facing reason. The query API
+// returns the reason verbatim, so a provider error must never reach it: it
+// carries the upstream hostname, error codes and channel settings. The full
+// error goes to the server log, correlated with the task id.
+func failVodMJTask(ctx context.Context, task *model.Task, reason string, cause error) {
+	logger.LogError(ctx, fmt.Sprintf("generate_image(vodmj): 任务失败 task=%s upstream=%s: %v", task.TaskID, task.PrivateData.UpstreamTaskID, cause))
+	failGenerateImageTask(task, reason)
+}
+
+// vodMJFailureMessage maps a provider error onto a reason a customer can act
+// on, without disclosing which provider produced it.
+func vodMJFailureMessage(err error) string {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return "任务已取消，请重新提交"
+	}
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "voilationcontent"), strings.Contains(message, "moderation"),
+		strings.Contains(message, "审查"), strings.Contains(message, "审核"):
+		return "提示词或参考图未通过内容审核"
+	case strings.Contains(message, "requestlimitexceeded"), strings.Contains(message, "concurrency"),
+		strings.Contains(message, "并发"):
+		return "当前生成任务较多，请稍后重试"
+	case strings.Contains(message, "timeout"), strings.Contains(message, "超时"):
+		return "生成超时，请稍后重试"
+	}
+	return "生成失败，请稍后重试"
+}
+
 // submitVodMJTask creates the upstream task and returns its id.
 func submitVodMJTask(ctx context.Context, client *tencentvod.Client, subAppID int64, task *model.Task, asyncReq *dto.AsyncImageRequest) (string, error) {
 	files, err := vodMJReferenceFiles(ctx, asyncReq)
@@ -183,7 +228,7 @@ func submitVodMJTask(ctx context.Context, client *tencentvod.Client, subAppID in
 		SessionID: vodMJSessionID(task),
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %v", errVodMJProvider, err)
 	}
 	return resp.TaskID, nil
 }
@@ -413,7 +458,6 @@ func validateGenerateImageVodMJ(req *dto.GenerateImageRequest) error {
 	}
 	return nil
 }
-
 
 // vodMJActiveTasks records the tasks a goroutine in this process is already
 // polling. The resume sweep runs on every polling pass, so without this marker
