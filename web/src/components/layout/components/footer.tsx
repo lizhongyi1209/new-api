@@ -20,6 +20,10 @@ import { Link } from '@tanstack/react-router'
 import { Fragment, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import {
+  MAIN_SITE_FILING_LINKS,
+  shouldShowMainSiteFiling,
+} from '@/config/main-site-filing'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { cn } from '@/lib/utils'
@@ -115,6 +119,36 @@ function LegalLinks(props: { leadingSeparator?: boolean }) {
           >
             {item.label}
           </Link>
+        </Fragment>
+      ))}
+    </>
+  )
+}
+
+// Renders the main site's ICP / public-security filing records. The records are
+// gated on `window.location.hostname` inside the shared config, so the same
+// bundle can be served from sub-sites and the .com origins without exposing the
+// main site's filing identity.
+function MainSiteFiling() {
+  if (!shouldShowMainSiteFiling(window.location.hostname)) {
+    return null
+  }
+
+  return (
+    <>
+      {MAIN_SITE_FILING_LINKS.map((link) => (
+        <Fragment key={link.text}>
+          <span aria-hidden='true' className='text-muted-foreground/30'>
+            ·
+          </span>
+          <a
+            href={link.href}
+            target='_blank'
+            rel='noopener noreferrer'
+            className='hover:text-foreground transition-colors duration-200'
+          >
+            {link.text}
+          </a>
         </Fragment>
       ))}
     </>
@@ -238,6 +272,7 @@ export function Footer(props: FooterProps) {
             />
             <div className='border-border/60 text-muted-foreground/45 flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t pt-4 text-xs sm:w-auto sm:justify-end sm:border-t-0 sm:border-l sm:pt-0 sm:pl-5'>
               <LegalLinks />
+              <MainSiteFiling />
               <ProjectAttribution currentYear={currentYear} inline />
             </div>
           </div>
@@ -299,6 +334,7 @@ export function Footer(props: FooterProps) {
               {props.copyright ?? t('footer.defaultCopyright')}
             </span>
             <LegalLinks leadingSeparator />
+            <MainSiteFiling />
           </div>
           <ProjectAttribution currentYear={currentYear} />
         </div>

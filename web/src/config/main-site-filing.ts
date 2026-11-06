@@ -23,8 +23,12 @@ For commercial licensing, please contact support@quantumnous.com
  * seed data, or sub-site provisioning. A copied or newly created sub-site must
  * not inherit the main site's filing identity. Hostname gating is intentional:
  * the same image can be deployed to sub-sites without exposing these records.
+ *
+ * The filing applies to the mainland-China (.cn) origin only. The .com and
+ * cf-api.o1key.com fronts serve the same image but must not display it, so the
+ * allowlist is exact-match on hostnames rather than a suffix test.
  */
-const MAIN_SITE_HOSTS = new Set(['api.o1key.cn', 'api.o1key.com'])
+const FILING_HOSTS = new Set(['api.o1key.cn'])
 
 export const MAIN_SITE_FILING_LINKS = [
   {
@@ -32,11 +36,11 @@ export const MAIN_SITE_FILING_LINKS = [
     href: 'https://beian.miit.gov.cn',
   },
   {
-    text: '粤公网安备粤ICP备2026055881号-1',
+    text: '粤公网安备44030002012770号',
     href: 'https://www.beian.gov.cn',
   },
 ] as const
 
 export function shouldShowMainSiteFiling(hostname: string): boolean {
-  return MAIN_SITE_HOSTS.has(hostname.trim().toLowerCase())
+  return FILING_HOSTS.has(hostname.trim().toLowerCase())
 }
