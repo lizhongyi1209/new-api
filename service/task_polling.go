@@ -652,12 +652,17 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 
 // ApplyVideoOutputStrategy moves a completed video into the durable object
 // storage selected on its channel. Empty and passthrough strategies preserve
-// the upstream result URL.
+// the upstream result URL. Seedance tasks on channel type 60 also preserve it.
 func ApplyVideoOutputStrategy(ctx context.Context, ch *model.Channel, task *model.Task, taskResult *relaycommon.TaskInfo) error {
 	if ch == nil || task == nil || taskResult == nil {
 		return fmt.Errorf("channel, task and task result are required")
 	}
 	if taskResult.Status != model.TaskStatusSuccess {
+		return nil
+	}
+	// Seedance on channel type 60 publishes the provider URL. Other models on
+	// that channel, including MiniMax and Grok, still follow the strategy below.
+	if ch.Type == constant.ChannelTypeServiceInferenceVideo && task.PassesThroughSeedanceVideo() {
 		return nil
 	}
 

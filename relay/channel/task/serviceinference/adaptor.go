@@ -111,7 +111,63 @@ type taskMetadata struct {
 }
 
 type metadataContent struct {
-	URL string `json:"url,omitempty"`
+	URL      string           `json:"url,omitempty"`
+	VideoURL providerMediaURL `json:"video_url,omitempty"`
+}
+
+func (c *metadataContent) videoURL() string {
+	if c == nil {
+		return ""
+	}
+	if url := strings.TrimSpace(c.URL); url != "" {
+		return url
+	}
+	return c.VideoURL.String()
+}
+
+// providerMediaURL accepts the provider video field as either a string or an
+// object with url / video_url. Unexpected shapes are ignored so one optional
+// field cannot fail the whole task parse.
+type providerMediaURL struct {
+	value string
+}
+
+func (p providerMediaURL) String() string {
+	return strings.TrimSpace(p.value)
+}
+
+func (p *providerMediaURL) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || string(data) == "null" {
+		p.value = ""
+		return nil
+	}
+	if data[0] == '"' {
+		var raw string
+		if err := common.Unmarshal(data, &raw); err != nil {
+			return err
+		}
+		p.value = strings.TrimSpace(raw)
+		return nil
+	}
+	var object map[string]any
+	if err := common.Unmarshal(data, &object); err != nil {
+		p.value = ""
+		return nil
+	}
+	if url, ok := object["url"].(string); ok && strings.TrimSpace(url) != "" {
+		p.value = strings.TrimSpace(url)
+		return nil
+	}
+	switch nested := object["video_url"].(type) {
+	case string:
+		p.value = strings.TrimSpace(nested)
+	case map[string]any:
+		if url, ok := nested["url"].(string); ok {
+			p.value = strings.TrimSpace(url)
+		}
+	}
+	return nil
 }
 
 type metadataVideo struct {
@@ -559,7 +615,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 			taskResult.Url = resTask.Outputs[0]
 		}
 		if taskResult.Url == "" && resTask.Content != nil {
-			taskResult.Url = resTask.Content.URL
+			taskResult.Url = resTask.Content.videoURL()
 		}
 		usage := effectiveTaskUsage(resTask)
 		if usage != nil {
@@ -591,7 +647,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 				taskResult.Url = resTask.Metadata.Video.URL
 			}
 			if taskResult.Url == "" && resTask.Metadata.Content != nil {
-				taskResult.Url = resTask.Metadata.Content.URL
+				taskResult.Url = resTask.Metadata.Content.videoURL()
 			}
 			taskResult.Metadata["progress"] = resTask.Metadata.Progress
 			if resTask.Metadata.Video != nil && resTask.Metadata.Video.Duration > 0 {
@@ -664,12 +720,16 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		openAIVideo.SetMetadata("outputs", resTask.Outputs)
 	}
 	if openAIVideo.ResultURL == "" && resTask.Metadata != nil && resTask.Metadata.Content != nil {
-		openAIVideo.ResultURL = resTask.Metadata.Content.URL
-		openAIVideo.SetMetadata("url", resTask.Metadata.Content.URL)
+		if contentURL := resTask.Metadata.Content.videoURL(); contentURL != "" {
+			openAIVideo.ResultURL = contentURL
+			openAIVideo.SetMetadata("url", contentURL)
+		}
 	}
 	if openAIVideo.ResultURL == "" && resTask.Content != nil {
-		openAIVideo.ResultURL = resTask.Content.URL
-		openAIVideo.SetMetadata("url", resTask.Content.URL)
+		if contentURL := resTask.Content.videoURL(); contentURL != "" {
+			openAIVideo.ResultURL = contentURL
+			openAIVideo.SetMetadata("url", contentURL)
+		}
 	}
 	if resTask.LastFrameURL != "" {
 		openAIVideo.SetMetadata("last_frame_url", resTask.LastFrameURL)
