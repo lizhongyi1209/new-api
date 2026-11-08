@@ -61,6 +61,38 @@ func TestBuildUnifiedSeedanceAssetRequestDoubao(t *testing.T) {
 	}`, string(body))
 }
 
+func TestBuildUnifiedSeedanceAssetRequestDreamina(t *testing.T) {
+	path, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
+		Type:      " Dreamina ",
+		URL:       " http://cdn.example.com/reference.mp3 ",
+		Name:      " voice-reference ",
+		AssetType: "audio",
+		Model:     " dreamina-seedance-2-0-260128-max ",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v2/sd-max/assets", path)
+	assert.JSONEq(t, `{
+		"URL": "http://cdn.example.com/reference.mp3",
+		"Name": "voice-reference",
+		"AssetType": "Audio",
+		"Model": "dreamina-seedance-2-0-260128-max"
+	}`, string(body))
+}
+
+func TestBuildUnifiedSeedanceAssetRequestDreaminaOmitsEmptyModel(t *testing.T) {
+	_, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
+		Type: "dreamina",
+		URL:  "https://cdn.example.com/reference.png",
+	})
+
+	require.NoError(t, err)
+	assert.JSONEq(t, `{
+		"URL": "https://cdn.example.com/reference.png",
+		"AssetType": "Image"
+	}`, string(body))
+}
+
 func TestBuildUnifiedSeedanceAssetRequestDefaultsToImage(t *testing.T) {
 	_, body, err := buildUnifiedSeedanceAssetRequest(UnifiedSeedanceAssetRequest{
 		Type: "HC",
@@ -109,7 +141,7 @@ func TestBuildUnifiedSeedanceAssetRequestRejectsInvalidInput(t *testing.T) {
 		{
 			name:    "unsupported workflow",
 			request: UnifiedSeedanceAssetRequest{Type: "standard", URL: "https://cdn.example.com/a.png"},
-			wantErr: "currently supported: hc, df",
+			wantErr: "currently supported: hc, df, doubao, dreamina",
 		},
 		{
 			name:    "non https url",
@@ -146,6 +178,13 @@ func TestBuildUnifiedSeedanceAssetQueryDF(t *testing.T) {
 	assert.Equal(t, "/v1/sd-5/assets/asset-123", path)
 }
 
+func TestBuildUnifiedSeedanceAssetQueryDreamina(t *testing.T) {
+	path, err := buildUnifiedSeedanceAssetQuery("dreamina", "mva-e144dfc364a647f1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "/v2/sd-max/assets/mva-e144dfc364a647f1", path)
+}
+
 func TestBuildUnifiedSeedanceAssetQueryDoubao(t *testing.T) {
 	path, err := buildUnifiedSeedanceAssetQuery("doubao", "mva-e144dfc364a647f1")
 
@@ -164,7 +203,7 @@ func TestBuildUnifiedSeedanceAssetQueryRejectsInvalidInput(t *testing.T) {
 			name:          "unsupported workflow",
 			assetWorkflow: "standard",
 			assetID:       "asset-123",
-			wantErr:       "currently supported: hc, df",
+			wantErr:       "currently supported: hc, df, doubao, dreamina",
 		},
 		{
 			name:          "missing asset id",

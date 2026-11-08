@@ -76,7 +76,7 @@ func TestSeedanceAssetRecoveryThroughProxyAndBackgroundPolling(t *testing.T) {
 		}
 	}))
 	defer upstream.Close()
-	channel := &model.Channel{Id: 265, Name: "seedance", Type: 60, Status: 1, Key: "fixture-key", BaseURL: &upstream.URL}
+	channel := &model.Channel{Id: 265, Name: "seedance", Type: 60, Status: 1, Key: "fixture-key", BaseURL: &upstream.URL, Group: "default", Models: "dreamina-seedance-2-0-hc"}
 	require.NoError(t, db.Create(channel).Error)
 	require.NoError(t, db.Create(&model.User{Id: 7, Username: "asset-owner", Quota: 9000}).Error)
 	createResponse := httptest.NewRecorder()

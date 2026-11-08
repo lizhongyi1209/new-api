@@ -30,3 +30,12 @@ func TestMissingSeedanceAssetRequiresExplicitFailureAndKnownSource(t *testing.T)
 	}
 	assert.False(t, adaptor.MissingSeedanceAsset(&model.Task{}, "The specified asset asset-known is not found"))
 }
+
+func TestSeedanceRecoverableAssetPathIncludesDreaminaMax(t *testing.T) {
+	assert.True(t, seedanceRecoverableAssetPath("/v2/sd-max/assets"))
+	assert.True(t, seedanceRecoverableAssetPath("/v2/db-sd-max/assets"))
+	assert.True(t, seedanceRecoverableAssetPath("/v1/sd/assets"))
+	assert.True(t, seedanceRecoverableAssetPath("/v1/sd-5/assets"))
+	assert.False(t, seedanceRecoverableAssetPath("/v1/assets"))
+	assert.False(t, seedanceRecoverableAssetPath("/v2/video/generate"))
+}

@@ -65,6 +65,15 @@ func (a *TaskAdaptor) captureSeedanceAssetRecovery(c *gin.Context, info *relayco
 	}
 }
 
+func seedanceRecoverableAssetPath(path string) bool {
+	switch path {
+	case "/v1/sd/assets", "/v1/sd-5/assets", "/v2/db-sd-max/assets", "/v2/sd-max/assets":
+		return true
+	default:
+		return false
+	}
+}
+
 // MissingSeedanceAsset only recognizes an explicit asset-not-found failure
 // whose source was retained for this task. Other failures are never recovered.
 func (a *TaskAdaptor) MissingSeedanceAsset(task *model.Task, reason string) bool {
@@ -87,7 +96,7 @@ func (a *TaskAdaptor) RecreateMissingSeedanceAsset(ctx context.Context, task *mo
 	recovery := task.PrivateData.SeedanceAssetRecovery
 	missingID := extractAssetIDFromMessage(reason)
 	source, ok := recovery.Sources[missingID]
-	if !ok || (source.Path != "/v1/sd/assets" && source.Path != "/v1/sd-5/assets" && source.Path != "/v2/db-sd-max/assets") {
+	if !ok || !seedanceRecoverableAssetPath(source.Path) {
 		return "", nil, false, fmt.Errorf("asset creation source unavailable")
 	}
 	var payload map[string]json.RawMessage

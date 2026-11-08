@@ -85,14 +85,24 @@ func SetVideoRouter(router *gin.Engine) {
 		seedanceAssetProxyRouter.GET("/seedance/assets/:asset_id", controller.GetUnifiedSeedanceAsset)
 	}
 
-	// Doubao Seedance MAX v2 asset contract. This remains on the same type-60
-	// channel while keeping the existing HC and DF v1 asset routes unchanged.
+	// Doubao Seedance MAX v2 asset contract. The handler selects a type-60
+	// channel that serves Doubao models, not an arbitrary type-60 channel.
 	doubaoSeedanceAssetRouter := router.Group("/v2/db-sd-max")
 	doubaoSeedanceAssetRouter.Use(middleware.RouteTag("relay"))
 	doubaoSeedanceAssetRouter.Use(middleware.TokenAuth())
 	{
 		doubaoSeedanceAssetRouter.POST("/assets", controller.ProxySeedanceAssetAPI)
 		doubaoSeedanceAssetRouter.GET("/assets/:asset_id", controller.ProxySeedanceAssetAPI)
+	}
+
+	// Dreamina Seedance MAX v2 asset contract. Same selection rule, bound to
+	// channels that serve Dreamina models.
+	dreaminaSeedanceAssetRouter := router.Group("/v2/sd-max")
+	dreaminaSeedanceAssetRouter.Use(middleware.RouteTag("relay"))
+	dreaminaSeedanceAssetRouter.Use(middleware.TokenAuth())
+	{
+		dreaminaSeedanceAssetRouter.POST("/assets", controller.ProxySeedanceAssetAPI)
+		dreaminaSeedanceAssetRouter.GET("/assets/:asset_id", controller.ProxySeedanceAssetAPI)
 	}
 
 	klingV1Router := router.Group("/kling/v1")
