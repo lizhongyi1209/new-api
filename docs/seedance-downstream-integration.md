@@ -178,7 +178,22 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 
 ### 5.1 MAX v2 自动素材准备
 
-当 HC 公共模型通过渠道模型映射指向对应的 Dreamina MAX 上游模型时，本站内部使用 v2 视频接口。既有映射保持不变：
+当公开模型通过渠道模型映射指向对应的 MAX 上游模型时，本站内部使用 v2 视频接口。
+
+**主推简写模型名（新接入推荐）：**
+
+| 本站公开模型 | MAX 上游模型 |
+| --- | --- |
+| `dreamina-seedance-2-0` | `dreamina-seedance-2-0-260128-max` |
+| `dreamina-seedance-2-0-fast` | `dreamina-seedance-2-0-fast-260128-max` |
+| `dreamina-seedance-2-0-mini` | `dreamina-seedance-2-0-mini-260615-max` |
+| `dreamina-seedance-2-5` | `dreamina-seedance-2-5-260628-max` |
+| `doubao-seedance-2-0` | `doubao-seedance-2-0-260128-max` |
+| `doubao-seedance-2-0-fast` | `doubao-seedance-2-0-fast-260128-max` |
+| `doubao-seedance-2-0-mini` | `doubao-seedance-2-0-mini-260615-max` |
+| `doubao-seedance-2-5` | `doubao-seedance-2-5-260628-max` |
+
+**兼容旧名（Dreamina `-hc`，给老客户保留）：**
 
 | 本站公开模型 | MAX 上游模型 |
 | --- | --- |
@@ -187,14 +202,9 @@ GET https://cf-api.o1key.com/v1/video/generations/{task_id}
 | `dreamina-seedance-2-0-mini-hc` | `dreamina-seedance-2-0-mini-260615-max` |
 | `dreamina-seedance-2-5-hc` | `dreamina-seedance-2-5-260628-max` |
 
-同一个 `TokenMartSeedance` 渠道还支持直接使用以下 Doubao MAX 模型，不需要模型映射：
+国内 Doubao 也可继续直接使用长名别名（无需映射）：`doubao-seedance-2-0-260128-max`、`doubao-seedance-2-0-fast-260128-max`、`doubao-seedance-2-0-mini-260615-max`、`doubao-seedance-2-5-260628-max`。
 
-- `doubao-seedance-2-0-260128-max`
-- `doubao-seedance-2-0-fast-260128-max`
-- `doubao-seedance-2-0-mini-260615-max`
-- `doubao-seedance-2-5-260628-max`
-
-下游创建和查询路径仍然是 `/v1/video/generations` 与 `/v1/video/generations/{task_id}`。从 HC 切换到 Doubao 时只需修改请求中的 `model`。本站根据映射后的上游模型前缀分别应用 Dreamina 或 Doubao 请求适配，两者当前均提交到上游 `/v2/video/generate` 并通过 `/v2/video/tasks/{id}` 查询。
+下游创建和查询路径仍然是 `/v1/video/generations` 与 `/v1/video/generations/{task_id}`。切换 Dreamina / Doubao 时只需修改请求中的 `model`。本站根据映射后的上游模型前缀分别应用 Dreamina 或 Doubao 请求适配，两者当前均提交到上游 `/v2/video/generate` 并通过 `/v2/video/tasks/{id}` 查询。
 
 Doubao MAX 和 Dreamina MAX 使用相同的请求参数。本站完整转发以下可选参数；未填写时使用上游默认值，显式 `false` 和 `0` 会保留：
 
@@ -242,7 +252,7 @@ MAX v2 请求中的公网图片和视频 URL 会原样转发，由上游视频�
 }
 ```
 
-下游仍然调用本站的 `/v1/video/generations`，并继续使用 HC 模型名和公开 `task_...` ID，不需要感知 MAX 模型名或上游 v2 路径。
+下游仍然调用本站的 `/v1/video/generations`，并继续使用公开模型名（推荐简写）和公开 `task_...` ID，不需要感知 MAX 上游模型名或上游 v2 路径。
 
 只使用一次的素材仍推荐直接传公网 URL。需要反复渲染时再预上传。Doubao MAX 与 Dreamina MAX 都可以预上传：
 
@@ -250,12 +260,13 @@ MAX v2 请求中的公网图片和视频 URL 会原样转发，由上游视频�
 | --- | --- | --- |
 | Dreamina MAX | `dreamina` | `POST` / `GET /v2/sd-max/assets` |
 | Doubao MAX | `doubao` | `POST` / `GET /v2/db-sd-max/assets` |
-| HC | `hc` | `POST` / `GET /v1/sd/assets` |
-| DF | `df` | `POST` / `GET /v1/sd-5/assets` |
+| HC（兼容旧名） | `hc` | `POST` / `GET /v1/sd/assets` |
 
-创建和查询都会按 `type`，以及创建请求里的可选 `model`，选择与视频生成相同的渠道密钥。Dreamina / HC / DF 使用配置了 Dreamina 模型的国外渠道（线上为渠道 265 一类）；Doubao 使用配置了豆包模型的国内渠道（线上为渠道 465 一类）。不会再取任意一个优先级最高的类型 60 渠道。`asset://` 句柄只在创建它的渠道组织内有效，不能把 Dreamina 句柄用于豆包模型，也不能把豆包句柄用于 Dreamina 模型。
+创建和查询都会按 `type`，以及创建请求里的可选 `model`，在当前令牌分组里选择渠道密钥。Dreamina / HC 只在配置了 Dreamina 模型的国外渠道中选择（线上为渠道 265 一类）；Doubao 只在配置了豆包模型的国内渠道中选择（线上为渠道 465 一类）。不会再取任意一个优先级最高的类型 60 渠道。
 
-Dreamina 的 `model` 可以省略，省略后适用于该渠道上的全部 Dreamina MAX 模型。如填写，可使用本站公开名（如 `dreamina-seedance-2-0-hc`、`dreamina-seedance-2-0`）或上游名 `dreamina-*-max`；统一入口会按渠道映射改写成上游模型名再转发。Doubao 的 `model` 仍建议省略；如填写，使用 `doubao-seedance-2-0-260128-max` 或本站已映射到该上游名的豆包模型名。直接调用 `/v2/sd-max/assets` 或 `/v2/db-sd-max/assets` 时，`URL`、`AssetType`、`Name`、`Model` 原样转发。
+`asset://` 句柄只对创建它时实际选中的那把上游密钥及其组织有效。Dreamina 与豆包不能混用。同一家族如果有多把密钥或多个组织，只传 `type` 会选该分组里优先级最高的匹配渠道；生成若落到另一把密钥，句柄不能用。预上传请带上与生成请求相同的公开模型名，使两边都在提供该模型的渠道中选择。同一模型仍可能对应多把密钥，不能把句柄当作同家族或同模型下的任意渠道都能复用。
+
+Dreamina 的 `model` 可以省略，省略后适用于该渠道上的全部 Dreamina MAX 模型。如填写，可使用本站公开名（推荐简写如 `dreamina-seedance-2-0-mini`，兼容 `-hc` 旧名）或上游名 `dreamina-*-max`；统一入口会按渠道映射改写成上游模型名再转发。Doubao 的 `model` 仍建议省略；如填写，使用 `doubao-seedance-2-0` 或 `doubao-seedance-2-0-260128-max`。直接调用 `/v2/sd-max/assets` 或 `/v2/db-sd-max/assets` 时，`URL`、`AssetType`、`Name`、`Model` 原样转发。
 
 本站对异步视频任务明确返回的“素材不存在”（`asset ... not found`）提供自动恢复：使用原创建参数重新创建该素材，等待素材可用后，在原渠道重新提交视频。每个任务最多恢复 3 次，公开任务 ID 保持不变，沿用原预扣额度，最终失败才退款。其他错误不进入此恢复流程。
 
@@ -265,34 +276,9 @@ Dreamina 的 `model` 可以省略，省略后适用于该渠道上的全部 Drea
 
 当 `content` 中的 `image_url.url` 是公网 HTTP(S) URL 时，本站渠道 265 会先按模型选择素材工作流，再把图片转换为 `asset://{asset_id}`。
 
-DF 模型使用直接素材接口：
+> **对外说明**：`df` 素材类型与 DF 上游模型名**不再对外推荐**。代码侧仍识别 DF 路径以兼容存量，但公开文档与新接入请勿使用 `type: "df"` 或 `*-df` 模型名。Dreamina MAX / 简写模型请直接传公网 URL（走 MAX v2 自动素材准备）。
 
-```http
-POST /v1/sd-5/assets
-```
-
-```json
-{
-  "URL": "https://cdn.example.com/reference.jpg",
-  "Name": "reference_image",
-  "AssetType": "Image"
-}
-```
-
-素材未完成时查询：
-
-```http
-GET /v1/sd-5/assets/{asset_id}
-```
-
-以下四个上游模型归入 DF 素材工作流：
-
-- `dreamina-seedance-2-0-260128-df`
-- `dreamina-seedance-2-0-fast-260128-df`
-- `dreamina-seedance-2-0-mini-260615-df`
-- `dreamina-seedance-2-5-260628-df`
-
-HC 模型使用对应的直接素材接口 `POST /v1/sd/assets`，并通过 `GET /v1/sd/assets/{asset_id}` 查询状态：
+兼容旧名 HC 模型若仍走 v1 素材路径，使用直接素材接口 `POST /v1/sd/assets`，并通过 `GET /v1/sd/assets/{asset_id}` 查询状态：
 
 - `dreamina-seedance-2-0-hc`
 - `dreamina-seedance-2-0-fast-hc`
@@ -367,31 +353,84 @@ GET /v1/asset-groups/{group_id}
 
 本站公开了素材代理接口。下游如需复用同一份图片、视频或音频，可以使用本站 API Token 调用以下接口。本站按素材类型选择对应渠道的上游密钥，下游不需要、也不能指定渠道 ID。
 
-统一入口按 `type` 转发。`dreamina` 转发到 `/v2/sd-max/assets`，`doubao` 转发到 `/v2/db-sd-max/assets`，`hc` 转发到 `/v1/sd/assets`，`df` 转发到 `/v1/sd-5/assets`：
+统一入口按 `type` 转发。`dreamina` 转发到 `/v2/sd-max/assets`，`doubao` 转发到 `/v2/db-sd-max/assets`，`hc`（兼容旧名）转发到 `/v1/sd/assets`。内部仍识别 `df` 但不对外推荐：
 
 ```http
 POST https://cf-api.o1key.com/v1/seedance/assets
 ```
 
+国外 Dreamina 复用素材时，按下面四步调用。示例中的 `mva-example-mini-001`、`task_example_dreamina_mini` 和图片地址都是占位，不是线上记录。`asset_type` 使用 `image` / `video` / `audio`，默认 `image`。
+
+1. 创建素材。`model` 填写即将用于生成的简写：
+
 ```json
 {
   "type": "dreamina",
-  "url": "https://cdn.example.com/reference.jpg",
-  "name": "reference_image",
-  "asset_type": "image",
-  "model": "dreamina-seedance-2-0-hc"
+  "model": "dreamina-seedance-2-0-mini",
+  "url": "https://cdn.example.com/reference-mini.png",
+  "name": "窗台参考图",
+  "asset_type": "image"
 }
 ```
 
-`url` 在 Dreamina 与 Doubao 上接受公网 `http://` 或 `https://`。`model` 可省略；填写时使用即将用于生成的本站模型名或上游 `dreamina-*-max`。把 `type` 换成 `doubao`、`hc` 或 `df` 即走对应素材接口。状态查询必须带上创建时的 `type`：
+响应立即返回，`data.Status` 先是 `Processing`。记下 `data.Id` 和 `data.Ref`。统一入口会按渠道映射把公开简写改成上游名再转发，`data.Model` 可能回显该上游名。
+
+2. 查询直到 `Active`：
 
 ```http
-GET https://cf-api.o1key.com/v1/seedance/assets/{asset_id}?type=dreamina
+GET https://cf-api.o1key.com/v1/seedance/assets/mva-example-mini-001?type=dreamina
+```
+
+每 1–2 秒一次。`data.Status` 为 `Active` 后才能引用；`Failed` 时看 `data.Error`。
+
+3. 用 `data.Ref` 作为 `image_url.url` 提交生成。`model` 与预上传相同，示例为 480p、4 秒、关闭生成音频：
+
+```json
+{
+  "model": "dreamina-seedance-2-0-mini",
+  "content": [
+    {
+      "type": "text",
+      "text": "一只小猫在窗台上晒太阳，镜头缓慢推近。"
+    },
+    {
+      "type": "image_url",
+      "image_url": {
+        "url": "asset://mva-example-mini-001"
+      },
+      "role": "reference_image"
+    }
+  ],
+  "duration": 4,
+  "resolution": "480p",
+  "generate_audio": false
+}
+```
+
+句柄已就绪时，创建响应的 `status` 通常是 `queued`，`id` / `task_id` 为本站 `task_...`。
+
+4. 用该任务 ID 轮询 `GET /v1/video/generations/{task_id}`，直到 `status` 为 `completed` 或 `failed`。完成后从 `result_url` 或 `metadata.url` 取视频，`metadata.outputs` 是完整列表。本站状态是 `queued`、`in_progress`、`completed`、`failed`，不是上游的 `pending` / `processing`。
+
+`url` 在 Dreamina 与 Doubao 上接受公网 `http://` 或 `https://`。`model` 可省略，但同一家族有多把密钥时建议填写，并与生成请求使用同一个公开名。把 `type` 换成 `doubao` 或兼容旧名 `hc` 即走对应素材接口。国内豆包创建示例：
+
+```json
+{
+  "type": "doubao",
+  "url": "https://cdn.example.com/reference.jpg",
+  "name": "人物参考图",
+  "asset_type": "image"
+}
+```
+
+状态查询必须带上创建时的 `type`：
+
+```http
+GET https://cf-api.o1key.com/v1/seedance/assets/mva-example-doubao-001?type=doubao
 ```
 
 已经按上游字段组装请求时，也可以直接调用同路径代理。Dreamina MAX 为 `POST /v2/sd-max/assets` 与 `GET /v2/sd-max/assets/{Id}`，请求体使用 `URL`、`AssetType`、`Name`、`Model`。Doubao MAX 仍是 `/v2/db-sd-max/assets`。上传是 POST 到不带 id 的路径；带 id 的路径只用于查询。
 
-素材句柄不能跨渠道混用。用 `type: "dreamina"`（或 HC / DF）创建的 `asset://` 只能交给 Dreamina 视频请求；用 `type: "doubao"` 创建的句柄只能交给豆包视频请求。两边的上游密钥不在同一组织时，交叉引用会失败。只使用一次的素材不必预上传，继续在视频请求里传公网 URL 即可。
+素材句柄不能跨组织混用。`type: "dreamina"` 或兼容旧名 `hc` 创建的 `asset://` 只能交给创建它的那把 Dreamina 密钥上的视频请求；`type: "doubao"` 的句柄只能交给对应的豆包密钥。同一家族的其他密钥不能仅凭家族名复用该句柄。只使用一次的素材不必预上传，继续在视频请求里传公网 URL 即可。
 
 原有素材组接口保持可用：
 
@@ -416,9 +455,13 @@ POST https://cf-api.o1key.com/v1/assets/get
 
 只有需要跨多个任务复用素材时才建议手动创建。普通图生视频请求直接传公网图片 URL 即可。
 
-## 7. 渠道 265 的公开模型映射
+## 7. 渠道公开模型映射
 
-下游只能发送左侧的本站模型名，右侧上游模型名由本站内部转换：
+下游只能发送左侧的本站模型名，右侧上游模型名由本站内部转换。
+
+**主推（MAX 简写，见第 5.1 节）：** `dreamina-seedance-2-0` / `fast` / `mini` / `2-5`，以及 `doubao-seedance-2-0` / `fast` / `mini` / `2-5`。兼容旧名：`dreamina-*-hc`。
+
+**历史非 MAX 映射（存量兼容，新接入勿用）：**
 
 | 本站模型名 | 内部上游模型名 |
 | --- | --- |
