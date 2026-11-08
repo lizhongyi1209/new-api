@@ -1689,14 +1689,14 @@
 <p>通过公开 URL 创建可复用素材。仅使用一次的素材可直接在视频请求中传入 URL。</p>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>；须与视频模型对应</td></tr>
-          <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开素材地址；HC/DF 要求 HTTPS，Doubao 接受 HTTP(S)</td></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>string</td><td><code>dreamina</code>、<code>doubao</code>、<code>hc</code> 或 <code>df</code>；须与视频模型对应</td></tr>
+          <tr><td><code>url</code></td><td class="req">是</td><td>string</td><td>公开素材地址；HC/DF 要求 HTTPS，Dreamina 与 Doubao 接受 HTTP(S)。<code>asset://</code> 和 <code>data:</code> 会被拒绝</td></tr>
           <tr><td><code>name</code></td><td class="opt">否</td><td>string</td><td>素材名称</td></tr>
           <tr><td><code>asset_type</code></td><td class="opt">否</td><td>string</td><td><code>image</code>、<code>video</code> 或 <code>audio</code>；默认 <code>image</code></td></tr>
-          <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>Doubao 素材上传建议省略；如填写，只接受 <code>doubao-seedance-2-0-260128-max</code>，其他模型值会返回 400</td></tr>
+          <tr><td><code>model</code></td><td class="opt">否</td><td>string</td><td>用于选择渠道，并在 Dreamina / Doubao 上转发给上游。Dreamina 可省略；如填写，使用本站公开名（如 <code>dreamina-seedance-2-0-hc</code>、<code>dreamina-seedance-2-0</code>）或上游 <code>dreamina-*-max</code>。Doubao 建议省略；如填写，使用 <code>doubao-seedance-2-0-260128-max</code> 或已映射到该上游名的豆包模型名</td></tr>
         </table>
-        <p>Doubao 素材有效期为 7 天。状态变为 <code>Active</code> 后，使用响应中的 <code>Ref</code> 生成视频。上传素材免费。</p>
-        <p>本节预上传示例使用 <code>type: "doubao"</code>。Dreamina MAX / HC 视频推荐直接传公开 URL；<code>type: "hc"</code>、<code>type: "df"</code> 保留原有素材接口。</p>
+        <p><code>type: "dreamina"</code> 转发到 <code>POST /v2/sd-max/assets</code>，<code>type: "doubao"</code> 转发到 <code>POST /v2/db-sd-max/assets</code>。这两条上游路径也可以直接调用，请求体字段为 <code>URL</code>、<code>AssetType</code>、<code>Name</code>、<code>Model</code>，响应原样返回 <code>Id</code>、<code>Ref</code>、<code>Status</code>。上传是 POST 到不带 id 的路径。</p>
+        <p>本站按 <code>type</code> 和可选 <code>model</code> 选择与视频生成相同的渠道密钥：Dreamina / HC / DF 使用 Dreamina 国外渠道，Doubao 使用豆包国内渠道。<code>asset://</code> 句柄不能在这两类渠道之间混用。素材有效期为 7 天。状态变为 <code>Active</code> 后，使用响应中的 <code>Ref</code> 生成视频。上传素材免费。只使用一次的素材仍可直接在视频请求中传公开 URL。</p>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -1741,7 +1741,7 @@
 <table>
           <tr><th>字段</th><th>必填</th><th>位置</th><th>说明</th></tr>
           <tr><td><code>asset_id</code></td><td class="req">是</td><td>path</td><td>创建接口返回的 <code>data.Id</code></td></tr>
-          <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td><code>hc</code>、<code>df</code> 或 <code>doubao</code>，须与创建时一致</td></tr>
+          <tr><td><code>type</code></td><td class="req">是</td><td>query</td><td><code>dreamina</code>、<code>doubao</code>、<code>hc</code> 或 <code>df</code>，须与创建时一致。查询使用创建该句柄的同一类渠道</td></tr>
         </table>
         <table>
           <tr><th>状态</th><th>说明</th></tr>
@@ -1754,8 +1754,9 @@
         <aside class="api-examples">
           <div class="api-examples-inner">
 <h3>请求示例</h3>
-        <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-e144dfc364a647f1?type=doubao" \
+        <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-e144dfc364a647f1?type=dreamina" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
+        <p class="compact-note">Doubao 把查询参数换成 <code>type=doubao</code>。直接代理分别为 <code>GET /v2/sd-max/assets/{Id}</code> 与 <code>GET /v2/db-sd-max/assets/{Id}</code>。</p>
         <h3>响应示例</h3>
         <h4>查询成功 <span class="pill success">200</span></h4>
         <pre><code>{

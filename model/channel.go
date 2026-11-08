@@ -1172,6 +1172,15 @@ func GetChannelsByType(startIdx int, num int, idSort bool, channelType int) ([]*
 	return channels, err
 }
 
+// GetEnabledChannelsByType returns every enabled channel of the given type,
+// including credentials. Callers that must bind a request to one organization
+// filter this list themselves.
+func GetEnabledChannelsByType(channelType int) ([]*Channel, error) {
+	var channels []*Channel
+	err := DB.Where("type = ? AND status = ?", channelType, common.ChannelStatusEnabled).Find(&channels).Error
+	return channels, err
+}
+
 // Count channels of specific type
 func CountChannelsByType(channelType int) (int64, error) {
 	var count int64
