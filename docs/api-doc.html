@@ -2611,15 +2611,14 @@
       <article class="api-card" id="kling-4-overview">
         <header class="api-head">
           <div class="api-head-main">
-            <h3 class="api-title">Kling 4.0 / Flash 视频接口</h3>
+            <h3 class="api-title">路径、参数与价格</h3>
           </div>
           <button type="button" class="anchor-btn" data-anchor="kling-4-overview" aria-label="复制此接口链接" title="复制接口链接">#</button>
         </header>
         <div class="api-body with-examples">
           <div class="api-main">
-<p>请求使用 <code>Authorization: Bearer &lt;API Key&gt;</code> 和 <code>Content-Type: application/json</code>。本站在可灵官方路径前保留 <code>/kling</code>，用来区分可灵流量。下游只需把可灵官方 Base URL 换成本站地址，并在官方路径前加上 <code>/kling</code>。模型由路径决定，请求体不要再传 <code>model</code>。</p>
-        <p>创建和查询的响应与可灵官方一致：<code>{code, message, request_id, data}</code>。<code>data.id</code> 是提交后用来查询的任务 ID。<code>data.external_id</code> 对应请求里的 <code>options.external_task_id</code>。任务状态为 <code>submitted</code>、<code>processing</code>、<code>succeeded</code>、<code>failed</code>。</p>
-        <p><strong>如何使用 Kling 4.0 Flash：</strong>接口形态与 4.0 相同，只把路径中的模型段改成 <code>kling-4.0-flash</code>。例如文生视频用 <code>POST /kling/text-to-video/kling-4.0-flash</code>，图生视频用 <code>POST /kling/image-to-video/kling-4.0-flash</code>，Omni 用 <code>POST /kling/omni-video/kling-4.0-flash</code>。Flash 只支持 <code>720p</code>（默认也是 <code>720p</code>），时长 3–20 秒；不要传 <code>1080p</code>，时长不要超过 20 秒。请求体字段与 4.0 一致，不要再传 <code>model</code>。</p>
+<div class="callout info"><b>Flash</b>：请求体与 4.0 相同，只把路径里的 <code>kling-4.0</code> 换成 <code>kling-4.0-flash</code>。只支持 <code>720p</code>（默认也是 <code>720p</code>），时长 3–20 秒。不要传 <code>1080p</code>，也不要超过 20 秒。</div>
+        <h3 id="h-kling-paths" class="sub">创建与单任务查询</h3>
         <table>
           <tr><th>类型</th><th>提交</th><th>按任务 ID 查询</th></tr>
           <tr><td>文生视频</td><td><code>POST /kling/text-to-video/kling-4.0</code></td><td><code>GET /kling/text-to-video/kling-4.0/{task_id}</code></td></tr>
@@ -2629,27 +2628,38 @@
           <tr><td>Flash 图生视频</td><td><code>POST /kling/image-to-video/kling-4.0-flash</code></td><td><code>GET /kling/image-to-video/kling-4.0-flash/{task_id}</code></td></tr>
           <tr><td>Flash Omni</td><td><code>POST /kling/omni-video/kling-4.0-flash</code></td><td><code>GET /kling/omni-video/kling-4.0-flash/{task_id}</code></td></tr>
         </table>
-        <p>也可以不走上面的单任务路径，直接调用与官方相同的批量查询和游标查询。单任务路径的响应体同样是官方的任务数组。</p>
+        <ul>
+          <li>请求头：<code>Authorization: Bearer &lt;API Key&gt;</code>，<code>Content-Type: application/json</code>。</li>
+          <li>在可灵官方路径前加 <code>/kling</code>，Base URL 换成本站。模型由路径决定，请求体不要传 <code>model</code>。</li>
+          <li>创建和查询的响应与可灵官方一致：<code>{code, message, request_id, data}</code>。<code>data.id</code> 是任务 ID；<code>data.external_id</code> 对应 <code>options.external_task_id</code>。状态：<code>submitted</code>、<code>processing</code>、<code>succeeded</code>、<code>failed</code>。</li>
+          <li>单任务 GET 的响应也是任务数组。批量查询和游标查询与官方相同，见下表。</li>
+        </ul>
+        <h3 id="h-kling-query" class="sub">批量与游标查询</h3>
         <table>
           <tr><th>查询</th><th>方法</th><th>说明</th></tr>
           <tr><td>按任务 ID</td><td><code>GET /kling/tasks?task_ids=id1,id2</code></td><td>系统任务 ID，逗号分隔。不能与 <code>external_task_ids</code> 同时使用。</td></tr>
-          <tr><td>按自定义 ID</td><td><code>GET /kling/tasks?external_task_ids=a,b</code></td><td>对应 <code>options.external_task_id</code>，同一 API Key 下必须唯一。</td></tr>
-          <tr><td>游标</td><td><code>POST /kling/tasks</code></td><td><code>start_time</code>、<code>end_time</code> 为毫秒时间戳；<code>cursor</code> 使用上次返回的 <code>next_cursor</code>；<code>limit</code> 默认 100，最大 500。传入 <code>cursor</code> 后忽略起止时间。</td></tr>
+          <tr><td>按自定义 ID</td><td><code>GET /kling/tasks?external_task_ids=a,b</code></td><td>对应 <code>options.external_task_id</code>。同一 API Key 下必须唯一。</td></tr>
+          <tr><td>游标</td><td><code>POST /kling/tasks</code></td><td><code>start_time</code>、<code>end_time</code> 为毫秒时间戳。<code>cursor</code> 用上次返回的 <code>next_cursor</code>，传入后忽略起止时间。<code>limit</code> 默认 100，最大 500。</td></tr>
         </table>
         <h3 id="h-37" class="sub">通用设置</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
-          <tr><td><code>settings.duration</code></td><td>integer</td><td>否</td><td>Kling 4.0 为 3–30 秒，Kling 4.0 Flash 为 3–20 秒。显式设置优先于提示词。省略时，模型识别提示词中的时长；Omni 在没有提示词时长时，会把 <code>base_video</code> 时长取整，否则默认 10 秒。计费时长见查询结果的 <code>usage.output_duration</code>。</td></tr>
-          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td>Kling 4.0：<code>720p</code> 或 <code>1080p</code>，默认 <code>1080p</code>。Flash 只支持 <code>720p</code>，默认也是 <code>720p</code>。</td></tr>
-          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td>仅文生视频和 Omni：<code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>。Omni 另支持 <code>adaptive</code>。图生视频不能传此字段。</td></tr>
-          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td>仅 Omni。<code>native</code> 按画面生成音频，默认值；<code>original</code> 保留输入视频原声。使用 <code>original</code> 时不能同时引用 <code>voice</code>，且至少要有一条 <code>base_video</code> 或 <code>feature_video</code>。有 <code>base_video</code> 时用它的声音，否则用 <code>contents</code> 中第一条 <code>feature_video</code> 的声音。</td></tr>
+          <tr><td><code>settings.duration</code></td><td>integer</td><td>否</td><td>4.0：3–30 秒；Flash：3–20 秒。有填写值时以填写值为准。省略时识别提示词时长；Omni 若仍没有，则取 <code>base_video</code> 时长（取整），否则 10 秒。计费看 <code>usage.output_duration</code>。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td>4.0：<code>720p</code> 或 <code>1080p</code>，默认 <code>1080p</code>。Flash 只支持 <code>720p</code>，默认也是 <code>720p</code>。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td>仅文生视频和 Omni：<code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>。Omni 另支持 <code>adaptive</code>。图生视频不能传。</td></tr>
+          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td>仅 Omni。<code>native</code>（默认）按画面生成音频；<code>original</code> 保留输入视频原声。<code>original</code> 不能同时引用 <code>voice</code>，且至少要有一条 <code>base_video</code> 或 <code>feature_video</code>。有 <code>base_video</code> 用它的声音，否则用 <code>contents</code> 第一条 <code>feature_video</code> 的声音。</td></tr>
           <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>任务状态变化时的回调地址。</td></tr>
-          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>自定义任务 ID，不会覆盖 <code>data.id</code>。可用 <code>GET /kling/tasks?external_task_ids=</code> 查询，同一 API Key 下必须唯一。</td></tr>
-          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。显式 <code>false</code> 也会原样转发。不支持自定义水印。</td></tr>
+          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>自定义任务 ID，不覆盖 <code>data.id</code>。同一 API Key 下必须唯一。用 <code>GET /kling/tasks?external_task_ids=</code> 查询。</td></tr>
+          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。传入 <code>false</code> 也会按 <code>false</code> 提交，不会省掉。不支持自定义水印。</td></tr>
         </table>
-        <p>提示词中用 <code>@id</code> 引用素材，并写明每项素材的用途。可灵原始说明：<a href="https://kling.ai/document-api/api/video/4-0/text-to-video">文生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/image-to-video">图生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/video-omni">Omni</a>、<a href="https://kling.ai/document-api/api/video/4-0-flash/text-to-video">Flash</a>。</p>
+        <p>提示词用 <code>@id</code> 引用素材，并写明每项用途。可灵说明：<a href="https://kling.ai/document-api/api/video/4-0/text-to-video">文生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/image-to-video">图生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/video-omni">Omni</a>、<a href="https://kling.ai/document-api/api/video/4-0-flash/text-to-video">Flash</a>。</p>
         <h3 id="h-kling-price" class="sub">价格</h3>
-        <p>按下表美元单价计费。计费秒数使用查询结果里的 <code>usage.output_duration</code>，不要用 <code>outputs[].duration</code>；后者是成片文件时长，可能和计费时长不同。输入视频时长使用 <code>usage.input_duration</code>，包含参考视频（<code>feature_video</code>、<code>base_video</code>）和视频角色主体。账户若设置了分组倍率，实际扣费会在下表单价上再乘该倍率。</p>
+        <ul>
+          <li>下表为美元单价。密钥若有分组倍率，再乘该倍率。</li>
+          <li>输出秒数用 <code>usage.output_duration</code>，不要用 <code>outputs[].duration</code>（成片时长，可能不同）。</li>
+          <li>输入视频秒数用 <code>usage.input_duration</code>，含 <code>feature_video</code>、<code>base_video</code> 和视频角色主体。</li>
+          <li>未传 <code>settings.duration</code> 时，先按最长输出预留：4.0 为 30 秒，Flash 为 20 秒。请求里有视频或主体时，输入时长也按同一上限预留。成功后按 <code>usage.output_duration</code> 和 <code>usage.input_duration</code> 结算。</li>
+        </ul>
         <table>
           <tr><th>模型</th><th>条件</th><th>计费时长</th><th>720p</th><th>1080p</th></tr>
           <tr><td>Kling 4.0</td><td>无输入视频</td><td>输出时长</td><td>$0.157 / 秒</td><td>$0.235 / 秒</td></tr>
@@ -2659,7 +2669,7 @@
           <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>$0.063 / 秒</td><td>—</td></tr>
           <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>$0.063 / 秒</td><td>—</td></tr>
         </table>
-        <p>未传 <code>settings.duration</code> 时，先按该模型允许的最长输出预留费用：4.0 为 30 秒，Flash 为 20 秒。请求里包含视频或主体时，输入时长也先按同一上限预留。任务成功后，用 <code>usage.output_duration</code> 和 <code>usage.input_duration</code> 结算。价格与可灵视频计价一致：<a href="https://kling.ai/document-api/pricing/base/video">Video pricing</a>。</p>
+        <p>价格与可灵视频计价一致：<a href="https://kling.ai/document-api/pricing/base/video">Video pricing</a>。</p>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -2676,7 +2686,7 @@
     "external_id": ""
   }
 }</code></pre>
-        <p class="compact-note">之后用 <code>data.id</code> 查询。时间戳单位为毫秒。</p>
+        <p class="compact-note">用 <code>data.id</code> 查询。时间戳单位为毫秒。</p>
           </div>
         </aside>
         </div>
@@ -2697,10 +2707,10 @@
           <div class="api-main">
 <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
-          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>可包含正向和负向描述。纯英文最多 26,000 字符，纯非英文最多 11,000 字符；混合输入需满足 E/26000 + N/11000 ≤ 1。</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>可含正向和负向描述。纯英文最多 26,000 字符，纯非英文最多 11,000 字符；混合输入须满足 E/26000 + N/11000 ≤ 1。</td></tr>
           <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>，默认 <code>16:9</code>。</td></tr>
         </table>
-        <p>还可传上方列出的 <code>settings.duration</code>、<code>settings.resolution</code> 和 <code>options</code>。Flash 使用 <code>POST /kling/text-to-video/kling-4.0-flash</code>，分辨率只有 <code>720p</code>，时长 3–20 秒，请求体字段相同。</p>
+        <p>也可传通用设置里的 <code>settings.duration</code>、<code>settings.resolution</code> 和 <code>options</code>。</p>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -2722,7 +2732,6 @@
     "settings": {"duration": 8, "resolution": "720p", "aspect_ratio": "16:9"},
     "options": {"watermark_info": {"enabled": false}}
   }'</code></pre>
-        <p class="compact-note">Flash 与 4.0 共用同一请求字段；只需改路径模型段，并把分辨率固定为 <code>720p</code>、时长限制在 3–20 秒。</p>
           </div>
         </aside>
         </div>
@@ -2743,13 +2752,16 @@
           <div class="api-main">
 <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
-          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>至少 1 张关键帧图片，可附提示词；图片最多 10 张。</td></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>至少 1 张关键帧，可附提示词。图片最多 10 张。</td></tr>
           <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>middle_frame</code>、<code>last_frame</code>。</td></tr>
-          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td><code>type=prompt</code> 时必填，字符限制与文生视频 <code>prompt</code> 相同。</td></tr>
-          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片项必填；可传公开 URL 或 Base64。</td></tr>
-          <tr><td><code>contents[].id</code></td><td>string</td><td>否</td><td>任务内唯一，在提示词中用 <code>@id</code> 引用；多个 <code>middle_frame</code> 时应为每张图指定 ID。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td><code>type=prompt</code> 时必填。字符限制与文生视频 <code>prompt</code> 相同。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片项必填。可传公开 URL 或 Base64。</td></tr>
+          <tr><td><code>contents[].id</code></td><td>string</td><td>否</td><td>任务内唯一，提示词里用 <code>@id</code> 引用。多个 <code>middle_frame</code> 时，每张图都要指定 ID。</td></tr>
         </table>
-        <p>图片格式 JPG、JPEG、PNG；单张不超过 30 MB，宽高均不小于 300px，宽高比为 2:5 至 5:2。文件属性由可灵校验。图生视频不支持 <code>refer_image</code>、视频、元素、声音、<code>settings.aspect_ratio</code> 和 <code>settings.audio</code>；需要这些素材请使用 Omni。Flash 使用 <code>POST /kling/image-to-video/kling-4.0-flash</code>，只支持 720p 和 3–20 秒。</p>
+        <ul>
+          <li>图片：JPG、JPEG、PNG。单张不超过 30 MB，宽高均不小于 300px，宽高比 2:5 至 5:2。文件属性由可灵校验。</li>
+          <li>不支持 <code>refer_image</code>、视频、元素、声音、<code>settings.aspect_ratio</code>、<code>settings.audio</code>。需要这些素材请用 Omni。</li>
+        </ul>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -2774,7 +2786,7 @@
       <article class="api-card" id="/kling/omni-video/kling-4.0">
         <header class="api-head">
           <div class="api-head-main">
-            <h3 class="api-title">Omni 多素材生成与视频编辑</h3>
+            <h3 class="api-title">Omni 多素材与视频编辑</h3>
           <div class="api-endpoints">
           <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-4.0</span></div>
           <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-4.0-flash</span></div>
@@ -2788,22 +2800,22 @@
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
           <tr><td><code>contents</code></td><td>array</td><td>是</td><td>提示词、图片、视频、元素、声音引用的集合。</td></tr>
           <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>middle_frame</code>、<code>last_frame</code>、<code>refer_image</code>、<code>feature_video</code>、<code>base_video</code>、<code>element</code>、<code>voice</code>。</td></tr>
-          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td>提示词项必填，字符限制与文生视频 <code>prompt</code> 相同。说明各素材用途，以及要修改和保留的内容。</td></tr>
-          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片或视频项必填；图片可传公开 URL 或 Base64，视频传公开 URL。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td>提示词项必填。字符限制与文生视频 <code>prompt</code> 相同。写明各素材用途，以及要修改和保留的内容。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片或视频项必填。图片可传公开 URL 或 Base64，视频传公开 URL。</td></tr>
           <tr><td><code>contents[].element_id</code></td><td>string</td><td>条件</td><td><code>type=element</code> 时必填，来自下方主体接口。</td></tr>
-          <tr><td><code>contents[].voice_id</code></td><td>string</td><td>条件</td><td><code>type=voice</code> 时必填，可使用自定义或系统预设声音 ID。</td></tr>
-          <tr><td><code>contents[].id</code></td><td>string</td><td>条件</td><td>任务内唯一，供 <code>@id</code> 引用；<code>element</code> 和 <code>voice</code> 必填，多个中间帧或参考图时也必填。</td></tr>
-          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td><code>native</code> 或 <code>original</code>，默认 <code>native</code>。省略时按 <code>native</code> 处理，不需要为了默认值显式传入。</td></tr>
-          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>、<code>adaptive</code>；默认 <code>adaptive</code>。省略或设为 <code>adaptive</code> 时，优先使用提示词中的比例，再参考基础视频、关键帧及其他视频，最后默认 16:9。</td></tr>
+          <tr><td><code>contents[].voice_id</code></td><td>string</td><td>条件</td><td><code>type=voice</code> 时必填。可用自定义或系统预设声音 ID。</td></tr>
+          <tr><td><code>contents[].id</code></td><td>string</td><td>条件</td><td>任务内唯一，供 <code>@id</code> 引用。<code>element</code> 和 <code>voice</code> 必填；多个中间帧或参考图时也必填。</td></tr>
+          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td><code>native</code> 或 <code>original</code>，默认 <code>native</code>。省略即按 <code>native</code> 处理，不必为了默认值传入。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>21:9</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>、<code>adaptive</code>，默认 <code>adaptive</code>。省略或设为 <code>adaptive</code> 时：先用提示词中的比例，再参考基础视频、关键帧及其他视频，最后默认 16:9。</td></tr>
         </table>
         <h3 id="h-38" class="sub">素材限制</h3>
-        <ul>
-          <li>图片最多 10 张；单张 JPG/JPEG/PNG 不超过 30 MB，宽高均不小于 300px，宽高比为 2:5 至 5:2。</li>
-          <li>参考视频最多 5 个，其中 <code>base_video</code> 最多 1 个；视频角色元素与参考视频合计最多 5 个。视频 MP4/MOV 单个不超过 300 MB。Kling 4.0 每个及输入视频合计时长为 3–30 秒（含视频角色元素）；Flash 为 3–20 秒。输入帧率 24–60 fps。视频宽高各为 700–4553px，总像素数不超过 8,294,400，宽高比为 2:5 至 5:2。</li>
-          <li>元素最多 7 个，其中视频角色元素最多 3 个；声音引用最多 3 个；图片、视频、元素、声音总数最多 15 个。</li>
-          <li>本接口先校验字段、枚举、ID 和数量。文件大小、分辨率、输入视频时长和元素类型等媒体属性由可灵校验。</li>
-        </ul>
-        <p>Flash Omni 使用 <code>POST /kling/omni-video/kling-4.0-flash</code>，字段与上表相同，分辨率只有 <code>720p</code>，时长 3–20 秒。</p>
+        <table>
+          <tr><th>素材</th><th>数量</th><th>规格</th></tr>
+          <tr><td>图片</td><td>最多 10 张</td><td>JPG、JPEG、PNG。单张不超过 30 MB，宽高均不小于 300px，宽高比 2:5 至 5:2。</td></tr>
+          <tr><td>参考视频</td><td>最多 5 个；<code>base_video</code> 最多 1 个；与视频角色元素合计最多 5 个</td><td>MP4、MOV，单个不超过 300 MB。每个及合计时长：4.0 为 3–30 秒，Flash 为 3–20 秒（含视频角色元素）。帧率 24–60 fps。宽、高各 700–4553px，总像素不超过 8,294,400，宽高比 2:5 至 5:2。</td></tr>
+          <tr><td>元素 / 声音</td><td>元素最多 7 个，其中视频角色元素最多 3 个；声音最多 3 个</td><td>图片、视频、元素、声音总数最多 15 个。</td></tr>
+          <tr><td>校验</td><td colspan="2">本接口先校验字段、枚举、ID 和数量。文件大小、分辨率、输入视频时长和元素类型等媒体属性由可灵校验。</td></tr>
+        </table>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -2848,7 +2860,7 @@
       <article class="api-card" id="/kling/tasks">
         <header class="api-head">
           <div class="api-head-main">
-            <h3 class="api-title">查询 Kling 4.0 / Flash 任务</h3>
+            <h3 class="api-title">查询 4.0 / Flash</h3>
           <div class="api-endpoints">
           <div class="endpoint"><span class="method get">GET</span><span class="path">/kling/tasks</span></div>
           <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/tasks</span></div>
@@ -2858,21 +2870,21 @@
         </header>
         <div class="api-body with-examples">
           <div class="api-main">
-<p>使用创建响应里的 <code>data.id</code>，或创建时传入的 <code>options.external_task_id</code>。查询使用同一 API Key。</p>
+<p>用创建响应的 <code>data.id</code>，或创建时的 <code>options.external_task_id</code>。查询使用同一 API Key。</p>
         <table>
           <tr><th>响应字段</th><th>说明</th></tr>
           <tr><td><code>code</code></td><td>成功为 <code>0</code>。</td></tr>
           <tr><td><code>data[].id</code></td><td>任务 ID，与创建响应的 <code>data.id</code> 相同。</td></tr>
           <tr><td><code>data[].status</code></td><td><code>submitted</code>、<code>processing</code>、<code>succeeded</code>、<code>failed</code>。</td></tr>
           <tr><td><code>data[].message</code></td><td>失败时为失败原因。</td></tr>
-          <tr><td><code>data[].outputs</code></td><td>成功后的结果。视频项含 <code>type</code>、<code>id</code>、<code>url</code>、<code>watermark_url</code>、<code>duration</code>。<code>duration</code> 是成片文件时长，单位秒。结果链接通常保留 30 天，请及时保存。</td></tr>
-          <tr><td><code>data[].usage.output_duration</code></td><td>用于计费的输出时长，单位秒。有 <code>settings.duration</code> 时用该值；否则用提示词中的时长；都没有时，Omni 使用 <code>base_video</code> 取整后的时长，再否则为 10 秒。计算费用时用这个字段，不要用 <code>outputs[].duration</code>。</td></tr>
-          <tr><td><code>data[].usage.input_duration</code></td><td>输入视频总时长，保留两位小数字符串。只在有视频输入且任务结束后返回，包含 <code>feature_video</code>、<code>base_video</code> 和视频角色主体。时长按归一化后的视频计算，可能和原文件略有差别。</td></tr>
-          <tr><td><code>data[].billing</code></td><td>任务扣费明细。可能有多条。字段包括 <code>charge_type</code>（<code>cash</code> 或 <code>unit</code>）、<code>cash_type</code>、<code>amount</code>、<code>currency</code>、<code>package_type</code>、<code>list_price</code>。本站按上方价格表扣费；分组倍率另乘在单价上。</td></tr>
+          <tr><td><code>data[].outputs</code></td><td>成功后的结果。视频项含 <code>type</code>、<code>id</code>、<code>url</code>、<code>watermark_url</code>、<code>duration</code>。<code>duration</code> 是成片时长，单位秒。结果链接通常保留 30 天，请及时保存。</td></tr>
+          <tr><td><code>data[].usage.output_duration</code></td><td>计费用的输出时长，单位秒。有 <code>settings.duration</code> 时用该值；否则用提示词中的时长；都没有时，Omni 用 <code>base_video</code> 取整后的时长，再否则为 10 秒。计算费用用这个字段，不要用 <code>outputs[].duration</code>。</td></tr>
+          <tr><td><code>data[].usage.input_duration</code></td><td>输入视频总时长，保留两位小数的字符串。只在有视频输入且任务结束后返回，含 <code>feature_video</code>、<code>base_video</code> 和视频角色主体。时长按归一化后的视频计算，可能和原文件略有差别。</td></tr>
+          <tr><td><code>data[].billing</code></td><td>扣费明细，可有多条。字段：<code>charge_type</code>（<code>cash</code> 或 <code>unit</code>）、<code>cash_type</code>、<code>amount</code>、<code>currency</code>、<code>package_type</code>、<code>list_price</code>。按上方价格表扣费。</td></tr>
           <tr><td><code>data[].external_id</code></td><td>自定义任务 ID。</td></tr>
           <tr><td><code>data[].create_time</code> / <code>update_time</code></td><td>毫秒时间戳。</td></tr>
         </table>
-        <p>游标查询的 <code>data</code> 是对象，任务在 <code>data.result</code> 中，并带 <code>count</code>、<code>next_cursor</code>、<code>has_more</code>。<code>filters</code> 可用 <code>status</code>（<code>submitted</code>、<code>processing</code>、<code>succeeded</code>、<code>failed</code>）和 <code>product_type</code>（视频任务为 <code>video</code>）。</p>
+        <p>游标查询的 <code>data</code> 是对象：任务在 <code>data.result</code>，并带 <code>count</code>、<code>next_cursor</code>、<code>has_more</code>。<code>filters.status</code> 可用 <code>submitted</code>、<code>processing</code>、<code>succeeded</code>、<code>failed</code>；<code>filters.product_type</code> 中，视频任务为 <code>video</code>。</p>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -2916,7 +2928,7 @@
     }
   ]
 }</code></pre>
-        <p class="compact-note">上例按 1080p、无输入视频、输出 10 秒计算为 $0.235 × 10。任务 ID、链接和金额仅为示例。单任务路径 <code>GET /kling/text-to-video/kling-4.0/{task_id}</code>、<code>GET /kling/image-to-video/kling-4.0/{task_id}</code>、<code>GET /kling/omni-video/kling-4.0/{task_id}</code> 以及对应的 Flash 路径，返回同一结构。</p>
+        <p class="compact-note">按 1080p、无输入视频、输出 10 秒计为 $0.235 × 10。ID、链接、金额仅为示例。文生、图生、Omni 的单任务 GET（<code>kling-4.0</code> 与 <code>kling-4.0-flash</code>）返回同一结构，路径见本节开头。</p>
           </div>
         </aside>
         </div>
@@ -2931,7 +2943,7 @@
         </header>
         <div class="api-body with-examples">
           <div class="api-main">
-<p>主体和声音管理沿用可灵官方路径，并保留 <code>/kling</code> 前缀。请求体和响应使用官方字段：<code>code</code>、<code>message</code>、<code>request_id</code>、<code>data</code>。创建类任务的状态为 <code>submitted</code>、<code>processing</code>、<code>succeed</code>、<code>failed</code>。</p>
+<p>主体和声音沿用可灵官方路径，前面加 <code>/kling</code>。请求体和响应字段：<code>code</code>、<code>message</code>、<code>request_id</code>、<code>data</code>。创建类任务状态：<code>submitted</code>、<code>processing</code>、<code>succeed</code>、<code>failed</code>。</p>
         <table>
           <tr><th>操作</th><th>路径</th></tr>
           <tr><td>创建主体</td><td><code>POST /kling/v1/general/advanced-custom-elements</code></td></tr>
@@ -2945,7 +2957,11 @@
           <tr><td>预设声音</td><td><code>GET /kling/v1/general/presets-voices?pageNum=1&amp;pageSize=30</code></td></tr>
           <tr><td>删除声音</td><td><code>POST /kling/v1/general/delete-voices</code>，正文 <code>{"voice_id":"..."}</code></td></tr>
         </table>
-        <p>创建主体时传官方字段：<code>element_name</code>、<code>element_description</code>、<code>reference_type</code>（<code>image_refer</code> 或 <code>video_refer</code>）、<code>element_image_list</code> 或 <code>element_video_list</code>、<code>element_voice_id</code>、<code>tag_list</code>、<code>callback_url</code>、<code>external_task_id</code>。创建声音时传 <code>voice_name</code>，并在 <code>voice_url</code> 与 <code>video_id</code> 中只填一个。</p>
+        <table>
+          <tr><th>操作</th><th>字段</th></tr>
+          <tr><td>创建主体</td><td><code>element_name</code>、<code>element_description</code>、<code>reference_type</code>（<code>image_refer</code> 或 <code>video_refer</code>）、<code>element_image_list</code> 或 <code>element_video_list</code>、<code>element_voice_id</code>、<code>tag_list</code>、<code>callback_url</code>、<code>external_task_id</code></td></tr>
+          <tr><td>创建声音</td><td><code>voice_name</code>，且 <code>voice_url</code> 与 <code>video_id</code> 只填一个</td></tr>
+        </table>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
