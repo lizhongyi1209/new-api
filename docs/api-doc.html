@@ -291,7 +291,7 @@
           <a href="#minimax-h3" data-target="minimax-h3"><span class="dot"></span>MiniMax H3</a>
           <a href="#gemini-omni" data-target="gemini-omni"><span class="dot"></span>Gemini Omni</a>
           <a href="#grok-video" data-target="grok-video"><span class="dot"></span>Grok 视频</a>
-          <a href="#kling-4" data-target="kling-4"><span class="dot"></span>Kling 4.0</a>
+          <a href="#kling-4" data-target="kling-4"><span class="dot"></span>Kling 4.0 / Flash</a>
           <a href="#kling-3" data-target="kling-3"><span class="dot"></span>Kling 3.0</a>
         </div>
       </div>
@@ -2606,12 +2606,12 @@
 
     <section class="provider" id="kling-4" data-section="kling-4">
       <header class="provider-head">
-        <h2>Kling VIDEO 4.0</h2>
+        <h2>Kling VIDEO 4.0 / Flash</h2>
       </header>
       <article class="api-card" id="kling-4-overview">
         <header class="api-head">
           <div class="api-head-main">
-            <h3 class="api-title">Kling 4.0 视频接口</h3>
+            <h3 class="api-title">Kling 4.0 / Flash 视频接口</h3>
           </div>
           <button type="button" class="anchor-btn" data-anchor="kling-4-overview" aria-label="复制此接口链接" title="复制接口链接">#</button>
         </header>
@@ -2619,6 +2619,7 @@
           <div class="api-main">
 <p>请求使用 <code>Authorization: Bearer &lt;API Key&gt;</code> 和 <code>Content-Type: application/json</code>。本站在可灵官方路径前保留 <code>/kling</code>，用来区分可灵流量。下游只需把可灵官方 Base URL 换成本站地址，并在官方路径前加上 <code>/kling</code>。模型由路径决定，请求体不要再传 <code>model</code>。</p>
         <p>创建和查询的响应与可灵官方一致：<code>{code, message, request_id, data}</code>。<code>data.id</code> 是提交后用来查询的任务 ID。<code>data.external_id</code> 对应请求里的 <code>options.external_task_id</code>。任务状态为 <code>submitted</code>、<code>processing</code>、<code>succeeded</code>、<code>failed</code>。</p>
+        <p><strong>如何使用 Kling 4.0 Flash：</strong>接口形态与 4.0 相同，只把路径中的模型段改成 <code>kling-4.0-flash</code>。例如文生视频用 <code>POST /kling/text-to-video/kling-4.0-flash</code>，图生视频用 <code>POST /kling/image-to-video/kling-4.0-flash</code>，Omni 用 <code>POST /kling/omni-video/kling-4.0-flash</code>。Flash 只支持 <code>720p</code>（默认也是 <code>720p</code>），时长 3–20 秒；不要传 <code>1080p</code>，时长不要超过 20 秒。请求体字段与 4.0 一致，不要再传 <code>model</code>。</p>
         <table>
           <tr><th>类型</th><th>提交</th><th>按任务 ID 查询</th></tr>
           <tr><td>文生视频</td><td><code>POST /kling/text-to-video/kling-4.0</code></td><td><code>GET /kling/text-to-video/kling-4.0/{task_id}</code></td></tr>
@@ -2687,6 +2688,7 @@
             <h3 class="api-title">文生视频</h3>
           <div class="api-endpoints">
           <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/text-to-video/kling-4.0</span></div>
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/text-to-video/kling-4.0-flash</span></div>
           </div>
           </div>
           <button type="button" class="anchor-btn" data-anchor="/kling/text-to-video/kling-4.0" aria-label="复制此接口链接" title="复制接口链接">#</button>
@@ -2702,7 +2704,7 @@
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
-<h3>请求示例</h3>
+<h3>请求示例 · Kling 4.0</h3>
         <pre><code>curl https://cf-api.o1key.com/kling/text-to-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
@@ -2711,6 +2713,16 @@
     "settings": {"duration": 10, "resolution": "1080p", "aspect_ratio": "16:9"},
     "options": {"watermark_info": {"enabled": false}}
   }'</code></pre>
+        <h3>请求示例 · Kling 4.0 Flash</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/text-to-video/kling-4.0-flash \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "A sunrise over a quiet harbor, gentle waves, cinematic camera movement and ambient sound.",
+    "settings": {"duration": 8, "resolution": "720p", "aspect_ratio": "16:9"},
+    "options": {"watermark_info": {"enabled": false}}
+  }'</code></pre>
+        <p class="compact-note">Flash 与 4.0 共用同一请求字段；只需改路径模型段，并把分辨率固定为 <code>720p</code>、时长限制在 3–20 秒。</p>
           </div>
         </aside>
         </div>
@@ -2722,6 +2734,7 @@
             <h3 class="api-title">图生视频 · 多关键帧</h3>
           <div class="api-endpoints">
           <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/image-to-video/kling-4.0</span></div>
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/image-to-video/kling-4.0-flash</span></div>
           </div>
           </div>
           <button type="button" class="anchor-btn" data-anchor="/kling/image-to-video/kling-4.0" aria-label="复制此接口链接" title="复制接口链接">#</button>
@@ -2764,6 +2777,7 @@
             <h3 class="api-title">Omni 多素材生成与视频编辑</h3>
           <div class="api-endpoints">
           <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-4.0</span></div>
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/kling/omni-video/kling-4.0-flash</span></div>
           </div>
           </div>
           <button type="button" class="anchor-btn" data-anchor="/kling/omni-video/kling-4.0" aria-label="复制此接口链接" title="复制接口链接">#</button>
