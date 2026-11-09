@@ -301,7 +301,8 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	if strings.HasSuffix(c.Request.URL.Path, "/kling-4.0") {
+	if modelName, ok := kling40ModelFromPath(c.Request.URL.Path); ok {
+		profile := video40ProfileForModel(modelName)
 		var action string
 		switch {
 		case strings.Contains(c.Request.URL.Path, "/text-to-video/"):
@@ -341,16 +342,28 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 				err = validateVideo40Prompt(body.Prompt)
 			}
 			if err == nil {
-				err = validateVideo40Settings(body.Settings, "text")
+				err = validateVideo40Settings(body.Settings, "text", profile)
 			}
 		} else {
 			var body video40ContentsRequest
 			if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
-				err = validateVideo40Contents(body, action == constant.TaskActionKling40Image)
+				err = validateVideo40Contents(body, action == constant.TaskActionKling40Image, profile)
 			}
 		}
 		if err != nil {
 			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if ext := externalTaskIDFromMetadata(req.Metadata); ext != "" {
+			c.Set("kling_external_task_id", ext)
+			if info != nil && info.UserId > 0 {
+				exists, lookupErr := model.KlingExternalTaskExists(info.UserId, ext)
+				if lookupErr != nil {
+					return service.TaskErrorWrapper(lookupErr, "get_task_failed", http.StatusInternalServerError)
+				}
+				if exists {
+					return service.TaskErrorWrapperLocal(fmt.Errorf("options.external_task_id must be unique"), "invalid_request", http.StatusBadRequest)
+				}
+			}
 		}
 		return nil
 	}
@@ -399,11 +412,11 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	var path string
 	switch info.Action {
 	case constant.TaskActionKling40Text:
-		path = "/text-to-video/kling-4.0"
+		path = "/text-to-video/" + kling40UpstreamSlug(info)
 	case constant.TaskActionKling40Image:
-		path = "/image-to-video/kling-4.0"
+		path = "/image-to-video/" + kling40UpstreamSlug(info)
 	case constant.TaskActionKling40Omni:
-		path = "/omni-video/kling-4.0"
+		path = "/omni-video/" + kling40UpstreamSlug(info)
 	case constant.TaskActionOmniVideo30:
 		path = "/omni-video/kling-3.0-omni"
 	case constant.TaskActionMotionControl30:
@@ -568,6 +581,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
+	if isKling40Action(info.Action) {
+		c.JSON(http.StatusOK, kling40CreateResponse(c, info, responseBody))
+		return resolvedTaskID, responseBody, nil
+	}
+
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
 	ov.TaskID = info.PublicTaskID
@@ -630,7 +648,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
-	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3", "kling-video-o1", "kling-v3-omni", "kling-3.0-omni", "kling-3.0", "kling-4.0"}
+	return []string{"kling-v1", "kling-v1-6", "kling-v2-6", "kling-v2-master", "kling-v3", "kling-video-o1", "kling-v3-omni", "kling-3.0-omni", "kling-3.0", "kling-4.0", "kling-4.0-flash"}
 }
 
 func (a *TaskAdaptor) GetChannelName() string {

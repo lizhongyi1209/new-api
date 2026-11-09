@@ -292,6 +292,7 @@ var defaultModelRatio = map[string]float64{
 	"kling-3.0-omni":      1, // Kling official 3.0 Omni API
 	"kling-3.0":           1, // Kling official 3.0 Motion Control API
 	"kling-4.0":           1, // Kling official 4.0 video APIs
+	"kling-4.0-flash":     1, // Kling official 4.0 Flash video APIs
 	// Motion-control variants (SubmitMotionControlKlingJob), same post-paid billing.
 	"kling-v2-6-motion-t":          1,
 	"kling-v3-motion-t":            1,

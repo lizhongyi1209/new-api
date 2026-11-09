@@ -128,6 +128,15 @@ func TestKlingVideo40ConvertPromotesOfficialRequestAndFetchModel(t *testing.T) {
 		assert.Equal(t, "kling-4.0", request.Model)
 		c.Status(http.StatusNoContent)
 	})
+	router.POST("/kling/omni-video/kling-4.0-flash", func(c *gin.Context) {
+		var request relaycommon.TaskSubmitReq
+		require.NoError(t, common.UnmarshalBodyReusable(c, &request))
+		assert.Equal(t, "kling-4.0-flash", request.Model)
+		assert.Equal(t, 20, request.Duration)
+		settings := request.Metadata["settings"].(map[string]any)
+		assert.Equal(t, "original", settings["audio"])
+		c.Status(http.StatusNoContent)
+	})
 
 	request := httptest.NewRequest(http.MethodPost, "/kling/text-to-video/kling-4.0", strings.NewReader(`{"prompt":"A cinematic lake","settings":{"duration":30,"aspect_ratio":"21:9","resolution":"1080p"}}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -137,5 +146,11 @@ func TestKlingVideo40ConvertPromotesOfficialRequestAndFetchModel(t *testing.T) {
 
 	response = httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/kling/text-to-video/kling-4.0/task-1", nil))
+	assert.Equal(t, http.StatusNoContent, response.Code)
+
+	flash := httptest.NewRequest(http.MethodPost, "/kling/omni-video/kling-4.0-flash", strings.NewReader(`{"contents":[{"type":"prompt","text":"A lake"}],"settings":{"duration":20,"resolution":"720p","audio":"original"}}`))
+	flash.Header.Set("Content-Type", "application/json")
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, flash)
 	assert.Equal(t, http.StatusNoContent, response.Code)
 }

@@ -135,6 +135,24 @@ func TestKling40PreviewPricingFormula(t *testing.T) {
 	}
 }
 
+func TestKling40BillsOutputDurationAndFlashBounds(t *testing.T) {
+	meta := ForModel(constant.ChannelTypeKling, "kling-4.0")
+	actual, err := Complete(meta.Meter, map[string]any{"video_input": "none"}, []byte(`{"data":[{"outputs":[{"type":"video","duration":"10.8"}],"usage":{"output_duration":"10"}}]}`), &relaycommon.TaskInfo{})
+	require.NoError(t, err)
+	assert.Equal(t, float64(10), actual["seconds"])
+
+	flash := ForModel(constant.ChannelTypeKling, "kling-4.0-flash")
+	require.Equal(t, Kling40Flash, flash.Meter)
+	estimate, err := Estimate(flash, relaycommon.TaskSubmitReq{Model: "kling-4.0-flash"}, constant.TaskActionKling40Text)
+	require.NoError(t, err)
+	assert.Equal(t, float64(20), estimate["seconds"])
+	assert.Equal(t, "720p", estimate["resolution"])
+	_, err = Estimate(flash, relaycommon.TaskSubmitReq{Model: "kling-4.0-flash", Duration: 21}, constant.TaskActionKling40Text)
+	assert.Error(t, err)
+	_, err = Estimate(flash, relaycommon.TaskSubmitReq{Model: "kling-4.0-flash", Resolution: "1080p"}, constant.TaskActionKling40Text)
+	assert.Error(t, err)
+}
+
 func TestKling40VideoInputRequiresAuthoritativeDuration(t *testing.T) {
 	meta := ForModel(constant.ChannelTypeKling, "kling-4.0")
 	for _, request := range []relaycommon.TaskSubmitReq{

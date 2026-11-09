@@ -790,6 +790,9 @@ func executeTaskSubmissionWith(
 		task.PrivateData.PluginState = result.PluginState
 	}
 	task.Action = relayInfo.Action
+	if ext := strings.TrimSpace(c.GetString("kling_external_task_id")); ext != "" {
+		task.ExternalTaskID = ext
+	}
 	if immediate := result.Immediate; immediate != nil {
 		task.Status = model.TaskStatus(immediate.Status)
 		task.Progress = immediate.Progress

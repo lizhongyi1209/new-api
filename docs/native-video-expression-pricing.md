@@ -12,7 +12,7 @@
 | 61 Xinhankr | seedance-2.0、Fast、Mini | 同上 |
 | 50 Kling | v2.6、v3、v3 Omni、3.0，标准/专业/音频/4K/时长/动作控制变体 | `units`，保留上游资源扣减的小数精度 |
 | 58 Tencent Video | kling-v2-6-t、kling-v3-t、Omni、动作控制变体 | `units` |
-| 50 Kling 4.0 | kling-4.0 文生视频、图生视频、Omni | `seconds`、`input_video_seconds`、`video_input`、`resolution`；预览公式见 `docs/kling-4-video.md` |
+| 50 Kling 4.0 | kling-4.0、kling-4.0-flash 文生视频、图生视频、Omni | `seconds`、`input_video_seconds`、`video_input`、`resolution`；公式见 `docs/kling-4-video.md` |
 | 35 MiniMax、60 TokenMart | MiniMax-H3 / MiniMax-H3-MAX | `seconds`、`input_video_seconds`、`input_images`、`resolution` |
 | 48 xAI、60 TokenMart、1 OpenAI 兼容 | grok-imagine-video、1.0、1.5、1.5-preview | `seconds`、`input_images`、`resolution`、`operation` |
 | 24 Gemini | gemini-omni-flash-preview | `input_tokens`、`text_output_tokens`、`video_output_tokens` |

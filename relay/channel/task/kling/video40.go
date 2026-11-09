@@ -15,9 +15,33 @@ type video40Content struct {
 }
 
 type video40Settings struct {
+	Audio       *string `json:"audio,omitempty"`
 	Resolution  *string `json:"resolution,omitempty"`
 	AspectRatio *string `json:"aspect_ratio,omitempty"`
 	Duration    *int    `json:"duration,omitempty"`
+}
+
+type video40Profile struct {
+	maxDuration int
+	resolutions map[string]struct{}
+}
+
+func video40ProfileForModel(model string) video40Profile {
+	if model == "kling-4.0-flash" {
+		return video40Profile{maxDuration: 20, resolutions: map[string]struct{}{"720p": {}}}
+	}
+	return video40Profile{maxDuration: 30, resolutions: map[string]struct{}{"720p": {}, "1080p": {}}}
+}
+
+func kling40ModelFromPath(path string) (string, bool) {
+	switch {
+	case strings.Contains(path, "/kling-4.0-flash"):
+		return "kling-4.0-flash", true
+	case strings.Contains(path, "/kling-4.0"):
+		return "kling-4.0", true
+	default:
+		return "", false
+	}
 }
 
 type video40Watermark struct {
@@ -70,6 +94,9 @@ func validateVideo40Shape(metadata map[string]any, action string) error {
 		if action != "image" {
 			allowed = append(allowed, "aspect_ratio")
 		}
+		if action == "omni" {
+			allowed = append(allowed, "audio")
+		}
 		if err := validateVideo40Fields(settings, "settings", allowed...); err != nil {
 			return err
 		}
@@ -114,15 +141,26 @@ func validateVideo40Prompt(prompt string) error {
 	return nil
 }
 
-func validateVideo40Settings(settings *video40Settings, action string) error {
+func validateVideo40Settings(settings *video40Settings, action string, profile video40Profile) error {
 	if settings == nil {
 		return nil
 	}
-	if settings.Duration != nil && (*settings.Duration < 3 || *settings.Duration > 30) {
-		return fmt.Errorf("settings.duration must be between 3 and 30 seconds")
+	if settings.Duration != nil && (*settings.Duration < 3 || *settings.Duration > profile.maxDuration) {
+		return fmt.Errorf("settings.duration must be between 3 and %d seconds", profile.maxDuration)
 	}
-	if settings.Resolution != nil && *settings.Resolution != "720p" && *settings.Resolution != "1080p" {
-		return fmt.Errorf("settings.resolution must be 720p or 1080p")
+	if settings.Resolution != nil {
+		if _, ok := profile.resolutions[*settings.Resolution]; !ok {
+			if profile.maxDuration == 20 {
+				return fmt.Errorf("settings.resolution must be 720p")
+			}
+			return fmt.Errorf("settings.resolution must be 720p or 1080p")
+		}
+	}
+	if action != "omni" && settings.Audio != nil {
+		return fmt.Errorf("settings.audio requires omni-video")
+	}
+	if settings.Audio != nil && *settings.Audio != "native" && *settings.Audio != "original" {
+		return fmt.Errorf("settings.audio must be native or original")
 	}
 	if action == "image" && settings.AspectRatio != nil {
 		return fmt.Errorf("settings.aspect_ratio is not supported by image-to-video")
@@ -141,7 +179,7 @@ func validateVideo40Settings(settings *video40Settings, action string) error {
 	return nil
 }
 
-func validateVideo40Contents(req video40ContentsRequest, imageOnly bool) error {
+func validateVideo40Contents(req video40ContentsRequest, imageOnly bool, profile video40Profile) error {
 	if len(req.Contents) == 0 {
 		return fmt.Errorf("contents is required")
 	}
@@ -149,7 +187,7 @@ func validateVideo40Contents(req video40ContentsRequest, imageOnly bool) error {
 	if imageOnly {
 		action = "image"
 	}
-	if err := validateVideo40Settings(req.Settings, action); err != nil {
+	if err := validateVideo40Settings(req.Settings, action, profile); err != nil {
 		return err
 	}
 	images, middleFrames, referenceImages := 0, 0, 0
@@ -213,6 +251,14 @@ func validateVideo40Contents(req video40ContentsRequest, imageOnly bool) error {
 			}
 		default:
 			return fmt.Errorf("unsupported content type %q", content.Type)
+		}
+	}
+	if req.Settings != nil && req.Settings.Audio != nil && *req.Settings.Audio == "original" {
+		if voices > 0 {
+			return fmt.Errorf("settings.audio original cannot be combined with voice")
+		}
+		if videos == 0 {
+			return fmt.Errorf("settings.audio original requires base_video or feature_video")
 		}
 	}
 	if imageOnly && images == 0 {

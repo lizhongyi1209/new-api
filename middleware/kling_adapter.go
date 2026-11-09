@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -236,8 +237,14 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 // the model and bounded request dimensions to the shared task pipeline.
 func KlingVideo40Convert() func(c *gin.Context) {
 	return func(c *gin.Context) {
+		modelName := "kling-4.0"
+		maxDuration := 30.0
+		if strings.Contains(c.Request.URL.Path, "kling-4.0-flash") {
+			modelName = "kling-4.0-flash"
+			maxDuration = 20
+		}
 		if c.Request.Method == http.MethodGet {
-			prepareKling30TaskFetch(c, "kling-4.0")
+			prepareKling30TaskFetch(c, modelName)
 			return
 		}
 		var metadata map[string]any
@@ -255,9 +262,14 @@ func KlingVideo40Convert() func(c *gin.Context) {
 				}
 			}
 		}
-		unifiedReq := map[string]any{"model": "kling-4.0", "prompt": prompt, "metadata": metadata}
+		unifiedReq := map[string]any{"model": modelName, "prompt": prompt, "metadata": metadata}
+		if options, ok := metadata["options"].(map[string]any); ok {
+			if ext, ok := options["external_task_id"].(string); ok && strings.TrimSpace(ext) != "" {
+				c.Set("kling_external_task_id", strings.TrimSpace(ext))
+			}
+		}
 		if settings, ok := metadata["settings"].(map[string]any); ok {
-			if duration, ok := settings["duration"].(float64); ok && duration >= 3 && duration <= 30 && duration == float64(int(duration)) {
+			if duration, ok := settings["duration"].(float64); ok && duration >= 3 && duration <= maxDuration && duration == float64(int(duration)) {
 				unifiedReq["duration"] = int(duration)
 			}
 			if ratio, ok := settings["aspect_ratio"].(string); ok {

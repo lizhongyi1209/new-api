@@ -148,9 +148,25 @@ func SetVideoRouter(router *gin.Engine) {
 		kling40Router.POST("/text-to-video/kling-4.0", controller.RelayTask)
 		kling40Router.POST("/image-to-video/kling-4.0", controller.RelayTask)
 		kling40Router.POST("/omni-video/kling-4.0", controller.RelayTask)
-		kling40Router.GET("/text-to-video/kling-4.0/:task_id", controller.RelayKlingVideo30TaskFetch)
-		kling40Router.GET("/image-to-video/kling-4.0/:task_id", controller.RelayKlingVideo30TaskFetch)
-		kling40Router.GET("/omni-video/kling-4.0/:task_id", controller.RelayKlingVideo30TaskFetch)
+		kling40Router.POST("/text-to-video/kling-4.0-flash", controller.RelayTask)
+		kling40Router.POST("/image-to-video/kling-4.0-flash", controller.RelayTask)
+		kling40Router.POST("/omni-video/kling-4.0-flash", controller.RelayTask)
+		kling40Router.GET("/text-to-video/kling-4.0/:task_id", controller.RelayKling40TaskFetch)
+		kling40Router.GET("/image-to-video/kling-4.0/:task_id", controller.RelayKling40TaskFetch)
+		kling40Router.GET("/omni-video/kling-4.0/:task_id", controller.RelayKling40TaskFetch)
+		kling40Router.GET("/text-to-video/kling-4.0-flash/:task_id", controller.RelayKling40TaskFetch)
+		kling40Router.GET("/image-to-video/kling-4.0-flash/:task_id", controller.RelayKling40TaskFetch)
+		kling40Router.GET("/omni-video/kling-4.0-flash/:task_id", controller.RelayKling40TaskFetch)
+	}
+
+	// Official batch and cursor task queries. The /kling prefix stays; the
+	// query shape matches Kling's GET/POST /tasks.
+	klingTaskQueryRouter := router.Group("/kling/tasks")
+	klingTaskQueryRouter.Use(middleware.RouteTag("relay"))
+	klingTaskQueryRouter.Use(middleware.TokenAuth())
+	{
+		klingTaskQueryRouter.GET("", controller.RelayKling40TasksQuery)
+		klingTaskQueryRouter.POST("", controller.RelayKling40TasksQuery)
 	}
 
 	// Kling 3.0 Motion Control official API. This is additive; the legacy
@@ -173,6 +189,11 @@ func SetVideoRouter(router *gin.Engine) {
 		klingElementRouter.GET("/advanced-custom-elements", controller.ListKlingOfficialElements)
 		klingElementRouter.GET("/advanced-presets-elements", controller.ListKlingOfficialPresetsElements)
 		klingElementRouter.POST("/delete-advanced-elements", controller.DeleteKlingOfficialElementByBody)
+		klingElementRouter.POST("/custom-voices", controller.ProxyKlingGeneralAPI)
+		klingElementRouter.GET("/custom-voices", controller.ProxyKlingGeneralAPI)
+		klingElementRouter.GET("/custom-voices/:id", controller.ProxyKlingGeneralAPI)
+		klingElementRouter.GET("/presets-voices", controller.ProxyKlingGeneralAPI)
+		klingElementRouter.POST("/delete-voices", controller.ProxyKlingGeneralAPI)
 		// Additional convenience routes for management
 		klingElementRouter.POST("/upload", controller.UploadAigcElementImage) // Reuse existing upload handler
 	}
