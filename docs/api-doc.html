@@ -436,7 +436,7 @@
           <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>通用：<code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>；2.5 / 2.6 额外支持 <code>xhigh</code>、<code>max</code>。</td></tr>
           <tr><td><code>complexity</code></td><td class="opt">否</td><td>string</td><td>仅 2.6：<code>low</code>、<code>medium</code>、<code>high</code>（默认 <code>high</code>）。控制渲染前的规划强度，越高越慢、改动幅度越大。</td></tr>
           <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td><code>auto</code>、<code>transparent</code> 或 <code>opaque</code>。透明背景要求 PNG 或 WebP。</td></tr>
-          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code>（默认）、<code>jpeg</code>、<code>webp</code>；仅 2.6 额外支持 <code>svg</code>、<code>gif</code>。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code>（默认）、<code>jpeg</code>、<code>webp</code>；仅 2.6 额外支持 <code>svg</code>（仅生成）和 <code>gif</code>（生成与编辑）。</td></tr>
           <tr><td><code>output_compression</code></td><td class="opt">否</td><td>integer</td><td>0–100，仅对 <code>jpeg</code> / <code>webp</code> 生效。SVG 与 GIF 不支持。</td></tr>
           <tr><td><code>partial_images</code></td><td class="opt">否</td><td>integer</td><td>0–3，渐进预览帧数，每帧额外计费。SVG 与 GIF 不支持。</td></tr>
           <tr><td><code>frame_count</code></td><td class="opt">否</td><td>integer</td><td>仅 GIF：2–64 帧，默认 9。</td></tr>
@@ -454,7 +454,7 @@
           <tr><td>4K</td><td><code>2880x2880</code></td><td><code>3504x2336</code>、<code>3264x2448</code>、<code>3840x2160</code></td><td><code>2336x3504</code>、<code>2448x3264</code>、<code>2160x3840</code></td></tr>
         </table>
         <div class="callout warn"><b>自定义尺寸</b>：使用小写 <code>x</code>；宽高均须为 16 的倍数，比例介于 <code>1:3</code> 与 <code>3:1</code>，单边不超过 3840 像素，总像素为 655,360–8,294,400。超出范围会在提交阶段直接返回 400。</div>
-        <div class="callout warn"><b>SVG / GIF 限制</b>：仅 2.6 支持，且只在 <code>/v1/images/generations</code> 这类纯生成请求中可用；编辑请求不支持矢量与动图输出。SVG 要求 <code>n</code> 为 1，两者都不支持流式、<code>partial_images</code> 与 <code>output_compression</code>。</div>
+        <div class="callout warn"><b>SVG / GIF 限制</b>：仅 2.6 支持。SVG 只用于纯生成（对应 <code>/v1/images/generations</code>），编辑请求不能输出 SVG，也不能把 SVG 当作参考图。GIF 在生成和编辑中都可用；用静帧引导动画时把参考图放进 <code>images</code>（走编辑）。<code>frame_count</code> 与 <code>frame_duration_ms</code> 在两条路径上都生效。SVG 要求 <code>n</code> 为 1。两者都不支持流式、<code>partial_images</code> 与 <code>output_compression</code>。</div>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -523,7 +523,7 @@
     "frame_count": 9,
     "frame_duration_ms": 200
   }'</code></pre>
-              <p class="compact-note">9 帧 × 200ms ≈ 1.8 秒循环。</p>
+              <p class="compact-note">9 帧 × 200ms ≈ 1.8 秒循环。带参考静帧时把图片放进 <code>images</code>，请求按编辑处理；GIF 在编辑中同样可用。</p>
             </div>
             <div class="example-tab-panel" id="gpt-svg" role="tabpanel" aria-labelledby="gpt-svg-tab" aria-hidden="true">
               <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \

@@ -60,9 +60,26 @@ func TestImageGenerationOptionsValidate(t *testing.T) {
 			wantErr: "only supported by GPT Image 2.6",
 		},
 		{
+			name:    "generations accepts svg",
+			options: ImageGenerationOptions{Model: "gpt-image-2.6-flare", Target: ImageTargetGenerations, OutputFormat: "svg", N: uintPtr(1)},
+		},
+		{
+			name:    "generations accepts gif",
+			options: ImageGenerationOptions{Model: "gpt-image-2.6-flare", Target: ImageTargetGenerations, OutputFormat: "gif", FrameCount: intPtr(9), FrameDurationMs: intPtr(200)},
+		},
+		{
 			name:    "svg is generations only",
 			options: ImageGenerationOptions{Model: "gpt-image-2.6-flare", Target: ImageTargetEdits, OutputFormat: "svg", N: uintPtr(1)},
 			wantErr: "only supported on /v1/images/generations",
+		},
+		{
+			name:    "edits accepts gif",
+			options: ImageGenerationOptions{Model: "gpt-image-2.6-flare", Target: ImageTargetEdits, OutputFormat: "gif", FrameCount: intPtr(9), FrameDurationMs: intPtr(200)},
+		},
+		{
+			name:    "edits still requires 2.6 for gif",
+			options: ImageGenerationOptions{Model: "gpt-image-2.5-flare", Target: ImageTargetEdits, OutputFormat: "gif"},
+			wantErr: "only supported by GPT Image 2.6",
 		},
 		{
 			name:    "svg needs a single frame",
