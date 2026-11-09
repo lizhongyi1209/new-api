@@ -141,9 +141,12 @@ func (o ImageGenerationOptions) Validate() error {
 		if !SupportsImageVectorAndAnimationOutput(o.Model) {
 			return fmt.Errorf("output_format %s is only supported by GPT Image 2.6 and later", format)
 		}
-		if o.Target == ImageTargetEdits {
-			return fmt.Errorf("output_format %s is only supported on /v1/images/generations", format)
-		}
+	}
+	// SVG output is generations-only. GIF is valid on both generations and
+	// edits; reference stills for an animation belong on the edit endpoint.
+	// frame_count and frame_duration_ms stay GIF-only and apply on either target.
+	if format == "svg" && o.Target == ImageTargetEdits {
+		return fmt.Errorf("output_format svg is only supported on /v1/images/generations")
 	}
 
 	background := strings.ToLower(strings.TrimSpace(o.Background))

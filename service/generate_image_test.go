@@ -310,6 +310,55 @@ func TestValidateGenerateImageRequestGPTImage25Quality(t *testing.T) {
 	}
 }
 
+func TestValidateGenerateImageRequestGIFOnEdits(t *testing.T) {
+	gif := "gif"
+	svg := "svg"
+	frames := 9
+	duration := 200
+	reference := func() []dto.GenerateImageInput {
+		return []dto.GenerateImageInput{{Value: testStringPtr("data:image/png;base64,BBBB")}}
+	}
+
+	t.Run("edits accepts gif", func(t *testing.T) {
+		req := &dto.GenerateImageRequest{
+			Model:           "gpt-image-2.6-flare",
+			Prompt:          "animate the still",
+			Images:          reference(),
+			OutputFormat:    &gif,
+			FrameCount:      &frames,
+			FrameDurationMs: &duration,
+		}
+		require.NoError(t, ValidateGenerateImageRequest(req))
+	})
+
+	t.Run("edits rejects svg", func(t *testing.T) {
+		n := uint(1)
+		req := &dto.GenerateImageRequest{
+			Model:        "gpt-image-2.6-flare",
+			Prompt:       "vectorize",
+			Images:       reference(),
+			N:            &n,
+			OutputFormat: &svg,
+		}
+		err := ValidateGenerateImageRequest(req)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "output_format svg is only supported on /v1/images/generations")
+	})
+
+	t.Run("edits still requires 2.6 for gif", func(t *testing.T) {
+		req := &dto.GenerateImageRequest{
+			Model:        "gpt-image-2.5-flare",
+			Prompt:       "animate the still",
+			Images:       reference(),
+			OutputFormat: &gif,
+		}
+		err := ValidateGenerateImageRequest(req)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "only supported by GPT Image 2.6")
+		assert.NotContains(t, err.Error(), "only supported on /v1/images/generations")
+	})
+}
+
 func TestValidateGenerateImageRequestEnforcesSeedreamContract(t *testing.T) {
 	two := uint(2)
 	enabled := true
