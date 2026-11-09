@@ -36,24 +36,38 @@ func TestKling40RequestValidation(t *testing.T) {
 		{"omni requires ids for multiple references", `{"contents":[{"type":"refer_image","url":"https://example.com/a.png"},{"type":"refer_image","url":"https://example.com/b.png"}]}`, "omni", "id is required for multiple refer_image inputs"},
 		{"omni rejects sixth video", `{"contents":[{"type":"feature_video","url":"1"},{"type":"feature_video","url":"2"},{"type":"feature_video","url":"3"},{"type":"feature_video","url":"4"},{"type":"feature_video","url":"5"},{"type":"feature_video","url":"6"}]}`, "omni", "contents exceeds Kling 4.0 material limits"},
 		{"reject legacy audio setting", `{"prompt":"A lake at dawn","settings":{"audio":"native"}}`, "text", "unsupported settings field \"audio\""},
+		{"omni native audio", `{"contents":[{"type":"prompt","text":"A lake"}],"settings":{"audio":"native"}}`, "omni", ""},
+		{"omni original audio", `{"contents":[{"type":"feature_video","url":"https://example.com/a.mp4"}],"settings":{"audio":"original"}}`, "omni", ""},
+		{"omni original audio rejects voice", `{"contents":[{"type":"feature_video","url":"https://example.com/a.mp4"},{"type":"voice","voice_id":"1","id":"v"}],"settings":{"audio":"original"}}`, "omni", "settings.audio original cannot be combined with voice"},
+		{"omni original audio requires video", `{"contents":[{"type":"prompt","text":"A lake"}],"settings":{"audio":"original"}}`, "omni", "settings.audio original requires base_video or feature_video"},
+		{"omni rejects unknown audio", `{"contents":[{"type":"prompt","text":"A lake"}],"settings":{"audio":"off"}}`, "omni", "settings.audio must be native or original"},
+		{"flash duration", `{"prompt":"A lake at dawn","settings":{"duration":20,"resolution":"720p"}}`, "flash-text", ""},
+		{"flash rejects 1080p", `{"prompt":"A lake at dawn","settings":{"resolution":"1080p"}}`, "flash-text", "settings.resolution must be 720p"},
+		{"flash rejects 21 seconds", `{"prompt":"A lake at dawn","settings":{"duration":21}}`, "flash-text", "settings.duration must be between 3 and 20 seconds"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			var metadata map[string]any
 			require.NoError(t, common.Unmarshal([]byte(test.body), &metadata))
-			err := validateVideo40Shape(metadata, test.action)
+			action := test.action
+			profile := video40ProfileForModel("kling-4.0")
+			if action == "flash-text" {
+				action = "text"
+				profile = video40ProfileForModel("kling-4.0-flash")
+			}
+			err := validateVideo40Shape(metadata, action)
 			if err == nil {
-				if test.action == "text" {
+				if action == "text" {
 					var req video40TextRequest
 					require.NoError(t, common.Unmarshal([]byte(test.body), &req))
 					err = validateVideo40Prompt(req.Prompt)
 					if err == nil {
-						err = validateVideo40Settings(req.Settings, "text")
+						err = validateVideo40Settings(req.Settings, "text", profile)
 					}
 				} else {
 					var req video40ContentsRequest
 					require.NoError(t, common.Unmarshal([]byte(test.body), &req))
-					err = validateVideo40Contents(req, test.action == "image")
+					err = validateVideo40Contents(req, action == "image", profile)
 				}
 			}
 			if test.wantErr == "" {
@@ -70,7 +84,7 @@ func TestKling40PreservesExplicitFalseAndOfficialPath(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodPost, "/kling/omni-video/kling-4.0", nil)
 	c.Set("task_request", relaycommon.TaskSubmitReq{Metadata: map[string]any{
 		"contents": []any{map[string]any{"type": "voice", "voice_id": "123", "id": "v"}},
-		"settings": map[string]any{"duration": 30, "aspect_ratio": "adaptive"},
+		"settings": map[string]any{"duration": 30, "aspect_ratio": "adaptive", "audio": "original"},
 		"options":  map[string]any{"external_task_id": "", "watermark_info": map[string]any{"enabled": false}},
 	}})
 	info := &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{Action: constant.TaskActionKling40Omni}, ChannelMeta: &relaycommon.ChannelMeta{}}
@@ -89,6 +103,7 @@ func TestKling40PreservesExplicitFalseAndOfficialPath(t *testing.T) {
 	assert.Equal(t, "", body["options"].(map[string]any)["external_task_id"])
 	assert.Equal(t, false, body["options"].(map[string]any)["watermark_info"].(map[string]any)["enabled"])
 	assert.Equal(t, "123", body["contents"].([]any)[0].(map[string]any)["voice_id"])
+	assert.Equal(t, "original", body["settings"].(map[string]any)["audio"])
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/tasks", r.URL.Path)
@@ -122,6 +137,25 @@ func TestKling40UsesDistinctOfficialSubmissionPaths(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, test.path, path)
 	}
+	info := &relaycommon.RelayInfo{OriginModelName: "kling-4.0-flash", TaskRelayInfo: &relaycommon.TaskRelayInfo{Action: constant.TaskActionKling40Text}, ChannelMeta: &relaycommon.ChannelMeta{}}
+	path, err := (&TaskAdaptor{}).BuildRequestURL(info)
+	require.NoError(t, err)
+	assert.Equal(t, "/text-to-video/kling-4.0-flash", path)
+}
+
+func TestKling40CreateResponseUsesOfficialEnvelope(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("kling_external_task_id", "ext-1")
+	info := &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}}
+	body := kling40CreateResponse(c, info, []byte(`{"code":0,"message":"","request_id":"req-1","data":{"id":"upstream","status":"submitted","create_time":11,"update_time":12}}`))
+	assert.Equal(t, 0, body["code"])
+	assert.Equal(t, "req-1", body["request_id"])
+	data := body["data"].(map[string]any)
+	assert.Equal(t, "task_public", data["id"])
+	assert.Equal(t, "submitted", data["status"])
+	assert.Equal(t, "ext-1", data["external_id"])
+	assert.Equal(t, int64(11), data["create_time"])
+	assert.NotContains(t, body, "task_id")
 }
 
 func TestKling40RejectsInvalidDurationBeforeSubmission(t *testing.T) {

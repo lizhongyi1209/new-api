@@ -149,41 +149,47 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 		// Resource deductions are unknown until completion. Reserve a conservative
 		// credit estimate without consulting a mutable currency price or ratio.
 		facts["units"] = seconds * 2
-	case Kling40:
+	case Kling40, Kling40Flash:
+		maxDuration := 30.0
+		defaultResolution := "1080p"
+		if meta.Meter == Kling40Flash {
+			maxDuration = 20
+			defaultResolution = "720p"
+		}
 		if duration := body.Get("settings.duration"); duration.Exists() {
 			n, parseErr := numeric(duration)
 			if parseErr != nil {
 				return nil, fmt.Errorf("invalid settings.duration: %w", parseErr)
 			}
-			if n != math.Trunc(n) || n < 3 || n > 30 {
-				return nil, fmt.Errorf("settings.duration must be an integer between 3 and 30")
+			if n != math.Trunc(n) || n < 3 || n > maxDuration {
+				return nil, fmt.Errorf("settings.duration must be an integer between 3 and %g", maxDuration)
 			}
 			seconds = n
 		}
 		if seconds == 0 {
 			// The prompt or base video may determine the output duration.
-			seconds = 30
+			seconds = maxDuration
 		}
-		if seconds < 3 || seconds > 30 {
-			return nil, fmt.Errorf("Kling 4.0 output duration must be between 3 and 30 seconds")
+		if seconds < 3 || seconds > maxDuration {
+			return nil, fmt.Errorf("Kling output duration must be between 3 and %g seconds", maxDuration)
 		}
 		if configured := body.Get("settings.resolution"); configured.Exists() {
 			res = configured.String()
 		}
 		if res == "" {
-			res = "1080p"
+			res = defaultResolution
 		}
 		input := "none"
 		inputSeconds := 0.0
 		if hasVideo {
-			input, inputSeconds = "video", 30
+			input, inputSeconds = "video", maxDuration
 		}
 		for _, content := range body.Get("contents").Array() {
 			switch content.Get("type").String() {
 			case "feature_video", "base_video", "element":
 				// Element type and URL video duration are not known locally. The
-				// upstream caps their combined duration at 30 seconds.
-				input, inputSeconds = "video", 30
+				// upstream caps their combined duration at the model maximum.
+				input, inputSeconds = "video", maxDuration
 			}
 		}
 		facts = map[string]any{"seconds": seconds, "input_video_seconds": inputSeconds, "video_input": input, "resolution": normalizeEnum(res, meta.Schema["resolution"].Enum)}
@@ -317,31 +323,45 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 			}
 			facts["units"] = sum
 		}
-	case Kling40:
+	case Kling40, Kling40Flash:
+		maxDuration := 30.0
+		if meter == Kling40Flash {
+			maxDuration = 20
+		}
 		foundOutputDuration := false
-		for _, output := range root.Get("data.0.outputs").Array() {
-			if output.Get("type").String() != "video" {
-				continue
-			}
-			duration := output.Get("duration")
-			if !duration.Exists() {
-				return nil, fmt.Errorf("Kling 4.0 output duration is missing")
-			}
-			n, err := numeric(duration)
-			if err != nil || n < 3 || n > 30 {
-				return nil, fmt.Errorf("invalid Kling 4.0 output duration")
+		if billed := root.Get("data.0.usage.output_duration"); billed.Exists() {
+			n, err := numeric(billed)
+			if err != nil || n < 3 || n > maxDuration {
+				return nil, fmt.Errorf("invalid Kling output duration")
 			}
 			facts["seconds"] = n
 			foundOutputDuration = true
-			break
 		}
 		if !foundOutputDuration {
-			return nil, fmt.Errorf("Kling 4.0 video output duration is missing")
+			for _, output := range root.Get("data.0.outputs").Array() {
+				if output.Get("type").String() != "video" {
+					continue
+				}
+				duration := output.Get("duration")
+				if !duration.Exists() {
+					return nil, fmt.Errorf("Kling output duration is missing")
+				}
+				n, err := numeric(duration)
+				if err != nil || n < 3 || n > maxDuration {
+					return nil, fmt.Errorf("invalid Kling output duration")
+				}
+				facts["seconds"] = n
+				foundOutputDuration = true
+				break
+			}
+		}
+		if !foundOutputDuration {
+			return nil, fmt.Errorf("Kling video output duration is missing")
 		}
 		if duration := root.Get("data.0.usage.input_duration"); duration.Exists() {
 			n, err := numeric(duration)
-			if err != nil || n > 30 || n < 0 {
-				return nil, fmt.Errorf("invalid Kling 4.0 input duration")
+			if err != nil || n > maxDuration || n < 0 {
+				return nil, fmt.Errorf("invalid Kling input duration")
 			}
 			facts["input_video_seconds"] = n
 			if n > 0 {

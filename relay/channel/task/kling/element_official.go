@@ -68,29 +68,29 @@ type OfficialTagItem struct {
 
 // CreateOfficialElementRequest represents the request to create a custom element
 type CreateOfficialElementRequest struct {
-	ElementName        string                        `json:"element_name"`
-	ElementDescription string                        `json:"element_description"`
-	ReferenceType      string                        `json:"reference_type"`
-	ElementImageList   *OfficialElementImageList     `json:"element_image_list,omitempty"`
-	ElementVideoList   *OfficialElementVideoList     `json:"element_video_list,omitempty"`
-	ElementVoiceId     string                        `json:"element_voice_id,omitempty"`
-	TagList            []OfficialTagItem             `json:"tag_list,omitempty"`
-	CallbackUrl        string                        `json:"callback_url,omitempty"`
-	ExternalTaskId     string                        `json:"external_task_id,omitempty"`
+	ElementName        string                    `json:"element_name"`
+	ElementDescription string                    `json:"element_description"`
+	ReferenceType      string                    `json:"reference_type"`
+	ElementImageList   *OfficialElementImageList `json:"element_image_list,omitempty"`
+	ElementVideoList   *OfficialElementVideoList `json:"element_video_list,omitempty"`
+	ElementVoiceId     string                    `json:"element_voice_id,omitempty"`
+	TagList            []OfficialTagItem         `json:"tag_list,omitempty"`
+	CallbackUrl        string                    `json:"callback_url,omitempty"`
+	ExternalTaskId     string                    `json:"external_task_id,omitempty"`
 }
 
 // OfficialElementResult represents a single element in the response
 type OfficialElementResult struct {
-	ElementId          int64                         `json:"element_id"`
-	ElementName        string                        `json:"element_name"`
-	ElementDescription string                        `json:"element_description"`
-	ReferenceType      string                        `json:"reference_type"`
-	ElementImageList   *OfficialElementImageList     `json:"element_image_list,omitempty"`
-	ElementVideoList   *OfficialElementVideoList     `json:"element_video_list,omitempty"`
-	ElementVoiceInfo   *OfficialElementVoiceInfo     `json:"element_voice_info,omitempty"`
-	TagList            []OfficialTagItem             `json:"tag_list,omitempty"`
-	OwnedBy            string                        `json:"owned_by"`
-	Status             string                        `json:"status"`
+	ElementId          int64                     `json:"element_id"`
+	ElementName        string                    `json:"element_name"`
+	ElementDescription string                    `json:"element_description"`
+	ReferenceType      string                    `json:"reference_type"`
+	ElementImageList   *OfficialElementImageList `json:"element_image_list,omitempty"`
+	ElementVideoList   *OfficialElementVideoList `json:"element_video_list,omitempty"`
+	ElementVoiceInfo   *OfficialElementVoiceInfo `json:"element_voice_info,omitempty"`
+	TagList            []OfficialTagItem         `json:"tag_list,omitempty"`
+	OwnedBy            string                    `json:"owned_by"`
+	Status             string                    `json:"status"`
 }
 
 // CreateOfficialElementResponse represents the response from creating an element
@@ -99,8 +99,8 @@ type CreateOfficialElementResponse struct {
 	Message   string `json:"message"`
 	RequestId string `json:"request_id"`
 	Data      struct {
-		TaskId     string `json:"task_id"`
-		TaskInfo   struct {
+		TaskId   string `json:"task_id"`
+		TaskInfo struct {
 			ExternalTaskId string `json:"external_task_id"`
 		} `json:"task_info"`
 		TaskStatus string `json:"task_status"`
@@ -124,7 +124,7 @@ type QueryOfficialElementResponse struct {
 		TaskResult struct {
 			Elements []OfficialElementResult `json:"elements"`
 		} `json:"task_result"`
-		FinalUnitDeduction string `json:"final_unit_deduction"`
+		FinalUnitDeduction    string `json:"final_unit_deduction"`
 		FinalBalanceDeduction struct {
 			Quota string `json:"quota"`
 		} `json:"final_balance_deduction"`
@@ -184,6 +184,32 @@ func NewOfficialElementClient(apiKey, baseURL, proxy string) *OfficialElementCli
 func (c *OfficialElementClient) createAuthToken() (string, error) {
 	adaptor := &TaskAdaptor{apiKey: c.apiKey}
 	return adaptor.createJWTTokenWithKey(c.apiKey)
+}
+
+// DoRaw forwards an official Kling general API call and returns the upstream response.
+func (c *OfficialElementClient) DoRaw(method, path string, body []byte) (*http.Response, error) {
+	var reqBody io.Reader
+	if len(body) > 0 {
+		reqBody = bytes.NewReader(body)
+	}
+	url := strings.TrimRight(c.baseURL, "/") + path
+	req, err := http.NewRequest(method, url, reqBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "create request failed")
+	}
+	token, err := c.createAuthToken()
+	if err != nil {
+		return nil, errors.Wrap(err, "create auth token failed")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("User-Agent", "kling-sdk/1.0")
+	client, err := service.GetHttpClientWithProxy(c.proxy)
+	if err != nil {
+		return nil, errors.Wrap(err, "get http client failed")
+	}
+	return client.Do(req)
 }
 
 // doRequest performs an HTTP request with authentication

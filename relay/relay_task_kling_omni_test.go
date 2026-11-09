@@ -73,16 +73,29 @@ func TestBuildKlingMotionControl30TaskResponseHidesInternalData(t *testing.T) {
 	assert.Len(t, response, 7)
 }
 
-func TestBuildKling40TaskResponseIncludesInputVideoDuration(t *testing.T) {
+func TestKling40OfficialTaskResponseUsesUpstreamFields(t *testing.T) {
 	task := &model.Task{
-		TaskID:      "task_public",
-		Status:      model.TaskStatusSuccess,
-		Properties:  model.Properties{OriginModelName: "kling-4.0"},
-		PrivateData: model.TaskPrivateData{ResultURL: "https://example.com/result.mp4"},
-		Data:        []byte(`{"request_id":"request-40","data":[{"outputs":[{"type":"video","duration":"10"}],"usage":{"input_duration":"8.03"}}]}`),
+		TaskID:         "task_public",
+		ExternalTaskID: "caller-1",
+		Status:         model.TaskStatusSuccess,
+		SubmitTime:     1781080778,
+		Properties:     model.Properties{OriginModelName: "kling-4.0"},
+		PrivateData:    model.TaskPrivateData{ResultURL: "https://example.com/result.mp4"},
+		Data:           []byte(`{"request_id":"request-40","data":[{"id":"upstream-1","status":"succeeded","create_time":1781080778802,"update_time":1781080794151,"outputs":[{"type":"video","id":"vid","url":"https://example.com/result.mp4","duration":"10.2"}],"usage":{"input_duration":"8.03","output_duration":"10"},"billing":[{"charge_type":"cash","amount":"1.57","currency":"USD"}]}]}`),
 	}
-	response := BuildKlingVideo30TaskResponse(task)
-	assert.Equal(t, map[string]string{"input_duration": "8.03"}, response["usage"])
-	assert.Equal(t, 10.0, response["duration"])
-	assert.NotContains(t, response, "data")
+	response := KlingOfficialTaskList("query-1", []*model.Task{task})
+	assert.Equal(t, 0, response["code"])
+	assert.Equal(t, "query-1", response["request_id"])
+	items := response["data"].([]any)
+	requireItem := items[0].(map[string]any)
+	assert.Equal(t, "task_public", requireItem["id"])
+	assert.Equal(t, "succeeded", requireItem["status"])
+	assert.Equal(t, "caller-1", requireItem["external_id"])
+	assert.Equal(t, int64(1781080778802), requireItem["create_time"])
+	usage := requireItem["usage"].(map[string]any)
+	assert.Equal(t, "8.03", usage["input_duration"])
+	assert.Equal(t, "10", usage["output_duration"])
+	assert.NotContains(t, requireItem, "task_id")
+	assert.NotContains(t, requireItem, "cost")
+	assert.Len(t, requireItem["billing"].([]any), 1)
 }

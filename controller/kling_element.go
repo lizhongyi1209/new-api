@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -56,17 +57,20 @@ func klingOfficialElementClient(channel *model.Channel, key string) *kling.Offic
 
 // CreateKlingOfficialElementRequest is the inbound JSON for creating an official element.
 type CreateKlingOfficialElementRequest struct {
-	ChannelId          int      `json:"channel_id"`
-	ElementName        string   `json:"element_name"`
-	ElementDescription string   `json:"element_description"`
-	ReferenceType      string   `json:"reference_type"`
-	FrontalImage       string   `json:"frontal_image"`
-	ReferImages        []string `json:"refer_images"`
-	VideoList          []string `json:"video_list"`
-	ElementVoiceId     string   `json:"element_voice_id"`
-	TagIds             []string `json:"tag_ids"`
-	CallbackUrl        string   `json:"callback_url"`
-	ExternalTaskId     string   `json:"external_task_id"`
+	ChannelId          int                             `json:"channel_id"`
+	ElementName        string                          `json:"element_name"`
+	ElementDescription string                          `json:"element_description"`
+	ReferenceType      string                          `json:"reference_type"`
+	ElementImageList   *kling.OfficialElementImageList `json:"element_image_list"`
+	ElementVideoList   *kling.OfficialElementVideoList `json:"element_video_list"`
+	FrontalImage       string                          `json:"frontal_image"`
+	ReferImages        []string                        `json:"refer_images"`
+	VideoList          []string                        `json:"video_list"`
+	ElementVoiceId     string                          `json:"element_voice_id"`
+	TagList            []kling.OfficialTagItem         `json:"tag_list"`
+	TagIds             []string                        `json:"tag_ids"`
+	CallbackUrl        string                          `json:"callback_url"`
+	ExternalTaskId     string                          `json:"external_task_id"`
 }
 
 func CreateKlingOfficialElement(c *gin.Context) {
@@ -85,10 +89,31 @@ func CreateKlingOfficialElement(c *gin.Context) {
 	if req.ReferenceType == "" {
 		req.ReferenceType = kling.OfficialReferenceTypeImage
 	}
+	if req.ElementImageList != nil {
+		if req.FrontalImage == "" {
+			req.FrontalImage = req.ElementImageList.FrontalImage
+		}
+		if len(req.ReferImages) == 0 {
+			for _, image := range req.ElementImageList.ReferImages {
+				req.ReferImages = append(req.ReferImages, image.ImageUrl)
+			}
+		}
+	}
+	if req.ElementVideoList != nil && len(req.VideoList) == 0 {
+		for _, video := range req.ElementVideoList.ReferVideos {
+			req.VideoList = append(req.VideoList, video.VideoUrl)
+		}
+	}
 
-	// Validate reference assets
+	// Validate reference assets. Official nested image lists are forwarded as-is;
+	// the flattened fields keep the existing local image check.
 	if req.ReferenceType == kling.OfficialReferenceTypeImage {
-		if msg := validateKlingOfficialImageRefs(&req); msg != "" {
+		if req.ElementImageList != nil {
+			if msg := validateOfficialImageList(req.ElementImageList); msg != "" {
+				common.ApiErrorMsg(c, msg)
+				return
+			}
+		} else if msg := validateKlingOfficialImageRefs(&req); msg != "" {
 			common.ApiErrorMsg(c, msg)
 			return
 		}
@@ -107,9 +132,12 @@ func CreateKlingOfficialElement(c *gin.Context) {
 		ElementVoiceId:     req.ElementVoiceId,
 		CallbackUrl:        req.CallbackUrl,
 		ExternalTaskId:     req.ExternalTaskId,
+		ElementImageList:   req.ElementImageList,
+		ElementVideoList:   req.ElementVideoList,
+		TagList:            req.TagList,
 	}
 
-	if req.ReferenceType == kling.OfficialReferenceTypeImage {
+	if klingReq.ElementImageList == nil && req.ReferenceType == kling.OfficialReferenceTypeImage {
 		il := &kling.OfficialElementImageList{FrontalImage: req.FrontalImage}
 		for _, u := range req.ReferImages {
 			if strings.TrimSpace(u) != "" {
@@ -117,7 +145,7 @@ func CreateKlingOfficialElement(c *gin.Context) {
 			}
 		}
 		klingReq.ElementImageList = il
-	} else if req.ReferenceType == kling.OfficialReferenceTypeVideo {
+	} else if klingReq.ElementVideoList == nil && req.ReferenceType == kling.OfficialReferenceTypeVideo {
 		vl := &kling.OfficialElementVideoList{}
 		for _, u := range req.VideoList {
 			if strings.TrimSpace(u) != "" {
@@ -126,10 +154,22 @@ func CreateKlingOfficialElement(c *gin.Context) {
 		}
 		klingReq.ElementVideoList = vl
 	}
-
-	for _, id := range req.TagIds {
-		if strings.TrimSpace(id) != "" {
-			klingReq.TagList = append(klingReq.TagList, kling.OfficialTagItem{TagId: id})
+	if len(klingReq.TagList) == 0 {
+		for _, id := range req.TagIds {
+			if strings.TrimSpace(id) != "" {
+				klingReq.TagList = append(klingReq.TagList, kling.OfficialTagItem{TagId: id})
+			}
+		}
+	}
+	if klingReq.ElementImageList != nil && req.FrontalImage == "" {
+		req.FrontalImage = klingReq.ElementImageList.FrontalImage
+		for _, image := range klingReq.ElementImageList.ReferImages {
+			req.ReferImages = append(req.ReferImages, image.ImageUrl)
+		}
+	}
+	if klingReq.ElementVideoList != nil && len(req.VideoList) == 0 {
+		for _, video := range klingReq.ElementVideoList.ReferVideos {
+			req.VideoList = append(req.VideoList, video.VideoUrl)
 		}
 	}
 
@@ -173,7 +213,23 @@ func CreateKlingOfficialElement(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, element)
+	c.JSON(http.StatusOK, result)
+}
+
+func validateOfficialImageList(list *kling.OfficialElementImageList) string {
+	if list == nil || strings.TrimSpace(list.FrontalImage) == "" {
+		return "缺少正面参考图 (frontal_image)"
+	}
+	count := 0
+	for _, image := range list.ReferImages {
+		if strings.TrimSpace(image.ImageUrl) != "" {
+			count++
+		}
+	}
+	if count < 1 || count > 3 {
+		return fmt.Sprintf("其他参考图需 1~3 张，当前 %d 张", count)
+	}
+	return ""
 }
 
 func validateKlingOfficialImageRefs(req *CreateKlingOfficialElementRequest) string {
@@ -231,7 +287,7 @@ func ListKlingOfficialElements(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
-		common.ApiSuccess(c, result)
+		c.JSON(http.StatusOK, result)
 		return
 	}
 
@@ -289,7 +345,7 @@ func ListKlingOfficialPresetsElements(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, result)
+	c.JSON(http.StatusOK, result)
 }
 
 // ListMyKlingOfficialElements returns the Kling official elements owned by the current token's account.
@@ -356,7 +412,7 @@ func QueryKlingOfficialElement(c *gin.Context) {
 		}
 		element.Update()
 
-		common.ApiSuccess(c, result)
+		c.JSON(http.StatusOK, result)
 		return
 	}
 
@@ -378,7 +434,7 @@ func QueryKlingOfficialElement(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, result)
+	c.JSON(http.StatusOK, result)
 }
 
 // RefreshKlingOfficialElement re-queries Kling for the element's latest status and updates the local row.
@@ -469,7 +525,7 @@ func DeleteKlingOfficialElementByBody(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
-		common.ApiSuccess(c, result)
+		c.JSON(http.StatusOK, result)
 		return
 	}
 
@@ -496,9 +552,10 @@ func DeleteKlingOfficialElementByBody(c *gin.Context) {
 		return
 	}
 
-	common.ApiSuccess(c, gin.H{
-		"code":    0,
-		"message": "success",
+	c.JSON(http.StatusOK, gin.H{
+		"code":       0,
+		"message":    "",
+		"request_id": klingRequestID(c),
 		"data": gin.H{
 			"task_id":     element.JobId,
 			"task_status": "succeed",
