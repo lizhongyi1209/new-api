@@ -397,7 +397,8 @@ export function DynamicPricingBreakdown({
       ) {
         fields.push({
           id: 'constant',
-          label: 'Additional charge',
+          label:
+            fields.length === 0 ? 'Price per request' : 'Additional charge',
           labelKind: 'i18n',
           unit: 'request',
           value: (tier: BreakdownTier) =>

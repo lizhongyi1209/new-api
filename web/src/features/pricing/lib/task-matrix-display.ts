@@ -57,8 +57,9 @@ export function getTaskMatrixDisplayTiers(
 }
 
 /** A usage price that is zero in every tier is left out while another usage
- * price is set, so a plugin field the model does not bill on is not listed as
- * free. A model priced at zero throughout keeps its zero prices.
+ * price or a fixed per-request price is set, so a field the model does not bill
+ * on is not listed as free. A model priced at zero throughout keeps its zero
+ * prices.
  */
 export function getTaskPricingDisplayTiers(
   expression: string | null | undefined,
@@ -70,7 +71,9 @@ export function getTaskPricingDisplayTiers(
       Object.keys(tier.unitPrices).filter((field) => tier.unitPrices[field] > 0)
     )
   )
-  if (pricedFields.size === 0) return tiers
+  if (pricedFields.size === 0 && !tiers.some((tier) => tier.constant > 0)) {
+    return tiers
+  }
   return tiers.map((tier) => ({
     ...tier,
     unitPrices: Object.fromEntries(

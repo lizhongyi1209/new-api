@@ -274,3 +274,67 @@ func TestNativeVideoCompletionRejectsMissingOrInvalidUsage(t *testing.T) {
 	assert.Error(t, Validate(ForMeter(Kling).Schema, map[string]any{"units": math.Inf(1)}))
 	assert.Error(t, Validate(ForMeter(Seedance).Schema, map[string]any{"tokens": -1}))
 }
+
+func TestOmniFlash12UsageFactsSupportResolutionAndEditing(t *testing.T) {
+	meta := ForModel(constant.ChannelTypeOpenAI, "omni_flash-1.2")
+	require.Equal(t, OmniFlash, meta.Meter)
+	assert.NotContains(t, meta.Schema, "size", "output size does not change the price and must not expand the pricing matrix")
+	assert.Equal(t, Sora, ForModel(constant.ChannelTypeOpenAI, "sora-2").Meter)
+	// The flat per-call form emitted by the visual pricing matrix.
+	expression := `u("operation") == "generate" && u("resolution") == "720p" ? tier("generate·720p", 1 + u("seconds") * 0) : u("operation") == "generate" && u("resolution") == "1080p" ? tier("generate·1080p", 1 + u("seconds") * 0) : u("operation") == "generate" && u("resolution") == "4k" ? tier("generate·4k", 1.5 + u("seconds") * 0) : u("operation") == "edit" && u("resolution") == "720p" ? tier("edit·720p", 1.5 + u("seconds") * 0) : u("operation") == "edit" && u("resolution") == "1080p" ? tier("edit·1080p", 1.5 + u("seconds") * 0) : tier("edit·4k", 2 + u("seconds") * 0)`
+	require.NoError(t, billing_setting.SmokeTestTaskExpr(expression, meta.Schema))
+
+	for _, tc := range []struct {
+		name          string
+		request       relaycommon.TaskSubmitReq
+		action        string
+		wantFacts     map[string]any
+		wantCost      float64
+		wantCostAfter float64
+	}{
+		{
+			name:      "default generation",
+			request:   relaycommon.TaskSubmitReq{Model: "omni_flash-1.2", Duration: 8},
+			action:    constant.TaskActionTextGenerate,
+			wantFacts: map[string]any{"seconds": float64(8), "resolution": "720p", "operation": "generate"},
+			wantCost:  1,
+		},
+		{
+			name:      "4k generation normalizes case",
+			request:   relaycommon.TaskSubmitReq{Model: "omni_flash-1.2", Resolution: "4K", Duration: 10},
+			action:    constant.TaskActionTextGenerate,
+			wantFacts: map[string]any{"seconds": float64(10), "resolution": "4k", "operation": "generate"},
+			wantCost:  1.5,
+		},
+		{
+			name:      "1080p edit from a source video",
+			request:   relaycommon.TaskSubmitReq{Model: "omni_flash-1.2", Resolution: "1080p", VideoUrl: "https://example.com/source.mp4"},
+			action:    constant.TaskActionVideoEdit,
+			wantFacts: map[string]any{"seconds": float64(4), "resolution": "1080p", "operation": "edit"},
+			wantCost:  1.5,
+		},
+		{
+			name:      "4k edit",
+			request:   relaycommon.TaskSubmitReq{Model: "omni_flash-1.2", Resolution: "4k", SourceVideoUrl: "https://example.com/source.mp4"},
+			action:    constant.TaskActionTextGenerate,
+			wantFacts: map[string]any{"seconds": float64(4), "resolution": "4k", "operation": "edit"},
+			wantCost:  2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			facts, err := Estimate(meta, tc.request, tc.action)
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantFacts, facts)
+			cost, _, err := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: facts})
+			require.NoError(t, err)
+			assert.InDelta(t, tc.wantCost, cost, 1e-9)
+		})
+	}
+
+	// Completion without size or resolution keeps the frozen request facts.
+	actual, err := Complete(meta.Meter, map[string]any{"seconds": 8, "resolution": "720p", "operation": "generate"}, []byte(`{"status":"completed","model":"omni_flash-1.2","output_url":"https://example.com/v.mp4"}`), &relaycommon.TaskInfo{})
+	require.NoError(t, err)
+	assert.Empty(t, actual)
+	_, err = Estimate(meta, relaycommon.TaskSubmitReq{Model: "omni_flash-1.2", Resolution: "8k"}, constant.TaskActionTextGenerate)
+	assert.Error(t, err)
+}

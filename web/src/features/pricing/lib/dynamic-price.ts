@@ -325,11 +325,13 @@ export function getDynamicPriceEntries(
       ]
     })
     if (tier.constant > 0) {
+      // Without usage prices the constant is the whole per-request price.
+      const isPerCall = usageEntries.length === 0
       usageEntries.push({
         key: 'constant',
         field: 'constant',
-        label: 'Additional charge',
-        shortLabel: 'Additional charge',
+        label: isPerCall ? 'Price per request' : 'Additional charge',
+        shortLabel: isPerCall ? 'Per-call' : 'Additional charge',
         labelKind: 'i18n',
         value: tier.constant,
         formatted: formatTaskUsageUnitPrice(tier.constant, options),
@@ -530,14 +532,26 @@ export function getDynamicPricingSummary(
       ]
     }
   }
+  // A task model priced only per request has no usage price to lead with;
+  // its fixed price is then the primary price.
+  const isTaskPerCall =
+    isTaskUsage &&
+    entries.length > 0 &&
+    entries.every((entry) => entry.unit === 'request')
   if (isTaskUsage) {
     const priceRanges = new Map<string, { min: number; max: number }>()
-    for (const [field] of getTaskNumberFields(model.billing_usage_schema)) {
+    const rangeFields = getTaskNumberFields(model.billing_usage_schema).map(
+      ([field]) => field
+    )
+    if (isTaskPerCall) rangeFields.push('constant')
+    for (const field of rangeFields) {
       let min = Number.POSITIVE_INFINITY
       let max = Number.NEGATIVE_INFINITY
       for (const taskTier of tiers) {
         if (!isTaskPricingTier(taskTier)) continue
-        const value = Number(taskTier.unitPrices[field])
+        const value = Number(
+          field === 'constant' ? taskTier.constant : taskTier.unitPrices[field]
+        )
         if (!Number.isFinite(value) || value < 0) continue
         min = Math.min(min, value)
         max = Math.max(max, value)
@@ -560,6 +574,22 @@ export function getDynamicPricingSummary(
       }
     })
   }
+  const isRequestEntry = (entry: DynamicPriceEntry) =>
+    entry.unit === 'request' || entry.unit === 'image'
+  let primaryEntries = entries.filter(
+    (entry) => isRequestEntry(entry) || PRIMARY_DYNAMIC_FIELDS.has(entry.field)
+  )
+  let secondaryEntries = entries.filter(
+    (entry) =>
+      !isRequestEntry(entry) && !PRIMARY_DYNAMIC_FIELDS.has(entry.field)
+  )
+  if (isTaskPerCall) {
+    primaryEntries = entries
+    secondaryEntries = []
+  } else if (isTaskUsage) {
+    primaryEntries = entries.filter((entry) => !isRequestEntry(entry))
+    secondaryEntries = entries.filter(isRequestEntry)
+  }
   const rawExpression = model.billing_expr || ''
 
   return {
@@ -570,26 +600,8 @@ export function getDynamicPricingSummary(
     isSpecialExpression: rawExpression.trim().length > 0 && tiers.length === 0,
     rawExpression,
     entries,
-    primaryEntries: isTaskUsage
-      ? entries.filter(
-          (entry) => entry.unit !== 'request' && entry.unit !== 'image'
-        )
-      : entries.filter(
-          (entry) =>
-            entry.unit === 'request' ||
-            entry.unit === 'image' ||
-            PRIMARY_DYNAMIC_FIELDS.has(entry.field)
-        ),
-    secondaryEntries: isTaskUsage
-      ? entries.filter(
-          (entry) => entry.unit === 'request' || entry.unit === 'image'
-        )
-      : entries.filter(
-          (entry) =>
-            entry.unit !== 'request' &&
-            entry.unit !== 'image' &&
-            !PRIMARY_DYNAMIC_FIELDS.has(entry.field)
-        ),
+    primaryEntries,
+    secondaryEntries,
     isTaskUsage,
     isTimePricing: timeTiers !== null,
     ...(isMixedBilling ? { isMixedBilling } : {}),

@@ -20,7 +20,7 @@ import assert from 'node:assert/strict'
 
 import { describe, expect, test } from 'vitest'
 
-import { parseTiersFromExpr } from '../lib/billing-expr'
+import { parseTiersFromExpr, type ParsedTaskTier } from '../lib/billing-expr'
 import { getBillingModeLabelKey } from '../lib/billing-mode'
 import {
   getCardExamplePrice,
@@ -327,6 +327,54 @@ describe('task dynamic pricing', () => {
 
     assert.equal(isUnconfiguredTaskUsageModel(model), false)
     assert.ok(getDynamicPricingSummary(model, summaryOptions))
+  })
+
+  test('leads with the per-request price when task tiers only charge per call', () => {
+    const model = pricingModel({
+      billing_mode: 'tiered_expr',
+      billing_expr:
+        'u("operation") == "generate" && u("resolution") == "720p" ? tier("generate·720p", 1 + u("seconds") * 0) : u("operation") == "generate" && u("resolution") == "4k" ? tier("generate·4k", 1.5 + u("seconds") * 0) : u("operation") == "edit" && u("resolution") == "720p" ? tier("edit·720p", 1.5 + u("seconds") * 0) : tier("edit·4k", 2 + u("seconds") * 0)',
+      billing_usage_schema: {
+        seconds: { type: 'number', unit: 'second' },
+        resolution: { enum: ['720p', '4k'] },
+        operation: { enum: ['generate', 'edit'] },
+      },
+    })
+
+    const summary = getDynamicPricingSummary(model, summaryOptions)
+
+    assert.ok(summary)
+    assert.equal(summary.isSpecialExpression, false)
+    const taskTiers = summary.tiers as ParsedTaskTier[]
+    assert.deepEqual(
+      taskTiers.map((tier) => tier.constant),
+      [1, 1.5, 1.5, 2]
+    )
+    assert.ok(
+      taskTiers.every((tier) => Object.keys(tier.unitPrices).length === 0),
+      'a zero per-second price is not listed as free'
+    )
+    assert.equal(summary.primaryEntries.length, 1)
+    assert.equal(summary.primaryEntries[0]?.shortLabel, 'Per-call')
+    assert.equal(summary.primaryEntries[0]?.unit, 'request')
+    assert.match(summary.primaryEntries[0]?.formattedRange ?? '', /\S – \S/)
+    assert.deepEqual(summary.secondaryEntries, [])
+  })
+
+  test('keeps a fixed charge secondary when task tiers also price usage', () => {
+    const model = pricingModel({
+      billing_mode: 'tiered_expr',
+      billing_expr: 'tier("base", 0.5 + u("seconds") * 0.4)',
+      billing_usage_schema: {
+        seconds: { type: 'number', unit: 'second' },
+      },
+    })
+
+    const summary = getDynamicPricingSummary(model, summaryOptions)
+
+    assert.ok(summary)
+    assert.equal(summary.primaryEntries[0]?.unit, 'second')
+    assert.equal(summary.secondaryEntries[0]?.shortLabel, 'Additional charge')
   })
 
   test('leaves fixed per-request pricing configured when a usage schema is present', () => {

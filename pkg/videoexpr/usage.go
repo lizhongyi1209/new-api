@@ -242,6 +242,19 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 			size = "720x1280"
 		}
 		facts = map[string]any{"seconds": seconds, "size": size}
+	case OmniFlash:
+		if seconds == 0 {
+			seconds = 4
+		}
+		resolution := strings.TrimSpace(req.Resolution)
+		if resolution == "" {
+			resolution = "720p"
+		}
+		operation := "generate"
+		if req.VideoUrl != "" || req.SourceVideoUrl != "" || action == constant.TaskActionVideoEdit {
+			operation = "edit"
+		}
+		facts = map[string]any{"seconds": seconds, "resolution": normalizeEnum(resolution, meta.Schema["resolution"].Enum), "operation": operation}
 	}
 	return facts, Validate(meta.Schema, facts)
 }
@@ -412,7 +425,7 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 			return nil, fmt.Errorf("video tokens exceed total output tokens")
 		}
 		facts = map[string]any{"input_tokens": result.PromptTokens, "text_output_tokens": result.CompletionTokens - video, "video_output_tokens": video}
-	case Grok, Veo, Sora:
+	case Grok, Veo, Sora, OmniFlash:
 		durationPaths := []string{"video.duration", "metadata.video.duration", "duration_seconds", "seconds", "duration", "metadata.duration"}
 		if meter == Grok && submitted["operation"] == "extend" {
 			// Extension bills the generated portion. video.duration includes the

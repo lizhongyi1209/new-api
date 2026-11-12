@@ -21,6 +21,7 @@ const (
 	Omni         = "gemini_omni"
 	Veo          = "veo"
 	Sora         = "sora"
+	OmniFlash    = "omni_flash"
 )
 
 type Metadata struct {
@@ -87,8 +88,10 @@ func ForModel(channelType int, model string) Metadata {
 			meter = Grok
 		case strings.HasPrefix(name, "veo-"):
 			meter = Veo
-		case strings.HasPrefix(name, "sora"), strings.HasPrefix(name, "omni_flash_"):
+		case strings.HasPrefix(name, "sora"):
 			meter = Sora
+		case strings.HasPrefix(name, "omni_flash_"), strings.HasPrefix(name, "omni_flash-"):
+			meter = OmniFlash
 		}
 	}
 	if meter == "" {
@@ -177,6 +180,16 @@ func ForMeter(meter string) Metadata {
 		meta.Schema["seconds"] = number("second", "Output video duration", "输出视频时长")
 		meta.Schema["size"] = jsplugin.UsageFieldSchema{Enum: []string{"720x1280", "1280x720", "1792x1024", "1024x1792"}, Description: jsplugin.LocalizedText{"en": "Output video dimensions", "zh": "输出视频尺寸"}}
 		meta.Examples = []jsplugin.UsageExample{{Label: "720x1280 · 4s", Facts: map[string]any{"seconds": 4, "size": "720x1280"}}}
+	case OmniFlash:
+		// Omni Flash prices by operation and resolution. Output dimensions do
+		// not affect the price, so size stays out of the pricing matrix.
+		meta.Schema["seconds"] = number("second", "Output video duration", "输出视频时长")
+		meta.Schema["resolution"] = resolution("720p", "1080p", "4k")
+		meta.Schema["operation"] = jsplugin.UsageFieldSchema{Enum: []string{"generate", "edit"}, Description: jsplugin.LocalizedText{"en": "Video operation", "zh": "视频操作"}, EnumLabels: map[string]jsplugin.LocalizedText{"generate": {"en": "Generate", "zh": "生成"}, "edit": {"en": "Edit", "zh": "编辑"}}}
+		meta.Examples = []jsplugin.UsageExample{
+			{Label: "720p · generate", Facts: map[string]any{"seconds": 8, "resolution": "720p", "operation": "generate"}},
+			{Label: "4k · edit", Facts: map[string]any{"seconds": 8, "resolution": "4k", "operation": "edit"}},
+		}
 	default:
 		return Metadata{}
 	}

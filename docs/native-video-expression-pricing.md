@@ -12,11 +12,11 @@
 | 61 Xinhankr | seedance-2.0、Fast、Mini | 同上 |
 | 50 Kling | v2.6、v3、v3 Omni、3.0，标准/专业/音频/4K/时长/动作控制变体 | `units`，保留上游资源扣减的小数精度 |
 | 58 Tencent Video | kling-v2-6-t、kling-v3-t、Omni、动作控制变体 | `units` |
-| 50 Kling 4.0 | kling-4.0、kling-4.0-flash 文生视频、图生视频、Omni | `seconds`、`input_video_seconds`、`video_input`、`resolution`；公式见 `docs/kling-4-video.md` |
+| 50 Kling 4.0 | kling-4.0、kling-4.0-flash 文生视频、图生视频、Omni | `billed_seconds`（已按视频输入规则换算的计费时长）、`seconds`、`input_video_seconds`、`video_input`、`resolution`；公式见 `docs/kling-4-video.md` |
 | 35 MiniMax、60 TokenMart | MiniMax-H3 / MiniMax-H3-MAX | `seconds`、`input_video_seconds`、`input_images`、`resolution` |
 | 48 xAI、60 TokenMart、1 OpenAI 兼容 | grok-imagine-video、1.0、1.5、1.5-preview | `seconds`、`input_images`、`resolution`、`operation` |
 | 24 Gemini | gemini-omni-flash-preview | `input_tokens`、`text_output_tokens`、`video_output_tokens` |
-| 1 OpenAI 兼容 | veo-3.1、omni_flash_abra_edit、omni_flash_10s | Veo：`seconds`、`resolution`；Omni 兼容入口：`seconds`、`size` |
+| 1 OpenAI 兼容 | veo-3.1、omni_flash-1.2、omni_flash_abra_edit、omni_flash_10s、sora | Veo：`seconds`、`resolution`；Omni Flash：`seconds`、`resolution`、`operation`（`generate` / `edit`，传入 `video_url` 或 `source_video_url` 即为编辑）；Sora：`seconds`、`size` |
 
 同一公开模型名映射到不同用量体系时，保存会拒绝不兼容的配置，需要使用不同的计费模型名。
 模型映射通过同一个渠道的映射链解析，价格仍保存到公开模型名。已有插件定价继续使用插件自己的配置。
