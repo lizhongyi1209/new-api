@@ -89,7 +89,7 @@ type imageRoute struct {
 // imageRoutes 是统一生图端点的分发注册表，按顺序匹配，第一条命中即生效。
 var imageRoutes = []imageRoute{
 	{match: isGeminiImageModelName, provider: imageProviderGeminiNative, action: "generateContent"},
-	{match: isSeedream5ProModelName, provider: imageProviderOpenAIImage, action: "seedreamGenerate"},
+	{match: isSeedreamModelName, provider: imageProviderOpenAIImage, action: "seedreamGenerate"},
 	{match: isTencentVodMJModelName, provider: imageProviderTencentVodMJ, action: "vodMJGenerate"},
 }
 
@@ -118,6 +118,11 @@ func isGeminiImageModelName(modelName string) bool {
 
 func isNanoBananaModelName(modelName string) bool {
 	return strings.HasPrefix(modelName, "nano-banana")
+}
+
+func isSeedreamModelName(modelName string) bool {
+	normalizedModelName := strings.ToLower(strings.TrimSpace(modelName))
+	return strings.HasPrefix(normalizedModelName, "dola-seedream")
 }
 
 func isSeedream5ProModelName(modelName string) bool {
@@ -1518,7 +1523,7 @@ func processGenerateImageOpenAI(ctx context.Context, c *gin.Context, task *model
 
 	var imageReq *dto.ImageRequest
 	var err error
-	seedreamRequest := task.Action == "seedreamGenerate" || isSeedream5ProModelName(task.Properties.OriginModelName)
+	seedreamRequest := task.Action == "seedreamGenerate" || isSeedreamModelName(task.Properties.OriginModelName)
 	if seedreamRequest {
 		// Seedream accepts text-to-image and image-to-image on the same JSON
 		// generations endpoint. Keep public URLs intact and map images -> image.

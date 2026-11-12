@@ -790,9 +790,15 @@ func TestAsyncOpenAIImageEditResponseFormat(t *testing.T) {
 }
 
 func TestSeedreamRouteUsesSynchronousGenerationsWorker(t *testing.T) {
-	action, isGeminiNative := ResolveImageRoute("dola-seedream-5-0-pro-260628-ep", 1)
-	assert.Equal(t, "seedreamGenerate", action)
-	assert.False(t, isGeminiNative)
+	for _, model := range []string{
+		"dola-seedream-5-0-pro-260628-ep",
+		"dola-seedream-5-5-261028-ep",
+		"DOLA-SEEDREAM-6-0-preview",
+	} {
+		action, isGeminiNative := ResolveImageRoute(model, 1)
+		assert.Equal(t, "seedreamGenerate", action, model)
+		assert.False(t, isGeminiNative, model)
+	}
 }
 
 func TestNewAsyncSeedreamImageRequestUsesImageArrayAndPreservesURLs(t *testing.T) {
