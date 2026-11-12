@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -847,6 +848,8 @@ func TaskModel2Dto(task *model.Task, includeUpstreamData bool) *dto.TaskDto {
 		} else {
 			data = nil
 		}
+	} else if !includeUpstreamData {
+		data, _ = redactUpstreamCharges(data)
 	}
 	return &dto.TaskDto{
 		ID:         task.ID,
@@ -870,6 +873,65 @@ func TaskModel2Dto(task *model.Task, includeUpstreamData bool) *dto.TaskDto {
 		Username:   task.Username,
 		Data:       data,
 	}
+}
+
+// upstreamChargeKeys name provider settlement fields: what the gateway pays
+// upstream (Kling billing and unit/balance deductions, Tencent VOD deductions).
+// Clients are billed by the gateway, so these never appear in client payloads.
+var upstreamChargeKeys = []string{"billing", "final_unit_deduction", "final_balance_deduction", "FinalUnitDeduction"}
+
+// redactUpstreamCharges removes upstream settlement fields at any depth while
+// leaving every other raw value byte-for-byte intact. It reports whether the
+// payload changed; a payload that cannot be re-encoded is dropped rather than
+// leaked.
+func redactUpstreamCharges(data common.RawMessage) (common.RawMessage, bool) {
+	var encoded []byte
+	var err error
+	switch common.GetJsonType(data) {
+	case "object":
+		var object map[string]common.RawMessage
+		if common.Unmarshal(data, &object) != nil {
+			return data, false
+		}
+		changed := false
+		for key, value := range object {
+			if slices.Contains(upstreamChargeKeys, key) {
+				delete(object, key)
+				changed = true
+				continue
+			}
+			if redacted, ok := redactUpstreamCharges(value); ok {
+				object[key] = redacted
+				changed = true
+			}
+		}
+		if !changed {
+			return data, false
+		}
+		encoded, err = common.Marshal(object)
+	case "array":
+		var items []common.RawMessage
+		if common.Unmarshal(data, &items) != nil {
+			return data, false
+		}
+		changed := false
+		for index, value := range items {
+			if redacted, ok := redactUpstreamCharges(value); ok {
+				items[index] = redacted
+				changed = true
+			}
+		}
+		if !changed {
+			return data, false
+		}
+		encoded, err = common.Marshal(items)
+	default:
+		return data, false
+	}
+	if err != nil {
+		return nil, true
+	}
+	return encoded, true
 }
 
 // BuildGrokVideoTaskResponse exposes the stable Grok deferred-video contract

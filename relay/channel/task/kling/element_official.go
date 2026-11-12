@@ -124,10 +124,8 @@ type QueryOfficialElementResponse struct {
 		TaskResult struct {
 			Elements []OfficialElementResult `json:"elements"`
 		} `json:"task_result"`
-		FinalUnitDeduction    string `json:"final_unit_deduction"`
-		FinalBalanceDeduction struct {
-			Quota string `json:"quota"`
-		} `json:"final_balance_deduction"`
+		// Upstream unit and balance deductions are deliberately not decoded:
+		// this struct is returned to clients, who must not see upstream costs.
 		CreatedAt int64 `json:"created_at"`
 		UpdatedAt int64 `json:"updated_at"`
 	} `json:"data"`

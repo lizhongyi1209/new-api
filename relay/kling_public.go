@@ -86,9 +86,6 @@ func klingOfficialTaskItem(task *model.Task) map[string]any {
 		if usage, ok := upstream["usage"].(map[string]any); ok && len(usage) > 0 {
 			item["usage"] = usage
 		}
-		if billing, ok := upstream["billing"].([]any); ok && len(billing) > 0 {
-			item["billing"] = billing
-		}
 	}
 	if _, ok := item["outputs"]; !ok && klingOfficialStatus(task.Status) == "succeeded" {
 		if url := task.GetResultURL(); url != "" {

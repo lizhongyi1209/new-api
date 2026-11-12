@@ -2662,12 +2662,12 @@
         </ul>
         <table>
           <tr><th>模型</th><th>条件</th><th>计费时长</th><th>720p</th><th>1080p</th></tr>
-          <tr><td>Kling 4.0</td><td>无输入视频</td><td>输出时长</td><td>¥1.0519 / 秒</td><td>¥1.5745 / 秒</td></tr>
-          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>¥0.6298 / 秒</td><td>¥0.9447 / 秒</td></tr>
-          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>¥0.6298 / 秒</td><td>¥0.9447 / 秒</td></tr>
-          <tr><td>Kling 4.0 Flash</td><td>无输入视频</td><td>输出时长</td><td>¥0.6298 / 秒</td><td>—</td></tr>
-          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>¥0.4221 / 秒</td><td>—</td></tr>
-          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>¥0.4221 / 秒</td><td>—</td></tr>
+          <tr><td>Kling 4.0</td><td>无输入视频</td><td>输出时长</td><td>¥1.05 / 秒</td><td>¥1.57 / 秒</td></tr>
+          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>¥0.63 / 秒</td><td>¥0.94 / 秒</td></tr>
+          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>¥0.63 / 秒</td><td>¥0.94 / 秒</td></tr>
+          <tr><td>Kling 4.0 Flash</td><td>无输入视频</td><td>输出时长</td><td>¥0.63 / 秒</td><td>—</td></tr>
+          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>¥0.42 / 秒</td><td>—</td></tr>
+          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>¥0.42 / 秒</td><td>—</td></tr>
         </table>
         <p>计价规则与可灵官方视频计价一致：<a href="https://kling.ai/document-api/pricing/base/video">Video pricing</a>。</p>
           </div>
@@ -2916,19 +2916,11 @@
       "usage": {
         "input_duration": "8.03",
         "output_duration": "10"
-      },
-      "billing": [
-        {
-          "charge_type": "cash",
-          "amount": "2.35",
-          "currency": "USD",
-          "list_price": "2.35"
-        }
-      ]
+      }
     }
   ]
 }</code></pre>
-        <p class="compact-note">示例中的 <code>billing</code> 为可灵上游返回的原始扣费信息，不代表本站扣费；本站按上方价格表结算，例如 1080p、无输入视频、输出 10 秒为 ¥1.5745 × 10。ID、链接、金额仅为示例。文生、图生、Omni 的单任务 GET（<code>kling-4.0</code> 与 <code>kling-4.0-flash</code>）返回同一结构，路径见本节开头。</p>
+        <p class="compact-note">响应不含 <code>billing</code> 字段；费用按上方价格表结算，例如 1080p、无输入视频、输出 10 秒为 ¥1.57 × 10 = ¥15.70。ID、链接仅为示例。文生、图生、Omni 的单任务 GET（<code>kling-4.0</code> 与 <code>kling-4.0-flash</code>）返回同一结构，路径见本节开头。</p>
           </div>
         </aside>
         </div>

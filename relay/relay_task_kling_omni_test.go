@@ -97,5 +97,5 @@ func TestKling40OfficialTaskResponseUsesUpstreamFields(t *testing.T) {
 	assert.Equal(t, "10", usage["output_duration"])
 	assert.NotContains(t, requireItem, "task_id")
 	assert.NotContains(t, requireItem, "cost")
-	assert.Len(t, requireItem["billing"].([]any), 1)
+	assert.NotContains(t, requireItem, "billing", "upstream charges must stay private")
 }

@@ -299,3 +299,16 @@ func TestValidateMotionControl30Request(t *testing.T) {
 		})
 	}
 }
+
+func TestOfficialElementQueryResponseOmitsUpstreamDeductions(t *testing.T) {
+	upstream := `{"code":0,"message":"SUCCEED","request_id":"r","data":{"task_id":"t1","task_status":"succeed","task_result":{"elements":[]},"final_unit_deduction":"2","final_balance_deduction":{"quota":"1.5"},"created_at":1,"updated_at":2}}`
+	var result QueryOfficialElementResponse
+	require.NoError(t, common.Unmarshal([]byte(upstream), &result))
+
+	encoded, err := common.Marshal(result)
+	require.NoError(t, err)
+
+	assert.Equal(t, "t1", result.Data.TaskId)
+	assert.NotContains(t, string(encoded), "final_unit_deduction")
+	assert.NotContains(t, string(encoded), "final_balance_deduction")
+}

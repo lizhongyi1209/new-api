@@ -195,6 +195,47 @@ func TestTaskModel2DtoNormalizesLegacyAction(t *testing.T) {
 	assert.Equal(t, "firstTailGenerate", task.Action)
 }
 
+func TestTaskModel2DtoRedactsUpstreamCharges(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want string
+	}{
+		{
+			name: "kling 3.0 unit and balance deductions",
+			data: `{"code":0,"data":{"created_at":1794483576829,"final_balance_deduction":{"list_price":"0","quota":"0"},"final_unit_deduction":"5.4","task_id":"949816616018772959","task_result":{"videos":[{"duration":"6.133","url":"https://example.com/v.mp4"}]}},"request_id":"r"}`,
+			want: `{"code":0,"data":{"created_at":1794483576829,"task_id":"949816616018772959","task_result":{"videos":[{"duration":"6.133","url":"https://example.com/v.mp4"}]}},"request_id":"r"}`,
+		},
+		{
+			name: "kling 4.0 billing inside task array",
+			data: `{"code":0,"data":[{"billing":[{"amount":"10","charge_type":"unit"}],"id":"949833309289971829","outputs":[{"duration":"10.041","type":"video"}],"usage":{"output_duration":"10"}}]}`,
+			want: `{"code":0,"data":[{"id":"949833309289971829","outputs":[{"duration":"10.041","type":"video"}],"usage":{"output_duration":"10"}}]}`,
+		},
+		{
+			name: "tencent vod deduction keeps large integers exact",
+			data: `{"Response":{"FinalUnitDeduction":"3","RequestId":"x","TaskSeq":9007199254740993}}`,
+			want: `{"Response":{"RequestId":"x","TaskSeq":9007199254740993}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			task := &model.Task{Data: []byte(tt.data)}
+
+			dtoTask := TaskModel2Dto(task, false)
+
+			assert.JSONEq(t, tt.want, string(dtoTask.Data))
+			assert.JSONEq(t, tt.data, string(task.Data), "stored upstream data must not change")
+		})
+	}
+}
+
+func TestTaskModel2DtoKeepsPayloadWithoutUpstreamCharges(t *testing.T) {
+	data := `{"status":"succeeded",  "usage":{"output_duration":"10"}}`
+	task := &model.Task{Data: []byte(data)}
+
+	assert.Equal(t, data, string(TaskModel2Dto(task, false).Data))
+}
+
 const mappingOrderSubmitPlugin = `
 export const meta = {apiVersion:1,key:"maporder",name:"Map Order",version:"1.0.0",author:{name:"Test"},models:["declared-model"],fetchMode:"per_task"};
 export function buildSubmitRequest(ctx) {
