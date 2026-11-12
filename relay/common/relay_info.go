@@ -1115,6 +1115,7 @@ type TaskSubmitReq struct {
 	DynamicMasks         json.RawMessage `json:"dynamic_masks,omitempty"`
 	CameraControl        json.RawMessage `json:"camera_control,omitempty"`
 	VideoUrl             string          `json:"video_url,omitempty"`
+	SourceVideoUrl       string          `json:"source_video_url,omitempty"`
 	CharacterOrientation string          `json:"character_orientation,omitempty"`
 	KeepOriginalSound    string          `json:"keep_original_sound,omitempty"`
 	VideoList            json.RawMessage `json:"video_list,omitempty"`
@@ -1140,6 +1141,7 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	aux := &struct {
 		Metadata json.RawMessage `json:"metadata,omitempty"`
 		Duration json.RawMessage `json:"duration,omitempty"`
+		Seconds  json.RawMessage `json:"seconds,omitempty"`
 		*Alias
 	}{
 		Alias: (*Alias)(t),
@@ -1159,6 +1161,18 @@ func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 				if v, err := strconv.Atoi(durationStr); err == nil {
 					t.Duration = v
 				}
+			}
+		}
+	}
+
+	if len(aux.Seconds) > 0 {
+		var secondsInt int
+		if err := common.Unmarshal(aux.Seconds, &secondsInt); err == nil {
+			t.Seconds = strconv.Itoa(secondsInt)
+		} else {
+			var secondsStr string
+			if err := common.Unmarshal(aux.Seconds, &secondsStr); err == nil {
+				t.Seconds = secondsStr
 			}
 		}
 	}

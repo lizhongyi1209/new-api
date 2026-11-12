@@ -140,3 +140,17 @@ func TestTaskDurationBounds(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateMultipartDirectCapturesResolution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	request := httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{"model":"omni_flash-1.2","prompt":"a city","resolution":"4k"}`))
+	request.Header.Set("Content-Type", "application/json")
+	context, _ := gin.CreateTestContext(httptest.NewRecorder())
+	context.Request = request
+	info := &RelayInfo{TaskRelayInfo: &TaskRelayInfo{}}
+
+	require.Nil(t, ValidateMultipartDirect(context, info))
+	storedReq, err := GetTaskRequest(context)
+	require.NoError(t, err)
+	assert.Equal(t, "4k", storedReq.Resolution)
+}

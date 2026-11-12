@@ -383,3 +383,13 @@ func TestInitChannelMetaResetsPerAttemptStreamStateAndPreservesRequestState(t *t
 func ptr[T any](value T) *T {
 	return &value
 }
+
+func TestTaskSubmitReqUnmarshalAcceptsNumericSeconds(t *testing.T) {
+	var req TaskSubmitReq
+	if err := json.Unmarshal([]byte(`{"model":"omni_flash-1.2","seconds":8}`), &req); err != nil {
+		t.Fatalf("unmarshal numeric seconds: %v", err)
+	}
+	if req.Seconds != "8" {
+		t.Fatalf("expected seconds to normalize to string 8, got %q", req.Seconds)
+	}
+}

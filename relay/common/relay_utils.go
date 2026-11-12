@@ -207,6 +207,12 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
 		return createTaskError(err, "invalid_json", http.StatusBadRequest, true)
 	}
+	var resolutionFields struct {
+		Resolution string `json:"resolution"`
+	}
+	if err := common.UnmarshalBodyReusable(c, &resolutionFields); err == nil {
+		req.Resolution = strings.TrimSpace(resolutionFields.Resolution)
+	}
 
 	prompt = req.Prompt
 	model = req.Model
