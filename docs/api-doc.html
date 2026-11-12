@@ -2655,21 +2655,21 @@
         <p>提示词用 <code>@id</code> 引用素材，并写明每项用途。可灵说明：<a href="https://kling.ai/document-api/api/video/4-0/text-to-video">文生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/image-to-video">图生视频</a>、<a href="https://kling.ai/document-api/api/video/4-0/video-omni">Omni</a>、<a href="https://kling.ai/document-api/api/video/4-0-flash/text-to-video">Flash</a>。</p>
         <h3 id="h-kling-price" class="sub">价格</h3>
         <ul>
-          <li>下表为美元单价。密钥若有分组倍率，再乘该倍率。</li>
+          <li>下表为人民币单价。密钥若有分组倍率，再乘该倍率。</li>
           <li>输出秒数用 <code>usage.output_duration</code>，不要用 <code>outputs[].duration</code>（成片时长，可能不同）。</li>
           <li>输入视频秒数用 <code>usage.input_duration</code>，含 <code>feature_video</code>、<code>base_video</code> 和视频角色主体。</li>
           <li>未传 <code>settings.duration</code> 时，先按最长输出预留：4.0 为 30 秒，Flash 为 20 秒。请求里有视频或主体时，输入时长也按同一上限预留。成功后按 <code>usage.output_duration</code> 和 <code>usage.input_duration</code> 结算。</li>
         </ul>
         <table>
           <tr><th>模型</th><th>条件</th><th>计费时长</th><th>720p</th><th>1080p</th></tr>
-          <tr><td>Kling 4.0</td><td>无输入视频</td><td>输出时长</td><td>$0.157 / 秒</td><td>$0.235 / 秒</td></tr>
-          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>$0.094 / 秒</td><td>$0.141 / 秒</td></tr>
-          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>$0.094 / 秒</td><td>$0.141 / 秒</td></tr>
-          <tr><td>Kling 4.0 Flash</td><td>无输入视频</td><td>输出时长</td><td>$0.094 / 秒</td><td>—</td></tr>
-          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>$0.063 / 秒</td><td>—</td></tr>
-          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>$0.063 / 秒</td><td>—</td></tr>
+          <tr><td>Kling 4.0</td><td>无输入视频</td><td>输出时长</td><td>¥1.0519 / 秒</td><td>¥1.5745 / 秒</td></tr>
+          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>¥0.6298 / 秒</td><td>¥0.9447 / 秒</td></tr>
+          <tr><td>Kling 4.0</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>¥0.6298 / 秒</td><td>¥0.9447 / 秒</td></tr>
+          <tr><td>Kling 4.0 Flash</td><td>无输入视频</td><td>输出时长</td><td>¥0.6298 / 秒</td><td>—</td></tr>
+          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 ≤ 输出时长</td><td>输出时长 × 2</td><td>¥0.4221 / 秒</td><td>—</td></tr>
+          <tr><td>Kling 4.0 Flash</td><td>有输入视频，且输入时长 &gt; 输出时长</td><td>输入时长 + 输出时长</td><td>¥0.4221 / 秒</td><td>—</td></tr>
         </table>
-        <p>价格与可灵视频计价一致：<a href="https://kling.ai/document-api/pricing/base/video">Video pricing</a>。</p>
+        <p>计价规则与可灵官方视频计价一致：<a href="https://kling.ai/document-api/pricing/base/video">Video pricing</a>。</p>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -2928,7 +2928,7 @@
     }
   ]
 }</code></pre>
-        <p class="compact-note">按 1080p、无输入视频、输出 10 秒计为 $0.235 × 10。ID、链接、金额仅为示例。文生、图生、Omni 的单任务 GET（<code>kling-4.0</code> 与 <code>kling-4.0-flash</code>）返回同一结构，路径见本节开头。</p>
+        <p class="compact-note">示例中的 <code>billing</code> 为可灵上游返回的原始扣费信息，不代表本站扣费；本站按上方价格表结算，例如 1080p、无输入视频、输出 10 秒为 ¥1.5745 × 10。ID、链接、金额仅为示例。文生、图生、Omni 的单任务 GET（<code>kling-4.0</code> 与 <code>kling-4.0-flash</code>）返回同一结构，路径见本节开头。</p>
           </div>
         </aside>
         </div>

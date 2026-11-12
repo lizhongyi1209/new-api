@@ -69,9 +69,13 @@ func TestSeedanceRequestEstimateIncludesReferenceVideo(t *testing.T) {
 
 func TestKling40PreviewPricingFormula(t *testing.T) {
 	const expression = `u("video_input") == "video" ? (u("resolution") == "1080p" ? tier("1080p_video", max(u("input_video_seconds") + u("seconds"), u("seconds") * 2) * 0.141) : tier("720p_video", max(u("input_video_seconds") + u("seconds"), u("seconds") * 2) * 0.094)) : (u("resolution") == "1080p" ? tier("1080p", u("seconds") * 0.235) : tier("720p", u("seconds") * 0.157))`
+	// billed_seconds carries Kling's video-input duration rule, so the flat
+	// tier chain the visual pricing editor emits must bill exactly the same.
+	const visualExpression = `u("resolution") == "1080p" && u("video_input") == "video" ? tier("1080p·video", u("billed_seconds") * 0.141) : u("resolution") == "720p" && u("video_input") == "video" ? tier("720p·video", u("billed_seconds") * 0.094) : u("resolution") == "1080p" && u("video_input") == "none" ? tier("1080p·none", u("billed_seconds") * 0.235) : tier("720p·none", u("billed_seconds") * 0.157)`
 	meta := ForModel(constant.ChannelTypeKling, "kling-4.0")
 	require.Equal(t, Kling40, meta.Meter)
 	require.NoError(t, billing_setting.SmokeTestTaskExpr(expression, meta.Schema))
+	require.NoError(t, billing_setting.SmokeTestTaskExpr(visualExpression, meta.Schema))
 	for _, tc := range []struct {
 		name           string
 		request        relaycommon.TaskSubmitReq
@@ -85,52 +89,56 @@ func TestKling40PreviewPricingFormula(t *testing.T) {
 			request:      relaycommon.TaskSubmitReq{Model: "kling-4.0"},
 			response:     `{"data":[{"outputs":[{"type":"video","duration":"10"}]}]}`,
 			wantReserved: 7.05, wantFinalUSD: 2.35,
-			wantFinalFacts: map[string]any{"seconds": float64(10)},
+			wantFinalFacts: map[string]any{"seconds": float64(10), "billed_seconds": float64(10)},
 		},
 		{
 			name:         "720p without video input",
 			request:      relaycommon.TaskSubmitReq{Model: "kling-4.0", Duration: 10, Metadata: map[string]any{"settings": map[string]any{"resolution": "720p", "duration": 10}}},
 			response:     `{"data":[{"outputs":[{"type":"video","duration":"10"}]}]}`,
 			wantReserved: 1.57, wantFinalUSD: 1.57,
-			wantFinalFacts: map[string]any{"seconds": float64(10)},
+			wantFinalFacts: map[string]any{"seconds": float64(10), "billed_seconds": float64(10)},
 		},
 		{
 			name:         "1080p input shorter than output",
 			request:      relaycommon.TaskSubmitReq{Model: "kling-4.0", Duration: 10, Metadata: map[string]any{"contents": []any{map[string]any{"type": "feature_video"}}}},
 			response:     `{"data":[{"outputs":[{"type":"video","duration":"10"}],"usage":{"input_duration":"8.00"}}]}`,
 			wantReserved: 5.64, wantFinalUSD: 2.82,
-			wantFinalFacts: map[string]any{"seconds": float64(10), "input_video_seconds": float64(8), "video_input": "video"},
+			wantFinalFacts: map[string]any{"seconds": float64(10), "input_video_seconds": float64(8), "billed_seconds": float64(20), "video_input": "video"},
 		},
 		{
 			name:         "720p input shorter than output",
 			request:      relaycommon.TaskSubmitReq{Model: "kling-4.0", Duration: 10, Metadata: map[string]any{"settings": map[string]any{"resolution": "720p"}, "contents": []any{map[string]any{"type": "feature_video"}}}},
 			response:     `{"data":[{"outputs":[{"type":"video","duration":"10"}],"usage":{"input_duration":"8.00"}}]}`,
 			wantReserved: 3.76, wantFinalUSD: 1.88,
-			wantFinalFacts: map[string]any{"seconds": float64(10), "input_video_seconds": float64(8), "video_input": "video"},
+			wantFinalFacts: map[string]any{"seconds": float64(10), "input_video_seconds": float64(8), "billed_seconds": float64(20), "video_input": "video"},
 		},
 		{
 			name:         "1080p input longer than output",
 			request:      relaycommon.TaskSubmitReq{Model: "kling-4.0", Duration: 3, Metadata: map[string]any{"contents": []any{map[string]any{"type": "base_video"}}}},
 			response:     `{"data":[{"outputs":[{"type":"video","duration":"3"}],"usage":{"input_duration":"30.00"}}]}`,
 			wantReserved: 4.653, wantFinalUSD: 4.653,
-			wantFinalFacts: map[string]any{"seconds": float64(3), "input_video_seconds": float64(30), "video_input": "video"},
+			wantFinalFacts: map[string]any{"seconds": float64(3), "input_video_seconds": float64(30), "billed_seconds": float64(33), "video_input": "video"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			estimate, err := Estimate(meta, tc.request, constant.TaskActionKling40Omni)
 			require.NoError(t, err)
-			reserved, _, err := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: estimate})
-			require.NoError(t, err)
-			assert.InDelta(t, tc.wantReserved, reserved, 1e-9)
+			for _, expr := range []string{expression, visualExpression} {
+				reserved, _, err := billingexpr.RunExprWithRequest(expr, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: estimate})
+				require.NoError(t, err)
+				assert.InDelta(t, tc.wantReserved, reserved, 1e-9, expr)
+			}
 			actual, err := Complete(meta.Meter, estimate, []byte(tc.response), &relaycommon.TaskInfo{})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantFinalFacts, actual)
 			for key, value := range actual {
 				estimate[key] = value
 			}
-			final, _, err := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: estimate})
-			require.NoError(t, err)
-			assert.InDelta(t, tc.wantFinalUSD, final, 1e-9)
+			for _, expr := range []string{expression, visualExpression} {
+				final, _, err := billingexpr.RunExprWithRequest(expr, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: estimate})
+				require.NoError(t, err)
+				assert.InDelta(t, tc.wantFinalUSD, final, 1e-9, expr)
+			}
 		})
 	}
 }
@@ -140,6 +148,7 @@ func TestKling40BillsOutputDurationAndFlashBounds(t *testing.T) {
 	actual, err := Complete(meta.Meter, map[string]any{"video_input": "none"}, []byte(`{"data":[{"outputs":[{"type":"video","duration":"10.8"}],"usage":{"output_duration":"10"}}]}`), &relaycommon.TaskInfo{})
 	require.NoError(t, err)
 	assert.Equal(t, float64(10), actual["seconds"])
+	assert.Equal(t, float64(10), actual["billed_seconds"])
 
 	flash := ForModel(constant.ChannelTypeKling, "kling-4.0-flash")
 	require.Equal(t, Kling40Flash, flash.Meter)
@@ -172,6 +181,7 @@ func TestKling40VideoInputRequiresAuthoritativeDuration(t *testing.T) {
 	actual, err := Complete(meta.Meter, estimate, []byte(`{"data":[{"outputs":[{"type":"video","duration":"3"}],"usage":{"input_duration":"0.00"}}]}`), &relaycommon.TaskInfo{})
 	require.NoError(t, err)
 	assert.Equal(t, "none", actual["video_input"])
+	assert.Equal(t, float64(3), actual["billed_seconds"])
 	for _, response := range []string{
 		`{"data":[{"outputs":[{"type":"video"}],"usage":{"input_duration":"8"}}]}`,
 		`{"data":[{"outputs":[{"type":"video","duration":"31"}],"usage":{"input_duration":"8"}}]}`,

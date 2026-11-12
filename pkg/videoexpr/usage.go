@@ -192,7 +192,7 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 				input, inputSeconds = "video", maxDuration
 			}
 		}
-		facts = map[string]any{"seconds": seconds, "input_video_seconds": inputSeconds, "video_input": input, "resolution": normalizeEnum(res, meta.Schema["resolution"].Enum)}
+		facts = map[string]any{"seconds": seconds, "input_video_seconds": inputSeconds, "billed_seconds": kling40BilledSeconds(input, inputSeconds, seconds), "video_input": input, "resolution": normalizeEnum(res, meta.Schema["resolution"].Enum)}
 	case H3, H3Max, H3MaxTurbo:
 		if seconds == 0 {
 			seconds = 5
@@ -328,14 +328,13 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 		if meter == Kling40Flash {
 			maxDuration = 20
 		}
-		foundOutputDuration := false
+		outputSeconds, foundOutputDuration := 0.0, false
 		if billed := root.Get("data.0.usage.output_duration"); billed.Exists() {
 			n, err := numeric(billed)
 			if err != nil || n < 3 || n > maxDuration {
 				return nil, fmt.Errorf("invalid Kling output duration")
 			}
-			facts["seconds"] = n
-			foundOutputDuration = true
+			outputSeconds, foundOutputDuration = n, true
 		}
 		if !foundOutputDuration {
 			for _, output := range root.Get("data.0.outputs").Array() {
@@ -350,31 +349,33 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 				if err != nil || n < 3 || n > maxDuration {
 					return nil, fmt.Errorf("invalid Kling output duration")
 				}
-				facts["seconds"] = n
-				foundOutputDuration = true
+				outputSeconds, foundOutputDuration = n, true
 				break
 			}
 		}
 		if !foundOutputDuration {
 			return nil, fmt.Errorf("Kling video output duration is missing")
 		}
+		facts["seconds"] = outputSeconds
+		input, inputSeconds := "none", 0.0
 		if duration := root.Get("data.0.usage.input_duration"); duration.Exists() {
 			n, err := numeric(duration)
 			if err != nil || n > maxDuration || n < 0 {
 				return nil, fmt.Errorf("invalid Kling input duration")
 			}
-			facts["input_video_seconds"] = n
+			inputSeconds = n
 			if n > 0 {
-				facts["video_input"] = "video"
-			} else {
-				facts["video_input"] = "none"
+				input = "video"
 			}
+			facts["input_video_seconds"] = n
+			facts["video_input"] = input
 		} else if submitted["video_input"] == "video" {
 			// Video-character Elements may be indistinguishable from image
 			// Elements at submission. Keep the reservation until the upstream
 			// reports the total video input duration.
 			return nil, fmt.Errorf("Kling 4.0 input video duration is missing")
 		}
+		facts["billed_seconds"] = kling40BilledSeconds(input, inputSeconds, outputSeconds)
 	case H3, H3Max, H3MaxTurbo:
 		if !usage.IsObject() {
 			return nil, fmt.Errorf("upstream MiniMax video usage is missing")
@@ -445,6 +446,16 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 		}
 	}
 	return facts, Validate(meta.Schema, facts)
+}
+
+// kling40BilledSeconds applies Kling 4.0's official duration rule: requests
+// with video input bill max(input + output, 2 × output) at the video-input
+// rate; all other requests bill the output duration.
+func kling40BilledSeconds(videoInput string, inputSeconds, outputSeconds float64) float64 {
+	if videoInput != "video" {
+		return outputSeconds
+	}
+	return math.Max(inputSeconds+outputSeconds, outputSeconds*2)
 }
 
 // Validate bounds every multiplier before expression evaluation. Unknown fields
