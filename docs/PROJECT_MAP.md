@@ -37,7 +37,9 @@ Aliases: 任务插件, 插件市场, 插件广场, 插件上传, 插件版本, �
 
 ## Native video usage expressions
 
-Aliases: 原生视频表达式计费, Seedance 定价, 视频价格矩阵, native video billing, TokenMart, Kling credits, Gemini Omni tokens.
+Aliases: 原生视频表达式计费, Seedance 定价, 视频价格矩阵, native video billing, TokenMart, Kling credits, Gemini Omni tokens, Omni Flash 1.2, `omni_flash-1.2`.
+
+- `omni_flash_*` / `omni_flash-*` models (OpenAI-compatible channel, `POST /v1/videos` passthrough in `relay/channel/task/sora/adaptor.go`) use the `omni_flash` meter: `seconds`, `resolution`, `operation` (edit when `video_url` or `source_video_url` is present), priced per call in a visual operation × resolution matrix. Public docs: `docs/api-doc.html#omni-flash`.
 
 - Native model/adaptor usage schemas and bounded estimates/completion facts: `pkg/videoexpr/schema.go`, `usage.go`; native adaptor handoff: `relay/channel/task/taskcommon/helpers.go`.
 - Mapped native models, admin snapshot/save validation, and public pricing metadata: `model/native_video_pricing.go`, `model/model_pricing_config.go`, `model/pricing.go`; existing versioned model-pricing routes: `controller/model_pricing_config.go`, `router/api-router.go`.
@@ -426,7 +428,9 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 
 ## Seedream unified asynchronous image generation
 
-Aliases: Seedream 5.0 Pro, `dola-seedream-5-0-pro-260628-ep`, `/async/v1/generateImage`, Seedream 图生图, TokenMart image.
+Aliases: Seedream 5.0 Pro, Seedream 5.5, `dola-seedream-5-0-pro-260628-ep`, `dola-seedream-5-5-261028-ep`, `/async/v1/generateImage`, Seedream 图生图, TokenMart image.
+
+- Every `dola-seedream*` model routes through the Seedream request path (`isSeedreamModelName` in `service/generate_image.go`); 5.0 Pro-only validation and `layer_decomposition` stay behind `isSeedream5ProModelName`.
 
 - The public endpoint is the existing unified asynchronous task API. The gateway creates a local task, calls the upstream synchronous image endpoint in its worker, and returns the result through `/async/v1/tasks/:id`.
 - Both text-to-image and image-to-image use upstream `POST /v1/images/generations` with JSON. Public `images` is mapped to the upstream singular `image` array without downloading URL references or switching to OpenAI multipart edits.

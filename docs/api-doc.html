@@ -290,6 +290,7 @@
           <a href="#seedance" data-target="seedance"><span class="dot"></span>Seedance</a>
           <a href="#minimax-h3" data-target="minimax-h3"><span class="dot"></span>MiniMax H3</a>
           <a href="#gemini-omni" data-target="gemini-omni"><span class="dot"></span>Gemini Omni</a>
+          <a href="#omni-flash" data-target="omni-flash"><span class="dot"></span>Omni Flash 1.2</a>
           <a href="#grok-video" data-target="grok-video"><span class="dot"></span>Grok 视频</a>
           <a href="#kling-4" data-target="kling-4"><span class="dot"></span>Kling 4.0 / Flash</a>
           <a href="#kling-3" data-target="kling-3"><span class="dot"></span>Kling 3.0</a>
@@ -797,19 +798,20 @@
         <table>
           <tr><th>模型系列</th><th>模型名称</th></tr>
           <tr><td>Seedream 5.0 Pro</td><td><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
+          <tr><td>Seedream 5.5</td><td><code>dola-seedream-5-5-261028-ep</code></td></tr>
         </table>
 
         <h3 id="h-11" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>固定使用 <code>dola-seedream-5-0-pro-260628-ep</code>。</td></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td><code>dola-seedream-5-0-pro-260628-ep</code> 或 <code>dola-seedream-5-5-261028-ep</code>。</td></tr>
           <tr><td><code>prompt</code></td><td class="opt">否*</td><td>string</td><td>图片生成、编辑或多图融合时必填；图层拆分时可省略，由模型自动识别待拆分元素。</td></tr>
           <tr><td><code>images</code></td><td class="opt">否</td><td>string[]</td><td>公网图片 URL 数组，最多 10 张。单张参考图也必须放入数组；图层拆分模式必须且只能传 1 张。</td></tr>
           <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>仅支持单图输出，省略或传 <code>1</code>。</td></tr>
           <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>图片生成模式支持 <code>1K</code>、<code>2K</code> 或合法的 <code>WIDTHxHEIGHT</code>；图层拆分模式仅支持 <code>auto</code>、<code>1K</code>、<code>1.5K</code>、<code>2K</code>，省略时按 <code>auto</code> 处理。</td></tr>
           <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code> 或 <code>jpeg</code>。</td></tr>
           <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td><code>true</code> 添加“AI 生成”水印，<code>false</code> 不添加。</td></tr>
-          <tr><td><code>layer_decomposition</code></td><td class="opt">否</td><td>boolean</td><td>图层拆分开关，默认 <code>false</code>。设为 <code>true</code> 时，将输入图拆解为 1 张底图和最多 16 个带透明通道的 PNG 图层。</td></tr>
+          <tr><td><code>layer_decomposition</code></td><td class="opt">否</td><td>boolean</td><td>图层拆分开关，默认 <code>false</code>，仅 Seedream 5.0 Pro 支持。设为 <code>true</code> 时，将输入图拆解为 1 张底图和最多 16 个带透明通道的 PNG 图层。</td></tr>
         </table>
 
         <h3 id="h-12" class="sub">图层拆分</h3>
@@ -835,6 +837,7 @@
           <tr><td><code>21:9</code></td><td><code>1568x672</code></td><td><code>3136x1344</code></td></tr>
         </table>
         <div class="callout warn"><b>自定义尺寸</b>：总像素必须在 921,600 至 4,624,220 之间，宽高比必须在 <code>1:16</code> 至 <code>16:1</code> 之间。尺寸只接受小写 <code>x</code>。</div>
+        <div class="callout info"><b>Seedream 5.5</b>：<code>size</code> 直接传 <code>WIDTHxHEIGHT</code>，例如 <code>2048x2048</code>、<code>2688x1512</code>。不支持图层拆分。</div>
 
         <h3 id="h-14" class="sub">参考图限制</h3>
         <table>
@@ -848,6 +851,7 @@
 
         <h3 id="h-15" class="sub">计费</h3>
         <p>基础价格按火山引擎中国区官方价格及实际输出结算：图片生成模式不超过 261 万像素为 <code>¥0.30 / 张</code>，超过 261 万像素为 <code>¥0.60 / 张</code>；图层拆分模式按每张实际返回图片计费，底图计入数量，不超过 261 万像素为 <code>¥0.15 / 张</code>，超过 261 万像素为 <code>¥0.30 / 张</code>。图片生成模式首张参考图免费，从第 2 张起每张增加 <code>¥0.02</code>。最终价格乘以调用密钥所属分组的倍率。</p>
+        <p>Seedream 5.5 按实际输出结算：不超过 261 万像素为 <code>¥0.14 / 张</code>，超过 261 万像素为 <code>¥0.245 / 张</code>。每张参考图增加 <code>¥0.056</code>（从第 1 张起计）。最终价格同样乘以分组倍率。</p>
           </div>
         <aside class="api-examples">
           <div class="api-examples-inner">
@@ -2342,6 +2346,145 @@
         <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt;/content \
   -H "Authorization: Bearer $API_KEY" \
   --output gemini-omni-result.mp4</code></pre>
+          </div>
+        </aside>
+        </div>
+      </article>
+    </section>
+
+    <section class="provider" id="omni-flash" data-section="omni-flash">
+      <header class="provider-head">
+        <h2>Omni Flash 1.2 视频</h2>
+        <p>文生视频和视频编辑，按次计费。提交后返回任务 ID，查询到 <code>completed</code> 后下载 MP4。</p>
+      </header>
+      <article class="api-card" id="omni-flash-create">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">创建 Omni Flash 1.2 视频任务</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method post">POST</span><span class="path">/v1/videos</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="omni-flash-create" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>固定使用 <code>omni_flash-1.2</code>，请求体为 JSON。</p>
+        <div class="callout warn"><b>时长字段</b>：只用 <code>seconds</code>，且必须是整数（写 <code>8</code>，不要写 <code>"8"</code>）。传 <code>duration</code> 会被拒绝。</div>
+
+        <h3 id="h-omni-flash-params" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>固定为 <code>omni_flash-1.2</code>。</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>视频内容描述；视频编辑时写明要修改的内容。</td></tr>
+          <tr><td><code>seconds</code></td><td>integer</td><td>否</td><td>输出时长（秒），整数。</td></tr>
+          <tr><td><code>resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code> 或 <code>4k</code>。不传按 <code>720p</code> 计费。</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td>string</td><td>否</td><td><code>16:9</code> 或 <code>9:16</code>。</td></tr>
+          <tr><td><code>source_video_url</code></td><td>string</td><td>条件</td><td>视频编辑时必填，待编辑视频的公网 URL。可先用<a href="#temporary-upload">素材上传</a>得到 URL。也可写作 <code>video_url</code>。</td></tr>
+        </table>
+
+        <h3 id="h-omni-flash-price" class="sub">计费</h3>
+        <p>按次计费，与时长无关。传入 <code>source_video_url</code> 或 <code>video_url</code> 即按视频编辑计费，否则按视频生成计费。密钥若有分组倍率，再乘该倍率。任务失败不扣费。</p>
+        <table>
+          <tr><th>操作</th><th>720p</th><th>1080p</th><th>4K</th></tr>
+          <tr><td>视频生成</td><td>¥1.00 / 次</td><td>¥1.00 / 次</td><td>¥1.50 / 次</td></tr>
+          <tr><td>视频编辑</td><td>¥1.50 / 次</td><td>¥1.50 / 次</td><td>¥2.00 / 次</td></tr>
+        </table>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Omni Flash 1.2 请求类型">
+            <button type="button" class="example-tab" id="omni-flash-text-tab" role="tab" aria-selected="true" aria-controls="omni-flash-text">文生视频</button>
+            <button type="button" class="example-tab" id="omni-flash-edit-tab" role="tab" aria-selected="false" aria-controls="omni-flash-edit">视频编辑</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-flash-text" role="tabpanel" aria-labelledby="omni-flash-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "omni_flash-1.2",
+    "prompt": "一只小猫在阳光下轻轻挥手",
+    "seconds": 8,
+    "resolution": "720p",
+    "aspect_ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-flash-edit" role="tabpanel" aria-labelledby="omni-flash-edit-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "omni_flash-1.2",
+    "prompt": "保持人物动作不变，把背景换成雨夜街道",
+    "source_video_url": "https://cdn.example.com/source.mp4",
+    "resolution": "1080p"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>创建响应</h3>
+        <pre><code>{
+  "id": "task_xxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "omni_flash-1.2",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1794490280
+}</code></pre>
+
+        <h3>参数错误响应</h3>
+        <pre><code>{
+  "code": "invalid_request",
+  "message": "seconds must be an integer",
+  "data": null
+}</code></pre>
+          </div>
+        </aside>
+        </div>
+      </article>
+
+      <article class="api-card" id="omni-flash-result">
+        <header class="api-head">
+          <div class="api-head-main">
+            <h3 class="api-title">查询与下载 Omni Flash 1.2 视频</h3>
+          <div class="api-endpoints">
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}</span></div>
+          <div class="endpoint"><span class="method get">GET</span><span class="path">/v1/videos/{task_id}/content</span></div>
+          </div>
+          </div>
+          <button type="button" class="anchor-btn" data-anchor="omni-flash-result" aria-label="复制此接口链接" title="复制接口链接">#</button>
+        </header>
+        <div class="api-body with-examples">
+          <div class="api-main">
+<p>状态：<code>queued</code>、<code>in_progress</code>、<code>completed</code>、<code>failed</code>。</p>
+        <p><code>completed</code> 后调用内容接口下载 MP4。</p>
+          </div>
+        <aside class="api-examples">
+          <div class="api-examples-inner">
+<h3>查询状态</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>完成响应</h3>
+        <pre><code>{
+  "id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "omni_flash-1.2",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1794490280,
+  "completed_at": 1794490324
+}</code></pre>
+
+        <h3>下载视频</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt;/content \
+  -H "Authorization: Bearer $API_KEY" \
+  --output omni-flash-result.mp4</code></pre>
           </div>
         </aside>
         </div>
