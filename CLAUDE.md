@@ -344,19 +344,37 @@ When working on tiered/dynamic billing (expression-based pricing), you MUST read
 
 ### Daily Development Workflow
 
+Deploy only through `scripts/deploy-production.sh`. Do not use `docker compose up --build`
+for production: images built that way report `git_commit: unknown` in `/api/status` and
+skip the release checks.
+
 After editing code on the server:
 
 ```bash
 cd /home/ubuntu/new-api
 
-git add .
+git add <files>
 git commit -m "feat: describe what you did"
 git push origin custom
 
-docker compose up --build -d
-docker builder prune -af         # clean all build cache
-docker compose logs -f new-api   # Ctrl+C to exit
+scripts/deploy-production.sh check     # preflight only, changes nothing
+DEPLOY_CONFIRM=DEPLOY_NEW_API_PRODUCTION scripts/deploy-production.sh deploy
+docker compose logs -f new-api         # Ctrl+C to exit
 ```
+
+What the script does:
+
+| Command | Effect |
+|---------|--------|
+| `check` | Requires branch `custom`, a clean working tree, and `HEAD == origin/custom`; the latest `production-*` tag must be an ancestor of `HEAD`. Changes nothing. |
+| `build` | `check`, then the Go test gate (`./middleware ./relay/common ./relay ./router ./relay/channel/task/kling ./relay/channel/task/xai`), `docker compose build new-api`, `docker builder prune -af`, and verifies the image revision label equals `HEAD`. Does not deploy. |
+| `deploy` | Requires `DEPLOY_CONFIRM=DEPLOY_NEW_API_PRODUCTION`. Runs `build`, `docker compose up -d --no-build new-api`, waits for `healthy`, smoke-tests `/api/status` (`git_commit` must equal `HEAD`) and key video routes, then creates and pushes the tag `production-<UTC time>-<sha>`. |
+
+- Set `LOCAL_RELEASE=1` to deploy local commits without pushing: `HEAD` only needs to contain `origin/custom`, and the tag is created but not pushed.
+- The working tree must be clean. Commit or deliberately stash unrelated work before deploying, because the script refuses to build a dirty tree.
+- The script already prunes Docker build cache (Rule 8), so no separate `docker builder prune -af` is needed.
+- Rollback: the script only deploys branch `custom` at or after the latest `production-*` tag, so an old tag cannot be redeployed directly. Roll back with `git revert <bad commits>` on `custom`, push, and deploy again. List releases with `git tag --list 'production-*' --sort=-creatordate | head`.
+- Runtime settings such as model prices are stored in the `options` table and re-synced into every instance every 30 seconds (`SYNC_FREQUENCY=30`). A pricing expression that needs a new usage field must be saved only after the code that provides that field is deployed.
 
 ### Syncing Upstream Official Releases
 
@@ -382,8 +400,7 @@ echo -n "v1.0.0-rc.NN" > VERSION
 **Case 1 — No conflicts:**
 ```bash
 git push origin custom --force-with-lease
-docker compose up --build -d
-docker builder prune -af
+DEPLOY_CONFIRM=DEPLOY_NEW_API_PRODUCTION scripts/deploy-production.sh deploy
 ```
 
 **Case 2 — Conflicts** (git will show which files conflict):
@@ -394,9 +411,13 @@ Edit conflicting files, resolve `<<<<<<< HEAD` / `=======` / `>>>>>>> upstream/m
 git add .
 git rebase --continue
 git push origin custom --force-with-lease
-docker compose up --build -d
-docker builder prune -af
+DEPLOY_CONFIRM=DEPLOY_NEW_API_PRODUCTION scripts/deploy-production.sh deploy
 ```
+
+After a rebase, the latest `production-*` tag is usually no longer an ancestor of `HEAD`, so
+`check` fails with `latest production tag ... is not an ancestor of HEAD`. That check exists
+to stop accidental rollbacks. Confirm that the rebased branch contains everything from the
+last production release before working around it.
 
 ### Common Operations Commands
 
@@ -404,7 +425,7 @@ docker builder prune -af
 docker compose ps                        # check running status
 docker compose logs -f new-api           # live logs
 docker compose restart new-api           # restart without rebuild
-docker compose up --build -d             # rebuild and start (use after code changes)
+scripts/deploy-production.sh check       # validate a release candidate without changing anything
 docker compose down                      # stop all services
 docker stats                             # resource usage
 ```
@@ -436,7 +457,7 @@ ls -lh /home/ubuntu/backup_*.sql
 2. **Commit your changes before syncing upstream** — otherwise rebase will fail.
 3. **Back up the database before each deployment** (recommended).
 4. **Bump the `VERSION` file on every upstream sync** to the synced official `v1.0.0-rc.*` tag — it is not auto-updated and otherwise `/api/status` keeps showing the old version.
-5. First `docker compose up --build` takes 5–15 min; subsequent builds are faster due to cache.
+5. **Deploy only with `scripts/deploy-production.sh`** (see Daily Development Workflow). A build takes several minutes; because the script prunes the build cache, every build starts cold.
 6. This manual may be updated over time — Claude should update it in-place when the user provides new information, rather than keeping stale data.
 
 ### Upstream Sync Checklist — Task Plugin System
