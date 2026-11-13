@@ -1,0 +1,36 @@
+<doc-page slug="index" nav="对接概览" title="对接概览" kind="overview">
+<doc-summary>本文档面向接入方技术团队，说明如何调用图像与视频生成接口。所有接口共用一套 Bearer 鉴权：先上传参考素材取得公网地址，再提交生成任务，最后按任务 ID 轮询结果。</doc-summary>
+<doc-body>
+<h2 id="basic">基本信息</h2>
+<table>
+  <tr><th>入口</th><th>Base URL</th><th>说明</th></tr>
+  <tr><td>国内加速 <span class="pill success">推荐</span></td><td><code>https://api.o1key.cn</code></td><td>流式请求最长 300 秒</td></tr>
+  <tr><td>Cloudflare</td><td><code>https://cf-api.o1key.com</code></td><td>单次连接最长 100 秒</td></tr>
+  <tr><td>美国直连</td><td><code>https://api.o1key.com</code></td><td>适合长连接</td></tr>
+</table>
+<table>
+  <tr><th>项目</th><th>说明</th></tr>
+  <tr><td>认证方式</td><td>请求头 <code>Authorization: Bearer &lt;API Key&gt;</code>，所有接口相同</td></tr>
+  <tr><td>数据格式</td><td>JSON，UTF-8 编码。素材上传接口使用 <code>multipart/form-data</code></td></tr>
+  <tr><td>素材地址</td><td>参考图、视频、音频需为公网可直接下载的 URL。本地文件先用<a href="#temporary-upload">素材上传</a>换取 URL</td></tr>
+</table>
+
+<h2 id="endpoints">接口一览</h2>
+<doc-endpoint-index></doc-endpoint-index>
+
+<h2 id="flow">任务流程</h2>
+<div class="flow">
+  <div class="flow-step"><span class="step-n">1</span><span class="flow-text"><b>上传素材</b><br>本地文件先换取公网 URL，线上素材可直接使用。</span></div>
+  <div class="flow-step"><span class="step-n">2</span><span class="flow-text"><b>提交任务</b><br>选择模型与参数，立即返回任务 ID。</span></div>
+  <div class="flow-step"><span class="step-n">3</span><span class="flow-text"><b>轮询结果</b><br>用任务 ID 查询，直到成功或失败。各接口的状态名和建议间隔见对应页面。</span></div>
+</div>
+
+<h2 id="checklist">对接清单</h2>
+<div class="checklist" data-checklist>
+  <label><input type="checkbox" data-check="key"><span>获取 API Key，并确认可用模型</span></label>
+  <label><input type="checkbox" data-check="first"><span>完成一次提交和查询，确认返回格式</span></label>
+  <label><input type="checkbox" data-check="poll"><span>实现轮询，并处理失败状态和错误信息</span></label>
+  <label><input type="checkbox" data-check="save"><span>成功后下载结果。部分接口的结果链接有时效，见对应页面</span></label>
+</div>
+</doc-body>
+</doc-page>

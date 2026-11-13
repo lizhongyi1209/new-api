@@ -1,0 +1,66 @@
+<doc-page slug="temporary-upload" nav="素材上传" title="临时素材上传" kind="reference">
+<doc-summary>把本地图片、音频、视频或文档上传，换取生成接口可以引用的公网 URL。同步返回，无需轮询。</doc-summary>
+<doc-flow>
+<step title="选择文件"><code>multipart/form-data</code>，字段 <code>file</code>，每次 1 个</step>
+<step title="上传">POST <code>/v1/o1key/uploads</code></step>
+<step title="使用 URL">把返回的 <code>url</code> 填进生成接口的素材字段</step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>生成接口只接受公网可下载的素材地址。手里只有本地文件时，先用这个接口上传，拿到 URL 后再提交生成任务。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>文件</dt><dd><code>file</code>，每次 1 个文件，最大 20 MiB。多个文件请分别上传。</dd></div>
+<div><dt>格式</dt><dd>图片 png / jpg / jpeg / webp，音频 mp3 / wav / m4a，视频 mp4 / mov，文档 pdf / txt / md。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>返回</dt><dd>接口直接返回 <code>url</code>，上传后 24 小时内有效，到期时间见 <code>expires_at</code>。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>用 <code>multipart/form-data</code> POST <code>/v1/o1key/uploads</code>，字段名 <code>file</code>，一次一个文件。</li>
+<li>从响应读取 <code>url</code>，填入生成接口的素材字段；注意 <code>expires_at</code>。</li>
+<li>400 表示文件无效、格式不支持或传了多个文件；413 表示超过大小限制。把原因告诉用户，不要自动重试。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="temporary-upload-endpoint" title="上传文件" returns="文件 URL（同步）">
+<doc-route method="POST" path="/v1/o1key/uploads"></doc-route>
+<doc-main>
+<p><code>Authorization: Bearer &lt;API Key&gt;</code> · <code>multipart/form-data</code></p>
+        <p><strong>参数</strong>：<code>file</code>（必填，每次 1 个文件，最大 20 MiB）。多个文件请分别上传。</p>
+        <p>返回的 <code>url</code> 可直接用作各生成接口的参考素材，上传后 24 小时内有效，到期时间见 <code>expires_at</code>。</p>
+
+        <h3 id="h-1" class="sub">支持的文件格式</h3>
+        <table>
+          <tr><th>类型</th><th>扩展名</th></tr>
+          <tr><td>图片</td><td><code>png</code>、<code>jpg</code>、<code>jpeg</code>、<code>webp</code></td></tr>
+          <tr><td>音频</td><td><code>mp3</code>、<code>wav</code>、<code>m4a</code></td></tr>
+          <tr><td>视频</td><td><code>mp4</code>、<code>mov</code></td></tr>
+          <tr><td>文档</td><td><code>pdf</code>、<code>txt</code>、<code>md</code></td></tr>
+        </table>
+        <p><strong>常见错误</strong>：<code>400</code> 文件无效、格式不支持或传入多个文件 · <code>401</code> 鉴权失败 · <code>413</code> 超过大小限制</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求</h3>
+        <pre><code>curl -X POST "$BASE_URL/v1/o1key/uploads" \
+  -H "Authorization: Bearer $API_KEY" \
+  -F "file=@./reference.png"</code></pre>
+
+        <h3>成功响应</h3>
+        <pre><code>{
+  "url": "https://upload.o1key.com/tmp/input/7f46d5e8-9bf6-45c4-9a3a-87dbd5138dd1.png",
+  "filename": "reference.png",
+  "content_type": "image/png",
+  "size": 11630,
+  "expires_at": 1787495062
+}</code></pre>
+
+        <h3>错误响应（HTTP 400 示例）</h3>
+        <pre><code>{
+  "error": "unsupported attachment type"
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

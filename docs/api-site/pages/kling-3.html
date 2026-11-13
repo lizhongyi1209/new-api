@@ -1,0 +1,479 @@
+<doc-page slug="kling-3" nav="Kling 3.0" title="Kling VIDEO 3.0" kind="async">
+<doc-summary>可灵 3.0 Omni 视频生成（多图、多视频参考）和动作模仿。提交后返回 <code>task_id</code>，用对应查询接口取结果。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/kling/omni-video/kling-3.0-omni</code> 等，返回 <code>task_id</code></step>
+<step title="轮询状态">GET <code>…/{task_id}</code></step>
+<step title="获取视频"><code>SUCCESS</code> 后读取 <code>video_url</code></step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用可灵 3.0 生成视频：Omni 接口可以组合提示词、首尾帧、参考图和参考视频；动作模仿接口让图片中的角色按一段视频的动作动起来。接口先返回<b>任务编号</b>，之后用编号查询。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>做什么</dt><dd>Omni 生成用 <code>/kling/omni-video/kling-3.0-omni</code>，动作模仿用 <code>/kling/motion-control/kling-3.0</code>。</dd></div>
+<div><dt>提示词和素材</dt><dd><code>contents</code> 数组：<code>prompt</code> 项写描述，图片、视频项填 <code>url</code>。</dd></div>
+<div><dt>画面比例</dt><dd><code>settings.aspect_ratio</code>：没有首帧或参考视频时必填。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>状态</dt><dd><code>SUBMITTED</code>、<code>IN_PROGRESS</code> 继续等待；<code>SUCCESS</code> 成功；<code>FAILURE</code> 失败。</dd></div>
+<div><dt>视频地址</dt><dd><code>video_url</code>，实际时长见 <code>duration</code>。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>Omni 生成 POST <code>/kling/omni-video/kling-3.0-omni</code>；动作模仿 POST <code>/kling/motion-control/kling-3.0</code>。记录返回的 <code>task_id</code>。</li>
+<li>定期 GET 同一路径加 <code>/{task_id}</code>，<code>SUBMITTED</code> 或 <code>IN_PROGRESS</code> 时继续查询。</li>
+<li><code>SUCCESS</code>：把 <code>video_url</code> 返回给用户。</li>
+<li><code>FAILURE</code>：把错误信息告诉用户，不要自动重试。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="/kling/omni-video/kling-3.0-omni" title="Kling 3.0 Omni 视频生成" returns="任务 ID（异步）">
+<doc-route method="POST" path="/kling/omni-video/kling-3.0-omni"></doc-route>
+<doc-main>
+<p>使用官方 <code>contents</code>、<code>settings</code>、<code>options</code> 结构。无需传 <code>model</code>。</p>
+
+        <h3 id="h-39" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>提示词、图片和视频输入集合。</td></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>、<code>first_frame</code>、<code>last_frame</code>、<code>refer_image</code>、<code>feature_video</code>、<code>base_video</code>。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td><code>type=prompt</code> 时必填。官方上限 3072 字符，建议不超过 2500 字符。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片支持公开 URL 或 Base64；视频使用可公开访问的 URL。</td></tr>
+          <tr><td><code>contents[].id</code></td><td>string</td><td>否</td><td>任务内唯一的引用 ID，可在提示词中以 <code>@id</code> 引用。</td></tr>
+          <tr><td><code>settings</code></td><td>object</td><td>条件</td><td>输出设置。没有首帧或参考视频时必须提供，并填写 <code>aspect_ratio</code>。</td></tr>
+          <tr><td><code>settings.multi_shot</code></td><td>boolean</td><td>否</td><td>是否生成多镜头，默认 <code>true</code>。</td></tr>
+          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td><code>native</code> 生成原生音频；<code>original</code> 保留参考视频声音；<code>off</code> 无音频。默认 <code>off</code>。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code>、<code>4k</code>，默认 <code>720p</code>。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>条件</td><td><code>16:9</code>、<code>9:16</code>、<code>1:1</code>。没有首帧或参考视频时必填。</td></tr>
+          <tr><td><code>settings.duration</code></td><td>integer</td><td>否</td><td>3-15 秒的整数，默认 5 秒。</td></tr>
+          <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>任务状态变化时接收通知的回调地址。</td></tr>
+          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>调用方自定义且账号内唯一的任务 ID。</td></tr>
+          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
+        </table>
+
+        <h3 id="h-40" class="sub">素材与组合规则</h3>
+        <ul>
+          <li>图片支持 JPG、JPEG、PNG，单文件不超过 50MB；宽高均不低于 300px，宽高比在 1:2.5 至 2.5:1 之间。</li>
+          <li>首尾帧仅支持“仅首帧”或“首帧 + 尾帧”，不支持只传尾帧。</li>
+          <li>视频支持 MP4、MOV，单文件不超过 200MB，时长 3-15.5 秒；最多传入 1 个参考视频。</li>
+          <li><code>feature_video</code> 用作特征参考：<code>multi_shot</code> 必须为 <code>true</code>，<code>audio</code> 使用 <code>off</code>。</li>
+          <li><code>base_video</code> 用作视频编辑：不能同时传首尾帧，<code>multi_shot</code> 必须为 <code>false</code>，<code>audio</code> 可用 <code>original</code> 或 <code>off</code>。</li>
+          <li>多镜头提示词写法为“镜头序号, 秒数, 描述;”，支持 1-6 个镜头；各镜头时长之和必须等于 <code>settings.duration</code>。</li>
+        </ul>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling Omni 请求场景">
+            <button type="button" class="example-tab" id="omni-prompt-tab" role="tab" aria-selected="true" aria-controls="omni-prompt">纯文本</button>
+            <button type="button" class="example-tab" id="omni-images-tab" role="tab" aria-selected="false" aria-controls="omni-images">首帧 + 参考图</button>
+            <button type="button" class="example-tab" id="omni-frames-tab" role="tab" aria-selected="false" aria-controls="omni-frames">首尾帧</button>
+            <button type="button" class="example-tab" id="omni-base64-tab" role="tab" aria-selected="false" aria-controls="omni-base64">Base64 图片</button>
+            <button type="button" class="example-tab" id="omni-multimodal-tab" role="tab" aria-selected="false" aria-controls="omni-multimodal">多模态 · 图 + 视频</button>
+            <button type="button" class="example-tab" id="omni-multishot-tab" role="tab" aria-selected="false" aria-controls="omni-multishot">多镜头</button>
+            <button type="button" class="example-tab" id="omni-feature-tab" role="tab" aria-selected="false" aria-controls="omni-feature">特征视频</button>
+            <button type="button" class="example-tab" id="omni-base-tab" role="tab" aria-selected="false" aria-controls="omni-base">基础视频</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-prompt" role="tabpanel" aria-labelledby="omni-prompt-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "A cinematic sunrise over a quiet harbor, gentle waves and native ambient sound."}
+    ],
+    "settings": {
+      "resolution": "1080p",
+      "aspect_ratio": "16:9",
+      "duration": 5,
+      "audio": "native",
+      "multi_shot": false
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-images" role="tabpanel" aria-labelledby="omni-images-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "@image_1 walks into the scene; match the color palette of @image_2."},
+      {"type": "first_frame", "url": "https://cdn.example.com/start.png", "id": "image_1"},
+      {"type": "refer_image", "url": "https://cdn.example.com/style.png", "id": "image_2"}
+    ],
+    "settings": {"resolution": "1080p", "duration": 5, "audio": "native", "multi_shot": false}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-frames" role="tabpanel" aria-labelledby="omni-frames-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Create a smooth cinematic transition from @start to @end."},
+      {"type": "first_frame", "url": "https://cdn.example.com/start.jpg", "id": "start"},
+      {"type": "last_frame", "url": "https://cdn.example.com/end.jpg", "id": "end"}
+    ],
+    "settings": {"resolution": "1080p", "duration": 8, "audio": "off", "multi_shot": false}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-base64" role="tabpanel" aria-labelledby="omni-base64-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Animate @image_1 with a slow camera push-in."},
+      {"type": "first_frame", "url": "data:image/png;base64,iVBORw0KGgoAAA...", "id": "image_1"}
+    ],
+    "settings": {"resolution": "720p", "duration": 5, "audio": "off", "multi_shot": false}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-multimodal" role="tabpanel" aria-labelledby="omni-multimodal-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {
+        "type": "prompt",
+        "text": "Use @image_1 as the character and clothing reference; reproduce the camera movement and action rhythm of @video_1."
+      },
+      {
+        "type": "refer_image",
+        "url": "https://cdn.example.com/character.png",
+        "id": "image_1"
+      },
+      {
+        "type": "feature_video",
+        "url": "https://cdn.example.com/camera-and-motion.mp4",
+        "id": "video_1"
+      }
+    ],
+    "settings": {
+      "resolution": "1080p",
+      "audio": "off",
+      "multi_shot": true
+    },
+    "options": {
+      "external_task_id": "omni-multimodal-001",
+      "watermark_info": {"enabled": false}
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-multishot" role="tabpanel" aria-labelledby="omni-multishot-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {
+        "type": "prompt",
+        "text": "shot 1, 3, Wide shot: a traveler walks across a misty mountain ridge at sunrise; shot 2, 3, Close-up: the traveler stops, turns toward the warm sunlight, and smiles;"
+      }
+    ],
+    "settings": {
+      "resolution": "1080p",
+      "aspect_ratio": "16:9",
+      "duration": 6,
+      "audio": "native",
+      "multi_shot": true
+    },
+    "options": {
+      "external_task_id": "omni-multishot-001",
+      "watermark_info": {"enabled": false}
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-feature" role="tabpanel" aria-labelledby="omni-feature-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Use the camera rhythm and visual features of @video_1."},
+      {"type": "feature_video", "url": "https://cdn.example.com/reference.mp4", "id": "video_1"}
+    ],
+    "settings": {"resolution": "4k", "audio": "off", "multi_shot": true}
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-base" role="tabpanel" aria-labelledby="omni-base-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "Change the weather to light rain while preserving the original subject and motion."},
+      {"type": "base_video", "url": "https://cdn.example.com/source.mov", "id": "video_1"}
+    ],
+    "settings": {"resolution": "1080p", "audio": "original", "multi_shot": false}
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling Omni 创建响应">
+            <button type="button" class="example-tab" id="omni-create-ok-tab" role="tab" aria-selected="true" aria-controls="omni-create-ok">成功 · 200</button>
+            <button type="button" class="example-tab" id="omni-create-error-tab" role="tab" aria-selected="false" aria-controls="omni-create-error">失败 · 400</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-create-ok" role="tabpanel" aria-labelledby="omni-create-ok-tab" aria-hidden="false"><pre data-sim="submit"><code>{
+  "id": "task_omni_xxxxxxxxxx",
+  "task_id": "task_omni_xxxxxxxxxx",
+  "object": "video",
+  "model": "kling-3.0-omni",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre></div>
+            <div class="example-tab-panel" id="omni-create-error" role="tabpanel" aria-labelledby="omni-create-error-tab" aria-hidden="true"><pre><code>{
+  "error": {
+    "message": "settings.aspect_ratio is required when no first frame or reference video is provided",
+    "type": "invalid_request_error",
+    "code": "invalid_request"
+  }
+}</code></pre></div>
+          </div>
+        </div>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/kling/omni-video/kling-3.0-omni/{task_id}" title="查询 Kling 3.0 Omni 任务" returns="任务状态与结果">
+<doc-route method="GET" path="/kling/omni-video/kling-3.0-omni/{task_id}"></doc-route>
+<doc-main>
+<p>使用创建接口返回的 <code>task_id</code> 查询。常见状态为 <code>SUBMITTED</code>、<code>IN_PROGRESS</code>、<code>SUCCESS</code>、<code>FAILURE</code>。</p>
+        <table>
+          <tr><th>响应字段</th><th>说明</th></tr>
+          <tr><td><code>video_url</code></td><td>成功后的视频地址。</td></tr>
+          <tr><td><code>duration</code></td><td>上游返回的实际视频时长（秒）。</td></tr>
+          <tr><td><code>cost</code></td><td>本平台任务结算后的收费金额，不是 Kling 原始账单字段。</td></tr>
+          <tr><td><code>request_id</code></td><td>用于问题追踪的上游请求 ID。</td></tr>
+        </table>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-3.0-omni/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling Omni 查询响应">
+            <button type="button" class="example-tab" id="omni-query-ok-tab" role="tab" aria-selected="true" aria-controls="omni-query-ok">成功</button>
+            <button type="button" class="example-tab" id="omni-query-running-tab" role="tab" aria-selected="false" aria-controls="omni-query-running">处理中</button>
+            <button type="button" class="example-tab" id="omni-query-failed-tab" role="tab" aria-selected="false" aria-controls="omni-query-failed">失败</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-query-ok" role="tabpanel" aria-labelledby="omni-query-ok-tab" aria-hidden="false"><pre data-sim="done"><code>{
+  "task_id": "task_omni_xxxxxxxxxx",
+  "status": "SUCCESS",
+  "video_url": "https://cdn.example.com/result.mp4",
+  "duration": 5.041,
+  "model": "kling-3.0-omni",
+  "cost": "3.825",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+            <div class="example-tab-panel" id="omni-query-running" role="tabpanel" aria-labelledby="omni-query-running-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_omni_xxxxxxxxxx",
+  "status": "IN_PROGRESS",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0-omni",
+  "cost": "0",
+  "request_id": ""
+}</code></pre></div>
+            <div class="example-tab-panel" id="omni-query-failed" role="tabpanel" aria-labelledby="omni-query-failed-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_omni_xxxxxxxxxx",
+  "status": "FAILURE",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0-omni",
+  "cost": "0",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+          </div>
+        </div>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/kling/motion-control/kling-3.0" title="Kling 3.0 动作模仿" returns="任务 ID（异步）">
+<doc-route method="POST" path="/kling/motion-control/kling-3.0"></doc-route>
+<doc-main>
+<p>请求体沿用 Kling 3.0 Motion Control 官方结构。每个任务提供 1 张角色外观参考图和 1 个动作参考视频；模型已由路径确定。</p>
+
+        <h3 id="h-41" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>由提示词、角色图片和动作视频组成。</td></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td>本页展示 <code>prompt</code>、<code>image</code>、<code>video</code>。</td></tr>
+          <tr><td><code>contents[].text</code></td><td>string</td><td>条件</td><td><code>type=prompt</code> 时必填，最多 2500 字符；提示词本身可省略。</td></tr>
+          <tr><td><code>contents[].url</code></td><td>string</td><td>条件</td><td>图片支持公开 URL 或 Base64；动作视频使用公开 URL。</td></tr>
+          <tr><td><code>settings.character_orientation</code></td><td>string</td><td>是</td><td><code>video</code>：朝向跟随动作视频；<code>image</code>：朝向跟随参考图。</td></tr>
+          <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td><code>original</code> 保留动作视频原声；<code>off</code> 无音频。默认 <code>original</code>。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code>，默认 <code>720p</code>。</td></tr>
+          <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>任务状态变化时接收通知的回调地址。</td></tr>
+          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>调用方自定义且账号内唯一的任务 ID。</td></tr>
+          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
+        </table>
+
+        <h3 id="h-42" class="sub">素材规则</h3>
+        <ul>
+          <li>必须且只能传 1 个 <code>image</code> 和 1 个 <code>video</code>。</li>
+          <li>图片支持 JPG、JPEG、PNG，最大 50MB；宽高均不低于 300px，宽高比在 1:2.5 至 2.5:1 之间。</li>
+          <li>动作视频支持 MP4、MOV，最大 100MB，宽高均在 340-3850px 之间；建议使用人物完整可见、无遮挡、无切镜、无明显运镜的连续单镜头。</li>
+          <li><code>character_orientation=video</code> 时动作视频可为 3-30 秒；设为 <code>image</code> 时可为 3-10 秒。</li>
+          <li><code>video</code> 更适合复杂动作；<code>image</code> 保持参考图朝向，并更适合通过提示词控制镜头运动。</li>
+        </ul>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling 动作模仿请求场景">
+            <button type="button" class="example-tab" id="motion-video-tab" role="tab" aria-selected="true" aria-controls="motion-video">朝向跟随视频</button>
+            <button type="button" class="example-tab" id="motion-image-tab" role="tab" aria-selected="false" aria-controls="motion-image">朝向跟随图片</button>
+            <button type="button" class="example-tab" id="motion-base64-tab" role="tab" aria-selected="false" aria-controls="motion-base64">Base64 图片</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="motion-video" role="tabpanel" aria-labelledby="motion-video-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "The character wears a loose gray T-shirt and denim shorts."},
+      {"type": "image", "url": "https://cdn.example.com/character.png"},
+      {"type": "video", "url": "https://cdn.example.com/dance-10s.mp4"}
+    ],
+    "settings": {
+      "character_orientation": "video",
+      "resolution": "1080p",
+      "audio": "original"
+    },
+    "options": {
+      "callback_url": "https://example.com/callback",
+      "external_task_id": "motion-order-001",
+      "watermark_info": {"enabled": false}
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="motion-image" role="tabpanel" aria-labelledby="motion-image-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "The camera slowly pulls back while the character performs the reference motion."},
+      {"type": "image", "url": "https://cdn.example.com/character.jpg"},
+      {"type": "video", "url": "https://cdn.example.com/motion-8s.mov"}
+    ],
+    "settings": {
+      "character_orientation": "image",
+      "resolution": "1080p",
+      "audio": "off"
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="motion-base64" role="tabpanel" aria-labelledby="motion-base64-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "image", "url": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ..."},
+      {"type": "video", "url": "https://cdn.example.com/motion-6s.mp4"}
+    ],
+    "settings": {
+      "character_orientation": "video",
+      "resolution": "720p",
+      "audio": "original"
+    }
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling 动作模仿创建响应">
+            <button type="button" class="example-tab" id="motion-create-ok-tab" role="tab" aria-selected="true" aria-controls="motion-create-ok">成功 · 200</button>
+            <button type="button" class="example-tab" id="motion-create-error-tab" role="tab" aria-selected="false" aria-controls="motion-create-error">失败 · 400</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="motion-create-ok" role="tabpanel" aria-labelledby="motion-create-ok-tab" aria-hidden="false"><pre><code>{
+  "id": "task_motion_xxxxxxxxxx",
+  "task_id": "task_motion_xxxxxxxxxx",
+  "object": "video",
+  "model": "kling-3.0",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre></div>
+            <div class="example-tab-panel" id="motion-create-error" role="tabpanel" aria-labelledby="motion-create-error-tab" aria-hidden="true"><pre><code>{
+  "error": {
+    "message": "motion control requires exactly one image and one video",
+    "type": "invalid_request_error",
+    "code": "invalid_request"
+  }
+}</code></pre></div>
+          </div>
+        </div>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/kling/motion-control/kling-3.0/{task_id}" title="查询 Kling 3.0 动作模仿任务" returns="任务状态与结果">
+<doc-route method="GET" path="/kling/motion-control/kling-3.0/{task_id}"></doc-route>
+<doc-main>
+<p>使用动作模仿创建接口返回的 <code>task_id</code> 查询。响应字段与 Kling 3.0 Omni 查询接口一致，<code>model</code> 固定为 <code>kling-3.0</code>。</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/kling/motion-control/kling-3.0/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Kling 动作模仿查询响应">
+            <button type="button" class="example-tab" id="motion-query-ok-tab" role="tab" aria-selected="true" aria-controls="motion-query-ok">成功</button>
+            <button type="button" class="example-tab" id="motion-query-running-tab" role="tab" aria-selected="false" aria-controls="motion-query-running">处理中</button>
+            <button type="button" class="example-tab" id="motion-query-failed-tab" role="tab" aria-selected="false" aria-controls="motion-query-failed">失败</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="motion-query-ok" role="tabpanel" aria-labelledby="motion-query-ok-tab" aria-hidden="false"><pre><code>{
+  "task_id": "task_motion_xxxxxxxxxx",
+  "status": "SUCCESS",
+  "video_url": "https://cdn.example.com/motion-result.mp4",
+  "duration": 9.966,
+  "model": "kling-3.0",
+  "cost": "4.5",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+            <div class="example-tab-panel" id="motion-query-running" role="tabpanel" aria-labelledby="motion-query-running-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_motion_xxxxxxxxxx",
+  "status": "IN_PROGRESS",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0",
+  "cost": "0",
+  "request_id": ""
+}</code></pre></div>
+            <div class="example-tab-panel" id="motion-query-failed" role="tabpanel" aria-labelledby="motion-query-failed-tab" aria-hidden="true"><pre><code>{
+  "task_id": "task_motion_xxxxxxxxxx",
+  "status": "FAILURE",
+  "video_url": "",
+  "duration": 0,
+  "model": "kling-3.0",
+  "cost": "0",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre></div>
+          </div>
+        </div>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

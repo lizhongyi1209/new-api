@@ -4,7 +4,7 @@
 
 ## 接口与下游对接
 
-- [`api-doc.html`](./api-doc.html)：下游 API 对接页面。
+- [`api-site/`](./api-site/)：下游 API 对接文档站（每页 HTML + Markdown，`llms.txt`），线上地址 `/docs/`。
 - [`seedance-downstream-integration.md`](./seedance-downstream-integration.md)：Seedance 下游接入说明。
 - [`kling-api-guide.md`](./kling-api-guide.md)：Kling 视频接口指南。
 - [`openapi/`](./openapi/)：OpenAPI JSON 定义。

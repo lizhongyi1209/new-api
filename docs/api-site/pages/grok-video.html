@@ -1,0 +1,238 @@
+<doc-page slug="grok-video" nav="Grok 视频" title="Grok 视频生成" kind="async">
+<doc-summary>支持视频生成、视频编辑和视频延长三种操作。三个接口共用同一查询端点。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST 生成 / 编辑 / 延长接口，返回 <code>request_id</code></step>
+<step title="轮询状态">GET <code>/grok/v1/videos/{task_id}</code></step>
+<step title="获取视频"><code>done</code> 后读取 <code>video.url</code></step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用 Grok 生成视频，也可以编辑或延长一段已有视频。三种操作提交后都返回 <code>request_id</code>，并用同一个查询接口拿结果。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>用哪个模型</dt><dd><code>model</code>，例如 <code>grok-imagine-video-1.5</code>。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>prompt</code>；编辑和延长时写要改什么、接着发生什么。</dd></div>
+<div><dt>素材（按操作）</dt><dd>图生视频传 <code>image</code>；编辑和延长传 <code>video</code>，公网 URL 或 Base64。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>状态</dt><dd><code>pending</code> 继续等待；<code>done</code> 完成；<code>failed</code>、<code>expired</code> 失败。</dd></div>
+<div><dt>视频地址</dt><dd><code>video.url</code>，时长见 <code>video.duration</code>。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>按需求选择接口：生成 POST <code>/grok/v1/videos/generations</code>，编辑 <code>/grok/v1/videos/edits</code>，延长 <code>/grok/v1/videos/extensions</code>。记录返回的 <code>request_id</code>。</li>
+<li>定期 GET <code>/grok/v1/videos/{request_id}</code>，<code>pending</code> 时继续查询。</li>
+<li><code>done</code>：把 <code>video.url</code> 返回给用户。</li>
+<li><code>failed</code> 或 <code>expired</code>：把 <code>error</code> 告诉用户，不要自动重试。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="grok-video-create" title="视频生成" returns="任务 ID（异步）">
+<doc-route method="POST" path="/grok/v1/videos/generations"></doc-route>
+<doc-main>
+<p>从文本、图片或多模态参考素材生成视频。</p>
+
+        <h3 id="h-33" class="sub">模型</h3>
+        <table>
+          <tr><th>模型名称</th><th>最高分辨率</th><th>说明</th></tr>
+          <tr><td><code>grok-imagine-video</code></td><td>720p</td><td>支持文生、图生和多参考素材生成</td></tr>
+          <tr><td><code>grok-imagine-video-1.5</code></td><td>1080p</td><td>文生和图生支持 1080p；多参考素材上限 720p</td></tr>
+        </table>
+
+        <h3 id="h-34" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>条件</td><td>文生视频和多参考素材必填；图生可选</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>否</td><td>1-15 秒，默认 8 秒</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td>string</td><td>否</td><td><code>16:9</code>（默认）、<code>9:16</code>、<code>1:1</code>、<code>4:3</code>、<code>3:4</code>、<code>3:2</code>、<code>2:3</code></td></tr>
+          <tr><td><code>resolution</code></td><td>string</td><td>否</td><td><code>480p</code>（默认）、<code>720p</code>、<code>1080p</code></td></tr>
+          <tr><td><code>image</code></td><td>object</td><td>条件</td><td>图生视频输入，填 <code>url</code> 或 <code>image_url</code>；公网 URL 或 Base64</td></tr>
+          <tr><td><code>reference_images</code></td><td>array</td><td>否</td><td>参考图数组，最多 7 张</td></tr>
+          <tr><td><code>reference_audios</code></td><td>array</td><td>否</td><td>参考音频，每项可用 <code>url</code> 或 <code>voice_id</code>，最多 3 个</td></tr>
+        </table>
+
+        <div class="callout warn"><b>互斥规则</b>：<code>image</code> 和 <code>reference_images</code> 不能同时使用。</div>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Grok 视频请求场景">
+            <button type="button" class="example-tab" id="grok-text-tab" role="tab" aria-selected="true" aria-controls="grok-text">文生视频</button>
+            <button type="button" class="example-tab" id="grok-15-image-tab" role="tab" aria-selected="false" aria-controls="grok-15-image">图生视频</button>
+            <button type="button" class="example-tab" id="grok-references-tab" role="tab" aria-selected="false" aria-controls="grok-references">多参考素材</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="grok-text" role="tabpanel" aria-labelledby="grok-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "A spacecraft crosses Saturn rings, cinematic tracking shot.",
+    "duration": 10,
+    "resolution": "1080p",
+    "aspect_ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="grok-15-image" role="tabpanel" aria-labelledby="grok-15-image-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "image": {"url": "https://cdn.example.com/ref.jpg"},
+    "prompt": "让画面中的人物微笑并挥手",
+    "duration": 10,
+    "resolution": "1080p"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="grok-references" role="tabpanel" aria-labelledby="grok-references-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "Fashion film with character from first image and style from second.",
+    "reference_images": [
+      {"url": "https://cdn.example.com/char.jpg"},
+      {"url": "https://cdn.example.com/style.jpg"}
+    ],
+    "reference_audios": [{"voice_id": "nova"}],
+    "duration": 8,
+    "resolution": "720p"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>响应</h3>
+        <pre data-sim="submit"><code>{"request_id": "task_grok_xxxxxxxxxx"}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="grok-video-query" title="查询任务" returns="任务状态与结果">
+<doc-route method="GET" path="/grok/v1/videos/{task_id}"></doc-route>
+<doc-main>
+<p>使用创建接口返回的 <code>request_id</code> 查询任务状态和结果。</p>
+        <table>
+          <tr><th>响应字段</th><th>说明</th></tr>
+          <tr><td><code>status</code></td><td><code>pending</code>（处理中）、<code>done</code>（完成）、<code>failed</code>（失败）、<code>expired</code>（过期）</td></tr>
+          <tr><td><code>model</code></td><td>使用的模型名称</td></tr>
+          <tr><td><code>progress</code></td><td>进度百分比（0-100）</td></tr>
+          <tr><td><code>video.url</code></td><td>视频下载地址（完成后可用）</td></tr>
+          <tr><td><code>video.duration</code></td><td>视频时长（秒）</td></tr>
+          <tr><td><code>error</code></td><td>失败时的错误信息</td></tr>
+        </table>
+
+</doc-main>
+<doc-examples>
+<h3>请求</h3>
+        <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>响应示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Grok 视频查询响应">
+            <button type="button" class="example-tab" id="grok-query-ok-tab" role="tab" aria-selected="true" aria-controls="grok-query-ok">完成</button>
+            <button type="button" class="example-tab" id="grok-query-pending-tab" role="tab" aria-selected="false" aria-controls="grok-query-pending">处理中</button>
+            <button type="button" class="example-tab" id="grok-query-failed-tab" role="tab" aria-selected="false" aria-controls="grok-query-failed">失败</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="grok-query-ok" role="tabpanel" aria-labelledby="grok-query-ok-tab" aria-hidden="false"><pre data-sim="done"><code>{
+  "status": "done",
+  "model": "grok-imagine-video-1.5",
+  "video": {
+    "url": "https://cdn.example.com/grok-result.mp4",
+    "duration": 15
+  },
+  "progress": 100
+}</code></pre></div>
+            <div class="example-tab-panel" id="grok-query-pending" role="tabpanel" aria-labelledby="grok-query-pending-tab" aria-hidden="true"><pre><code>{
+  "status": "pending",
+  "model": "grok-imagine-video-1.5",
+  "progress": 42
+}</code></pre></div>
+            <div class="example-tab-panel" id="grok-query-failed" role="tabpanel" aria-labelledby="grok-query-failed-tab" aria-hidden="true"><pre><code>{
+  "status": "failed",
+  "model": "grok-imagine-video",
+  "error": {
+    "code": "content_policy_violation",
+    "message": "The request could not be completed."
+  }
+}</code></pre></div>
+          </div>
+        </div>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="grok-video-edit" title="视频编辑" returns="任务 ID（异步）">
+<doc-route method="POST" path="/grok/v1/videos/edits"></doc-route>
+<doc-main>
+<p>基于提示词编辑输入视频。输出保持输入的时长和宽高比，分辨率上限 720p。</p>
+        <div class="callout warn"><b>时长限制</b>：输入视频不超过 8.7 秒。</div>
+
+        <h3 id="h-35" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>编辑指令</td></tr>
+          <tr><td><code>video</code></td><td>object</td><td>是</td><td>输入视频，填 <code>url</code> 或 <code>file_id</code>；公网 URL 或 Base64</td></tr>
+        </table>
+        <p><strong>不支持的参数</strong>：<code>duration</code>、<code>aspect_ratio</code>、<code>resolution</code>、<code>image</code>、<code>reference_images</code>、<code>reference_audios</code></p>
+
+</doc-main>
+<doc-examples>
+<h3>请求</h3>
+        <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/edits \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "Make the sky turn golden with a dramatic sunset, keep everything else unchanged.",
+    "video": {"url": "https://cdn.example.com/input.mp4"}
+  }'</code></pre>
+
+        <h3>响应</h3>
+        <pre><code>{"request_id": "task_grok_edit_xxxxxxxxxx"}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="grok-video-extend" title="视频延长" returns="任务 ID（异步）">
+<doc-route method="POST" path="/grok/v1/videos/extensions"></doc-route>
+<doc-main>
+<p>延长输入视频。<code>duration</code> 参数控制延长部分的时长，输出总时长 = 输入时长 + duration。</p>
+
+        <h3 id="h-36" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>模型名称</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>延长部分的内容描述</td></tr>
+          <tr><td><code>video</code></td><td>object</td><td>是</td><td>输入视频，填 <code>url</code> 或 <code>file_id</code>；公网 URL 或 Base64</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>否</td><td>延长部分时长 2-10 秒，默认 6 秒</td></tr>
+        </table>
+        <p><strong>不支持的参数</strong>：<code>aspect_ratio</code>、<code>resolution</code>、<code>image</code>、<code>reference_images</code>、<code>reference_audios</code></p>
+
+</doc-main>
+<doc-examples>
+<h3>请求</h3>
+        <pre><code>curl https://cf-api.o1key.com/grok/v1/videos/extensions \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "grok-imagine-video-1.5",
+    "prompt": "Continue the camera movement smoothly, revealing more of the landscape.",
+    "video": {"url": "https://cdn.example.com/clip.mp4"},
+    "duration": 5
+  }'</code></pre>
+        <p class="compact-note">输入 10 秒视频 + duration=5 → 输出 15 秒视频。</p>
+
+        <h3>响应</h3>
+        <pre><code>{"request_id": "task_grok_extend_xxxxxxxxxx"}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

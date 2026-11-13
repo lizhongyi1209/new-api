@@ -1,0 +1,227 @@
+<doc-page slug="image-gpt-image" nav="GPT Image" title="GPT Image" kind="async">
+<doc-summary>图片生成、透明背景输出和参考图编辑。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/async/v1/generateImage</code>，返回 <code>task_id</code></step>
+<step title="轮询状态">GET <code>/async/v1/tasks/{task_id}</code></step>
+<step title="获取图片"><code>SUCCESS</code> 后读取 <code>data.images</code></step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用一段文字生成图片，或者上传参考图让模型按你的要求修改。支持透明背景输出。图片需要一点时间生成，接口先返回<b>任务编号</b>，之后用编号查询，完成后拿到图片地址。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>用哪个模型</dt><dd><code>model</code>，填完整模型名，例如 <code>gpt-image-2</code>，可选列表见完整参考。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>prompt</code>，描述越具体，效果越接近预期。</dd></div>
+<div><dt>参考图（可选）</dt><dd><code>images</code>，传图片 URL 或 Base64，即为图片编辑。</dd></div>
+<div><dt>尺寸与画质（可选）</dt><dd><code>size</code>、<code>quality</code>，不传按默认值。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>查询</dt><dd>用 <code>task_id</code> 调 <code>GET /async/v1/tasks/{task_id}</code>。</dd></div>
+<div><dt>状态</dt><dd><code>SUBMITTED</code>、<code>IN_PROGRESS</code> 继续等待；<code>SUCCESS</code> 成功；<code>FAILURE</code> 失败。</dd></div>
+<div><dt>图片地址</dt><dd>成功后读 <code>data.images[].url</code>；失败时读 <code>error</code>。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>POST <code>/async/v1/generateImage</code>，<code>model</code> 用用户指定的完整模型名，记录返回的 <code>task_id</code>。</li>
+<li>每 5 秒 GET <code>/async/v1/tasks/{task_id}</code>，<code>SUBMITTED</code> 或 <code>IN_PROGRESS</code> 时继续查询。</li>
+<li><code>SUCCESS</code>：把 <code>data.images[].url</code> 返回给用户。</li>
+<li><code>FAILURE</code>：把 <code>error</code> 中的信息告诉用户，不要自动重试。</li>
+<li>缺少 <code>model</code> 或 <code>prompt</code> 时，先向用户确认，不要猜测。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="async-generate-image-gpt" title="提交 GPT Image 任务" returns="任务 ID（异步）">
+<doc-route method="POST" path="/async/v1/generateImage"></doc-route>
+<doc-main>
+<h3 id="h-2" class="sub">模型名称</h3>
+        <table>
+          <tr><th>模型系列</th><th>特价</th><th>优质</th><th>企业</th></tr>
+          <tr><td>GPT Image 2.6 Sunburst</td><td><code>gpt-image-2.6-sunburst-sp</code></td><td><code>gpt-image-2.6-sunburst-sd</code></td><td><code>gpt-image-2.6-sunburst</code></td></tr>
+          <tr><td>GPT Image 2.6 Flare</td><td><code>gpt-image-2.6-flare-sp</code></td><td><code>gpt-image-2.6-flare-sd</code></td><td><code>gpt-image-2.6-flare</code></td></tr>
+          <tr><td>GPT Image 2.5 Sunburst</td><td><code>gpt-image-2.5-sunburst-sp</code></td><td><code>gpt-image-2.5-sunburst-sd</code></td><td><code>gpt-image-2.5-sunburst</code></td></tr>
+          <tr><td>GPT Image 2.5 Flare</td><td><code>gpt-image-2.5-flare-sp</code></td><td><code>gpt-image-2.5-flare-sd</code></td><td><code>gpt-image-2.5-flare</code></td></tr>
+          <tr><td>GPT Image 2</td><td><code>gpt-image-2-c-sp</code></td><td><code>gpt-image-2-c-sd</code></td><td><code>gpt-image-2</code></td></tr>
+        </table>
+        <div class="callout info"><b>怎么选</b>：<code>Sunburst</code> 偏精修与细节还原，<code>Flare</code> 偏快速出图；2.6 在 2.5 基础上增加了复杂度控制、标注图编辑、SVG 与 GIF 输出。</div>
+
+        <h3 id="h-3" class="sub">能力矩阵</h3>
+        <table>
+          <tr><th>能力</th><th>GPT Image 2</th><th>2.5 系列</th><th>2.6 系列</th></tr>
+          <tr><td><code>quality</code> 扩展档位 <code>xhigh</code> / <code>max</code></td><td class="no">—</td><td class="yes">支持</td><td class="yes">支持</td></tr>
+          <tr><td><code>complexity</code> 复杂度控制</td><td class="no">—</td><td class="no">—</td><td class="yes">支持</td></tr>
+          <tr><td><code>markup</code> 标注图编辑</td><td class="no">—</td><td class="yes">支持</td><td class="yes">支持</td></tr>
+          <tr><td><code>output_format</code> 为 <code>svg</code> / <code>gif</code></td><td class="no">—</td><td class="no">—</td><td class="yes">支持</td></tr>
+          <tr><td><code>frame_count</code> / <code>frame_duration_ms</code></td><td class="no">—</td><td class="no">—</td><td class="yes">仅 GIF</td></tr>
+          <tr><td><code>input_fidelity</code></td><td class="no">不要传</td><td class="yes">可传</td><td class="yes">可传</td></tr>
+        </table>
+
+        <h3 id="h-4" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>使用上表中的完整模型名称。</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>图片生成或编辑指令。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>array</td><td>参考图数组。支持 URL、Data URI、原始 Base64、<code>fileData</code> 和 <code>inlineData</code>。第一张是编辑目标。</td></tr>
+          <tr><td><code>markup</code></td><td class="opt">否</td><td>object</td><td>2.5+ 标注图编辑。传 <code>{"image_url": "..."}</code>，与 <code>images</code> 等宽等高、透明底，标注层不叠加在原图上。与 <code>prompt</code> 一起说明「改什么」和「保留什么」。</td></tr>
+          <tr><td><code>mask</code></td><td class="opt">否</td><td>object</td><td>蒙版局部重绘。传 <code>{"image_url": "..."}</code>，需带 alpha 通道；<b>与 <code>markup</code> 互斥</b>。蒙版仅作用于第一张参考图。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>生成图片数量，1–128，默认 1。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>WIDTHxHEIGHT</code>；常用尺寸见下表。</td></tr>
+          <tr><td><code>quality</code></td><td class="opt">否</td><td>string</td><td>通用：<code>low</code>、<code>medium</code>、<code>high</code>、<code>auto</code>；2.5 / 2.6 额外支持 <code>xhigh</code>、<code>max</code>。</td></tr>
+          <tr><td><code>complexity</code></td><td class="opt">否</td><td>string</td><td>仅 2.6：<code>low</code>、<code>medium</code>、<code>high</code>（默认 <code>high</code>）。控制渲染前的规划强度，越高越慢、改动幅度越大。</td></tr>
+          <tr><td><code>background</code></td><td class="opt">否</td><td>string</td><td><code>auto</code>、<code>transparent</code> 或 <code>opaque</code>。透明背景要求 PNG 或 WebP。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code>（默认）、<code>jpeg</code>、<code>webp</code>；仅 2.6 额外支持 <code>svg</code>（仅生成）和 <code>gif</code>（生成与编辑）。</td></tr>
+          <tr><td><code>output_compression</code></td><td class="opt">否</td><td>integer</td><td>0–100，仅对 <code>jpeg</code> / <code>webp</code> 生效。SVG 与 GIF 不支持。</td></tr>
+          <tr><td><code>partial_images</code></td><td class="opt">否</td><td>integer</td><td>0–3，渐进预览帧数，每帧额外计费。SVG 与 GIF 不支持。</td></tr>
+          <tr><td><code>frame_count</code></td><td class="opt">否</td><td>integer</td><td>仅 GIF：2–64 帧，默认 9。</td></tr>
+          <tr><td><code>frame_duration_ms</code></td><td class="opt">否</td><td>integer</td><td>仅 GIF：每帧 20–2000 毫秒，默认 200，按 10ms 取整。</td></tr>
+          <tr><td><code>input_fidelity</code></td><td class="opt">否</td><td>string</td><td>2.5 / 2.6 可传。<b>GPT Image 2 必须省略</b>，该系列始终高保真处理输入图。</td></tr>
+          <tr><td><code>moderation</code></td><td class="opt">否</td><td>string</td><td><code>auto</code> 或 <code>low</code>。</td></tr>
+        </table>
+
+        <h3 id="h-5" class="sub">常用尺寸</h3>
+        <table>
+          <tr><th>分辨率</th><th>正方形</th><th>横版</th><th>竖版</th></tr>
+          <tr><td>自动</td><td colspan="3"><code>auto</code></td></tr>
+          <tr><td>1K</td><td><code>1024x1024</code></td><td><code>1536x1024</code>、<code>1360x1024</code>、<code>1824x1024</code></td><td><code>1024x1536</code>、<code>1024x1360</code>、<code>1024x1824</code></td></tr>
+          <tr><td>2K</td><td><code>2048x2048</code></td><td><code>3072x2048</code>、<code>2736x2048</code>、<code>3648x2048</code></td><td><code>2048x3072</code>、<code>2048x2736</code>、<code>2048x3648</code></td></tr>
+          <tr><td>4K</td><td><code>2880x2880</code></td><td><code>3504x2336</code>、<code>3264x2448</code>、<code>3840x2160</code></td><td><code>2336x3504</code>、<code>2448x3264</code>、<code>2160x3840</code></td></tr>
+        </table>
+        <div class="callout warn"><b>自定义尺寸</b>：使用小写 <code>x</code>；宽高均须为 16 的倍数，比例介于 <code>1:3</code> 与 <code>3:1</code>，单边不超过 3840 像素，总像素为 655,360–8,294,400。超出范围会在提交阶段直接返回 400。</div>
+        <div class="callout warn"><b>SVG / GIF 限制</b>：仅 2.6 支持。SVG 只用于纯生成（对应 <code>/v1/images/generations</code>），编辑请求不能输出 SVG，也不能把 SVG 当作参考图。GIF 在生成和编辑中都可用；用静帧引导动画时把参考图放进 <code>images</code>（走编辑）。<code>frame_count</code> 与 <code>frame_duration_ms</code> 在两条路径上都生效。SVG 要求 <code>n</code> 为 1。两者都不支持流式、<code>partial_images</code> 与 <code>output_compression</code>。</div>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="GPT Image 请求类型">
+            <button type="button" class="example-tab" id="gpt-text-tab" role="tab" aria-selected="true" aria-controls="gpt-text">文生图</button>
+            <button type="button" class="example-tab" id="gpt-image-tab" role="tab" aria-selected="false" aria-controls="gpt-image">参考图编辑</button>
+            <button type="button" class="example-tab" id="gpt-markup-tab" role="tab" aria-selected="false" aria-controls="gpt-markup">标注图编辑</button>
+            <button type="button" class="example-tab" id="gpt-gif-tab" role="tab" aria-selected="false" aria-controls="gpt-gif">GIF 动图</button>
+            <button type="button" class="example-tab" id="gpt-svg-tab" role="tab" aria-selected="false" aria-controls="gpt-svg">SVG 矢量</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="gpt-text" role="tabpanel" aria-labelledby="gpt-text-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-sunburst-sp",
+    "prompt": "生成一枚蓝色玻璃徽章",
+    "size": "1024x1024",
+    "quality": "max",
+    "complexity": "high",
+    "background": "transparent",
+    "output_format": "png",
+    "moderation": "low"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="gpt-image" role="tabpanel" aria-labelledby="gpt-image-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-flare-sd",
+    "prompt": "保留主体结构，将材质改为磨砂金属",
+    "images": ["https://upload.o1key.com/uploads/product.png"],
+    "size": "1536x1024",
+    "quality": "xhigh",
+    "output_format": "png"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="gpt-markup" role="tabpanel" aria-labelledby="gpt-markup-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-sunburst",
+    "prompt": "把红圈标注的花瓶改成青瓷，其余部分保持不变",
+    "images": ["https://upload.o1key.com/uploads/room.png"],
+    "markup": {"image_url": "https://upload.o1key.com/uploads/room-markup.png"},
+    "quality": "high",
+    "output_format": "png"
+  }'</code></pre>
+              <p class="compact-note">标注层是独立透明 PNG，尺寸与第一张参考图一致，不要把它叠在原图上。</p>
+            </div>
+            <div class="example-tab-panel" id="gpt-gif" role="tabpanel" aria-labelledby="gpt-gif-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-flare",
+    "prompt": "一盏灯笼轻微摇曳，循环回到起始姿态",
+    "size": "1024x1024",
+    "quality": "medium",
+    "output_format": "gif",
+    "frame_count": 9,
+    "frame_duration_ms": 200
+  }'</code></pre>
+              <p class="compact-note">9 帧 × 200ms ≈ 1.8 秒循环。带参考静帧时把图片放进 <code>images</code>，请求按编辑处理；GIF 在编辑中同样可用。</p>
+            </div>
+            <div class="example-tab-panel" id="gpt-svg" role="tabpanel" aria-labelledby="gpt-svg-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-image-2.6-sunburst",
+    "prompt": "一个极简线性风格的云朵图标，单色",
+    "size": "1024x1024",
+    "quality": "high",
+    "output_format": "svg",
+    "n": 1
+  }'</code></pre>
+              <p class="compact-note">输出是可编辑路径的矢量图，只支持静态内容，<code>n</code> 必须为 1。</p>
+            </div>
+          </div>
+        </div>
+        <h3>提交成功 <span class="pill success">200</span></h3>
+        <pre data-sim="submit"><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+        <h3>提交失败 <span class="pill danger">400</span></h3>
+        <pre><code>{
+  "error": {
+    "message": "complexity is only supported by GPT Image 2.6 and later",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="async-task-gpt-image" title="查询 GPT Image 任务" returns="任务状态与结果">
+<doc-route method="GET" path="/async/v1/tasks/{task_id}"></doc-route>
+<doc-main>
+<p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>生成成功 <span class="pill success">200</span></h3>
+        <pre data-sim="done"><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "gpt-image-2.5-sunburst-sp",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/example.png",
+        "mime_type": "image/png"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>生成失败 <span class="pill danger">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "上游未返回图片数据"
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

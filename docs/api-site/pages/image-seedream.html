@@ -1,0 +1,233 @@
+<doc-page slug="image-seedream" nav="Seedream" title="Seedream" kind="async">
+<doc-summary>单图生成、参考图编辑、多图融合和图层拆分。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/async/v1/generateImage</code>，返回 <code>task_id</code></step>
+<step title="轮询状态">GET <code>/async/v1/tasks/{task_id}</code></step>
+<step title="获取图片"><code>SUCCESS</code> 后读取 <code>data.images</code></step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>生成单张图片，或基于参考图编辑、融合多张图，还可以把一张图拆成多个图层。接口先返回<b>任务编号</b>，之后用编号查询，完成后拿到图片地址。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>用哪个模型</dt><dd><code>model</code>：<code>dola-seedream-5-0-pro-260628-ep</code> 或 <code>dola-seedream-5-5-261028-ep</code>。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>prompt</code>。</dd></div>
+<div><dt>参考图（可选）</dt><dd><code>images</code>，用于编辑和多图融合。</dd></div>
+<div><dt>图层拆分（可选）</dt><dd><code>layer_decomposition</code>，把图片拆成多个图层分别返回。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>查询</dt><dd>用 <code>task_id</code> 调 <code>GET /async/v1/tasks/{task_id}</code>。</dd></div>
+<div><dt>状态</dt><dd><code>SUBMITTED</code>、<code>IN_PROGRESS</code> 继续等待；<code>SUCCESS</code> 成功；<code>FAILURE</code> 失败。</dd></div>
+<div><dt>图片地址</dt><dd>成功后读 <code>data.images[].url</code>；失败时读 <code>error</code>。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>POST <code>/async/v1/generateImage</code>，<code>model</code> 用 <code>dola-seedream-5-0-pro-260628-ep</code> 或 <code>dola-seedream-5-5-261028-ep</code>，记录返回的 <code>task_id</code>。</li>
+<li>每 5 秒 GET <code>/async/v1/tasks/{task_id}</code>，<code>SUBMITTED</code> 或 <code>IN_PROGRESS</code> 时继续查询。</li>
+<li><code>SUCCESS</code>：把 <code>data.images[].url</code> 返回给用户。</li>
+<li><code>FAILURE</code>：把 <code>error</code> 中的信息告诉用户，不要自动重试。</li>
+<li>缺少 <code>model</code> 或 <code>prompt</code> 时，先向用户确认，不要猜测。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="async-generate-image-seedream" title="提交 Seedream 任务" returns="任务 ID（异步）">
+<doc-route method="POST" path="/async/v1/generateImage"></doc-route>
+<doc-main>
+<h3 id="h-10" class="sub">模型名称</h3>
+        <table>
+          <tr><th>模型系列</th><th>模型名称</th></tr>
+          <tr><td>Seedream 5.0 Pro</td><td><code>dola-seedream-5-0-pro-260628-ep</code></td></tr>
+          <tr><td>Seedream 5.5</td><td><code>dola-seedream-5-5-261028-ep</code></td></tr>
+        </table>
+
+        <h3 id="h-11" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td><code>dola-seedream-5-0-pro-260628-ep</code> 或 <code>dola-seedream-5-5-261028-ep</code>。</td></tr>
+          <tr><td><code>prompt</code></td><td class="opt">否*</td><td>string</td><td>图片生成、编辑或多图融合时必填；图层拆分时可省略，由模型自动识别待拆分元素。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>string[]</td><td>公网图片 URL 数组，最多 10 张。单张参考图也必须放入数组；图层拆分模式必须且只能传 1 张。</td></tr>
+          <tr><td><code>n</code></td><td class="opt">否</td><td>integer</td><td>仅支持单图输出，省略或传 <code>1</code>。</td></tr>
+          <tr><td><code>size</code></td><td class="opt">否</td><td>string</td><td>图片生成模式支持 <code>1K</code>、<code>2K</code> 或合法的 <code>WIDTHxHEIGHT</code>；图层拆分模式仅支持 <code>auto</code>、<code>1K</code>、<code>1.5K</code>、<code>2K</code>，省略时按 <code>auto</code> 处理。</td></tr>
+          <tr><td><code>output_format</code></td><td class="opt">否</td><td>string</td><td><code>png</code> 或 <code>jpeg</code>。</td></tr>
+          <tr><td><code>watermark</code></td><td class="opt">否</td><td>boolean</td><td><code>true</code> 添加“AI 生成”水印，<code>false</code> 不添加。</td></tr>
+          <tr><td><code>layer_decomposition</code></td><td class="opt">否</td><td>boolean</td><td>图层拆分开关，默认 <code>false</code>，仅 Seedream 5.0 Pro 支持。设为 <code>true</code> 时，将输入图拆解为 1 张底图和最多 16 个带透明通道的 PNG 图层。</td></tr>
+        </table>
+
+        <h3 id="h-12" class="sub">图层拆分</h3>
+        <table>
+          <tr><th>规则</th><th>说明</th></tr>
+          <tr><td>输入</td><td><code>images</code> 必须且只能包含 1 张待拆分图片。</td></tr>
+          <tr><td>输出</td><td><code>data.images</code> 返回 1 张底图和最多 16 个图层，按 <code>z_index</code> 表示图层顺序。</td></tr>
+          <tr><td>图层信息</td><td>每项可包含 <code>bounding_box</code>、<code>name</code> 和 <code>description</code>；<code>bounding_box.absolute</code> 为绝对像素坐标，<code>bounding_box.normalized</code> 为 0–1000 归一化坐标。</td></tr>
+          <tr><td>失败处理</td><td>任一图层生成失败时，整个任务返回 <code>FAILURE</code>，不返回部分结果。</td></tr>
+          <tr><td>数量上限</td><td>提示词要求的图层数量超过上限时，超出部分可能不会返回。</td></tr>
+        </table>
+
+        <h3 id="h-13" class="sub">尺寸</h3>
+        <table>
+          <tr><th>宽高比</th><th><code>1K</code></th><th><code>2K</code></th></tr>
+          <tr><td><code>1:1</code></td><td><code>1024x1024</code></td><td><code>2048x2048</code></td></tr>
+          <tr><td><code>4:3</code></td><td><code>1152x864</code></td><td><code>2368x1776</code></td></tr>
+          <tr><td><code>3:4</code></td><td><code>864x1152</code></td><td><code>1776x2368</code></td></tr>
+          <tr><td><code>16:9</code></td><td><code>1424x800</code></td><td><code>2816x1584</code></td></tr>
+          <tr><td><code>9:16</code></td><td><code>800x1424</code></td><td><code>1584x2816</code></td></tr>
+          <tr><td><code>3:2</code></td><td><code>1248x832</code></td><td><code>2496x1664</code></td></tr>
+          <tr><td><code>2:3</code></td><td><code>832x1248</code></td><td><code>1664x2496</code></td></tr>
+          <tr><td><code>21:9</code></td><td><code>1568x672</code></td><td><code>3136x1344</code></td></tr>
+        </table>
+        <div class="callout warn"><b>自定义尺寸</b>：总像素必须在 921,600 至 4,624,220 之间，宽高比必须在 <code>1:16</code> 至 <code>16:1</code> 之间。尺寸只接受小写 <code>x</code>。</div>
+        <div class="callout info"><b>Seedream 5.5</b>：<code>size</code> 直接传 <code>WIDTHxHEIGHT</code>，例如 <code>2048x2048</code>、<code>2688x1512</code>。不支持图层拆分。</div>
+
+        <h3 id="h-14" class="sub">参考图限制</h3>
+        <table>
+          <tr><th>项目</th><th>限制</th></tr>
+          <tr><td>数量</td><td>最多 10 张</td></tr>
+          <tr><td>格式</td><td>JPEG、PNG、WebP、BMP、TIFF、GIF、HEIC、HEIF</td></tr>
+          <tr><td>文件大小</td><td>每张不超过 30MB</td></tr>
+          <tr><td>尺寸</td><td>宽和高均大于 14px，单张总像素不超过 36,000,000</td></tr>
+          <tr><td>宽高比</td><td><code>1:16</code> 至 <code>16:1</code></td></tr>
+        </table>
+
+        <h3 id="h-15" class="sub">计费</h3>
+        <p>基础价格按火山引擎中国区官方价格及实际输出结算：图片生成模式不超过 261 万像素为 <code>¥0.30 / 张</code>，超过 261 万像素为 <code>¥0.60 / 张</code>；图层拆分模式按每张实际返回图片计费，底图计入数量，不超过 261 万像素为 <code>¥0.15 / 张</code>，超过 261 万像素为 <code>¥0.30 / 张</code>。图片生成模式首张参考图免费，从第 2 张起每张增加 <code>¥0.02</code>。最终价格乘以调用密钥所属分组的倍率。</p>
+        <p>Seedream 5.5 按实际输出结算：不超过 261 万像素为 <code>¥0.14 / 张</code>，超过 261 万像素为 <code>¥0.245 / 张</code>。每张参考图增加 <code>¥0.056</code>（从第 1 张起计）。最终价格同样乘以分组倍率。</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Seedream 请求类型">
+            <button type="button" class="example-tab" id="seedream-async-text-tab" role="tab" aria-selected="true" aria-controls="seedream-async-text">文生图</button>
+            <button type="button" class="example-tab" id="seedream-async-image-tab" role="tab" aria-selected="false" aria-controls="seedream-async-image">多图融合</button>
+            <button type="button" class="example-tab" id="seedream-async-layer-tab" role="tab" aria-selected="false" aria-controls="seedream-async-layer">图层拆分</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="seedream-async-text" role="tabpanel" aria-labelledby="seedream-async-text-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "生成一张 16:9 横版科技产品海报",
+    "size": "1K",
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedream-async-image" role="tabpanel" aria-labelledby="seedream-async-image-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "保留图一人物的姿势，将服装替换为图二的套装",
+    "images": [
+      "https://upload.o1key.com/uploads/subject.png",
+      "https://upload.o1key.com/uploads/outfit.png"
+    ],
+    "size": "2K",
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="seedream-async-layer" role="tabpanel" aria-labelledby="seedream-async-layer-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "prompt": "将主体、背景和文字拆分为可独立编辑的图层",
+    "images": [
+      "https://upload.o1key.com/uploads/poster.png"
+    ],
+    "layer_decomposition": true,
+    "output_format": "png",
+    "watermark": false
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+        <h3>提交成功 <span class="pill success">200</span></h3>
+        <pre data-sim="submit"><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+        <h3>提交失败 <span class="pill danger">400</span></h3>
+        <pre><code>{
+  "error": {
+    "message": "n must be 1 for Seedream 5.0 Pro",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/async/v1/tasks/{task_id}" title="查询 Seedream 任务" returns="任务状态与结果">
+<doc-route method="GET" path="/async/v1/tasks/{task_id}"></doc-route>
+<doc-main>
+<p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>生成成功 <span class="pill success">200</span></h3>
+        <pre data-sim="done"><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/example.png",
+        "mime_type": "image/png"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>图层拆分成功 <span class="pill success">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "dola-seedream-5-0-pro-260628-ep",
+    "created": 1786350000,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/images/base.png",
+        "mime_type": "image/png",
+        "z_index": 0,
+        "size": "2048x2048",
+        "output_format": "png"
+      },
+      {
+        "url": "https://assetcache.o1key.com/images/subject.png",
+        "mime_type": "image/png",
+        "z_index": 1,
+        "size": "1408x1780",
+        "output_format": "png",
+        "bounding_box": {
+          "absolute": [320, 180, 1728, 1960],
+          "normalized": [156, 88, 844, 957]
+        },
+        "name": "主体",
+        "description": "画面中的主要人物"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>生成失败 <span class="pill danger">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "upstream image generation failed"
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

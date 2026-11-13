@@ -1,6 +1,6 @@
 # Kling 4.0 / 4.0 Flash 视频接口
 
-下游调用时保留 `/kling` 前缀，其余路径、请求体、状态和查询方式与可灵官方一致。客户说明见 `docs/api-doc.html` 的 Kling 4.0 一节。
+下游调用时保留 `/kling` 前缀，其余路径、请求体、状态和查询方式与可灵官方一致。客户说明见 `docs/api-site/pages/kling-4.html`（线上 `/docs/kling-4`）。
 
 | 操作 | 提交 | 单任务查询 |
 | --- | --- | --- |

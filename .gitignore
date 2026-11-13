@@ -81,3 +81,4 @@ uploads/
 
 # Local validation output can contain runtime data and build logs.
 /docs/reviews/artifacts/
+docs/api-site/dist/

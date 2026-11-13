@@ -1,0 +1,229 @@
+<doc-page slug="wan3" nav="万相 Wan 3.0" title="万相 Wan 3.0 视频生成" kind="async">
+<doc-summary>文生视频、首帧/首尾帧生视频、参考生视频和视频编辑。通过统一异步接口创建任务，并使用任务 ID 查询结果。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/v1/video/generations</code>，返回 <code>task_id</code></step>
+<step title="轮询状态">每 15 秒左右 GET <code>/v1/video/generations/{task_id}</code></step>
+<step title="获取视频"><code>completed</code> 后读取 <code>result_url</code></step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用万相 3.0 生成视频：文生视频、首帧或首尾帧生视频、参考图 / 视频 / 音频生视频，也可以编辑一段已有视频。最长 30 秒。接口先返回<b>任务编号</b>，之后用编号查询。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>用哪个模型</dt><dd><code>model</code>：<code>wan3.0-video</code>（标准）或 <code>wan3.0-video-prime</code>（更快）。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>prompt</code>，必填。用「图1」「视频1」引用素材。</dd></div>
+<div><dt>分辨率（建议填）</dt><dd><code>resolution</code>：<code>480p</code>、<code>720p</code>、<code>1080p</code>。不传按 1080p 生成和计费。</dd></div>
+<div><dt>时长（可选）</dt><dd><code>duration</code>，2–30 秒，不传为 5 秒。</dd></div>
+<div><dt>素材（可选）</dt><dd><code>image</code> 作为首帧；更多素材放进 <code>metadata.input.media</code>。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>状态</dt><dd><code>queued</code>、<code>in_progress</code> 继续等待；<code>completed</code> 成功；<code>failed</code> 失败。</dd></div>
+<div><dt>视频地址</dt><dd><code>result_url</code>（同 <code>metadata.url</code>），是限时链接，请及时下载转存。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>POST <code>/v1/video/generations</code>，<code>model</code> 为 <code>wan3.0-video</code> 或 <code>wan3.0-video-prime</code>，<code>prompt</code> 必填，记录返回的 <code>task_id</code>。</li>
+<li>显式传 <code>resolution</code>，不传会按 1080p 生成和计费。</li>
+<li>每 15 秒左右 GET <code>/v1/video/generations/{task_id}</code>，<code>queued</code> 或 <code>in_progress</code> 时继续查询。</li>
+<li><code>completed</code>：把 <code>result_url</code> 返回给用户，提醒是限时链接。</li>
+<li><code>failed</code>：把 <code>error.code</code> 和 <code>error.message</code> 告诉用户，不要自动重试。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="wan3-create" title="创建万相 Wan 3.0 视频任务" returns="任务 ID（异步）">
+<doc-route method="POST" path="/v1/video/generations"></doc-route>
+<doc-main>
+<p>创建成功后立即返回任务 ID，视频在后台生成，单次任务通常 1-5 分钟完成。</p>
+
+        <h3 id="h-wan3-models" class="sub">模型</h3>
+        <table>
+          <tr><th>模型</th><th>说明</th></tr>
+          <tr><td><code>wan3.0-video</code></td><td>标准版。</td></tr>
+          <tr><td><code>wan3.0-video-prime</code></td><td>高速版，能力和参数与标准版完全相同，出片更快，单价更高。</td></tr>
+        </table>
+
+        <h3 id="h-wan3-params" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td><code>wan3.0-video</code> 或 <code>wan3.0-video-prime</code>。</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>提示词。只用素材时也请写一句描述。用「图1」「视频1」「音频1」引用参考素材，序号为该类型在 <code>media</code> 中出现的顺序。</td></tr>
+          <tr><td><code>resolution</code></td><td>string</td><td>否</td><td><code>480p</code>、<code>720p</code> 或 <code>1080p</code>。<b>不传按 <code>1080p</code> 生成并计费</b>，建议显式传。</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>否</td><td>输出秒数，2-30，不传为 5。智能时长用 <code>metadata.parameters.duration: -1</code>。</td></tr>
+          <tr><td><code>image</code> / <code>images</code></td><td>string / array</td><td>否</td><td>快捷写法：1 张图作为首帧，2 张图作为首帧和尾帧。传了 <code>metadata.input.media</code> 时以 <code>media</code> 为准。</td></tr>
+          <tr><td><code>metadata.input.media</code></td><td>array</td><td>否</td><td>素材数组，每项 <code>{"type": "...", "url": "..."}</code>，见下表。</td></tr>
+          <tr><td><code>metadata.parameters.ratio</code></td><td>string</td><td>否</td><td><code>adaptive</code>、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>、<code>4:3</code>、<code>3:4</code>、<code>21:9</code>。</td></tr>
+          <tr><td><code>metadata.parameters.duration</code></td><td>integer</td><td>否</td><td>2-30，或 <code>-1</code> 智能时长（按实际生成秒数计费）。传了以此为准。</td></tr>
+          <tr><td><code>metadata.parameters.audio</code></td><td>boolean</td><td>否</td><td>是否带音轨，默认 <code>true</code>。</td></tr>
+          <tr><td><code>metadata.parameters.watermark</code></td><td>boolean</td><td>否</td><td>是否在右下角加「AI 生成」水印，默认 <code>false</code>。</td></tr>
+          <tr><td><code>metadata.parameters.seed</code></td><td>integer</td><td>否</td><td>随机种子。相同 seed 也不保证结果完全一致。</td></tr>
+          <tr><td><code>metadata.parameters.prompt_extend</code></td><td>boolean</td><td>否</td><td>是否先智能改写提示词，默认 <code>true</code>。传 <code>false</code> 严格按原提示词生成，出片更快。</td></tr>
+        </table>
+
+        <h3 id="h-wan3-media" class="sub"><code>media</code> 素材类型</h3>
+        <table>
+          <tr><th><code>type</code></th><th>含义</th><th>数量</th></tr>
+          <tr><td><code>first_frame</code></td><td>视频第一帧</td><td>最多 1 张</td></tr>
+          <tr><td><code>last_frame</code></td><td>视频最后一帧，需与 <code>first_frame</code> 一起用</td><td>最多 1 张</td></tr>
+          <tr><td><code>reference_image</code></td><td>参考图</td><td>最多 10 张</td></tr>
+          <tr><td><code>reference_video</code></td><td>参考视频；也用于视频编辑、视频延长</td><td>最多 5 段，总时长不超过 15 秒</td></tr>
+          <tr><td><code>reference_audio</code></td><td>参考音频</td><td>最多 5 段，总时长不超过 15 秒</td></tr>
+        </table>
+        <ul>
+          <li>首尾帧与参考素材互斥：有 <code>first_frame</code>/<code>last_frame</code> 就不能再有 <code>reference_*</code>。参考图、参考视频、参考音频之间可以自由组合。</li>
+          <li>带参考视频时，参考视频总时长 + 输出时长不超过 30 秒。</li>
+          <li>素材 URL 必须是公网可直接下载的 HTTP/HTTPS 地址，不依赖登录态、Cookie 或 Referer。可先用<a href="#temporary-upload">素材上传</a>得到 URL。</li>
+          <li>图片：JPEG/JPG/PNG（不支持透明通道）/BMP/WEBP，单边 240-8000 像素，宽高比不超过 8:1，单张不超过 20MB。参考视频：MP4/MOV，单段 1-15 秒，帧率不低于 16fps，单个不超过 100MB。参考音频：WAV/MP3，单段 1-15 秒，单个不超过 15MB。</li>
+        </ul>
+
+        <h3 id="h-wan3-price" class="sub">计费</h3>
+        <p>按秒、按输出分辨率计费：计费秒数 = 输出视频秒数 + 参考视频秒数。提交时按上限预扣（智能时长按 30 秒；带参考视频时按参考视频 15 秒且合计不超过 30 秒），完成后按实际秒数结算，多退少补。带不带音轨、开不开 <code>prompt_extend</code> 价格相同。密钥若有分组倍率，再乘该倍率。任务失败不扣费。</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="万相 Wan 3.0 请求类型">
+            <button type="button" class="example-tab" id="wan3-text-tab" role="tab" aria-selected="true" aria-controls="wan3-text">文生视频</button>
+            <button type="button" class="example-tab" id="wan3-frame-tab" role="tab" aria-selected="false" aria-controls="wan3-frame">首帧生视频</button>
+            <button type="button" class="example-tab" id="wan3-ref-tab" role="tab" aria-selected="false" aria-controls="wan3-ref">参考生视频</button>
+            <button type="button" class="example-tab" id="wan3-edit-tab" role="tab" aria-selected="false" aria-controls="wan3-edit">视频编辑</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="wan3-text" role="tabpanel" aria-labelledby="wan3-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "wan3.0-video",
+    "prompt": "一只小猫在月光下的屋顶上奔跑，城市的霓虹灯在远处闪烁",
+    "resolution": "720p",
+    "duration": 5,
+    "metadata": {
+      "parameters": { "ratio": "16:9", "prompt_extend": false }
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="wan3-frame" role="tabpanel" aria-labelledby="wan3-frame-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "wan3.0-video",
+    "prompt": "涂鸦少年从墙上活过来，开始说唱",
+    "image": "https://example.com/first.png",
+    "resolution": "720p",
+    "duration": 5,
+    "metadata": { "parameters": { "ratio": "adaptive" } }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="wan3-ref" role="tabpanel" aria-labelledby="wan3-ref-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "wan3.0-video",
+    "prompt": "图1中的女孩在海边奔跑，用音频1的声音说：今天的阳光真好",
+    "resolution": "720p",
+    "duration": 5,
+    "metadata": {
+      "input": {
+        "media": [
+          { "type": "reference_image", "url": "https://example.com/girl.jpg" },
+          { "type": "reference_audio", "url": "https://example.com/voice.mp3" }
+        ]
+      },
+      "parameters": { "ratio": "16:9" }
+    }
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="wan3-edit" role="tabpanel" aria-labelledby="wan3-edit-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "wan3.0-video",
+    "prompt": "将整个画面转换为黏土风格",
+    "resolution": "720p",
+    "metadata": {
+      "input": {
+        "media": [
+          { "type": "reference_video", "url": "https://example.com/source.mp4" }
+        ]
+      },
+      "parameters": { "ratio": "adaptive", "duration": -1 }
+    }
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>创建响应</h3>
+        <pre data-sim="submit"><code>{
+  "id": "task_xxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "wan3.0-video",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1794490280
+}</code></pre>
+
+        <h3>参数错误响应</h3>
+        <pre><code>{
+  "code": "invalid_request",
+  "message": "wan3.0 duration must be -1 or an integer between 2 and 30",
+  "data": null
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="wan3-result" title="查询万相 Wan 3.0 视频任务" returns="任务状态与结果">
+<doc-route method="GET" path="/v1/video/generations/{task_id}"></doc-route>
+<doc-main>
+<p>状态：<code>queued</code>、<code>in_progress</code>、<code>completed</code>、<code>failed</code>。建议每 15 秒左右查询一次。</p>
+        <p><code>completed</code> 后从 <code>result_url</code>（同 <code>metadata.url</code>）下载视频。视频链接为限时链接，请及时下载转存。<code>seconds</code> 为实际输出秒数，<code>size</code> 为实际分辨率。</p>
+        <p><code>failed</code> 时读取 <code>error.code</code> 和 <code>error.message</code>，常见 <code>DataInspectionFailed</code>（内容审核未通过）、<code>IPInfringementSuspect</code>（疑似知识产权侵权）、<code>InvalidParameter</code>（参数或素材组合不被接受）。</p>
+
+</doc-main>
+<doc-examples>
+<h3>查询状态</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/video/generations/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>完成响应</h3>
+        <pre data-sim="done"><code>{
+  "id": "task_xxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "wan3.0-video",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1794490280,
+  "completed_at": 1794490370,
+  "seconds": "5",
+  "size": "720P",
+  "result_url": "https://cdn.example.com/video.mp4",
+  "metadata": {
+    "url": "https://cdn.example.com/video.mp4",
+    "resolution": "720P"
+  }
+}</code></pre>
+
+        <h3>失败响应</h3>
+        <pre><code>{
+  "id": "task_xxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "wan3.0-video",
+  "status": "failed",
+  "progress": 100,
+  "created_at": 1794490280,
+  "error": {
+    "code": "DataInspectionFailed",
+    "message": "Input data may contain inappropriate content."
+  }
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

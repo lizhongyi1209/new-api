@@ -1,0 +1,142 @@
+<doc-page slug="omni-flash" nav="Omni Flash 1.2" title="Omni Flash 1.2 视频" kind="async">
+<doc-summary>文生视频和视频编辑，按次计费。提交后返回任务 ID，查询到 <code>completed</code> 后下载 MP4。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/v1/videos</code>，返回任务 ID</step>
+<step title="轮询状态">GET <code>/v1/videos/{task_id}</code></step>
+<step title="下载视频"><code>completed</code> 后 GET <code>…/content</code> 得到 MP4</step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用 Omni Flash 1.2 生成视频，或编辑一段已有视频，按次计费。接口先返回<b>任务编号</b>，完成后用内容接口下载视频文件。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>用哪个模型</dt><dd><code>model</code>，固定 <code>omni_flash-1.2</code>。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>prompt</code>；编辑视频时写明要改什么。</dd></div>
+<div><dt>待编辑视频（编辑时必填）</dt><dd><code>source_video_url</code>，公网 URL，可先用素材上传得到。</dd></div>
+<div><dt>时长与分辨率（可选）</dt><dd><code>seconds</code>、<code>resolution</code>、<code>aspect_ratio</code>。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>状态</dt><dd><code>queued</code>、<code>in_progress</code> 继续等待；<code>completed</code> 成功；<code>failed</code> 失败。</dd></div>
+<div><dt>视频文件</dt><dd><code>completed</code> 后 GET <code>/v1/videos/{task_id}/content</code>，响应体就是 MP4。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>POST <code>/v1/videos</code>，<code>model</code> 固定 <code>omni_flash-1.2</code>；传 <code>source_video_url</code> 即为视频编辑。记录返回的任务 ID。</li>
+<li>定期 GET <code>/v1/videos/{task_id}</code>，<code>queued</code> 或 <code>in_progress</code> 时继续查询。</li>
+<li><code>completed</code>：GET <code>/v1/videos/{task_id}/content</code> 下载 MP4 交给用户。</li>
+<li><code>failed</code>：把错误信息告诉用户，不要自动重试。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="omni-flash-create" title="创建 Omni Flash 1.2 视频任务" returns="任务 ID（异步）">
+<doc-route method="POST" path="/v1/videos"></doc-route>
+<doc-main>
+<p>固定使用 <code>omni_flash-1.2</code>，请求体为 JSON。</p>
+        <div class="callout warn"><b>时长字段</b>：只用 <code>seconds</code>，且必须是整数（写 <code>8</code>，不要写 <code>"8"</code>）。传 <code>duration</code> 会被拒绝。</div>
+
+        <h3 id="h-omni-flash-params" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>固定为 <code>omni_flash-1.2</code>。</td></tr>
+          <tr><td><code>prompt</code></td><td>string</td><td>是</td><td>视频内容描述；视频编辑时写明要修改的内容。</td></tr>
+          <tr><td><code>seconds</code></td><td>integer</td><td>否</td><td>输出时长（秒），整数。</td></tr>
+          <tr><td><code>resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code> 或 <code>4k</code>。不传按 <code>720p</code> 计费。</td></tr>
+          <tr><td><code>aspect_ratio</code></td><td>string</td><td>否</td><td><code>16:9</code> 或 <code>9:16</code>。</td></tr>
+          <tr><td><code>source_video_url</code></td><td>string</td><td>条件</td><td>视频编辑时必填，待编辑视频的公网 URL。可先用<a href="#temporary-upload">素材上传</a>得到 URL。也可写作 <code>video_url</code>。</td></tr>
+        </table>
+
+        <h3 id="h-omni-flash-price" class="sub">计费</h3>
+        <p>按次计费，与时长无关。传入 <code>source_video_url</code> 或 <code>video_url</code> 即按视频编辑计费，否则按视频生成计费。密钥若有分组倍率，再乘该倍率。任务失败不扣费。</p>
+        <table>
+          <tr><th>操作</th><th>720p</th><th>1080p</th><th>4K</th></tr>
+          <tr><td>视频生成</td><td>¥1.00 / 次</td><td>¥1.00 / 次</td><td>¥1.50 / 次</td></tr>
+          <tr><td>视频编辑</td><td>¥1.50 / 次</td><td>¥1.50 / 次</td><td>¥2.00 / 次</td></tr>
+        </table>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Omni Flash 1.2 请求类型">
+            <button type="button" class="example-tab" id="omni-flash-text-tab" role="tab" aria-selected="true" aria-controls="omni-flash-text">文生视频</button>
+            <button type="button" class="example-tab" id="omni-flash-edit-tab" role="tab" aria-selected="false" aria-controls="omni-flash-edit">视频编辑</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="omni-flash-text" role="tabpanel" aria-labelledby="omni-flash-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "omni_flash-1.2",
+    "prompt": "一只小猫在阳光下轻轻挥手",
+    "seconds": 8,
+    "resolution": "720p",
+    "aspect_ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="omni-flash-edit" role="tabpanel" aria-labelledby="omni-flash-edit-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "omni_flash-1.2",
+    "prompt": "保持人物动作不变，把背景换成雨夜街道",
+    "source_video_url": "https://cdn.example.com/source.mp4",
+    "resolution": "1080p"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <h3>创建响应</h3>
+        <pre data-sim="submit"><code>{
+  "id": "task_xxxxxxxxxx",
+  "task_id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "omni_flash-1.2",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1794490280
+}</code></pre>
+
+        <h3>参数错误响应</h3>
+        <pre><code>{
+  "code": "invalid_request",
+  "message": "seconds must be an integer",
+  "data": null
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="omni-flash-result" title="查询与下载 Omni Flash 1.2 视频" returns="任务状态、视频文件">
+<doc-route method="GET" path="/v1/videos/{task_id}"></doc-route>
+<doc-route method="GET" path="/v1/videos/{task_id}/content"></doc-route>
+<doc-main>
+<p>状态：<code>queued</code>、<code>in_progress</code>、<code>completed</code>、<code>failed</code>。</p>
+        <p><code>completed</code> 后调用内容接口下载 MP4。</p>
+
+</doc-main>
+<doc-examples>
+<h3>查询状态</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>完成响应</h3>
+        <pre data-sim="done"><code>{
+  "id": "task_xxxxxxxxxx",
+  "object": "video",
+  "model": "omni_flash-1.2",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1794490280,
+  "completed_at": 1794490324
+}</code></pre>
+
+        <h3>下载视频</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt;/content \
+  -H "Authorization: Bearer $API_KEY" \
+  --output omni-flash-result.mp4</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

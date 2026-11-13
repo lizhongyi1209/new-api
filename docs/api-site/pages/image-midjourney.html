@@ -1,0 +1,242 @@
+<doc-page slug="image-midjourney" nav="Midjourney" title="Midjourney" kind="async">
+<doc-summary>画面比例、画质、高清档、风格参考等设置直接写在提示词末尾，沿用 Midjourney 原生语法。标准模式每次任务返回 4 张图；使用 <code>--draft</code> 时出图数量与尺寸可能不同。按次计费。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/async/v1/generateImage</code>，返回 <code>task_id</code></step>
+<step title="轮询状态">每 5–10 秒 GET <code>/async/v1/tasks/{task_id}</code></step>
+<step title="获取图片"><code>SUCCESS</code> 后读取 <code>data.images</code>，通常 4 张</step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用 Midjourney 生成图片。画面比例、画质、风格参考等设置直接写在提示词末尾，沿用 Midjourney 原生写法。标准模式每次返回 4 张图，单次通常需要 60–170 秒。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>用哪个模型</dt><dd><code>model</code>，固定 <code>mj-v8.2</code>。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>prompt</code>，参数写在末尾，例如 <code>A cat --ar 16:9 --q 2</code>。</dd></div>
+<div><dt>参考图（可选）</dt><dd><code>images</code>，或把公网图片 URL 写进提示词。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>查询</dt><dd>用 <code>task_id</code> 调 <code>GET /async/v1/tasks/{task_id}</code>。</dd></div>
+<div><dt>状态</dt><dd><code>SUBMITTED</code>、<code>IN_PROGRESS</code> 继续等待；<code>SUCCESS</code> 成功；<code>FAILURE</code> 失败。</dd></div>
+<div><dt>图片地址</dt><dd>成功后读 <code>data.images[].url</code>；失败时读 <code>error</code>。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>POST <code>/async/v1/generateImage</code>，<code>model</code> 用 <code>mj-v8.2</code>，比例等参数写在 <code>prompt</code> 末尾，记录返回的 <code>task_id</code>。</li>
+<li>每 5–10 秒 GET <code>/async/v1/tasks/{task_id}</code>，<code>SUBMITTED</code> 或 <code>IN_PROGRESS</code> 时继续查询。</li>
+<li><code>SUCCESS</code>：把 <code>data.images[].url</code> 返回给用户。</li>
+<li><code>FAILURE</code>：把 <code>error</code> 中的信息告诉用户，不要自动重试。</li>
+<li>缺少 <code>model</code> 或 <code>prompt</code> 时，先向用户确认，不要猜测。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="async-generate-image-midjourney" title="提交 Midjourney 任务" returns="任务 ID（异步）">
+<doc-route method="POST" path="/async/v1/generateImage"></doc-route>
+<doc-main>
+<div class="callout info"><b>写法与其它生图模型不同</b>：Midjourney 的画幅、画质、高清档等设置<b>全部写在 <code>prompt</code> 末尾</b>，沿用 Midjourney 原生参数语法。</div>
+
+        <h3 id="h-mj-model" class="sub">模型名称</h3>
+        <table>
+          <tr><th>模型名称</th><th>版本</th><th>能力</th></tr>
+          <tr><td><code>mj-v8.2</code></td><td>v8.2</td><td>文生图、单图参考、Prompt 多内容参考、风格参考（<code>--sref</code>）</td></tr>
+        </table>
+
+        <h3 id="h-mj-params" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>必填</th><th>类型</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td class="req">是</td><td>string</td><td>固定使用 <code>mj-v8.2</code>。</td></tr>
+          <tr><td><code>prompt</code></td><td class="req">是</td><td>string</td><td>提示词。画幅、画质、参考图 URL、<code>--sref</code> 等设置都写在这里，例如 <code>A cat --ar 16:9 --q 2</code>。多张内容参考请把公网 URL 写在提示词开头。</td></tr>
+          <tr><td><code>images</code></td><td class="opt">否</td><td>string[]</td><td>参考图 URL 数组，元素为字符串（不是对象）。<b>最多 1 张</b>；传两张及以上会返回 400。需要多张内容参考时，把 URL 写进 <code>prompt</code> 开头，不要塞进本字段。</td></tr>
+        </table>
+
+        <h3 id="h-mj-prompt" class="sub">提示词参数</h3>
+        <p>以下参数直接写在 <code>prompt</code> 末尾，按 Midjourney 原生语法生效：</p>
+        <table>
+          <tr><th>参数</th><th>作用</th><th>取值</th><th>说明</th></tr>
+          <tr><td><code>--ar</code></td><td>画面比例</td><td><code>1:1</code>、<code>16:9</code>、<code>9:16</code>、<code>4:5</code>、<code>3:2</code>、<code>2:3</code>、<code>21:9</code> 等</td><td>默认 <code>1:1</code>。控制比例，不承诺精确像素。</td></tr>
+          <tr><td><code>--q</code></td><td>渲染质量档位</td><td><code>1</code>、<code>2</code>、<code>3</code>、<code>4</code></td><td>v8.2 支持全部四档。</td></tr>
+          <tr><td><code>--hd</code></td><td>高清档输出</td><td>开关</td><td>开启后长边翻倍到 2048 左右。</td></tr>
+          <tr><td><code>--iw</code></td><td>内容参考权重</td><td><code>0–3</code>，默认 <code>1</code></td><td>数值越高越贴合内容参考。对 <code>images</code> 单图，以及写在 <code>prompt</code> 开头的内容参考 URL 均有效。</td></tr>
+          <tr><td><code>--raw</code></td><td>原生模式</td><td>开关</td><td>弱化默认美化滤镜，画面更写实。</td></tr>
+          <tr><td><code>--s</code> / <code>--stylize</code></td><td>风格化强度</td><td><code>0–1000</code>，默认 <code>250</code></td><td>越高越艺术化。</td></tr>
+          <tr><td><code>--c</code> / <code>--chaos</code></td><td>四张差异度</td><td><code>0–100</code></td><td>越高，四张候选图差异越大。</td></tr>
+          <tr><td><code>--seed</code></td><td>随机种子</td><td>整数</td><td>相同种子可复现同一结果。</td></tr>
+          <tr><td><code>--no</code></td><td>排除元素</td><td>关键词</td><td>例如 <code>--no people</code>。</td></tr>
+          <tr><td><code>--sref</code> / <code>--sw</code></td><td>风格参考图与权重</td><td>URL；<code>0–1000</code>，默认 <code>100</code></td><td>迁移参考图的色彩、笔触、氛围。</td></tr>
+          <tr><td><code>--tile</code></td><td>无缝平铺</td><td>开关</td><td>输出可重复拼接的纹理。</td></tr>
+          <tr><td><code>--weird</code></td><td>超现实怪异度</td><td><code>0–3000</code></td><td>画面越离奇。</td></tr>
+          <tr><td><code>--exp</code></td><td>动态影调增强</td><td><code>0–100</code></td><td>增强画面冲击力；例如 <code>--exp 50</code>。</td></tr>
+          <tr><td><code>--draft</code></td><td>草图模式</td><td>开关</td><td>更快的草图输出。v8 规则与早期版本不同：<b>不保证返回 4 张</b>，现网实测可能返回多张约 512 边长的草稿图。</td></tr>
+        </table>
+        <div class="callout info"><b>多参考图怎么写</b>：<code>images</code> 只能传 1 张字符串 URL。多张内容参考请把公网 URL 写在 <code>prompt</code> 开头，再用 <code>--iw</code> 控强度；风格参考用 <code>--sref URL --sw N</code>。内容参考与 <code>--sref</code> 可以组合使用。</div>
+        <div class="callout warn"><b>已移除的参数</b>：<code>--stop</code>、<code>::</code> 分段加权、<code>--cref</code>、<code>--oref</code> 在 v8.1 及之后版本已不支持，写入提示词会被上游拒绝或忽略，请勿对外宣称支持。</div>
+
+        <h3 id="h-mj-size" class="sub">输出尺寸</h3>
+        <p>输出尺寸由 <code>--ar</code> 和档位共同决定。标准档的常见比例：</p>
+        <table>
+          <tr><th><code>--ar</code></th><th>标准档输出</th><th>加 <code>--hd</code></th></tr>
+          <tr><td><code>1:1</code></td><td>1024 × 1024</td><td>2048 × 2048</td></tr>
+          <tr><td><code>16:9</code></td><td>1456 × 816</td><td>2944 × 1648</td></tr>
+          <tr><td><code>9:16</code></td><td>816 × 1456</td><td>1648 × 2944</td></tr>
+          <tr><td><code>4:5</code></td><td>960 × 1200</td><td>约 1920 × 2400</td></tr>
+          <tr><td><code>3:2</code></td><td>1344 × 896</td><td>约 2688 × 1792</td></tr>
+          <tr><td><code>4:3</code></td><td>1232 × 928</td><td>约 2464 × 1856</td></tr>
+        </table>
+        <p>未列出的比例同样按 <code>--ar</code> 输出，长边像素与同档位接近；加 <code>--hd</code> 后长边约为标准档的两倍。</p>
+        <div class="callout info"><b>关于 4K</b>：v8.2 最高输出 2K，<code>--hd</code> 已是上限，无法输出 4K。</div>
+
+        <h3 id="h-mj-image" class="sub">图生图与多参考</h3>
+        <table>
+          <tr><th>项目</th><th>规则</th></tr>
+          <tr><td><code>images</code> 数量</td><td>最多 1 张字符串 URL；传两张及以上返回 400。</td></tr>
+          <tr><td>格式</td><td>JPEG、PNG、WebP</td></tr>
+          <tr><td>文件大小</td><td>不超过 7MB</td></tr>
+          <tr><td>传入方式</td><td>公网可访问的 http(s) URL，或 <code>data:image/...;base64,</code> 形式的数据。</td></tr>
+          <tr><td>单图常用写法</td><td>例如 <code>Replace the outfit with a black knit cardigan --ar 4:5 --iw 2 --raw</code>，并把 URL 放进 <code>images</code>。</td></tr>
+          <tr><td>多内容参考</td><td>把多张公网 URL 写在 <code>prompt</code> 开头，例如 <code>https://a.jpg https://b.jpg a fashion editorial --iw 1.5</code>。</td></tr>
+          <tr><td>风格参考</td><td>在 <code>prompt</code> 中写 <code>--sref https://style.jpg --sw 80</code>；可与内容参考组合。</td></tr>
+        </table>
+
+        <h3 id="h-mj-billing" class="sub">计费</h3>
+        <p>Midjourney <b>按次计费</b>，不按张计费：标准模式一次任务返回 4 张图，只扣一次费用；使用 <code>--draft</code> 时出图数量可能更多、边长更小，仍按次计费。档位由实际输出分辨率决定。</p>
+        <table>
+          <tr><th>档位</th><th>触发方式</th><th>输出</th></tr>
+          <tr><td>标准档</td><td>默认</td><td>长边约 1024</td></tr>
+          <tr><td>高清档</td><td>提示词加 <code>--hd</code></td><td>长边约 2048</td></tr>
+        </table>
+        <div class="callout info"><b>预扣与结算</b>：提交时按高清档预扣，任务完成后按实际档位结算，差额自动退回。余额不足高清档时请求会被直接拒绝。最终价格乘以调用密钥所属分组的倍率。</div>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="Midjourney 请求类型">
+            <button type="button" class="example-tab" id="mj-text-tab" role="tab" aria-selected="true" aria-controls="mj-text">文生图标准档</button>
+            <button type="button" class="example-tab" id="mj-hd-tab" role="tab" aria-selected="false" aria-controls="mj-hd">文生图高清档</button>
+            <button type="button" class="example-tab" id="mj-image-tab" role="tab" aria-selected="false" aria-controls="mj-image">图生图</button>
+            <button type="button" class="example-tab" id="mj-multi-tab" role="tab" aria-selected="false" aria-controls="mj-multi">多参考</button>
+            <button type="button" class="example-tab" id="mj-draft-tab" role="tab" aria-selected="false" aria-controls="mj-draft">草图模式</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="mj-text" role="tabpanel" aria-labelledby="mj-text-tab" aria-hidden="false">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mj-v8.2",
+    "prompt": "A small orange cat beside a sunlit window --ar 1:1 --q 1"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="mj-hd" role="tabpanel" aria-labelledby="mj-hd-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mj-v8.2",
+    "prompt": "A small orange cat beside a sunlit window --ar 16:9 --q 2 --hd"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="mj-image" role="tabpanel" aria-labelledby="mj-image-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mj-v8.2",
+    "prompt": "Replace the outfit with a black knit cardigan --ar 4:5 --iw 2 --raw",
+    "images": [
+      "https://upload.o1key.com/uploads/subject.jpg"
+    ]
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="mj-multi" role="tabpanel" aria-labelledby="mj-multi-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mj-v8.2",
+    "prompt": "https://upload.o1key.com/uploads/content-a.jpg https://upload.o1key.com/uploads/content-b.jpg a fashion editorial portrait --ar 1:1 --iw 1.5 --sref https://upload.o1key.com/uploads/style.jpg --sw 80"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="mj-draft" role="tabpanel" aria-labelledby="mj-draft-tab" aria-hidden="true">
+              <pre><code>curl -X POST https://api.o1key.cn/async/v1/generateImage \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "mj-v8.2",
+    "prompt": "quick draft sketch of a cat by a window --draft --seed 4242"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+        <h3>提交成功 <span class="pill success">200</span></h3>
+        <pre data-sim="submit"><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUBMITTED"
+}</code></pre>
+        <h3>参数校验失败 <span class="pill danger">400</span></h3>
+        <pre><code>{
+  "error": {
+    "message": "参考图超过 7 MiB 上限",
+    "type": "invalid_request_error"
+  }
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/async/v1/tasks/mj" title="查询 Midjourney 任务" returns="任务状态与结果">
+<doc-route method="GET" path="/async/v1/tasks/{task_id}"></doc-route>
+<doc-main>
+<p>使用提交响应的 <code>task_id</code> 查询。<code>SUBMITTED</code>、<code>IN_PROGRESS</code> 表示继续等待；<code>SUCCESS</code> 读取 <code>data.images</code>，<code>FAILURE</code> 读取 <code>error</code>。</p>
+<p>单次任务通常需要 <b>60–170 秒</b>，建议每 5–10 秒轮询一次。</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <pre><code>curl https://api.o1key.cn/async/v1/tasks/task_xxxxxxxxxxxxxxxx \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+        <h3>生成成功 <span class="pill success">200</span></h3>
+        <pre data-sim="done"><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "SUCCESS",
+  "progress": "100%",
+  "data": {
+    "model": "mj-v8.2",
+    "created": 1793964424,
+    "images": [
+      {
+        "url": "https://assetcache.o1key.com/output/xxxx.png",
+        "mime_type": "image/png",
+        "size": "1024x1024",
+        "output_format": "png"
+      },
+      {
+        "url": "https://assetcache.o1key.com/output/yyyy.png",
+        "mime_type": "image/png",
+        "size": "1024x1024",
+        "output_format": "png"
+      },
+      {
+        "url": "https://assetcache.o1key.com/output/zzzz.png",
+        "mime_type": "image/png",
+        "size": "1024x1024",
+        "output_format": "png"
+      },
+      {
+        "url": "https://assetcache.o1key.com/output/wwww.png",
+        "mime_type": "image/png",
+        "size": "1024x1024",
+        "output_format": "png"
+      }
+    ]
+  }
+}</code></pre>
+        <h3>生成失败 <span class="pill danger">200</span></h3>
+        <pre><code>{
+  "task_id": "task_xxxxxxxxxxxxxxxx",
+  "status": "FAILURE",
+  "progress": "100%",
+  "error": "提示词或参考图未通过内容审核"
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

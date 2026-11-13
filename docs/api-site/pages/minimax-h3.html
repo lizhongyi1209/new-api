@@ -1,0 +1,245 @@
+<doc-page slug="minimax-h3" nav="MiniMax H3" title="MiniMax H3 / H3 Max / H3 Max Turbo 视频生成" kind="async">
+<doc-summary>通过统一异步接口创建任务，并使用任务 ID 查询生成结果。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/v1/video/generations</code>，返回任务 ID</step>
+<step title="轮询状态">每 10–20 秒 GET <code>/v1/videos/{task_id}</code></step>
+<step title="获取视频"><code>completed</code> 后读取 <code>result_url</code></step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用 MiniMax H3 系列生成视频，支持文字、图片、视频和音频作为输入。接口先返回<b>任务编号</b>，之后用编号查询，完成后拿到视频地址。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>用哪个模型</dt><dd><code>model</code>：<code>MiniMax-H3</code>、<code>MiniMax-H3-MAX</code> 或 <code>minimax-h3-max-turbo</code>。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>content</code> 数组，至少一项非空文本；图片、视频、音频也放在这里。</dd></div>
+<div><dt>分辨率与时长</dt><dd><code>resolution</code>、<code>duration</code>，必填，取值见完整参考的模型能力表。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>状态</dt><dd><code>queued</code>、<code>in_progress</code> 继续等待；<code>completed</code> 成功；<code>failed</code> 失败。</dd></div>
+<div><dt>视频地址</dt><dd><code>result_url</code>，请及时下载或转存。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>POST <code>/v1/video/generations</code>，必填 <code>model</code>、<code>content</code>、<code>resolution</code>、<code>duration</code>，记录返回的任务 ID。</li>
+<li>每 10–20 秒 GET <code>/v1/videos/{task_id}</code>，<code>queued</code> 或 <code>in_progress</code> 时继续查询。</li>
+<li><code>completed</code>：把 <code>result_url</code> 返回给用户。</li>
+<li><code>failed</code>：把错误信息告诉用户，不要自动重试。</li>
+<li>分辨率和时长必须符合所选模型的能力表；不确定时先向用户确认。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="minimax-h3-create" title="创建 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务" returns="任务 ID（异步）">
+<doc-route method="POST" path="/v1/video/generations"></doc-route>
+<doc-main>
+<p>创建成功后立即返回 <code>task_id</code>。视频在后台生成，无需保持请求连接。</p>
+
+        <h3 id="h-24" class="sub">模型能力</h3>
+        <table>
+          <tr><th>模型</th><th>支持场景</th><th>分辨率</th><th>时长</th></tr>
+          <tr><td><code>MiniMax-H3</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频、图片/视频/音频多模态参考</td><td><code>768P</code>、<code>2K</code></td><td>4-15 秒</td></tr>
+          <tr><td><code>MiniMax-H3-MAX</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code></td><td>5-15 秒</td></tr>
+          <tr><td><code>minimax-h3-max-turbo</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code>、<code>1080P</code></td><td>5-15 秒</td></tr>
+        </table>
+        <div class="callout info">需要 <code>2K</code> 或多模态参考时请选择 <code>MiniMax-H3</code>；H3 Max 和 H3 Max Turbo 不支持 <code>reference_*</code> 素材。需要 <code>1080P</code> 时请选择 <code>minimax-h3-max-turbo</code>。</div>
+
+        <h3 id="h-25" class="sub">请求参数</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td><code>MiniMax-H3</code>、<code>MiniMax-H3-MAX</code> 或 <code>minimax-h3-max-turbo</code>。</td></tr>
+          <tr><td><code>content</code></td><td>array</td><td>是</td><td>提示词和输入素材，至少包含一个非空文本项。</td></tr>
+          <tr><td><code>resolution</code></td><td>string</td><td>是</td><td>取值见上方模型能力表，区分大小写。</td></tr>
+          <tr><td><code>duration</code></td><td>integer</td><td>是</td><td>输出秒数，取值范围见上方模型能力表。</td></tr>
+          <tr><td><code>ratio</code></td><td>string</td><td>条件必填</td><td>文生视频必填且不能为 <code>adaptive</code>；图生视频可使用 <code>adaptive</code>。可选固定比例：<code>21:9</code>、<code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>。</td></tr>
+          <tr><td><code>callback_url</code></td><td>string</td><td>否</td><td>任务状态回调地址。建议同时保留查询任务的兜底逻辑。</td></tr>
+        </table>
+
+        <h3 id="h-26" class="sub"><code>content</code> 项</h3>
+        <table>
+          <tr><th><code>type</code></th><th>数据字段</th><th><code>role</code></th><th>适用模型</th></tr>
+          <tr><td><code>text</code></td><td><code>text</code></td><td>不填</td><td>全部；提示词最多 7000 个字符</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>first_frame</code> / <code>last_frame</code></td><td>全部；图片未指定 <code>role</code> 时按首帧处理</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>仅 H3</td></tr>
+          <tr><td><code>video_url</code></td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>仅 H3</td></tr>
+          <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>仅 H3</td></tr>
+        </table>
+
+        <h3 id="h-27" class="sub">素材限制</h3>
+        <table>
+          <tr><th>素材</th><th>格式与大小</th><th>其他限制</th></tr>
+          <tr><td>图片</td><td>JPG、JPEG、PNG、WEBP、HEIC、HEIF；单张不超过 30MB</td><td>宽高 256-5760px，宽高比 0.4-2.5</td></tr>
+          <tr><td>参考视频</td><td>MP4、MOV；单个不超过 50MB</td><td>单段 2-15 秒，总时长不超过 15 秒，23.976-60fps</td></tr>
+          <tr><td>参考音频</td><td>WAV、MP3；单个不超过 15MB</td><td>单段 2-15 秒，总时长不超过 15 秒</td></tr>
+        </table>
+        <ul>
+          <li>请求体不超过 64MB。素材可使用公网 URL 或对应格式的 Base64 Data URI，大文件建议使用 URL。</li>
+          <li>H3 最多包含 9 张参考图、3 个参考视频、3 个参考音频，全部参考素材合计不超过 12 个。</li>
+          <li><code>first_frame</code>/<code>last_frame</code> 不能与任一 <code>reference_*</code> 素材混用。</li>
+        </ul>
+
+        <h3 id="h-28" class="sub">计费说明</h3>
+        <p>H3 按输出视频秒数计费；参考视频按输入秒数计费；参考音频免费；参考图片前 5 张免费，超出部分按张计费。H3 Max 和 H3 Max Turbo 仅按输出视频秒数计费。创建任务时会预扣额度，完成后按实际用量结算，最终费用以消费记录为准。</p>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <div class="example-switcher" data-example-switcher>
+          <div class="example-tabs" role="tablist" aria-label="MiniMax H3 请求场景">
+            <button type="button" class="example-tab" id="h3-text-tab" role="tab" aria-selected="true" aria-controls="h3-text">文生视频</button>
+            <button type="button" class="example-tab" id="h3-frames-tab" role="tab" aria-selected="false" aria-controls="h3-frames">首尾帧</button>
+            <button type="button" class="example-tab" id="h3-reference-tab" role="tab" aria-selected="false" aria-controls="h3-reference">多模态参考</button>
+          </div>
+          <div class="example-panels">
+            <div class="example-tab-panel is-active" id="h3-text" role="tabpanel" aria-labelledby="h3-text-tab" aria-hidden="false">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {
+        "type": "text",
+        "text": "Epic space-opera trailer: a fleet jumps into warp beyond a giant observation window while the camera slowly pushes toward the captain."
+      }
+    ],
+    "resolution": "2K",
+    "duration": 5,
+    "ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="h3-frames" role="tabpanel" aria-labelledby="h3-frames-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {
+        "type": "text",
+        "text": "Create a smooth cinematic transformation from the daytime street into the same location at night."
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/day.jpg"},
+        "role": "first_frame"
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/night.jpg"},
+        "role": "last_frame"
+      }
+    ],
+    "resolution": "768P",
+    "duration": 8,
+    "ratio": "adaptive"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="h3-reference" role="tabpanel" aria-labelledby="h3-reference-tab" aria-hidden="true">
+              <pre><code>curl https://cf-api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3",
+    "content": [
+      {
+        "type": "text",
+        "text": "Use the character appearance from the reference image, follow the action and camera rhythm of the reference video, and speak with the reference voice."
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/character.png"},
+        "role": "reference_image"
+      },
+      {
+        "type": "video_url",
+        "video_url": {"url": "https://cdn.example.com/action.mp4"},
+        "role": "reference_video"
+      },
+      {
+        "type": "audio_url",
+        "audio_url": {"url": "https://cdn.example.com/voice.mp3"},
+        "role": "reference_audio"
+      }
+    ],
+    "resolution": "2K",
+    "duration": 6,
+    "ratio": "adaptive",
+    "callback_url": "https://example.com/minimax/callback"
+  }'</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout info">H3 Max 使用相同请求结构，将 <code>model</code> 改为 <code>MiniMax-H3-MAX</code>，并使用 <code>480P</code> 或 <code>768P</code>。H3 Max Turbo 将模型改为 <code>minimax-h3-max-turbo</code>，还可使用 <code>1080P</code>。单张首帧只需省略示例中的 <code>last_frame</code>。</div>
+
+        <h3>创建响应</h3>
+        <pre data-sim="submit"><code>{
+  "id": "task_h3_xxxxxxxxxx",
+  "task_id": "task_h3_xxxxxxxxxx",
+  "object": "video",
+  "model": "MiniMax-H3",
+  "status": "queued",
+  "progress": 0,
+  "created_at": 1786350000
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="minimax-h3-query" title="查询 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务" returns="任务状态与结果">
+<doc-route method="GET" path="/v1/videos/{task_id}"></doc-route>
+<doc-main>
+<p>使用创建接口返回的 <code>task_id</code> 查询。建议每 10-20 秒轮询一次，直到任务变为 <code>completed</code> 或 <code>failed</code>。</p>
+        <table>
+          <tr><th>状态</th><th>处理方式</th></tr>
+          <tr><td><code>queued</code> / <code>in_progress</code></td><td>任务排队或生成中，继续轮询。</td></tr>
+          <tr><td><code>completed</code></td><td>读取 <code>result_url</code> 并及时下载或转存。</td></tr>
+          <tr><td><code>failed</code></td><td>读取 <code>error.code</code> 和 <code>error.message</code>。</td></tr>
+          <tr><td><code>unknown</code></td><td>任务刚创建时可能短暂出现，按 <code>queued</code> 处理。</td></tr>
+        </table>
+
+        <h3 id="h-29" class="sub">响应字段</h3>
+        <table>
+          <tr><th>响应字段</th><th>说明</th></tr>
+          <tr><td><code>id</code> / <code>task_id</code></td><td>任务 ID，两个字段值相同。</td></tr>
+          <tr><td><code>status</code> / <code>progress</code></td><td>任务状态和进度；进度仅用于展示，不代表精确剩余时间。</td></tr>
+          <tr><td><code>result_url</code></td><td>任务完成后的视频地址。</td></tr>
+          <tr><td><code>seconds</code> / <code>size</code></td><td>实际输出时长和分辨率。</td></tr>
+          <tr><td><code>metadata.usage</code></td><td>实际输入与输出用量，包括视频秒数、音频秒数和图片数量。</td></tr>
+          <tr><td><code>error</code></td><td>失败信息，仅在任务失败时返回。</td></tr>
+        </table>
+        <div class="callout info">处理中可能没有 <code>result_url</code>、<code>metadata</code> 或完整用量信息，仅在 <code>completed</code> 后读取结果地址。</div>
+
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+
+        <h3>完成响应</h3>
+        <pre data-sim="done"><code>{
+  "id": "task_h3_xxxxxxxxxx",
+  "task_id": "task_h3_xxxxxxxxxx",
+  "object": "video",
+  "model": "MiniMax-H3",
+  "status": "completed",
+  "progress": 100,
+  "created_at": 1786350000,
+  "completed_at": 1786350417,
+  "seconds": "5",
+  "size": "2K",
+  "result_url": "https://cdn.example.com/h3-result.mp4",
+  "metadata": {
+    "url": "https://cdn.example.com/h3-result.mp4",
+    "ratio": "16:9",
+    "usage": {
+      "total_seconds": 5,
+      "input_seconds": 0,
+      "input_audio_seconds": 6,
+      "output_seconds": 5,
+      "input_image_count": 1
+    }
+  }
+}</code></pre>
+
+</doc-examples>
+</doc-endpoint>
+</doc-page>

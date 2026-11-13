@@ -39,7 +39,7 @@ Aliases: 任务插件, 插件市场, 插件广场, 插件上传, 插件版本, �
 
 Aliases: 原生视频表达式计费, Seedance 定价, 视频价格矩阵, native video billing, TokenMart, Kling credits, Gemini Omni tokens, Omni Flash 1.2, `omni_flash-1.2`.
 
-- `omni_flash_*` / `omni_flash-*` models (OpenAI-compatible channel, `POST /v1/videos` passthrough in `relay/channel/task/sora/adaptor.go`) use the `omni_flash` meter: `seconds`, `resolution`, `operation` (edit when `video_url` or `source_video_url` is present), priced per call in a visual operation × resolution matrix. Public docs: `docs/api-doc.html#omni-flash`.
+- `omni_flash_*` / `omni_flash-*` models (OpenAI-compatible channel, `POST /v1/videos` passthrough in `relay/channel/task/sora/adaptor.go`) use the `omni_flash` meter: `seconds`, `resolution`, `operation` (edit when `video_url` or `source_video_url` is present), priced per call in a visual operation × resolution matrix. Public docs: `docs/api-site/pages/omni-flash.html`.
 
 - Native model/adaptor usage schemas and bounded estimates/completion facts: `pkg/videoexpr/schema.go`, `usage.go`; native adaptor handoff: `relay/channel/task/taskcommon/helpers.go`.
 - Mapped native models, admin snapshot/save validation, and public pricing metadata: `model/native_video_pricing.go`, `model/model_pricing_config.go`, `model/pricing.go`; existing versioned model-pricing routes: `controller/model_pricing_config.go`, `router/api-router.go`.
@@ -53,7 +53,7 @@ Aliases: Kling 4.0, 可灵 4.0, Kling 4.0 Flash, Kling 4.0 文生视频, Kling 4
 
 - Public submission and task lookup routes: `router/video-router.go`; official-body conversion: `middleware/kling_adapter.go`; model routing, validation, upstream submission and `/tasks` polling: `relay/channel/task/kling/adaptor.go`, `video40.go`.
 - Native expression usage and the Kling 4.0 duration meter: `pkg/videoexpr/schema.go`, `usage.go`; task settlement: `service/task_polling.go`; model ratio: `setting/ratio_setting/model_ratio.go`; public task projection: `controller/relay.go`, `relay/relay_task.go`. Video artifact recognition: `controller/task.go` and both frontend task-log action lists.
-- Downstream contract and examples: `docs/kling-4-video.md`, public API page `docs/api-doc.html#kling-4`; focused coverage: `relay/channel/task/kling/video40_test.go`, `middleware/kling_adapter_test.go`, `pkg/videoexpr/usage_test.go`.
+- Downstream contract and examples: `docs/kling-4-video.md`, public API page `docs/api-site/pages/kling-4.html`; focused coverage: `relay/channel/task/kling/video40_test.go`, `middleware/kling_adapter_test.go`, `pkg/videoexpr/usage_test.go`.
 
 ## Channel health-check scheduling
 
@@ -416,7 +416,7 @@ Aliases: fileData 输入, Gemini fileData, 生图输入优化, Base64 转临时 
 | Channel capability setting | `dto/channel_settings.go` |
 | Validated R2 `tmp/input/` storage for Gemini fileData; default temporary uploads retain their own provider selection | `service/temporary_upload.go`, `service/storage.go` |
 | Channel editor option and form persistence | `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`, `web/src/features/channels/lib/channel-form.ts` |
-| Public API documentation | Source: `docs/api-doc.html`; independent Nano Banana, GPT Image, and Seedream sections at `#image-nano-banana`, `#image-gpt-image`, and `#image-seedream`, above Seedance; served directly by Nginx, not embedded in Go or Docker; publish updates with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/api-doc`, `/docs/download` |
+| Public API documentation | Source: one file per page in `docs/api-site/pages/` (`index.html` is the overview), page order in `docs/api-site/site.json`, shared styles and scripts in `docs/api-site/assets/`; `docs/api-site/build.py` renders each page as HTML and Markdown plus `llms.txt` / `llms-full.txt` (format notes: `docs/api-site/README.md`); served directly by Nginx, not embedded in Go or Docker; publish with `scripts/deploy-api-doc.sh`; Nginx locations: `deploy/nginx/api-doc-locations.conf`; public routes: `/docs/`, `/docs/<page>`, `/docs/<page>.md`, `/docs/llms.txt`, `/docs/llms-full.txt`, `/docs/download`; old `/docs/api-doc#<anchor>` links redirect to the overview, which forwards them to the right page |
 | Operations and troubleshooting | `docs/operations/generate-image-filedata.md`, `docs/operations/generate-image-observability.md` |
 
 ### Regression coverage
@@ -438,7 +438,7 @@ Aliases: Seedream 5.0 Pro, Seedream 5.5, `dola-seedream-5-0-pro-260628-ep`, `dol
 - Seedream request validation, model routing, worker dispatch, and result settlement: `service/generate_image.go`, `service/async_image.go`.
 - Public DTO conversion and request-aware billing projection: `dto/generate_image.go`, `dto/async_image.go`, `controller/generate_image.go`.
 - Async tiered settlement preserves the compact request body in `model.TaskBillingContext` and evaluates it in `service/task_billing.go`; image payloads and URLs are never stored in the billing snapshot.
-- Public examples and parameter reference: `docs/api-doc.html#image-seedream`.
+- Public examples and parameter reference: `docs/api-site/pages/image-seedream.html`.
 - Regression coverage: `service/generate_image_test.go`, `controller/generate_image_test.go`, `service/task_billing_test.go`.
 
 ## Tencent VOD Midjourney image generation
@@ -485,7 +485,7 @@ There are several distinct upload flows. Identify the required contract before e
 
 | Flow | HTTP/UI entry | Backend and frontend source entries |
 | --- | --- | --- |
-| Authenticated temporary attachment upload | `POST /v1/o1key/uploads`; legacy local files: `GET`/`HEAD /tmp/input/:filename` | Route: `router/relay-router.go`; multipart controller and public response: `controller/temporary_upload.go`; content validation, 20 MiB bound, OSS/R2 upload, object cleanup, and legacy local reads: `service/temporary_upload.go`, `service/temporary_image_cleanup_task.go`, `service/storage.go`; downstream integration guide: `docs/api-doc.html#temporary-upload`; contract tests: `service/temporary_upload_test.go`, `controller/temporary_upload_test.go`, `router/temporary_upload_router_test.go` |
+| Authenticated temporary attachment upload | `POST /v1/o1key/uploads`; legacy local files: `GET`/`HEAD /tmp/input/:filename` | Route: `router/relay-router.go`; multipart controller and public response: `controller/temporary_upload.go`; content validation, 20 MiB bound, OSS/R2 upload, object cleanup, and legacy local reads: `service/temporary_upload.go`, `service/temporary_image_cleanup_task.go`, `service/storage.go`; downstream integration guide: `docs/api-site/pages/temporary-upload.html`; contract tests: `service/temporary_upload_test.go`, `controller/temporary_upload_test.go`, `router/temporary_upload_router_test.go` |
 | Authenticated object-storage upload | `POST /v1/storage/presign` | Route: `router/relay-router.go`; validation/controller: `controller/storage.go`; host-based R2/OSS presign selection: `service/storage.go` |
 | Explicit OSS-compatible presign | `POST /v1/storage/oss/presign` | `router/relay-router.go`, `controller/storage.go`, `service/storage.go` |
 | Legacy direct object upload | `POST /v1/storage/local/upload?object_key=uploads/...` | `router/relay-router.go`, `controller/storage.go`, `service/storage.go`; new files are written to OSS under `uploads/oss/` (R2 when OSS is administratively disabled). Existing local files remain served by `router/main.go` at `/upload/*` until removed. |
@@ -519,7 +519,7 @@ Aliases: MiniMax H3, H3 Max, H3 Max Turbo, MiniMax-H3, MiniMax-H3-Max, minimax-h
 - Request validation, V2 response parsing, and public response conversion: `relay/channel/task/hailuo/v2.go`, `relay/channel/task/hailuo/adaptor.go`.
 - Submit estimation and completion settlement: `relay/channel/task/hailuo/billing.go`; base ratio enablement: `setting/ratio_setting/model_ratio.go`.
 - TokenMart/type-60 transport keeps the same downstream MiniMax request contract while mapping model IDs to `minimax-h3` / `minimax-h3-max` / `minimax-h3-max-turbo`, submitting and polling through `/v1/video/*`, and bypassing Seedance asset conversion. H3/H3 Max legacy prices settle from MiniMax's RMB per-second/image prices through the configured USD/RMB conversion; H3 Max Turbo uses its configured usage expression: `relay/channel/task/serviceinference/adaptor.go`, `relay/channel/task/serviceinference/minimax_h3.go`, `pkg/videoexpr/schema.go`.
-- Public downstream reference: `docs/api-doc.html#minimax-h3`.
+- Public downstream reference: `docs/api-site/pages/minimax-h3.html`.
 - Regression coverage: `relay/channel/task/hailuo/v2_test.go`, `relay/channel/task/serviceinference/adaptor_test.go`.
 
 ## Wan 3.0 video generation
@@ -531,7 +531,7 @@ Aliases: 万相 3.0, Wan 3.0, wan3.0-video, wan3.0-video-prime, 百炼视频, Da
 - Request conversion, wan3.0 validation (duration -1 or 2-30, 480P/720P/1080P, media types/counts, frame vs reference exclusivity), default 1080P, outbound-request usage estimate, and public response conversion: `relay/channel/task/ali/adaptor.go`, `constants.go`.
 - `wan_3_0` usage meter (output + reference-video seconds at the output resolution; automatic duration reserves 30 seconds) and completion facts from `usage.output_video_duration`/`input_video_duration`/`SR`: `pkg/videoexpr/schema.go`, `usage.go`. Pricing must use a task usage expression; legacy per-second prices have no wan3.0 resolution ratio.
 - Public lookup contract for Ali tasks: `relay/relay_task.go` (`videoFetchByIDRespBodyBuilder`).
-- Public downstream reference: `docs/api-doc.html#wan3`; upstream TokenMart reference copy: `docs/wan-dashscope.md`.
+- Public downstream reference: `docs/api-site/pages/wan3.html`; upstream TokenMart reference copy: `docs/wan-dashscope.md`.
 - Regression coverage: `relay/channel/task/ali/wan30_test.go`, `pkg/videoexpr/usage_test.go`, `relay/relay_task_test.go`.
 
 ## Seedance video generation
@@ -549,5 +549,5 @@ Aliases: Seedance 视频, Seedance task, 查询视频任务, `/v1/video/generati
 - ServiceInference request conversion, upstream polling, result parsing, and public video conversion: `relay/channel/task/serviceinference/adaptor.go`.
 - Missing-asset recovery only (fixed maximum of three recreations per task): `controller/seedance_asset_proxy.go` retains user-scoped creation sources for 24 hours in `model/seedance_asset_recovery.go`; `relay/channel/task/serviceinference/asset_recovery.go` freezes the private replay request, recreates the missing asset, waits for readiness, and resubmits on the original channel. `service/seedance_asset_recovery.go` runs before terminal failure/refund in `service/task_polling.go`, retaining the public task ID and original quota reservation. Recovery revisions reject concurrent/stale polls; terminal transitions erase private replay data. Historical/unknown sources and other failure types retain normal failure handling. Regression entries: `controller/seedance_asset_recovery_test.go`, `service/seedance_asset_recovery_test.go`, `model/seedance_asset_recovery_test.go`.
 - Channel-editor HC-to-MAX defaults: `web/src/features/channels/lib/channel-type-config.ts`, `web/src/features/channels/lib/channel-form.ts`, `web/src/features/channels/components/drawers/channel-mutate-drawer.tsx`.
-- Downstream reference and examples: `docs/api-doc.html#/v1/video/generations`, `docs/seedance-downstream-integration.md`.
+- Downstream reference and examples: `docs/api-site/pages/seedance.html`, `docs/seedance-downstream-integration.md`.
 - Response, parameter forwarding, and mapping contract coverage: `relay/channel/task/serviceinference/adaptor_test.go`, `relay/channel/task/serviceinference/seedance_max_test.go`, `web/src/features/channels/lib/__tests__/channel-type-options.test.ts`.
