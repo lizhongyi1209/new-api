@@ -971,7 +971,7 @@ def overview_page(site: Site, page: Page) -> str:
     body = body.replace("<doc-endpoint-index></doc-endpoint-index>", endpoint_index_html(site))
     summary = renderer.transform(page.summary)
     legacy = {}
-    for node_id, owner in site.id_owner.items():
+    for node_id, owner in sorted(site.id_owner.items()):
         if owner != "index":
             legacy[node_id] = site.pages[owner].href
     toc = "".join(f'<a href="#{esc(h.get("id"))}">{esc(text_of(h))}</a>' for h in parse(body).find_all("h2") if h.get("id"))
