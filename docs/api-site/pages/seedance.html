@@ -126,7 +126,7 @@
           <div class="example-panels">
             <div class="example-tab-panel is-active" id="seedance-request-text" role="tabpanel" aria-labelledby="seedance-request-text-tab" aria-hidden="false">
               <p class="compact-note">只传提示词即可生成视频，不需要参考素材。可通过 ratio 指定输出比例。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+              <pre><code>curl -X POST https://api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -145,7 +145,7 @@
             </div>
             <div class="example-tab-panel" id="seedance-request-first-frame" role="tabpanel" aria-labelledby="seedance-request-first-frame-tab" aria-hidden="true">
               <p class="compact-note">first_frame 指定视频的起始画面，比例跟随图片。本例同时导出生成视频的尾帧，完成后从 metadata.last_frame_url 读取。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+              <pre><code>curl -X POST https://api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -172,7 +172,7 @@
             </div>
             <div class="example-tab-panel" id="seedance-request-first-last-frame" role="tabpanel" aria-labelledby="seedance-request-first-last-frame-tab" aria-hidden="true">
               <p class="compact-note">同时提供起始画面和目标结束画面，让模型生成两者之间的过渡。显式填写 first_frame / last_frame，比例跟随图片，不混入 reference_* 素材。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+              <pre><code>curl -X POST https://api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -204,7 +204,7 @@
             </div>
             <div class="example-tab-panel" id="seedance-request-omni" role="tabpanel" aria-labelledby="seedance-request-omni-tab" aria-hidden="true">
               <p class="compact-note">本例组合两张参考图、一段参考视频和一段参考音频，可按需删减。@Image1 / @Image2、@Video1 分别按参考图、参考视频的数组顺序编号；2.0 的音频不能作为唯一参考素材。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+              <pre><code>curl -X POST https://api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -251,7 +251,7 @@
             </div>
             <div class="example-tab-panel" id="seedance-request-edit" role="tabpanel" aria-labelledby="seedance-request-edit-tab" aria-hidden="true">
               <p class="compact-note">仅 2.5：待编辑视频须为 4–30 秒，role 为 reference_video；设置 edit、ratio: "adaptive" 和 duration: -1，输出比例与时长基本跟随原视频。本例明确修改背景，并使用 MOV 输出；回调关联方式见左侧说明。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+              <pre><code>curl -X POST https://api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -281,7 +281,7 @@
             </div>
             <div class="example-tab-panel" id="seedance-request-extend" role="tabpanel" aria-labelledby="seedance-request-extend-tab" aria-hidden="true">
               <p class="compact-note">仅 2.5：传入 role 为 reference_video 的待延长视频，设置 extend 和 ratio: "adaptive"，比例跟随原视频。提示词明确“向前延长”或“向后延长”；本例设输出时长为 12 秒，可设为 4–30 秒中的整数，或传 -1 让模型自选，实际时长以任务结果为准。MP4 便于播放；注重声画衔接时，官方推荐 MOV 输入和输出。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+              <pre><code>curl -X POST https://api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -378,7 +378,7 @@
 </doc-main>
 <doc-examples>
 <h3>查询请求</h3>
-<pre><code>curl https://cf-api.o1key.com/v1/video/generations/&lt;task_id&gt; \
+<pre><code>curl https://api.o1key.com/v1/video/generations/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>查询响应</h3>
 <div class="example-switcher" data-example-switcher>
@@ -482,7 +482,7 @@
             <div class="example-tab-panel is-active" id="seedance-asset-dreamina" role="tabpanel" aria-labelledby="seedance-asset-dreamina-tab" aria-hidden="false">
               <p class="compact-note">以下四步均为示例。mva-example-mini-001 与 task_example_dreamina_mini 不是真实素材或任务。创建响应里的 Model 是上游回显；统一入口会先按渠道映射把公开简写改成上游名再转发。</p>
               <h4>1. 创建素材</h4>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
+              <pre><code>curl -X POST https://api.o1key.com/v1/seedance/assets \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -505,7 +505,7 @@
   }
 }</code></pre>
               <h4>2. 查询直到 Active</h4>
-              <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-example-mini-001?type=dreamina" \
+              <pre><code>curl "https://api.o1key.com/v1/seedance/assets/mva-example-mini-001?type=dreamina" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
               <pre><code>{
   "success": true,
@@ -519,7 +519,7 @@
   }
 }</code></pre>
               <h4>3. 用 Ref 生成视频</h4>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/video/generations \
+              <pre><code>curl -X POST https://api.o1key.com/v1/video/generations \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -551,7 +551,7 @@
   "created_at": 1786350000
 }</code></pre>
               <h4>4. 轮询生成结果</h4>
-              <pre><code>curl https://cf-api.o1key.com/v1/video/generations/task_example_dreamina_mini \
+              <pre><code>curl https://api.o1key.com/v1/video/generations/task_example_dreamina_mini \
   -H "Authorization: Bearer $API_KEY"</code></pre>
               <pre><code>{
   "id": "task_example_dreamina_mini",
@@ -575,7 +575,7 @@
             </div>
             <div class="example-tab-panel" id="seedance-asset-doubao" role="tabpanel" aria-labelledby="seedance-asset-doubao-tab" aria-hidden="true">
               <p class="compact-note">国内豆包示例。查询把 type 换成 doubao，路径中的 Id 使用本次响应的 data.Id。下列 ID 同样是示例。</p>
-              <pre><code>curl -X POST https://cf-api.o1key.com/v1/seedance/assets \
+              <pre><code>curl -X POST https://api.o1key.com/v1/seedance/assets \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -627,7 +627,7 @@
           <div class="example-panels">
             <div class="example-tab-panel is-active" id="seedance-asset-query-dreamina" role="tabpanel" aria-labelledby="seedance-asset-query-dreamina-tab" aria-hidden="false">
               <p class="compact-note">示例 ID。直接代理为 GET /v2/sd-max/assets/{Id}。</p>
-              <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-example-mini-001?type=dreamina" \
+              <pre><code>curl "https://api.o1key.com/v1/seedance/assets/mva-example-mini-001?type=dreamina" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
               <h4>查询成功 <span class="pill success">200</span></h4>
               <pre><code>{
@@ -643,7 +643,7 @@
             </div>
             <div class="example-tab-panel" id="seedance-asset-query-doubao" role="tabpanel" aria-labelledby="seedance-asset-query-doubao-tab" aria-hidden="true">
               <p class="compact-note">示例 ID。直接代理为 GET /v2/db-sd-max/assets/{Id}。</p>
-              <pre><code>curl "https://cf-api.o1key.com/v1/seedance/assets/mva-example-doubao-001?type=doubao" \
+              <pre><code>curl "https://api.o1key.com/v1/seedance/assets/mva-example-doubao-001?type=doubao" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
               <h4>查询成功 <span class="pill success">200</span></h4>
               <pre><code>{

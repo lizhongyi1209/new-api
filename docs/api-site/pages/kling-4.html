@@ -118,7 +118,7 @@
 </doc-main>
 <doc-examples>
 <h3>请求示例 · Kling 4.0</h3>
-        <pre><code>curl https://cf-api.o1key.com/kling/text-to-video/kling-4.0 \
+        <pre><code>curl https://api.o1key.com/kling/text-to-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -127,7 +127,7 @@
     "options": {"watermark_info": {"enabled": false}}
   }'</code></pre>
         <h3>请求示例 · Kling 4.0 Flash</h3>
-        <pre><code>curl https://cf-api.o1key.com/kling/text-to-video/kling-4.0-flash \
+        <pre><code>curl https://api.o1key.com/kling/text-to-video/kling-4.0-flash \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -159,7 +159,7 @@
 </doc-main>
 <doc-examples>
 <h3>请求示例 · 首帧 + 中间帧 + 尾帧</h3>
-        <pre><code>curl https://cf-api.o1key.com/kling/image-to-video/kling-4.0 \
+        <pre><code>curl https://api.o1key.com/kling/image-to-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -203,7 +203,7 @@
 </doc-main>
 <doc-examples>
 <h3>参考视频 + 参考图</h3>
-        <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0 \
+        <pre><code>curl https://api.o1key.com/kling/omni-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -215,7 +215,7 @@
     "settings": {"duration": 15, "resolution": "1080p", "aspect_ratio": "adaptive", "audio": "original"}
   }'</code></pre>
         <h3>编辑视频 + 元素</h3>
-        <pre><code>curl https://cf-api.o1key.com/kling/omni-video/kling-4.0 \
+        <pre><code>curl https://api.o1key.com/kling/omni-video/kling-4.0 \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -262,7 +262,7 @@
 </doc-main>
 <doc-examples>
 <h3>批量查询</h3>
-        <pre><code>curl "https://cf-api.o1key.com/kling/tasks?task_ids=task_a,task_b" \
+        <pre><code>curl "https://api.o1key.com/kling/tasks?task_ids=task_a,task_b" \
   -H "Authorization: Bearer $API_KEY"</code></pre>
         <h3>成功响应</h3>
         <pre data-sim="done"><code>{
@@ -323,7 +323,7 @@
 </doc-main>
 <doc-examples>
 <h3>创建多图主体</h3>
-        <pre><code>curl https://cf-api.o1key.com/kling/v1/general/advanced-custom-elements \
+        <pre><code>curl https://api.o1key.com/kling/v1/general/advanced-custom-elements \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{

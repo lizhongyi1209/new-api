@@ -73,7 +73,7 @@
           </div>
           <div class="example-panels">
             <div class="example-tab-panel is-active" id="omni-text" role="tabpanel" aria-labelledby="omni-text-tab" aria-hidden="false">
-              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+              <pre><code>curl https://api.o1key.com/v1/videos \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -88,7 +88,7 @@
   }'</code></pre>
             </div>
             <div class="example-tab-panel" id="omni-image" role="tabpanel" aria-labelledby="omni-image-tab" aria-hidden="true">
-              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+              <pre><code>curl https://api.o1key.com/v1/videos \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -100,7 +100,7 @@
   }'</code></pre>
             </div>
             <div class="example-tab-panel" id="omni-reference" role="tabpanel" aria-labelledby="omni-reference-tab" aria-hidden="true">
-              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+              <pre><code>curl https://api.o1key.com/v1/videos \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -115,7 +115,7 @@
   }'</code></pre>
             </div>
             <div class="example-tab-panel" id="omni-edit" role="tabpanel" aria-labelledby="omni-edit-tab" aria-hidden="true">
-              <pre><code>curl https://cf-api.o1key.com/v1/videos \
+              <pre><code>curl https://api.o1key.com/v1/videos \
   -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -166,7 +166,7 @@
 </doc-main>
 <doc-examples>
 <h3>查询状态</h3>
-        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt; \
+        <pre><code>curl https://api.o1key.com/v1/videos/&lt;task_id&gt; \
   -H "Authorization: Bearer $API_KEY"</code></pre>
 
         <h3>完成响应</h3>
@@ -181,7 +181,7 @@
 }</code></pre>
 
         <h3>下载视频</h3>
-        <pre><code>curl https://cf-api.o1key.com/v1/videos/&lt;task_id&gt;/content \
+        <pre><code>curl https://api.o1key.com/v1/videos/&lt;task_id&gt;/content \
   -H "Authorization: Bearer $API_KEY" \
   --output gemini-omni-result.mp4</code></pre>
 

@@ -4,9 +4,8 @@
   "tagline": "图像与视频生成接口。统一 Bearer 鉴权，异步任务提交后按任务 ID 轮询结果。",
   "auth": "Authorization: Bearer <API Key>",
   "base_urls": [
-    {"name": "国内加速，推荐", "url": "https://api.o1key.cn"},
-    {"name": "Cloudflare", "url": "https://cf-api.o1key.com"},
-    {"name": "美国直连", "url": "https://api.o1key.com"}
+    {"name": "主地址，推荐", "url": "https://api.o1key.com"},
+    {"name": "Cloudflare 备用", "url": "https://cf-api.o1key.com"}
   ],
   "groups": [
     {"label": "对接指南", "pages": ["temporary-upload"]},

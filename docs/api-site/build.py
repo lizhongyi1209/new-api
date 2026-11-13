@@ -816,6 +816,8 @@ def head(site: Site, page: Page, title: str) -> str:
 <link rel="alternate" type="text/plain" href="llms.txt" title="llms.txt">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;700&amp;display=swap" media="print" onload="this.media='all'">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <link rel="stylesheet" href="assets/docs.css">
 <script>try{{var m=localStorage.getItem('docs.mode');if(m)document.documentElement.dataset.mode=m}}catch(e){{}}</script>
 </head>
