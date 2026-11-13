@@ -833,7 +833,7 @@ def header(site: Site, page: Page) -> str:
         cur = ' aria-current="page"' if on else ""
         return f'<a href="{href}"{cur}>{label}</a>'
     return f"""<header class="topbar">
-<a class="brand" href="./"><span class="brand-mark" aria-hidden="true">{esc(cfg['brand'][:1])}</span><span>{esc(cfg['brand'])}</span><span class="brand-sub">对接文档</span></a>
+<a class="brand" href="./"><img class="brand-mark" src="assets/favicon.png" alt="" width="26" height="26"><span>{esc(cfg['brand'])}</span><span class="brand-sub">对接文档</span></a>
 <nav class="topnav" aria-label="主导航">{tab('对接指南', './', guide_on)}{tab('API 参考', './#endpoints' if guide_on else page.href, not guide_on)}</nav>
 <div class="search" data-search>
 <label class="search-box"><span class="sr-only">搜索文档</span>{SEARCH_ICON}<input type="search" placeholder="搜索接口或参数" autocomplete="off" spellcheck="false" data-search-input aria-controls="search-results" aria-expanded="false" role="combobox"><kbd data-kbd>⌘K</kbd></label>
