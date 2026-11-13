@@ -294,8 +294,13 @@ func (t *Task) GetUpstreamTaskID() string {
 }
 
 // GetResultURL 获取任务结果 URL（视频地址等）
-// 新数据存在 PrivateData.ResultURL 中；旧数据回退到 FailReason（历史兼容）
+// 新数据存在 PrivateData.ResultURL 中；旧数据回退到 FailReason（历史兼容）。
+// Seedance（渠道类型 60）在 payload 中仍有供应商视频地址时返回该地址，
+// 已镜像到本站对象存储的 result_url 不覆盖它。payload 里没有供应商地址的历史行继续用 result_url。
 func (t *Task) GetResultURL() string {
+	if providerURL := t.seedanceProviderVideoURL(); providerURL != "" {
+		return providerURL
+	}
 	dataURL := t.GetDataResultURL()
 	if dataURL != "" && t.isOwnVideoProxyURL(t.PrivateData.ResultURL) {
 		return dataURL

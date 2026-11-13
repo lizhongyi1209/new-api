@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -142,6 +143,80 @@ func TestApplyVideoOutputStrategyUploadsAnyChannelVideoToOSS(t *testing.T) {
 	assert.Equal(t, []byte("fake mp4"), requestBody)
 	assert.True(t, strings.HasPrefix(result.Url, "https://media.example.com/output/"), result.Url)
 	assert.Empty(t, result.RemoteUrl)
+}
+
+func TestApplyVideoOutputStrategyPassesThroughSeedanceProviderURL(t *testing.T) {
+	const providerURL = "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/output/video.mp4?X-Tos-Signature=abc"
+	for _, strategy := range []string{dto.ImageOutputStrategyOSS, dto.ImageOutputStrategyR2} {
+		t.Run(strategy, func(t *testing.T) {
+			channel := &model.Channel{Type: constant.ChannelTypeServiceInferenceVideo}
+			channel.SetOtherSettings(dto.ChannelOtherSettings{ImageOutputStrategy: strategy})
+			task := &model.Task{
+				TaskID:   "task_seedance",
+				Platform: constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeServiceInferenceVideo)),
+				Properties: model.Properties{
+					OriginModelName:   "dreamina-seedance-2-0-hc",
+					UpstreamModelName: "dreamina-seedance-2-0-260128-max",
+				},
+			}
+			result := &relaycommon.TaskInfo{
+				Status: model.TaskStatusSuccess,
+				Url:    providerURL,
+			}
+
+			err := ApplyVideoOutputStrategy(context.Background(), channel, task, result)
+
+			require.NoError(t, err)
+			assert.Equal(t, providerURL, result.Url)
+			assert.Empty(t, result.RemoteUrl)
+		})
+	}
+}
+
+func TestApplyVideoOutputStrategyStillMirrorsOtherServiceInferenceModels(t *testing.T) {
+	var requestPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		requestPath = request.URL.Path
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	previousClient := ossClient
+	previousPresignClient := ossPresignClient
+	ossClient = nil
+	ossPresignClient = nil
+	t.Cleanup(func() {
+		ossClient = previousClient
+		ossPresignClient = previousPresignClient
+	})
+	t.Setenv("ALIYUN_OSS_ACCESS_KEY_ID", "test-access-key")
+	t.Setenv("ALIYUN_OSS_ACCESS_KEY_SECRET", "test-secret-key")
+	t.Setenv("ALIYUN_OSS_REGION", "test-region")
+	t.Setenv("ALIYUN_OSS_ENDPOINT", server.URL)
+	t.Setenv("ALIYUN_OSS_FORCE_PATH_STYLE", "true")
+	t.Setenv("ALIYUN_OSS_BUCKET", "test-bucket")
+	t.Setenv("ALIYUN_OSS_PUBLIC_BASE_URL", "https://media.example.com")
+
+	channel := &model.Channel{Type: constant.ChannelTypeServiceInferenceVideo}
+	channel.SetOtherSettings(dto.ChannelOtherSettings{ImageOutputStrategy: dto.ImageOutputStrategyOSS})
+	task := &model.Task{
+		TaskID:   "task_minimax",
+		Platform: constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeServiceInferenceVideo)),
+		Properties: model.Properties{
+			OriginModelName:   "MiniMax-H3",
+			UpstreamModelName: "minimax-h3",
+		},
+	}
+	result := &relaycommon.TaskInfo{
+		Status: model.TaskStatusSuccess,
+		Url:    "data:video/mp4;base64,ZmFrZSBtcDQ=",
+	}
+
+	err := ApplyVideoOutputStrategy(context.Background(), channel, task, result)
+
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(requestPath, "/test-bucket/output/"), requestPath)
+	assert.True(t, strings.HasPrefix(result.Url, "https://media.example.com/output/"), result.Url)
 }
 
 func TestApplyVideoOutputStrategyDefaultsToUpstreamPassthrough(t *testing.T) {

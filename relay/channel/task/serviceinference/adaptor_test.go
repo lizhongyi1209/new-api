@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -762,6 +763,35 @@ func TestParseTaskResultCompletedUsage(t *testing.T) {
 	assert.Equal(t, 40594, taskInfo.TotalTokens)
 }
 
+func TestParseTaskResultReadsSeedanceProviderVideoURL(t *testing.T) {
+	const providerURL = "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/output/video.mp4?sig=1"
+	cases := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "metadata content video_url string",
+			body: `{"task":{"id":"mvt-1","status":"completed","model":"dreamina-seedance-2-0-260128-max","metadata":{"content":{"video_url":"` + providerURL + `"}}}}`,
+		},
+		{
+			name: "metadata content video_url object",
+			body: `{"task":{"id":"mvt-1","status":"completed","model":"doubao-seedance-2-0-260128-max","metadata":{"content":{"video_url":{"url":"` + providerURL + `"}}}}}`,
+		},
+		{
+			name: "content video_url string",
+			body: `{"task":{"id":"mvt-1","status":"completed","model":"dreamina-seedance-2-0-hc","content":{"video_url":"` + providerURL + `"}}}`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			taskInfo, err := (&TaskAdaptor{}).ParseTaskResult([]byte(tc.body))
+			require.NoError(t, err)
+			assert.Equal(t, model.TaskStatusSuccess, taskInfo.Status)
+			assert.Equal(t, providerURL, taskInfo.Url)
+		})
+	}
+}
+
 func TestParseTaskResultPreparingPreservesPreparation(t *testing.T) {
 	adaptor := &TaskAdaptor{}
 	taskInfo, err := adaptor.ParseTaskResult([]byte(`{
@@ -1002,6 +1032,39 @@ func TestConvertToOpenAIVideoCompletedTaskMatchesDownstreamContract(t *testing.T
 	assert.Equal(t, []any{"https://cdn.example.com/result.mp4"}, video.Metadata["outputs"])
 	assert.NotNil(t, video.Metadata["usage"])
 	assert.Nil(t, video.Error)
+}
+
+func TestConvertToOpenAIVideoPrefersSeedanceProviderURLOverMirroredResult(t *testing.T) {
+	const providerURL = "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/output/video.mp4?sig=1"
+	task := &model.Task{
+		TaskID:   "task-public",
+		Status:   model.TaskStatusSuccess,
+		Platform: constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeServiceInferenceVideo)),
+		Progress: "100%",
+		Properties: model.Properties{
+			OriginModelName: "dreamina-seedance-2-0-hc",
+		},
+		PrivateData: model.TaskPrivateData{
+			ResultURL: "https://oss.o1key.cn/output/mirrored.mp4",
+		},
+		Data: []byte(`{
+			"task": {
+				"status": "completed",
+				"outputs": [],
+				"metadata": {"content": {"video_url": "` + providerURL + `"}}
+			}
+		}`),
+	}
+
+	data, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var video dto.OpenAIVideo
+	require.NoError(t, common.Unmarshal(data, &video))
+	assert.Equal(t, providerURL, video.ResultURL)
+	require.NotNil(t, video.Metadata)
+	assert.Equal(t, providerURL, video.Metadata["url"])
+	assert.NotContains(t, string(data), "oss.o1key.cn")
 }
 
 func TestConvertToOpenAIVideoPreservesPreparingAndPrep(t *testing.T) {
