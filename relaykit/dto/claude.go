@@ -351,9 +351,35 @@ func (c *ClaudeRequest) GetTokenCountMeta() *types.TokenCountMeta {
 					texts = append(texts, string(b))
 				}
 			case "tool_result":
-				if media.Content != nil {
+				if media.Content == nil {
+					continue
+				}
+				if media.IsStringContent() {
+					texts = append(texts, media.GetStringContent())
+					continue
+				}
+				// Tool results (screenshots, file reads) can nest base64 images
+				// and documents. Count those as media like top-level blocks;
+				// tokenizing their base64 inflates the estimate about tenfold.
+				nested := media.ParseMediaContent()
+				if len(nested) == 0 {
 					b, _ := kitutil.Marshal(media.Content)
 					texts = append(texts, string(b))
+					continue
+				}
+				for _, block := range nested {
+					source := block.ToFileSource()
+					switch {
+					case block.Type == "text":
+						texts = append(texts, block.GetText())
+					case block.Type == "image" && source != nil:
+						fileMeta = append(fileMeta, &types.FileMeta{FileType: types.FileTypeImage, Source: source})
+					case block.Type == "document" && source != nil && block.Source.Type != "text":
+						fileMeta = append(fileMeta, &types.FileMeta{FileType: types.FileTypeFile, Source: source})
+					default:
+						b, _ := kitutil.Marshal(block)
+						texts = append(texts, string(b))
+					}
 				}
 			}
 		}
