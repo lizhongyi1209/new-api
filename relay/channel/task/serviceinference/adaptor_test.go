@@ -1004,6 +1004,41 @@ func TestConvertToOpenAIVideoCompletedTaskMatchesDownstreamContract(t *testing.T
 	assert.Nil(t, video.Error)
 }
 
+// The channel output strategy decides the public URL: polling stores the
+// upstream URL under passthrough (the default) and the cached copy under
+// oss/r2, and the lookup must report whichever was stored.
+func TestConvertToOpenAIVideoFollowsChannelOutputStrategy(t *testing.T) {
+	upstreamURL := "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedance-2-5/2131488439/Video/cgt-20261021202720-dg4og.mp4?X-Tos-Signature=abc"
+	tests := []struct {
+		name      string
+		storedURL string
+	}{
+		{name: "passthrough returns the upstream URL", storedURL: upstreamURL},
+		{name: "oss returns the cached copy", storedURL: "https://oss.example.com/output/result.mp4"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			task := &model.Task{
+				TaskID:      "task-public",
+				Status:      model.TaskStatusSuccess,
+				Progress:    "100%",
+				Properties:  model.Properties{OriginModelName: "doubao-seedance-2-5-260628-max"},
+				PrivateData: model.TaskPrivateData{ResultURL: tc.storedURL},
+				Data:        []byte(`{"task":{"id":"mvt-upstream","status":"completed","outputs":["` + upstreamURL + `"]}}`),
+			}
+
+			data, err := (&TaskAdaptor{}).ConvertToOpenAIVideo(task)
+			require.NoError(t, err)
+
+			var video dto.OpenAIVideo
+			require.NoError(t, common.Unmarshal(data, &video))
+			assert.Equal(t, tc.storedURL, video.ResultURL)
+			assert.Equal(t, tc.storedURL, video.Metadata["url"])
+			assert.Equal(t, []any{tc.storedURL}, video.Metadata["outputs"])
+		})
+	}
+}
+
 func TestConvertToOpenAIVideoPreservesPreparingAndPrep(t *testing.T) {
 	adaptor := &TaskAdaptor{}
 	task := &model.Task{

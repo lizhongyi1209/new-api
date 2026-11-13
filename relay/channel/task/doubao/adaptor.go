@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -338,10 +339,15 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 				"resolution":       resTask.Resolution,
 			}
 		}
-	case "failed":
+	case "failed", "cancelled", "expired":
+		// cancelled and expired are terminal Ark states; leaving them in progress
+		// would hold the reservation until the task timeout sweeper refunds it.
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
 		taskResult.Reason = resTask.Error.Message
+		if taskResult.Reason == "" {
+			taskResult.Reason = "task " + resTask.Status
+		}
 	default:
 		// Unknown status, treat as processing
 		taskResult.Status = model.TaskStatusInProgress
@@ -351,10 +357,16 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	return &taskResult, nil
 }
 
+// ConvertToOpenAIVideo builds the public video object shared with the
+// ServiceInference Seedance channels. It reports the stored result URL, which
+// honors the channel output strategy (OSS/R2), instead of the short-lived
+// upstream content.video_url.
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	var dResp responseTask
-	if err := common.Unmarshal(originTask.Data, &dResp); err != nil {
-		return nil, errors.Wrap(err, "unmarshal doubao task data failed")
+	if len(bytes.TrimSpace(originTask.Data)) > 0 {
+		if err := common.Unmarshal(originTask.Data, &dResp); err != nil {
+			return nil, errors.Wrap(err, "unmarshal doubao task data failed")
+		}
 	}
 
 	openAIVideo := dto.NewOpenAIVideo()
@@ -362,16 +374,46 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.TaskID = originTask.TaskID
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
-	openAIVideo.SetMetadata("url", dResp.Content.VideoURL)
 	openAIVideo.CreatedAt = originTask.CreatedAt
-	openAIVideo.CompletedAt = originTask.UpdatedAt
+	openAIVideo.CompletedAt = originTask.FinishTime
 	openAIVideo.Model = originTask.Properties.OriginModelName
 
-	if dResp.Status == "failed" {
-		openAIVideo.Error = &dto.OpenAIVideoError{
-			Message: dResp.Error.Message,
-			Code:    dResp.Error.Code,
+	if originTask.Status == model.TaskStatusSuccess {
+		if resultURL := strings.TrimSpace(originTask.GetResultURL()); resultURL != "" {
+			openAIVideo.ResultURL = resultURL
+			openAIVideo.SetMetadata("url", resultURL)
 		}
+		if dResp.Usage.TotalTokens > 0 {
+			openAIVideo.SetMetadata("usage", map[string]int{
+				"completion_tokens": dResp.Usage.CompletionTokens,
+				"total_tokens":      dResp.Usage.TotalTokens,
+			})
+		}
+	}
+	if dResp.Duration > 0 {
+		openAIVideo.Seconds = strconv.Itoa(dResp.Duration)
+	}
+	if dResp.Resolution != "" {
+		openAIVideo.Size = dResp.Resolution
+		openAIVideo.SetMetadata("resolution", dResp.Resolution)
+	}
+	if dResp.Ratio != "" {
+		openAIVideo.SetMetadata("ratio", dResp.Ratio)
+	}
+
+	if originTask.Status == model.TaskStatusFailure {
+		code := dResp.Error.Code
+		if code == "" {
+			code = "upstream_error"
+		}
+		message := dResp.Error.Message
+		if message == "" {
+			message = strings.TrimSpace(originTask.FailReason)
+		}
+		if message == "" {
+			message = "task failed"
+		}
+		openAIVideo.Error = &dto.OpenAIVideoError{Message: message, Code: code}
 	}
 
 	return common.Marshal(openAIVideo)

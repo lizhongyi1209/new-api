@@ -700,3 +700,48 @@ export function extractUsage() { return {seconds:2}; }
 		})
 	}
 }
+
+func TestVideoFetchReturnsPublicObjectForArkSeedanceTasks(t *testing.T) {
+	previousPluginsEnabled := pluginruntime.DefaultRegistry.Enabled()
+	pluginruntime.DefaultRegistry.SetEnabled(false)
+	t.Cleanup(func() { pluginruntime.DefaultRegistry.SetEnabled(previousPluginsEnabled) })
+	database := setupRelayChannelDB(t)
+	require.NoError(t, database.AutoMigrate(&model.Task{}))
+
+	upstreamURL := "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedance-2-0-mini/v.mp4?X-Tos-Signature=abc"
+	for _, channelType := range []int{constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine} {
+		t.Run(strconv.Itoa(channelType), func(t *testing.T) {
+			taskID := "task_ark_" + strconv.Itoa(channelType)
+			task := &model.Task{
+				TaskID: taskID, UserId: 7, ChannelId: 555, Quota: 466831,
+				Platform: constant.TaskPlatform(strconv.Itoa(channelType)),
+				Status:   model.TaskStatusSuccess, Progress: "100%",
+				Properties: model.Properties{OriginModelName: "doubao-seedance-2-0-mini", UpstreamModelName: "doubao-seedance-2-0-mini-260615"},
+				PrivateData: model.TaskPrivateData{
+					UpstreamTaskID: "cgt-20261113180051-x3jui",
+					ResultURL:      "https://oss.example.com/output/v.mp4",
+				},
+				Data: []byte(`{"id":"cgt-20261113180051-x3jui","status":"succeeded","content":{"video_url":"` + upstreamURL + `"},` +
+					`"resolution":"480p","duration":4,"usage":{"completion_tokens":40594,"total_tokens":40594}}`),
+			}
+			require.NoError(t, database.Create(task).Error)
+
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/video/generations/"+taskID, nil)
+			c.Params = gin.Params{{Key: "task_id", Value: taskID}}
+			c.Set("id", 7)
+
+			body, taskErr := videoFetchByIDRespBodyBuilder(c)
+			require.Nil(t, taskErr)
+
+			var video dto.OpenAIVideo
+			require.NoError(t, common.Unmarshal(body, &video))
+			assert.Equal(t, taskID, video.ID)
+			assert.Equal(t, dto.VideoStatusCompleted, video.Status)
+			assert.Equal(t, "https://oss.example.com/output/v.mp4", video.ResultURL)
+			for _, leaked := range []string{`"channel_id"`, `"quota"`, `"user_id"`, `"platform"`, upstreamURL, "cgt-20261113180051-x3jui", "doubao-seedance-2-0-mini-260615"} {
+				assert.NotContains(t, string(body), leaked)
+			}
+		})
+	}
+}

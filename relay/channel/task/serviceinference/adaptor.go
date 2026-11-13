@@ -633,11 +633,16 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.CreatedAt = originTask.CreatedAt
 	openAIVideo.CompletedAt = originTask.FinishTime
 	openAIVideo.Model = originTask.Properties.OriginModelName
+	// The stored result URL honors the channel output strategy (OSS/R2). When it
+	// exists it is authoritative: the upstream outputs are short-lived provider
+	// links that also reveal the upstream account and task identifiers.
+	storedResultURL := ""
 	if originTask.Status == model.TaskStatusSuccess {
-		if resultURL := strings.TrimSpace(originTask.GetResultURL()); resultURL != "" {
-			openAIVideo.ResultURL = resultURL
-			openAIVideo.SetMetadata("url", resultURL)
-		}
+		storedResultURL = strings.TrimSpace(originTask.GetResultURL())
+	}
+	if storedResultURL != "" {
+		openAIVideo.ResultURL = storedResultURL
+		openAIVideo.SetMetadata("url", storedResultURL)
 	}
 
 	if len(bytes.TrimSpace(originTask.Data)) == 0 {
@@ -658,7 +663,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	if err != nil {
 		return nil, err
 	}
-	if len(resTask.Outputs) > 0 {
+	if storedResultURL != "" {
+		openAIVideo.SetMetadata("outputs", []string{storedResultURL})
+	} else if len(resTask.Outputs) > 0 {
 		openAIVideo.ResultURL = resTask.Outputs[0]
 		openAIVideo.SetMetadata("url", resTask.Outputs[0])
 		openAIVideo.SetMetadata("outputs", resTask.Outputs)
