@@ -119,6 +119,10 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 
 	facts := map[string]any{}
 	switch meta.Meter {
+	case Wan30:
+		// The adaptor owns parameter precedence for this protocol, so its
+		// estimate comes from the outbound request through Wan30Estimate.
+		return nil, fmt.Errorf("wan3.0 usage must be estimated from the outbound request")
 	case Seedance:
 		if seconds == 0 {
 			seconds = 15
@@ -413,6 +417,33 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 				}
 			}
 		}
+	case Wan30:
+		if !usage.IsObject() {
+			return nil, fmt.Errorf("upstream wan3.0 video usage is missing")
+		}
+		output := usage.Get("output_video_duration")
+		if !output.Exists() {
+			return nil, fmt.Errorf("wan3.0 output video duration is missing")
+		}
+		outputSeconds, err := numeric(output)
+		if err != nil || outputSeconds < 0 || outputSeconds > Wan30MaxBilledSeconds {
+			return nil, fmt.Errorf("invalid wan3.0 output video duration")
+		}
+		inputSeconds := 0.0
+		if input := usage.Get("input_video_duration"); input.Exists() {
+			inputSeconds, err = numeric(input)
+			if err != nil || inputSeconds < 0 || inputSeconds > Wan30MaxBilledSeconds {
+				return nil, fmt.Errorf("invalid wan3.0 input video duration")
+			}
+		} else if reserved, _ := submitted["input_video_seconds"].(float64); reserved > 0 {
+			// A request with reference video keeps its reservation until the
+			// upstream reports the billed input duration.
+			return nil, fmt.Errorf("wan3.0 input video duration is missing")
+		}
+		facts = map[string]any{"seconds": outputSeconds, "input_video_seconds": inputSeconds, "billed_seconds": outputSeconds + inputSeconds}
+		if sr := usage.Get("SR"); sr.Exists() {
+			facts["resolution"] = normalizeEnum(sr.String()+"P", meta.Schema["resolution"].Enum)
+		}
 	case Omni:
 		if !usage.IsObject() || (!usage.Get("total_input_tokens").Exists() && !usage.Get("input_tokens_by_modality").Exists()) || (!usage.Get("total_output_tokens").Exists() && !usage.Get("output_tokens_by_modality").Exists()) {
 			return nil, fmt.Errorf("upstream Omni video usage is missing")
@@ -459,6 +490,28 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 		}
 	}
 	return facts, Validate(meta.Schema, facts)
+}
+
+// Wan30Estimate reserves wan3.0 usage for the outbound request. Automatic
+// duration (-1) reserves the upstream maximum; reference video reserves the
+// rest of the upstream cap on output plus input duration, capped at 15
+// seconds of input.
+func Wan30Estimate(duration int, resolution string, referenceVideo bool) (map[string]any, error) {
+	if duration != -1 && (duration < 2 || duration > Wan30MaxBilledSeconds) {
+		return nil, fmt.Errorf("wan3.0 duration must be -1 or an integer between 2 and %d", Wan30MaxBilledSeconds)
+	}
+	output := float64(duration)
+	input := 0.0
+	switch {
+	case duration == -1 && referenceVideo:
+		output, input = Wan30MaxBilledSeconds-15, 15
+	case duration == -1:
+		output = Wan30MaxBilledSeconds
+	case referenceVideo:
+		input = math.Min(15, Wan30MaxBilledSeconds-output)
+	}
+	facts := map[string]any{"seconds": output, "input_video_seconds": input, "billed_seconds": output + input, "resolution": resolution}
+	return facts, Validate(ForMeter(Wan30).Schema, facts)
 }
 
 // kling40BilledSeconds applies Kling 4.0's official duration rule: requests

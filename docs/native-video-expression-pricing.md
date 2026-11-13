@@ -15,6 +15,7 @@
 | 50 Kling 4.0 | kling-4.0、kling-4.0-flash 文生视频、图生视频、Omni | `billed_seconds`（已按视频输入规则换算的计费时长）、`seconds`、`input_video_seconds`、`video_input`、`resolution`；公式见 `docs/kling-4-video.md` |
 | 35 MiniMax、60 TokenMart | MiniMax-H3 / MiniMax-H3-MAX | `seconds`、`input_video_seconds`、`input_images`、`resolution` |
 | 48 xAI、60 TokenMart、1 OpenAI 兼容 | grok-imagine-video、1.0、1.5、1.5-preview | `seconds`、`input_images`、`resolution`、`operation` |
+| 17 阿里百炼（含 TokenMart 百炼格式） | wan3.0-video、wan3.0-video-prime | `billed_seconds`（输出 + 参考视频秒数）、`seconds`、`input_video_seconds`、`resolution`（`480P` / `720P` / `1080P`） |
 | 24 Gemini | gemini-omni-flash-preview | `input_tokens`、`text_output_tokens`、`video_output_tokens` |
 | 1 OpenAI 兼容 | veo-3.1、omni_flash-1.2、omni_flash_abra_edit、omni_flash_10s、sora | Veo：`seconds`、`resolution`；Omni Flash：`seconds`、`resolution`、`operation`（`generate` / `edit`，传入 `video_url` 或 `source_video_url` 即为编辑）；Sora：`seconds`、`size` |
 
@@ -79,6 +80,12 @@ MiniMax H3：可计输出及参考视频秒数；前 5 张图片免费时：
 u("resolution") == "2K" ? tier("2K", (u("seconds") + u("input_video_seconds")) * 0.8 + max(u("input_images") - 5, 0) * 0.2) : tier("768P", (u("seconds") + u("input_video_seconds")) * 0.5 + max(u("input_images") - 5, 0) * 0.2)
 ```
 
+万相 Wan 3.0：输出和参考视频按同一分辨率单价计秒：
+
+```text
+u("resolution") == "480P" ? tier("480P", u("billed_seconds") * 0.15) : u("resolution") == "720P" ? tier("720P", u("billed_seconds") * 0.3) : tier("1080P", u("billed_seconds") * 0.6)
+```
+
 Grok 1.5：
 
 ```text
@@ -98,7 +105,7 @@ tier("omni", (u("input_tokens") * 1.5 + u("text_output_tokens") * 9 + u("video_o
 
 - 提交按经校验的请求估算用量。Seedance 用分辨率与时长估算 Token，参考视频预留 15 秒输入；`duration=-1`
   按映射后的模型上限预留，2.0 MAX 为 15 秒、2.5 MAX 为 30 秒。
-  旧版 Kling 暂按每请求秒 2 个资源点预留；实际资源扣减完成后结算。Kling 4.0 用独立计量器，未指定输出时长或无法读取输入视频时长时，分别按 30 秒上限预留；完成后用上游返回的时长结算。MiniMax 参考视频同样预留 15 秒。
+  旧版 Kling 暂按每请求秒 2 个资源点预留；实际资源扣减完成后结算。Kling 4.0 用独立计量器，未指定输出时长或无法读取输入视频时长时，分别按 30 秒上限预留；完成后用上游返回的时长结算。MiniMax 参考视频同样预留 15 秒。万相 Wan 3.0 的 `duration=-1` 按 30 秒预留；带参考视频时预留 15 秒输入，输出与输入合计不超过上游 30 秒上限；完成后用 `usage.output_video_duration`、`usage.input_video_duration` 和 `usage.SR` 结算。
   这些是预扣估算，不是供应商的精确报价，也不能保证覆盖任意管理员定义的条件表达式。
 - 请求里的 `usage` 不会成为用量；秒数、图片数、Token 和资源点先校验范围，再作为乘数。
 - 提交时冻结表达式、分组倍率、额度换算参数、用量维度和引用的标量条件/允许的请求头/时间。

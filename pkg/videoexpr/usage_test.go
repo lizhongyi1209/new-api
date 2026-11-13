@@ -338,3 +338,104 @@ func TestOmniFlash12UsageFactsSupportResolutionAndEditing(t *testing.T) {
 	_, err = Estimate(meta, relaycommon.TaskSubmitReq{Model: "omni_flash-1.2", Resolution: "8k"}, constant.TaskActionTextGenerate)
 	assert.Error(t, err)
 }
+
+func TestWan30ReservesUpperBoundAndSettlesReportedSeconds(t *testing.T) {
+	const expression = `u("resolution") == "480P" ? tier("480P", u("billed_seconds") * 0.15) : u("resolution") == "720P" ? tier("720P", u("billed_seconds") * 0.3) : tier("1080P", u("billed_seconds") * 0.6)`
+	for _, model := range []string{"wan3.0-video", "wan3.0-video-prime"} {
+		meta := ForModel(constant.ChannelTypeAli, model)
+		require.Equal(t, Wan30, meta.Meter, model)
+		require.NoError(t, billing_setting.SmokeTestTaskExpr(expression, meta.Schema))
+	}
+	assert.Empty(t, ForModel(constant.ChannelTypeAli, "wan2.7-i2v").Meter)
+
+	for _, tc := range []struct {
+		name           string
+		duration       int
+		resolution     string
+		referenceVideo bool
+		response       string
+		wantReserved   float64
+		wantFinal      float64
+		wantFinalFacts map[string]any
+	}{
+		{
+			name: "720P fixed duration", duration: 5, resolution: "720P",
+			response:     `{"output":{"task_status":"SUCCEEDED"},"usage":{"output_video_duration":5,"input_video_duration":0,"SR":720}}`,
+			wantReserved: 1.5, wantFinal: 1.5,
+			wantFinalFacts: map[string]any{"seconds": float64(5), "input_video_seconds": float64(0), "billed_seconds": float64(5), "resolution": "720P"},
+		},
+		{
+			name: "automatic duration reserves the maximum", duration: -1, resolution: "1080P",
+			response:     `{"output":{"task_status":"SUCCEEDED"},"usage":{"output_video_duration":12,"SR":1080}}`,
+			wantReserved: 18, wantFinal: 7.2,
+			wantFinalFacts: map[string]any{"seconds": float64(12), "input_video_seconds": float64(0), "billed_seconds": float64(12), "resolution": "1080P"},
+		},
+		{
+			name: "reference video bills input seconds", duration: 10, resolution: "1080P", referenceVideo: true,
+			response:     `{"output":{"task_status":"SUCCEEDED"},"usage":{"output_video_duration":10,"input_video_duration":4,"SR":1080}}`,
+			wantReserved: 15, wantFinal: 8.4,
+			wantFinalFacts: map[string]any{"seconds": float64(10), "input_video_seconds": float64(4), "billed_seconds": float64(14), "resolution": "1080P"},
+		},
+		{
+			name: "automatic duration with reference video stays within the cap", duration: -1, resolution: "480P", referenceVideo: true,
+			response:     `{"output":{"task_status":"SUCCEEDED"},"usage":{"output_video_duration":20,"input_video_duration":8,"SR":480}}`,
+			wantReserved: 4.5, wantFinal: 4.2,
+			wantFinalFacts: map[string]any{"seconds": float64(20), "input_video_seconds": float64(8), "billed_seconds": float64(28), "resolution": "480P"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			estimate, err := Wan30Estimate(tc.duration, tc.resolution, tc.referenceVideo)
+			require.NoError(t, err)
+			assert.LessOrEqual(t, estimate["billed_seconds"], float64(Wan30MaxBilledSeconds))
+			reserved, _, err := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: estimate})
+			require.NoError(t, err)
+			assert.InDelta(t, tc.wantReserved, reserved, 1e-9)
+
+			actual, err := Complete(Wan30, estimate, []byte(tc.response), &relaycommon.TaskInfo{})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantFinalFacts, actual)
+			for key, value := range actual {
+				estimate[key] = value
+			}
+			final, _, err := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: estimate})
+			require.NoError(t, err)
+			assert.InDelta(t, tc.wantFinal, final, 1e-9)
+		})
+	}
+}
+
+func TestWan30RejectsOutOfRangeRequestsAndUsage(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		duration   int
+		resolution string
+	}{
+		{name: "too short", duration: 1, resolution: "720P"},
+		{name: "too long", duration: 31, resolution: "720P"},
+		{name: "other negative", duration: -2, resolution: "720P"},
+		{name: "unsupported resolution", duration: 5, resolution: "4K"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Wan30Estimate(tc.duration, tc.resolution, false)
+			assert.Error(t, err)
+		})
+	}
+
+	withVideo, err := Wan30Estimate(10, "720P", true)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name      string
+		submitted map[string]any
+		response  string
+	}{
+		{name: "usage missing", submitted: map[string]any{}, response: `{"output":{"task_status":"SUCCEEDED"}}`},
+		{name: "output duration missing", submitted: map[string]any{}, response: `{"usage":{"SR":720}}`},
+		{name: "output duration above cap", submitted: map[string]any{}, response: `{"usage":{"output_video_duration":31}}`},
+		{name: "reserved input duration missing", submitted: withVideo, response: `{"usage":{"output_video_duration":10}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Complete(Wan30, tc.submitted, []byte(tc.response), &relaycommon.TaskInfo{})
+			assert.Error(t, err)
+		})
+	}
+}

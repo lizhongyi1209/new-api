@@ -522,6 +522,18 @@ Aliases: MiniMax H3, H3 Max, H3 Max Turbo, MiniMax-H3, MiniMax-H3-Max, minimax-h
 - Public downstream reference: `docs/api-doc.html#minimax-h3`.
 - Regression coverage: `relay/channel/task/hailuo/v2_test.go`, `relay/channel/task/serviceinference/adaptor_test.go`.
 
+## Wan 3.0 video generation
+
+Aliases: 万相 3.0, Wan 3.0, wan3.0-video, wan3.0-video-prime, 百炼视频, DashScope video-synthesis, TokenMart 百炼格式.
+
+- Downstream submission uses `POST /v1/video/generations` (prompt, `resolution`, `duration`, `image`/`images`, plus `metadata.input.media` and `metadata.parameters`); lookup uses `GET /v1/video/generations/:task_id` and returns the public OpenAI-style video object.
+- Channel type 17 (Ali) speaks the DashScope protocol (`/api/v1/services/aigc/video-generation/video-synthesis`, `/api/v1/tasks/:id`); TokenMart's official-format endpoint `https://model.service-inference.ai` works as its base URL.
+- Request conversion, wan3.0 validation (duration -1 or 2-30, 480P/720P/1080P, media types/counts, frame vs reference exclusivity), default 1080P, outbound-request usage estimate, and public response conversion: `relay/channel/task/ali/adaptor.go`, `constants.go`.
+- `wan_3_0` usage meter (output + reference-video seconds at the output resolution; automatic duration reserves 30 seconds) and completion facts from `usage.output_video_duration`/`input_video_duration`/`SR`: `pkg/videoexpr/schema.go`, `usage.go`. Pricing must use a task usage expression; legacy per-second prices have no wan3.0 resolution ratio.
+- Public lookup contract for Ali tasks: `relay/relay_task.go` (`videoFetchByIDRespBodyBuilder`).
+- Public downstream reference: `docs/api-doc.html#wan3`; upstream TokenMart reference copy: `docs/wan-dashscope.md`.
+- Regression coverage: `relay/channel/task/ali/wan30_test.go`, `pkg/videoexpr/usage_test.go`, `relay/relay_task_test.go`.
+
 ## Seedance video generation
 
 Aliases: Seedance 视频, Seedance task, 查询视频任务, `/v1/video/generations`, TokenMartSeedance, ServiceInference video, Seedance MAX, `/v2/video/generate`.

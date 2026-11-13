@@ -22,7 +22,12 @@ const (
 	Veo          = "veo"
 	Sora         = "sora"
 	OmniFlash    = "omni_flash"
+	Wan30        = "wan_3_0"
 )
+
+// Wan30MaxBilledSeconds is the upstream cap on output plus reference-video
+// duration for wan3.0 video, and the reservation for automatic duration.
+const Wan30MaxBilledSeconds = 30
 
 type Metadata struct {
 	Meter                    string
@@ -75,6 +80,10 @@ func ForModel(channelType int, model string) Metadata {
 		if strings.HasPrefix(name, "grok-imagine") && strings.Contains(name, "video") {
 			meter = Grok
 		}
+	case constant.ChannelTypeAli:
+		if strings.HasPrefix(name, "wan3.0-video") {
+			meter = Wan30
+		}
 	case constant.ChannelTypeGemini, constant.ChannelTypeVertexAi:
 		if strings.HasPrefix(name, "gemini-omni-") {
 			meter = Omni
@@ -103,6 +112,9 @@ func ForModel(channelType int, model string) Metadata {
 		if strings.Contains(name, "seedance-2-5") {
 			meta.AutomaticDurationSeconds = 30
 		}
+	}
+	if meter == Wan30 {
+		meta.AutomaticDurationSeconds = Wan30MaxBilledSeconds
 	}
 	if meter == Seedance {
 		field := meta.Schema["resolution"]
@@ -189,6 +201,17 @@ func ForMeter(meter string) Metadata {
 		meta.Examples = []jsplugin.UsageExample{
 			{Label: "720p · generate", Facts: map[string]any{"seconds": 8, "resolution": "720p", "operation": "generate"}},
 			{Label: "4k · edit", Facts: map[string]any{"seconds": 8, "resolution": "4k", "operation": "edit"}},
+		}
+	case Wan30:
+		// Wan 3.0 bills output seconds plus reference-video seconds at the
+		// output resolution's per-second price.
+		meta.Schema["seconds"] = number("second", "Output video duration", "输出视频时长")
+		meta.Schema["input_video_seconds"] = number("second", "Total reference video duration", "参考视频总时长")
+		meta.Schema["billed_seconds"] = number("second", "Billable duration: output plus reference video duration", "计费时长：输出时长 + 参考视频时长")
+		meta.Schema["resolution"] = resolution("480P", "720P", "1080P")
+		meta.Examples = []jsplugin.UsageExample{
+			{Label: "720P · 5s", Facts: map[string]any{"seconds": 5, "input_video_seconds": 0, "billed_seconds": 5, "resolution": "720P"}},
+			{Label: "1080P · 10s + 5s input", Facts: map[string]any{"seconds": 10, "input_video_seconds": 5, "billed_seconds": 15, "resolution": "1080P"}},
 		}
 	default:
 		return Metadata{}

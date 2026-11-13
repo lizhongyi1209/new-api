@@ -651,15 +651,16 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	}
 
 	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/")
-	// ServiceInference and the Ark-protocol Doubao/VolcEngine channels back the
-	// documented Seedance downstream API, and the same public model names can be
-	// served by either. Keep both video query routes on the same public
-	// OpenAI-style contract and never fall through to TaskDto, which exposes
-	// internal task, channel, and billing data plus the raw upstream response.
+	// ServiceInference, the Ark-protocol Doubao/VolcEngine channels and the
+	// DashScope-protocol Ali channel back the documented downstream video API.
+	// Keep both video query routes on the same public OpenAI-style contract and
+	// never fall through to TaskDto, which exposes internal task, channel, and
+	// billing data plus the raw upstream response.
 	switch originTask.Platform {
 	case constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeServiceInferenceVideo)),
 		constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeDoubaoVideo)),
-		constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeVolcEngine)):
+		constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeVolcEngine)),
+		constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeAli)):
 		adaptor := GetTaskAdaptor(originTask.Platform)
 		if adaptor == nil {
 			taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("invalid channel id: %d", originTask.ChannelId), "invalid_channel_id", http.StatusBadRequest)

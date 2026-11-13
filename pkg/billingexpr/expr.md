@@ -26,7 +26,8 @@ The expression is the billing contract between the administrator and the system.
 
 Native asynchronous video adaptors now support schema-validated `u(...)` expressions in the ordinary
 versioned model-pricing configuration. This applies to Seedance (TokenMart, Doubao, Xinhankr), Kling
-(official and Tencent), MiniMax H3/H3 Max, Grok video, Gemini Omni, and native Veo/Sora-compatible video.
+(official and Tencent), MiniMax H3/H3 Max, Grok video, Gemini Omni, Wan 3.0 (Ali DashScope protocol), and
+native Veo/Sora-compatible video.
 Non-task text/image models still cannot save an arbitrary usage expression. Plugin-scoped expression
 storage and plugin execution semantics remain unchanged.
 

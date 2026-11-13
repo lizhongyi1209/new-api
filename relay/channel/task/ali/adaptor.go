@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/videoexpr"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -55,11 +56,12 @@ type AliVideoInput struct {
 type AliVideoParameters struct {
 	Resolution   string `json:"resolution,omitempty"`    // 分辨率: 480P/720P/1080P（图生视频、首尾帧生视频）
 	Size         string `json:"size,omitempty"`          // 尺寸: 如 "832*480"（文生视频）
-	Duration     int    `json:"duration,omitempty"`      // 时长: 3-10秒
-	PromptExtend bool   `json:"prompt_extend,omitempty"` // 是否开启prompt智能改写
-	Watermark    bool   `json:"watermark,omitempty"`     // 是否添加水印
+	Ratio        string `json:"ratio,omitempty"`         // 宽高比（wan3.0）: adaptive/16:9/9:16/1:1/4:3/3:4/21:9
+	Duration     int    `json:"duration,omitempty"`      // 时长；wan3.0 为 2-30 秒或 -1 智能时长
+	PromptExtend *bool  `json:"prompt_extend,omitempty"` // 是否开启prompt智能改写
+	Watermark    *bool  `json:"watermark,omitempty"`     // 是否添加水印
 	Audio        *bool  `json:"audio,omitempty"`         // 是否添加音频（wan2.5）
-	Seed         int    `json:"seed,omitempty"`          // 随机数种子
+	Seed         *int   `json:"seed,omitempty"`          // 随机数种子
 }
 
 // AliVideoResponse 阿里通义万相响应
@@ -87,9 +89,11 @@ type AliVideoOutput struct {
 
 // AliUsage 使用统计
 type AliUsage struct {
-	Duration   dto.IntValue `json:"duration,omitempty"`
-	VideoCount dto.IntValue `json:"video_count,omitempty"`
-	SR         dto.IntValue `json:"SR,omitempty"`
+	Duration            dto.IntValue `json:"duration,omitempty"`
+	VideoCount          dto.IntValue `json:"video_count,omitempty"`
+	SR                  dto.IntValue `json:"SR,omitempty"`
+	OutputVideoDuration dto.IntValue `json:"output_video_duration,omitempty"`
+	InputVideoDuration  dto.IntValue `json:"input_video_duration,omitempty"`
 }
 
 type AliMetadata struct {
@@ -131,7 +135,26 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
 	// ValidateMultipartDirect 负责解析并将原始 TaskSubmitReq 存入 context
-	return relaycommon.ValidateMultipartDirect(c, info)
+	if taskErr = relaycommon.ValidateMultipartDirect(c, info); taskErr != nil {
+		return taskErr
+	}
+	taskReq, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	upstreamModel := taskReq.Model
+	if info.IsModelMapped {
+		upstreamModel = info.UpstreamModelName
+	}
+	if !isWan30Model(upstreamModel) {
+		return nil
+	}
+	// Build the outbound request now so wan3.0 limits, including the billed
+	// duration, are rejected with 400 before any quota is reserved.
+	if _, err := a.convertToAliRequest(info, taskReq); err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	return nil
 }
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -260,6 +283,10 @@ func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) 
 	return otherRatios, nil
 }
 
+func isWan30Model(model string) bool {
+	return strings.HasPrefix(model, "wan3.0-video")
+}
+
 func isWan27I2VModel(model string) bool {
 	return strings.HasPrefix(model, "wan2.7-i2v")
 }
@@ -347,6 +374,83 @@ func normalizeWan27I2VInput(aliReq *AliVideoRequest, req relaycommon.TaskSubmitR
 	return nil
 }
 
+// wan30MediaLimits lists the input.media types wan3.0 accepts and the maximum
+// count of each.
+var wan30MediaLimits = map[string]int{
+	"first_frame":     1,
+	"last_frame":      1,
+	"reference_image": 10,
+	"reference_video": 5,
+	"reference_audio": 5,
+}
+
+// normalizeWan30Request converts a request to the wan3.0 input.media protocol
+// and enforces its documented limits locally: duration and resolution are
+// billing multipliers, and the reservation is computed from this request.
+func normalizeWan30Request(aliReq *AliVideoRequest, req relaycommon.TaskSubmitReq) error {
+	if strings.TrimSpace(aliReq.Input.Prompt) == "" {
+		return fmt.Errorf("wan3.0 requires a prompt")
+	}
+	params := aliReq.Parameters
+	if params.Size != "" {
+		resolution, err := sizeToResolution(params.Size)
+		if err != nil {
+			return err
+		}
+		params.Resolution = resolution
+		params.Size = ""
+	}
+	params.Resolution = strings.ToUpper(strings.TrimSpace(params.Resolution))
+	if params.Resolution != "" && !strings.HasSuffix(params.Resolution, "P") {
+		params.Resolution += "P"
+	}
+	if !lo.Contains([]string{"480P", "720P", "1080P"}, params.Resolution) {
+		return fmt.Errorf("wan3.0 resolution must be 480P, 720P or 1080P")
+	}
+	if params.Duration != -1 && (params.Duration < 2 || params.Duration > videoexpr.Wan30MaxBilledSeconds) {
+		return fmt.Errorf("wan3.0 duration must be -1 or an integer between 2 and %d", videoexpr.Wan30MaxBilledSeconds)
+	}
+
+	if aliReq.Input.AudioURL != "" {
+		return fmt.Errorf("wan3.0 takes audio through input.media with type reference_audio")
+	}
+	if len(aliReq.Input.Media) == 0 {
+		if firstFrameURL := firstNonEmpty(aliReq.Input.FirstFrameURL, aliReq.Input.ImgURL, firstTaskImage(req)); firstFrameURL != "" {
+			aliReq.Input.Media = append(aliReq.Input.Media, AliVideoMedia{Type: "first_frame", URL: firstFrameURL})
+		}
+		if lastFrameURL := firstNonEmpty(aliReq.Input.LastFrameURL, secondTaskImage(req)); lastFrameURL != "" {
+			aliReq.Input.Media = append(aliReq.Input.Media, AliVideoMedia{Type: "last_frame", URL: lastFrameURL})
+		}
+	}
+	aliReq.Input.ImgURL = ""
+	aliReq.Input.FirstFrameURL = ""
+	aliReq.Input.LastFrameURL = ""
+
+	counts := map[string]int{}
+	for _, media := range aliReq.Input.Media {
+		limit, supported := wan30MediaLimits[media.Type]
+		if !supported {
+			return fmt.Errorf("wan3.0 does not support input.media type %q", media.Type)
+		}
+		if strings.TrimSpace(media.URL) == "" {
+			return fmt.Errorf("wan3.0 input.media %s requires a url", media.Type)
+		}
+		counts[media.Type]++
+		if counts[media.Type] > limit {
+			return fmt.Errorf("wan3.0 accepts at most %d %s", limit, media.Type)
+		}
+	}
+	hasFrames := counts["first_frame"]+counts["last_frame"] > 0
+	hasReferences := counts["reference_image"]+counts["reference_video"]+counts["reference_audio"] > 0
+	if counts["last_frame"] > 0 && counts["first_frame"] == 0 {
+		return fmt.Errorf("wan3.0 last_frame requires first_frame")
+	}
+	if hasFrames && hasReferences {
+		return fmt.Errorf("wan3.0 first/last frames cannot be combined with reference media")
+	}
+	return nil
+}
+
 func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relaycommon.TaskSubmitReq) (*AliVideoRequest, error) {
 	upstreamModel := req.Model
 	if info.IsModelMapped {
@@ -359,21 +463,24 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 			ImgURL: firstTaskImage(req),
 		},
 		Parameters: &AliVideoParameters{
-			PromptExtend: true, // 默认开启智能改写
-			Watermark:    false,
+			PromptExtend: lo.ToPtr(true), // 默认开启智能改写
 		},
 	}
 
 	// 处理分辨率映射
-	if req.Size != "" {
+	size := req.Size
+	if size == "" && isWan30Model(upstreamModel) {
+		size = req.Resolution // wan3.0 以 resolution 为准，与官方参数一致
+	}
+	if size != "" {
 		// text to video size must be contained *
-		if strings.Contains(req.Model, "t2v") && !strings.Contains(req.Size, "*") {
-			return nil, fmt.Errorf("invalid size: %s, example: %s", req.Size, "1920*1080")
+		if strings.Contains(req.Model, "t2v") && !strings.Contains(size, "*") {
+			return nil, fmt.Errorf("invalid size: %s, example: %s", size, "1920*1080")
 		}
-		if strings.Contains(req.Size, "*") {
-			aliReq.Parameters.Size = req.Size
+		if strings.Contains(size, "*") {
+			aliReq.Parameters.Size = size
 		} else {
-			resolution := strings.ToUpper(req.Size)
+			resolution := strings.ToUpper(size)
 			// 支持 480p, 720p, 1080p 或 480P, 720P, 1080P
 			if !strings.HasSuffix(resolution, "P") {
 				resolution = resolution + "P"
@@ -391,7 +498,9 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 				aliReq.Parameters.Size = "1280*720"
 			}
 		} else {
-			if strings.HasPrefix(req.Model, "wan2.6") {
+			if isWan30Model(upstreamModel) {
+				aliReq.Parameters.Resolution = "1080P" // 与官方默认一致
+			} else if strings.HasPrefix(req.Model, "wan2.6") {
 				aliReq.Parameters.Resolution = "1080P"
 			} else if strings.HasPrefix(req.Model, "wan2.5") {
 				aliReq.Parameters.Resolution = "1080P"
@@ -438,8 +547,31 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 	if err := normalizeWan27I2VInput(aliReq, req); err != nil {
 		return nil, err
 	}
+	if isWan30Model(aliReq.Model) {
+		if err := normalizeWan30Request(aliReq, req); err != nil {
+			return nil, err
+		}
+	}
 
 	return aliReq, nil
+}
+
+// ExtractUsageFactsValidated estimates wan3.0 usage from the outbound request
+// so the reservation follows the parameter precedence the upstream sees.
+func (a *TaskAdaptor) ExtractUsageFactsValidated(c *gin.Context, info *relaycommon.RelayInfo) (map[string]any, error) {
+	if !isWan30Model(info.UpstreamModelName) {
+		return a.BaseBilling.ExtractUsageFactsValidated(c, info)
+	}
+	taskReq, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil, err
+	}
+	aliReq, err := a.convertToAliRequest(info, taskReq)
+	if err != nil {
+		return nil, err
+	}
+	referenceVideo := lo.ContainsBy(aliReq.Input.Media, func(media AliVideoMedia) bool { return media.Type == "reference_video" })
+	return videoexpr.Wan30Estimate(aliReq.Parameters.Duration, aliReq.Parameters.Resolution, referenceVideo)
 }
 
 // EstimateBilling 根据用户请求参数计算 OtherRatios（时长、分辨率等）。
@@ -457,8 +589,12 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 
 	// metadata can override Duration past standard request validation;
 	// cap it because it is used as a billing multiplier.
+	seconds := aliReq.Parameters.Duration
+	if seconds == -1 && isWan30Model(aliReq.Model) {
+		seconds = videoexpr.Wan30MaxBilledSeconds // 智能时长按上限预扣
+	}
 	otherRatios := map[string]float64{
-		"seconds": float64(min(aliReq.Parameters.Duration, relaycommon.MaxTaskDurationSeconds)),
+		"seconds": float64(min(seconds, relaycommon.MaxTaskDurationSeconds)),
 	}
 	ratios, err := ProcessAliOtherRatios(aliReq)
 	if err != nil {
@@ -587,34 +723,46 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	return &taskResult, nil
 }
 
+// ConvertToOpenAIVideo builds the public video object. It reports the stored
+// result URL, which follows the channel output strategy (passthrough by
+// default, oss/r2 when configured).
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	var aliResp AliVideoResponse
-	if err := common.Unmarshal(task.Data, &aliResp); err != nil {
-		return nil, errors.Wrap(err, "unmarshal ali response failed")
+	if len(bytes.TrimSpace(task.Data)) > 0 {
+		if err := common.Unmarshal(task.Data, &aliResp); err != nil {
+			return nil, errors.Wrap(err, "unmarshal ali response failed")
+		}
 	}
 
 	openAIResp := dto.NewOpenAIVideo()
 	openAIResp.ID = task.TaskID
-	openAIResp.Status = convertAliStatus(aliResp.Output.TaskStatus)
+	openAIResp.TaskID = task.TaskID
+	openAIResp.Status = task.Status.ToVideoStatus()
 	openAIResp.Model = task.Properties.OriginModelName
 	openAIResp.SetProgressStr(task.Progress)
 	openAIResp.CreatedAt = task.CreatedAt
-	openAIResp.CompletedAt = task.UpdatedAt
+	openAIResp.CompletedAt = task.FinishTime
 
-	// 设置视频URL（核心字段）
-	openAIResp.SetMetadata("url", aliResp.Output.VideoURL)
+	if task.Status == model.TaskStatusSuccess {
+		if resultURL := strings.TrimSpace(task.GetResultURL()); resultURL != "" {
+			openAIResp.ResultURL = resultURL
+			openAIResp.SetMetadata("url", resultURL)
+		}
+	}
+	if aliResp.Usage != nil {
+		if aliResp.Usage.OutputVideoDuration > 0 {
+			openAIResp.Seconds = strconv.Itoa(int(aliResp.Usage.OutputVideoDuration))
+		}
+		if aliResp.Usage.SR > 0 {
+			openAIResp.Size = fmt.Sprintf("%dP", aliResp.Usage.SR)
+			openAIResp.SetMetadata("resolution", openAIResp.Size)
+		}
+	}
 
-	// 错误处理
-	if aliResp.Code != "" {
-		openAIResp.Error = &dto.OpenAIVideoError{
-			Code:    aliResp.Code,
-			Message: aliResp.Message,
-		}
-	} else if aliResp.Output.Code != "" {
-		openAIResp.Error = &dto.OpenAIVideoError{
-			Code:    aliResp.Output.Code,
-			Message: aliResp.Output.Message,
-		}
+	if task.Status == model.TaskStatusFailure {
+		code := firstNonEmpty(aliResp.Code, aliResp.Output.Code, "upstream_error")
+		message := firstNonEmpty(aliResp.Message, aliResp.Output.Message, task.FailReason, "task failed")
+		openAIResp.Error = &dto.OpenAIVideoError{Code: code, Message: message}
 	}
 
 	return common.Marshal(openAIResp)

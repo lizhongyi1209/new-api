@@ -701,7 +701,7 @@ export function extractUsage() { return {seconds:2}; }
 	}
 }
 
-func TestVideoFetchReturnsPublicObjectForArkSeedanceTasks(t *testing.T) {
+func TestVideoFetchReturnsPublicObjectForNativeVideoTasks(t *testing.T) {
 	previousPluginsEnabled := pluginruntime.DefaultRegistry.Enabled()
 	pluginruntime.DefaultRegistry.SetEnabled(false)
 	t.Cleanup(func() { pluginruntime.DefaultRegistry.SetEnabled(previousPluginsEnabled) })
@@ -709,7 +709,7 @@ func TestVideoFetchReturnsPublicObjectForArkSeedanceTasks(t *testing.T) {
 	require.NoError(t, database.AutoMigrate(&model.Task{}))
 
 	upstreamURL := "https://ark-acg-cn-beijing.tos-cn-beijing.volces.com/doubao-seedance-2-0-mini/v.mp4?X-Tos-Signature=abc"
-	for _, channelType := range []int{constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine} {
+	for _, channelType := range []int{constant.ChannelTypeDoubaoVideo, constant.ChannelTypeVolcEngine, constant.ChannelTypeAli} {
 		t.Run(strconv.Itoa(channelType), func(t *testing.T) {
 			taskID := "task_ark_" + strconv.Itoa(channelType)
 			task := &model.Task{
