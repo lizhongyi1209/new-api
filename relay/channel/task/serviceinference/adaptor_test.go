@@ -1271,6 +1271,174 @@ func TestMiniMaxH3BillingUsesOfficialMiniMaxPrices(t *testing.T) {
 	assert.InDelta(t, 2.5, miniMaxH3CostRMB("minimax-h3-max", 5, 10, 9, "768P"), 1e-12)
 }
 
+func TestMiniMaxH3HighspeedAndLiteBillingLifecycle(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	originalExchangeRate := operation_setting.USDExchangeRate
+	operation_setting.USDExchangeRate = 1
+	t.Cleanup(func() { operation_setting.USDExchangeRate = originalExchangeRate })
+
+	for _, tc := range []struct {
+		model, resolution                   string
+		rate, imageRate, preCost, finalCost float64
+	}{
+		{"MiniMax-H3-Highspeed", "480P", 0.26, 0.20, 1.50, 3.32},
+		{"MiniMax-H3-Highspeed", "768P", 0.40, 0.20, 2.20, 5.00},
+		{"MiniMax-H3-Lite", "480P", 0.16, 0.13, 0.93, 2.05},
+		{"MiniMax-H3-Lite", "768P", 0.26, 0.13, 1.43, 3.25},
+	} {
+		t.Run(tc.model+"/"+tc.resolution, func(t *testing.T) {
+			content := []map[string]any{{"type": "text", "text": "A paper boat crosses a puddle"}}
+			for range 6 {
+				content = append(content, map[string]any{"type": "image_url", "image_url": map[string]string{"url": "https://cdn.example.com/image.png"}, "role": "reference_image"})
+			}
+			content = append(content,
+				map[string]any{"type": "video_url", "video_url": map[string]string{"url": "https://cdn.example.com/input.mp4"}, "role": "reference_video"},
+				map[string]any{"type": "audio_url", "audio_url": map[string]string{"url": "https://cdn.example.com/audio.mp3"}, "role": "reference_audio"},
+			)
+			body, err := common.Marshal(map[string]any{"model": tc.model, "content": content, "duration": 5, "resolution": tc.resolution, "ratio": "16:9"})
+			require.NoError(t, err)
+			ctx := newTaskContextForPath("/v1/video/generations", string(body))
+			info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
+			info.OriginModelName = tc.model
+			info.UpstreamModelName = strings.ToLower(tc.model)
+			info.IsModelMapped = true
+			info.PriceData.ModelRatio = 1
+			info.PriceData.GroupRatioInfo.GroupRatio = 0.9
+			adaptor := &TaskAdaptor{}
+			adaptor.Init(info)
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(ctx, info))
+			reader, err := adaptor.BuildRequestBody(ctx, info)
+			require.NoError(t, err)
+			outbound, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			var payload requestPayload
+			require.NoError(t, common.Unmarshal(outbound, &payload))
+			assert.Equal(t, strings.ToLower(tc.model), payload.Model)
+			assert.Equal(t, tc.resolution, payload.Resolution)
+			require.Len(t, payload.Content, 9)
+			assert.Equal(t, "https://cdn.example.com/image.png", payload.Content[1].ImageURL.URL)
+			url, err := adaptor.BuildRequestURL(info)
+			require.NoError(t, err)
+			assert.Equal(t, "https://model.service-inference.ai/v1/video/generate", url)
+
+			ratios := adaptor.EstimateBilling(ctx, info)
+			assert.InDelta(t, tc.preCost/0.5, ratios["tokenmart_minimax_h3_cost"], 1e-12)
+			require.NotNil(t, info.VideoBilling)
+			assert.True(t, info.VideoBilling.Estimated)
+			assert.InDelta(t, tc.preCost, info.VideoBilling.ProviderCost, 1e-12)
+			assert.InDelta(t, tc.preCost*0.9, info.VideoBilling.FinalCost, 1e-12)
+
+			for _, boundary := range []struct {
+				count     int
+				surcharge float64
+			}{
+				{0, 0}, {5, 0}, {6, tc.imageRate}, {9, tc.imageRate * 4},
+			} {
+				assert.InDelta(t, 5*tc.rate+boundary.surcharge, miniMaxH3CostRMB(strings.ToLower(tc.model), 5, 0, boundary.count, tc.resolution), 1e-12)
+			}
+
+			response, err := common.Marshal(map[string]any{"task": map[string]any{
+				"id": "mvt-upstream", "model": strings.ToLower(tc.model), "status": "completed",
+				"metadata": map[string]any{"resolution": tc.resolution, "duration": 5, "ratio": "16:9",
+					"content": map[string]string{"url": "https://cdn.example.com/output.mp4"},
+					"usage":   map[string]int{"output_seconds": 5, "input_seconds": 7, "input_image_count": 6, "input_audio_seconds": 3}},
+			}})
+			require.NoError(t, err)
+			result, err := adaptor.ParseTaskResult(response)
+			require.NoError(t, err)
+			assert.Equal(t, model.TaskStatusSuccess, result.Status)
+			assert.Equal(t, "https://cdn.example.com/output.mp4", result.Url)
+			preQuota := common.QuotaRound(tc.preCost * common.QuotaPerUnit * 0.9)
+			task := &model.Task{Quota: preQuota, Data: response,
+				Properties:  model.Properties{OriginModelName: tc.model, UpstreamModelName: strings.ToLower(tc.model)},
+				PrivateData: model.TaskPrivateData{BillingContext: &model.TaskBillingContext{GroupRatio: 0.9}},
+			}
+			finalQuota := common.QuotaRound(tc.finalCost * common.QuotaPerUnit * 0.9)
+			assert.Equal(t, finalQuota, adaptor.AdjustBillingOnComplete(task, result))
+			require.NotNil(t, result.VideoBilling)
+			assert.False(t, result.VideoBilling.Estimated)
+			assert.Equal(t, "CNY", result.VideoBilling.Currency)
+			assert.Equal(t, tc.rate, result.VideoBilling.OutputUnitRate)
+			assert.Equal(t, tc.imageRate, result.VideoBilling.ImageUnitRate)
+			assert.Equal(t, 5, result.VideoBilling.FreeImageCount)
+			assert.Equal(t, 1, result.VideoBilling.BilledImageCount)
+			assert.Equal(t, 7, result.VideoBilling.ReferenceVideoInputSeconds)
+			assert.InDelta(t, tc.finalCost, result.VideoBilling.ProviderCost, 1e-12)
+			assert.InDelta(t, tc.finalCost*0.9, result.VideoBilling.FinalCost, 1e-12)
+			assert.Equal(t, finalQuota-preQuota, result.VideoBilling.SettlementDeltaQuota)
+		})
+	}
+}
+
+func TestMiniMaxH3HighspeedAndLiteRequestBounds(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, modelName := range []string{"MiniMax-H3-Highspeed", "MiniMax-H3-Lite"} {
+		for _, tc := range []struct {
+			name, resolution, ratio string
+			duration                int
+			wantError               bool
+		}{
+			{"minimum", "480P", "16:9", 4, false},
+			{"maximum", "768P", "16:9", 15, false},
+			{"below minimum", "480P", "16:9", 3, true},
+			{"above maximum", "768P", "16:9", 16, true},
+			{"negative", "480P", "16:9", -1, true},
+			{"2K unsupported", "2K", "16:9", 5, true},
+			{"text adaptive", "480P", "adaptive", 5, true},
+		} {
+			t.Run(modelName+"/"+tc.name, func(t *testing.T) {
+				body, err := common.Marshal(map[string]any{"model": modelName, "resolution": tc.resolution, "duration": tc.duration, "ratio": tc.ratio, "content": []map[string]string{{"type": "text", "text": "A boat"}}})
+				require.NoError(t, err)
+				ctx := newTaskContextForPath("/v1/video/generations", string(body))
+				info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
+				info.OriginModelName = modelName
+				adaptor := &TaskAdaptor{}
+				adaptor.Init(info)
+				taskErr := adaptor.ValidateRequestAndSetAction(ctx, info)
+				if tc.wantError {
+					require.NotNil(t, taskErr)
+					assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+				} else {
+					require.Nil(t, taskErr)
+				}
+			})
+		}
+	}
+}
+
+func TestMiniMaxH3HighspeedAndLiteReferenceRatio(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, modelName := range []string{"MiniMax-H3-Highspeed", "MiniMax-H3-Lite"} {
+		for _, ratio := range []string{"", "adaptive", "9:16"} {
+			t.Run(modelName+"/"+ratio, func(t *testing.T) {
+				body, err := common.Marshal(map[string]any{
+					"model": modelName, "duration": 5, "resolution": "480P", "ratio": ratio,
+					"content": []map[string]any{
+						{"type": "text", "text": "A boat"},
+						{"type": "image_url", "image_url": map[string]string{"url": "https://cdn.example.com/input.png"}},
+					},
+				})
+				require.NoError(t, err)
+				context := newTaskContextForPath("/v1/video/generations", string(body))
+				info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
+				info.OriginModelName = modelName
+				adaptor := &TaskAdaptor{}
+				adaptor.Init(info)
+				taskErr := adaptor.ValidateRequestAndSetAction(context, info)
+				if modelName == "MiniMax-H3-Lite" && ratio != "9:16" {
+					require.NotNil(t, taskErr)
+					assert.Equal(t, http.StatusBadRequest, taskErr.StatusCode)
+					return
+				}
+				require.Nil(t, taskErr)
+				request, err := relaycommon.GetTaskRequest(context)
+				require.NoError(t, err)
+				assert.Equal(t, 1, request.ReferenceImageCount)
+			})
+		}
+	}
+}
+
 func TestMiniMaxH3MaxCompletionUsesOfficialRMBRateAndGroupRatio(t *testing.T) {
 	originalExchangeRate := operation_setting.USDExchangeRate
 	operation_setting.USDExchangeRate = 1

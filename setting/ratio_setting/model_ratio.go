@@ -268,9 +268,11 @@ var defaultModelRatio = map[string]float64{
 	// The MiniMax H3 family is settled by its task adaptor from provider-native
 	// per-second/input pricing. These ratios only open the standard task billing
 	// path and provide the base used for submit-time pre-consumption.
-	"MiniMax-H3":     1,
-	"MiniMax-H3-Max": 1,
-	"MiniMax-H3-MAX": 1,
+	"MiniMax-H3":           1,
+	"MiniMax-H3-Highspeed": 1,
+	"MiniMax-H3-Lite":      1,
+	"MiniMax-H3-Max":       1,
+	"MiniMax-H3-MAX":       1,
 	// Tencent VCLM (Kling) image-to-video models — billed post-paid by actual
 	// FinalUnitDeduction in the tencentvideo adaptor's AdjustBillingOnComplete.
 	// The "-t" suffix isolates them from the official Kling channel's model

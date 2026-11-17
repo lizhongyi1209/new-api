@@ -22,13 +22,18 @@ const (
 	tokenMartH3MaxBodyBytes       = 64 << 20
 	// MiniMax official pay-as-you-go prices are denominated in RMB.
 	// Completion settlement uses the provider's returned usage.
-	tokenMartH3Rate768PRMB        = 0.50
-	tokenMartH3Rate2KRMB          = 0.80
-	tokenMartH3MaxRate480PRMB     = 0.33
-	tokenMartH3MaxRate768PRMB     = 0.50
-	tokenMartH3FreeImageCount     = 5
-	tokenMartH3ExtraImageRMB      = 0.20
-	tokenMartH3FallbackUSDRMBRate = 7.3
+	tokenMartH3Rate768PRMB          = 0.50
+	tokenMartH3Rate2KRMB            = 0.80
+	tokenMartH3HighspeedRate480PRMB = 0.26
+	tokenMartH3HighspeedRate768PRMB = 0.40
+	tokenMartH3LiteRate480PRMB      = 0.16
+	tokenMartH3LiteRate768PRMB      = 0.26
+	tokenMartH3LiteExtraImageRMB    = 0.13
+	tokenMartH3MaxRate480PRMB       = 0.33
+	tokenMartH3MaxRate768PRMB       = 0.50
+	tokenMartH3FreeImageCount       = 5
+	tokenMartH3ExtraImageRMB        = 0.20
+	tokenMartH3FallbackUSDRMBRate   = 7.3
 )
 
 type miniMaxH3InputSummary struct {
@@ -50,6 +55,8 @@ func validateMiniMaxH3Payload(request *requestPayload) (*miniMaxH3InputSummary, 
 	}
 
 	isMaxModel := isMiniMaxH3MaxModel(request.Model)
+	normalizedModel := strings.ToLower(strings.TrimSpace(request.Model))
+	isEconomyModel := normalizedModel == "minimax-h3-highspeed" || normalizedModel == "minimax-h3-lite"
 	minDuration := tokenMartH3MinDuration
 	if isMaxModel {
 		minDuration = tokenMartH3MaxMinDuration
@@ -67,6 +74,10 @@ func validateMiniMaxH3Payload(request *requestPayload) (*miniMaxH3InputSummary, 
 				return nil, fmt.Errorf("resolution must be 480P, 768P, or 1080P for MiniMax-H3-Max-Turbo")
 			}
 			return nil, fmt.Errorf("resolution must be 480P or 768P for MiniMax-H3-Max")
+		}
+	} else if isEconomyModel {
+		if request.Resolution != "480P" && request.Resolution != "768P" {
+			return nil, fmt.Errorf("resolution must be 480P or 768P for %s", request.Model)
 		}
 	} else if request.Resolution != "768P" && request.Resolution != "2K" {
 		return nil, fmt.Errorf("resolution must be 768P or 2K for MiniMax-H3")
@@ -112,6 +123,9 @@ func validateMiniMaxH3Payload(request *requestPayload) (*miniMaxH3InputSummary, 
 			role := item.Role
 			if role == "" {
 				role = "first_frame"
+				if isEconomyModel {
+					role = "reference_image"
+				}
 			}
 			switch role {
 			case "first_frame":
@@ -180,6 +194,9 @@ func validateMiniMaxH3Payload(request *requestPayload) (*miniMaxH3InputSummary, 
 	if frameMode && referenceMode {
 		return nil, fmt.Errorf("frame inputs and reference inputs are mutually exclusive")
 	}
+	if normalizedModel == "minimax-h3-lite" && referenceMode && (request.Ratio == "" || request.Ratio == "adaptive") {
+		return nil, fmt.Errorf("ratio must be specified and cannot be adaptive for MiniMax-H3-Lite reference inputs")
+	}
 	if !frameMode && !referenceMode && (request.Ratio == "" || request.Ratio == "adaptive") {
 		return nil, fmt.Errorf("ratio is required for text-to-video and cannot be adaptive")
 	}
@@ -206,34 +223,54 @@ func validMiniMaxH3MediaURL(rawURL string, mediaType string) bool {
 	return false
 }
 
-func miniMaxH3RateRMB(modelName, resolution string) (float64, bool) {
+func miniMaxH3RatesRMB(modelName, resolution string) (outputRate, imageRate float64, ok bool) {
 	// Turbo pricing is configured through its usage expression. Do not apply
 	// the legacy MiniMax CNY price table to this separately priced model.
 	if isMiniMaxH3MaxTurboModel(modelName) {
-		return 0, false
+		return 0, 0, false
 	}
 	if isMiniMaxH3MaxModel(modelName) {
 		switch strings.ToUpper(strings.TrimSpace(resolution)) {
 		case "480P":
-			return tokenMartH3MaxRate480PRMB, true
+			return tokenMartH3MaxRate480PRMB, 0, true
 		case "768P":
-			return tokenMartH3MaxRate768PRMB, true
+			return tokenMartH3MaxRate768PRMB, 0, true
 		default:
-			return 0, false
+			return 0, 0, false
+		}
+	}
+	switch strings.ToLower(strings.TrimSpace(modelName)) {
+	case "minimax-h3-highspeed":
+		switch strings.ToUpper(strings.TrimSpace(resolution)) {
+		case "480P":
+			return tokenMartH3HighspeedRate480PRMB, tokenMartH3ExtraImageRMB, true
+		case "768P":
+			return tokenMartH3HighspeedRate768PRMB, tokenMartH3ExtraImageRMB, true
+		default:
+			return 0, 0, false
+		}
+	case "minimax-h3-lite":
+		switch strings.ToUpper(strings.TrimSpace(resolution)) {
+		case "480P":
+			return tokenMartH3LiteRate480PRMB, tokenMartH3LiteExtraImageRMB, true
+		case "768P":
+			return tokenMartH3LiteRate768PRMB, tokenMartH3LiteExtraImageRMB, true
+		default:
+			return 0, 0, false
 		}
 	}
 	switch strings.ToUpper(strings.TrimSpace(resolution)) {
 	case "768P":
-		return tokenMartH3Rate768PRMB, true
+		return tokenMartH3Rate768PRMB, tokenMartH3ExtraImageRMB, true
 	case "2K":
-		return tokenMartH3Rate2KRMB, true
+		return tokenMartH3Rate2KRMB, tokenMartH3ExtraImageRMB, true
 	default:
-		return 0, false
+		return 0, 0, false
 	}
 }
 
 func miniMaxH3CostRMB(modelName string, outputSeconds, inputVideoSeconds, inputImageCount int, resolution string) float64 {
-	rate, ok := miniMaxH3RateRMB(modelName, resolution)
+	rate, imageRate, ok := miniMaxH3RatesRMB(modelName, resolution)
 	if !ok {
 		return 0
 	}
@@ -252,7 +289,7 @@ func miniMaxH3CostRMB(modelName string, outputSeconds, inputVideoSeconds, inputI
 	}
 	cost += float64(inputVideoSeconds) * rate
 	if inputImageCount > tokenMartH3FreeImageCount {
-		cost += float64(inputImageCount-tokenMartH3FreeImageCount) * tokenMartH3ExtraImageRMB
+		cost += float64(inputImageCount-tokenMartH3FreeImageCount) * imageRate
 	}
 	return cost
 }
@@ -269,10 +306,9 @@ func miniMaxH3BillingDetails(modelName string, outputSeconds, inputVideoSeconds,
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	rate, _ := miniMaxH3RateRMB(modelName, resolution)
+	rate, imageUnitRate, _ := miniMaxH3RatesRMB(modelName, resolution)
 	freeImageCount := tokenMartH3FreeImageCount
 	billedImageCount := inputImageCount - freeImageCount
-	imageUnitRate := tokenMartH3ExtraImageRMB
 	if billedImageCount < 0 {
 		billedImageCount = 0
 	}

@@ -507,10 +507,11 @@ Important boundaries:
 
 ## MiniMax H3 video generation
 
-Aliases: MiniMax H3, H3 Max, H3 Max Turbo, MiniMax-H3, MiniMax-H3-Max, minimax-h3-max-turbo, 海螺 H3, 尾帧视频, 多模态参考视频.
+Aliases: MiniMax H3, H3 Highspeed, H3 Lite, H3 Max, H3 Max Turbo, MiniMax-H3, MiniMax-H3-Highspeed, MiniMax-H3-Lite, MiniMax-H3-Max, minimax-h3-max-turbo, 海螺 H3, 尾帧视频, 多模态参考视频.
 
 - Downstream submission uses `POST /v1/video/generations`; task lookup uses `GET /v1/videos/:task_id`.
 - `MiniMax-H3` supports 768P/2K, 4-15 second T2V, first-frame/last-frame I2V, and multimodal reference generation. Reference inputs allow up to 9 images, 3 videos, and 3 audios, with at most 12 mixed media files in total.
+- TokenMart `MiniMax-H3-Highspeed` and `MiniMax-H3-Lite` use the same downstream contract with 480P/768P and 4-15 seconds; Lite requires a concrete ratio for reference inputs. Both use the native CNY precharge/completion settlement in `relay/channel/task/serviceinference/minimax_h3.go`: Highspeed 480P/768P costs CNY 0.26/0.40 per output or reference-video second, Lite 0.16/0.26; the first five images are free and extra images cost CNY 0.20/0.13 respectively. Default ratios only enable this native billing path in `setting/ratio_setting/model_ratio.go`; model recognition is in `relay/channel/task/serviceinference/constants.go`, with lifecycle/validation regressions in its `adaptor_test.go`.
 - `MiniMax-H3-Max` supports 480P/768P, 5-15 second T2V and first-frame/last-frame I2V only. It does not accept multimodal reference image, video, or audio inputs.
 - TokenMart `minimax-h3-max-turbo` supports 480P/768P/1080P with the same output-only usage dimensions, and exposes `seconds` plus `resolution` for expression billing.
 - Both models use MiniMax V2 create/query endpoints. Query usage preserves output seconds, reference-video seconds, input-audio seconds, image count, and token fields.
