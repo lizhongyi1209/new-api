@@ -1,5 +1,5 @@
-<doc-page slug="minimax-h3" nav="MiniMax H3" title="MiniMax H3 / H3 Max / H3 Max Turbo 视频生成" kind="async">
-<doc-summary>通过统一异步接口创建任务，并使用任务 ID 查询生成结果。</doc-summary>
+<doc-page slug="minimax-h3" nav="MiniMax H3" title="MiniMax H3 系列视频生成" kind="async">
+<doc-summary>支持 H3、Highspeed、Lite、Max 和 Max Turbo。按模型选择分辨率和输入素材，通过统一异步接口提交任务并查询视频结果。</doc-summary>
 <doc-flow>
 <step title="提交任务">POST <code>/v1/video/generations</code>，返回任务 ID</step>
 <step title="轮询状态">每 10–20 秒 GET <code>/v1/videos/{task_id}</code></step>
@@ -8,9 +8,11 @@
 <doc-simple>
 <section class="what"><h3>这个接口做什么？</h3><p>用 MiniMax H3 系列生成视频，支持文字、图片、视频和音频作为输入。接口先返回<b>任务编号</b>，之后用编号查询，完成后拿到视频地址。</p></section>
 <section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
-<div><dt>用哪个模型</dt><dd><code>model</code>：<code>MiniMax-H3</code>、<code>MiniMax-H3-MAX</code> 或 <code>minimax-h3-max-turbo</code>。</dd></div>
+<div><dt>用哪个模型</dt><dd><code>model</code>：<code>MiniMax-H3</code>、<code>MiniMax-H3-Highspeed</code>、<code>MiniMax-H3-Lite</code>、<code>MiniMax-H3-MAX</code> 或 <code>minimax-h3-max-turbo</code>。</dd></div>
 <div><dt>想要什么画面</dt><dd><code>content</code> 数组，至少一项非空文本；图片、视频、音频也放在这里。</dd></div>
 <div><dt>分辨率与时长</dt><dd><code>resolution</code>、<code>duration</code>，必填，取值见完整参考的模型能力表。</dd></div>
+<div><dt>Highspeed 与 Lite 怎么选</dt><dd>Highspeed 兼顾质量与速度，适合日常内容创作；Lite 侧重较低成本，适合创意探索与批量生成。两者均支持 <code>480P</code> / <code>768P</code>、4–15 秒，以及图片、视频、音频参考。</dd></div>
+<div><dt>画面比例</dt><dd>纯文本生成须填写具体 <code>ratio</code>，如 <code>16:9</code>。Lite 使用参考素材时也必须填写具体比例，不能使用 <code>adaptive</code>。</dd></div>
 </dl></section>
 <section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
 <div><dt>状态</dt><dd><code>queued</code>、<code>in_progress</code> 继续等待；<code>completed</code> 成功；<code>failed</code> 失败。</dd></div>
@@ -24,43 +26,59 @@
 <li><code>completed</code>：把 <code>result_url</code> 返回给用户。</li>
 <li><code>failed</code>：把错误信息告诉用户，不要自动重试。</li>
 <li>分辨率和时长必须符合所选模型的能力表；不确定时先向用户确认。</li>
+<li>Highspeed 和 Lite 的请求模型名分别为 <code>MiniMax-H3-Highspeed</code>、<code>MiniMax-H3-Lite</code>，均仅支持 <code>480P</code> / <code>768P</code>，时长 4–15 秒；不要为这两个模型请求 <code>2K</code> 或 <code>1080P</code>。</li>
+<li>Lite 使用任一 <code>reference_*</code> 素材时，显式传入具体 <code>ratio</code>（如 <code>16:9</code>），不能省略或使用 <code>adaptive</code>。</li>
+<li>图片请显式填写 <code>role</code>。首尾帧与 <code>reference_*</code> 素材不能混用；Highspeed、Lite 图片未指定 <code>role</code> 时按参考图处理。</li>
 </ol>
 </doc-agent>
 
-<doc-endpoint id="minimax-h3-create" title="创建 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务" returns="任务 ID（异步）">
+<doc-endpoint id="minimax-h3-create" title="创建 MiniMax H3 系列视频任务" returns="任务 ID（异步）">
 <doc-route method="POST" path="/v1/video/generations"></doc-route>
 <doc-main>
 <p>创建成功后立即返回 <code>task_id</code>。视频在后台生成，无需保持请求连接。</p>
 
-        <h3 id="h-24" class="sub">模型能力</h3>
+        <h3 id="h-24" class="sub">模型能力与 Highspeed / Lite 选型</h3>
         <table>
-          <tr><th>模型</th><th>支持场景</th><th>分辨率</th><th>时长</th></tr>
-          <tr><td><code>MiniMax-H3</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频、图片/视频/音频多模态参考</td><td><code>768P</code>、<code>2K</code></td><td>4-15 秒</td></tr>
-          <tr><td><code>MiniMax-H3-MAX</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code></td><td>5-15 秒</td></tr>
-          <tr><td><code>minimax-h3-max-turbo</code></td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code>、<code>1080P</code></td><td>5-15 秒</td></tr>
+          <tr><th>模型</th><th>适用需求</th><th>支持场景</th><th>分辨率</th><th>时长</th></tr>
+          <tr><td><code>MiniMax-H3</code></td><td>较高分辨率与多模态参考</td><td>文生视频、首帧/尾帧/首尾帧图生视频、图片/视频/音频多模态参考</td><td><code>768P</code>、<code>2K</code></td><td>4-15 秒</td></tr>
+          <tr><td><code>MiniMax-H3-Highspeed</code></td><td>兼顾质量与速度，适合日常内容创作</td><td>文生视频、首帧/尾帧/首尾帧图生视频、图片/视频/音频多模态参考</td><td><code>480P</code>、<code>768P</code></td><td>4-15 秒</td></tr>
+          <tr><td><code>MiniMax-H3-Lite</code></td><td>侧重较低成本，适合创意探索与批量生成</td><td>文生视频、首帧/尾帧/首尾帧图生视频、图片/视频/音频多模态参考</td><td><code>480P</code>、<code>768P</code></td><td>4-15 秒</td></tr>
+          <tr><td><code>MiniMax-H3-MAX</code></td><td>文字或首尾帧输入</td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code></td><td>5-15 秒</td></tr>
+          <tr><td><code>minimax-h3-max-turbo</code></td><td>文字或首尾帧输入，可选 1080P</td><td>文生视频、首帧/尾帧/首尾帧图生视频</td><td><code>480P</code>、<code>768P</code>、<code>1080P</code></td><td>5-15 秒</td></tr>
         </table>
-        <div class="callout info">需要 <code>2K</code> 或多模态参考时请选择 <code>MiniMax-H3</code>；H3 Max 和 H3 Max Turbo 不支持 <code>reference_*</code> 素材。需要 <code>1080P</code> 时请选择 <code>minimax-h3-max-turbo</code>。</div>
+        <div class="callout info">需要 <code>2K</code> 时请选择 <code>MiniMax-H3</code>；H3、Highspeed 和 Lite 均支持多模态参考。Highspeed 和 Lite 不支持 <code>2K</code> 或 <code>1080P</code>。H3 Max 和 H3 Max Turbo 不支持 <code>reference_*</code> 素材。需要 <code>1080P</code> 时请选择 <code>minimax-h3-max-turbo</code>。</div>
 
         <h3 id="h-25" class="sub">请求参数</h3>
         <table>
           <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
-          <tr><td><code>model</code></td><td>string</td><td>是</td><td><code>MiniMax-H3</code>、<code>MiniMax-H3-MAX</code> 或 <code>minimax-h3-max-turbo</code>。</td></tr>
+          <tr><td><code>model</code></td><td>string</td><td>是</td><td>使用上方能力表中的完整模型名，例如 <code>MiniMax-H3-Highspeed</code> 或 <code>MiniMax-H3-Lite</code>，保持示例中的大小写。</td></tr>
           <tr><td><code>content</code></td><td>array</td><td>是</td><td>提示词和输入素材，至少包含一个非空文本项。</td></tr>
           <tr><td><code>resolution</code></td><td>string</td><td>是</td><td>取值见上方模型能力表，区分大小写。</td></tr>
           <tr><td><code>duration</code></td><td>integer</td><td>是</td><td>输出秒数，取值范围见上方模型能力表。</td></tr>
-          <tr><td><code>ratio</code></td><td>string</td><td>条件必填</td><td>文生视频必填且不能为 <code>adaptive</code>；图生视频可使用 <code>adaptive</code>。可选固定比例：<code>21:9</code>、<code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>。</td></tr>
+          <tr><td><code>ratio</code></td><td>string</td><td>条件必填</td><td>纯文本生成、Lite 多模态参考必须填写具体比例。首尾帧模式可使用 <code>adaptive</code>。具体规则见下表。</td></tr>
           <tr><td><code>callback_url</code></td><td>string</td><td>否</td><td>任务状态回调地址。建议同时保留查询任务的兜底逻辑。</td></tr>
+        </table>
+
+        <h3 id="minimax-h3-ratio" class="sub">画面比例规则</h3>
+        <p>固定比例可选 <code>21:9</code>、<code>16:9</code>、<code>4:3</code>、<code>1:1</code>、<code>3:4</code>、<code>9:16</code>。</p>
+        <table>
+          <tr><th>输入场景</th><th><code>ratio</code> 规则</th></tr>
+          <tr><td>纯文本生成（全部模型）</td><td>必填固定比例，不能为 <code>adaptive</code>。</td></tr>
+          <tr><td>首帧 / 尾帧 / 首尾帧（全部模型）</td><td>可使用 <code>adaptive</code>，比例跟随输入图片。使用尾帧时请同时提供首帧。</td></tr>
+          <tr><td>H3、Highspeed 的多模态参考</td><td>可省略或使用 <code>adaptive</code>，也可指定固定比例。</td></tr>
+          <tr><td>Lite 的多模态参考</td><td>必填固定比例，例如 <code>16:9</code>；省略或使用 <code>adaptive</code> 会返回参数错误。</td></tr>
         </table>
 
         <h3 id="h-26" class="sub"><code>content</code> 项</h3>
         <table>
           <tr><th><code>type</code></th><th>数据字段</th><th><code>role</code></th><th>适用模型</th></tr>
           <tr><td><code>text</code></td><td><code>text</code></td><td>不填</td><td>全部；提示词最多 7000 个字符</td></tr>
-          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>first_frame</code> / <code>last_frame</code></td><td>全部；图片未指定 <code>role</code> 时按首帧处理</td></tr>
-          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>仅 H3</td></tr>
-          <tr><td><code>video_url</code></td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>仅 H3</td></tr>
-          <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>仅 H3</td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>first_frame</code> / <code>last_frame</code></td><td>全部；请显式填写 <code>role</code></td></tr>
+          <tr><td><code>image_url</code></td><td><code>image_url.url</code></td><td><code>reference_image</code></td><td>H3、Highspeed、Lite</td></tr>
+          <tr><td><code>video_url</code></td><td><code>video_url.url</code></td><td><code>reference_video</code></td><td>H3、Highspeed、Lite</td></tr>
+          <tr><td><code>audio_url</code></td><td><code>audio_url.url</code></td><td><code>reference_audio</code></td><td>H3、Highspeed、Lite</td></tr>
         </table>
+        <p>建议所有图片都显式填写 <code>role</code>，以准确选择输入模式。Highspeed、Lite 的图片省略 <code>role</code> 时按 <code>reference_image</code> 处理；H3、H3 Max、H3 Max Turbo 则按 <code>first_frame</code> 处理。</p>
 
         <h3 id="h-27" class="sub">素材限制</h3>
         <table>
@@ -71,12 +89,13 @@
         </table>
         <ul>
           <li>请求体不超过 64MB。素材可使用公网 URL 或对应格式的 Base64 Data URI，大文件建议使用 URL。</li>
-          <li>H3 最多包含 9 张参考图、3 个参考视频、3 个参考音频，全部参考素材合计不超过 12 个。</li>
+          <li>H3、Highspeed、Lite 最多包含 9 张参考图、3 个参考视频、3 个参考音频，全部参考素材合计不超过 12 个。</li>
           <li><code>first_frame</code>/<code>last_frame</code> 不能与任一 <code>reference_*</code> 素材混用。</li>
         </ul>
 
         <h3 id="h-28" class="sub">计费说明</h3>
-        <p>H3 按输出视频秒数计费；参考视频按输入秒数计费；参考音频免费；参考图片前 5 张免费，超出部分按张计费。H3 Max 和 H3 Max Turbo 仅按输出视频秒数计费。创建任务时会预扣额度，完成后按实际用量结算，最终费用以消费记录为准。</p>
+        <p>H3、Highspeed 和 Lite 按输出视频秒数计费；参考视频另按输入秒数计费；参考音频免费；每次请求前 5 张输入图片免费，第 6 张起按张计费。不同模型、分辨率的单价可能不同，请以账户适用价格为准。H3 Max 和 H3 Max Turbo 仅按输出视频秒数计费。</p>
+        <p>创建任务时会预扣额度，完成后按实际用量结算；包含参考视频的任务可能在完成后补扣输入视频费用。任务失败会退回已预扣额度，最终费用以消费记录为准。</p>
 
 </doc-main>
 <doc-examples>
@@ -86,6 +105,8 @@
             <button type="button" class="example-tab" id="h3-text-tab" role="tab" aria-selected="true" aria-controls="h3-text">文生视频</button>
             <button type="button" class="example-tab" id="h3-frames-tab" role="tab" aria-selected="false" aria-controls="h3-frames">首尾帧</button>
             <button type="button" class="example-tab" id="h3-reference-tab" role="tab" aria-selected="false" aria-controls="h3-reference">多模态参考</button>
+            <button type="button" class="example-tab" id="h3-highspeed-tab" role="tab" aria-selected="false" aria-controls="h3-highspeed">Highspeed 文生视频</button>
+            <button type="button" class="example-tab" id="h3-lite-tab" role="tab" aria-selected="false" aria-controls="h3-lite">Lite 多模态参考</button>
           </div>
           <div class="example-panels">
             <div class="example-tab-panel is-active" id="h3-text" role="tabpanel" aria-labelledby="h3-text-tab" aria-hidden="false">
@@ -165,10 +186,60 @@
     "callback_url": "https://example.com/minimax/callback"
   }'</code></pre>
             </div>
+            <div class="example-tab-panel" id="h3-highspeed" role="tabpanel" aria-labelledby="h3-highspeed-tab" aria-hidden="true">
+              <pre><code>curl https://api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3-Highspeed",
+    "content": [
+      {
+        "type": "text",
+        "text": "一只红色玩具球在白色桌面上缓慢滚动，固定镜头，自然光，无文字。"
+      }
+    ],
+    "resolution": "480P",
+    "duration": 4,
+    "ratio": "16:9"
+  }'</code></pre>
+            </div>
+            <div class="example-tab-panel" id="h3-lite" role="tabpanel" aria-labelledby="h3-lite-tab" aria-hidden="true">
+              <p>Lite 使用参考素材时，<code>ratio</code> 必须是具体比例。请将素材地址替换为可直接访问的实际文件地址。</p>
+              <pre><code>curl https://api.o1key.com/v1/video/generations \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "MiniMax-H3-Lite",
+    "content": [
+      {
+        "type": "text",
+        "text": "参考图1中的人物外观，参考视频1中的运镜，参考音频1中的声音，生成自然流畅的场景。"
+      },
+      {
+        "type": "image_url",
+        "image_url": {"url": "https://cdn.example.com/character.png"},
+        "role": "reference_image"
+      },
+      {
+        "type": "video_url",
+        "video_url": {"url": "https://cdn.example.com/action.mp4"},
+        "role": "reference_video"
+      },
+      {
+        "type": "audio_url",
+        "audio_url": {"url": "https://cdn.example.com/voice.mp3"},
+        "role": "reference_audio"
+      }
+    ],
+    "resolution": "768P",
+    "duration": 4,
+    "ratio": "16:9"
+  }'</code></pre>
+            </div>
           </div>
         </div>
 
-        <div class="callout info">H3 Max 使用相同请求结构，将 <code>model</code> 改为 <code>MiniMax-H3-MAX</code>，并使用 <code>480P</code> 或 <code>768P</code>。H3 Max Turbo 将模型改为 <code>minimax-h3-max-turbo</code>，还可使用 <code>1080P</code>。单张首帧只需省略示例中的 <code>last_frame</code>。</div>
+        <div class="callout info">这些模型共用相同的提交和查询接口。Highspeed、Lite 使用 <code>480P</code> 或 <code>768P</code>、4–15 秒；Lite 参考模式需填写固定比例。H3 Max 使用 <code>MiniMax-H3-MAX</code>、<code>480P</code> / <code>768P</code>、5–15 秒。H3 Max Turbo 使用 <code>minimax-h3-max-turbo</code>，还可使用 <code>1080P</code>。单张首帧只需省略首尾帧示例中的 <code>last_frame</code>，保留 <code>first_frame</code>。</div>
 
         <h3>创建响应</h3>
         <pre data-sim="submit"><code>{
@@ -184,7 +255,7 @@
 </doc-examples>
 </doc-endpoint>
 
-<doc-endpoint id="minimax-h3-query" title="查询 MiniMax H3 / H3 Max / H3 Max Turbo 视频任务" returns="任务状态与结果">
+<doc-endpoint id="minimax-h3-query" title="查询 MiniMax H3 系列视频任务" returns="任务状态与结果">
 <doc-route method="GET" path="/v1/videos/{task_id}"></doc-route>
 <doc-main>
 <p>使用创建接口返回的 <code>task_id</code> 查询。建议每 10-20 秒轮询一次，直到任务变为 <code>completed</code> 或 <code>failed</code>。</p>
