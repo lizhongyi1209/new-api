@@ -88,7 +88,8 @@ func isDreaminaSeedanceMaxModel(model string) bool {
 	case "dreamina-seedance-2-0-260128-max",
 		"dreamina-seedance-2-0-fast-260128-max",
 		"dreamina-seedance-2-0-mini-260615-max",
-		"dreamina-seedance-2-5-260628-max":
+		"dreamina-seedance-2-5-260628-max",
+		"dreamina-seedance-2-5-flash-261115-max":
 		return true
 	default:
 		return false
@@ -100,7 +101,8 @@ func isDoubaoSeedanceMaxModel(model string) bool {
 	case "doubao-seedance-2-0-260128-max",
 		"doubao-seedance-2-0-fast-260128-max",
 		"doubao-seedance-2-0-mini-260615-max",
-		"doubao-seedance-2-5-260628-max":
+		"doubao-seedance-2-5-260628-max",
+		"doubao-seedance-2-5-flash-261115-max":
 		return true
 	default:
 		return false

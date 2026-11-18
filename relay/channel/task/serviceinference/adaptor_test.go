@@ -829,6 +829,16 @@ func TestFetchTaskUsesTaskEndpointAndBearer(t *testing.T) {
 			expectedPath:  "/v2/video/tasks/mvt-1",
 		},
 		{
+			name:          "v2 Doubao Flash MAX model",
+			upstreamModel: "doubao-seedance-2-5-flash-261115-max",
+			expectedPath:  "/v2/video/tasks/mvt-1",
+		},
+		{
+			name:          "v2 Dreamina Flash MAX model",
+			upstreamModel: "dreamina-seedance-2-5-flash-261115-max",
+			expectedPath:  "/v2/video/tasks/mvt-1",
+		},
+		{
 			name:          "v2 Doubao MAX model",
 			upstreamModel: "doubao-seedance-2-0-260128-max",
 			expectedPath:  "/v2/video/tasks/mvt-1",

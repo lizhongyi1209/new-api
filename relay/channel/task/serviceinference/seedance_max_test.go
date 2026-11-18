@@ -178,3 +178,35 @@ func TestSeedanceMaxTailFrameIsAvailableInPublicTaskResult(t *testing.T) {
 	assert.Equal(t, "https://cdn.example.com/video.mp4", video.ResultURL)
 	assert.Equal(t, "https://cdn.example.com/last-frame.png", video.Metadata["last_frame_url"])
 }
+
+func TestSeedanceFlashUsesV2WithMappedModel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, family := range []string{"doubao", "dreamina"} {
+		t.Run(family, func(t *testing.T) {
+			publicModel := family + "-seedance-2-5-flash"
+			upstreamModel := publicModel + "-261115-max"
+			info := newTestRelayInfo("https://model.service-inference.ai", kitdto.ChannelOtherSettings{})
+			info.OriginModelName = publicModel
+			info.UpstreamModelName = upstreamModel
+			info.IsModelMapped = true
+			adaptor := &TaskAdaptor{}
+			adaptor.Init(info)
+			request := `{"model":"` + publicModel + `","content":[{"type":"text","text":"edit the background"},{"type":"image_url","image_url":{"url":"https://cdn.example.com/ref.png"},"role":"reference_image"},{"type":"video_url","video_url":{"url":"https://cdn.example.com/ref.mp4"},"role":"reference_video"}],"duration":-1,"resolution":"720p","ratio":"adaptive","generate_audio":false,"output_format":"mov","omni_reference_task_type":"edit"}`
+			c := newTaskContextForPath("/v1/video/generations", request)
+			require.Nil(t, adaptor.ValidateRequestAndSetAction(c, info))
+			endpoint, err := adaptor.BuildRequestURL(info)
+			require.NoError(t, err)
+			assert.Equal(t, "https://model.service-inference.ai/v2/video/generate", endpoint)
+			reader, err := adaptor.BuildRequestBody(c, info)
+			require.NoError(t, err)
+			data, err := io.ReadAll(reader)
+			require.NoError(t, err)
+			var expected map[string]any
+			require.NoError(t, common.Unmarshal([]byte(request), &expected))
+			expected["model"] = upstreamModel
+			expectedBody, err := common.Marshal(expected)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(expectedBody), string(data))
+		})
+	}
+}
