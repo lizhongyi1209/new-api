@@ -9,6 +9,6 @@
   "groups": [
     {"label": "对接指南", "pages": ["temporary-upload"]},
     {"label": "图像", "pages": ["image-gpt-image", "image-nano-banana", "image-seedream", "image-midjourney"]},
-    {"label": "视频", "pages": ["seedance", "minimax-h3", "wan3", "gemini-omni", "omni-flash", "grok-video", "kling-4", "kling-3"]}
+    {"label": "视频", "pages": ["seedance", "sd-video", "minimax-h3", "wan3", "gemini-omni", "omni-flash", "grok-video", "kling-4", "kling-3"]}
   ]
 }

@@ -1,0 +1,83 @@
+<doc-page slug="sd-video" nav="SD 2 / SD 2.5" title="SD 2 / SD 2.5 视频生成" kind="async">
+<doc-summary>11 个按秒计费的视频模型，支持文字生成和图片、视频、音频参考。通过同一个接口提交任务、查询进度和下载 MP4。</doc-summary>
+<doc-flow>
+<step title="提交视频">选择模型，提供提示词、时长和可选参考素材</step>
+<step title="查询进度">用返回的任务 ID 轮询状态</step>
+<step title="下载成片">任务完成后，携带 O1Key 密钥下载 MP4</step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>用一张图生成视频</h3><p>选择分辨率，把图放在可以直接读取的公网网址上，再写下人物动作、拍摄方式和配乐要求。只提供提示词即可做文生视频。</p></section>
+<section class="needs"><h3>5 秒视频多少钱？</h3><p>默认分组里，<code>sd-2-mini-480</code> 生成 5 秒为 ¥0.44，<code>sd-2.5-720P</code> 生成 5 秒为 ¥2.189。其他型号按下表的单价乘以计费秒数。</p></section>
+</doc-simple>
+<doc-agent><ol>
+<li>向 <code>POST /v1/videos</code> 提交 JSON。按下表填写完整模型 ID，使用 <code>prompt</code> 或 <code>content</code> 传入提示词。</li>
+<li>保存返回的 <code>id</code>，轮询 <code>GET /v1/videos/{id}</code>。</li>
+<li>状态为 <code>completed</code> 时携带同一账户的密钥请求 <code>GET /v1/videos/{id}/content</code> 保存 MP4。状态为 <code>failed</code> 时读取 <code>error</code>。</li>
+</ol></doc-agent>
+<doc-endpoint id="sd-video-create" title="创建视频" returns="视频任务 ID">
+<doc-route method="POST" path="/v1/videos"></doc-route>
+<doc-main>
+<h3>型号、时长和售价</h3>
+<p>默认分组的人民币单价如下。分辨率由型号确定，时长为整数秒，省略时生成 5 秒。</p>
+<table><thead><tr><th>模型 ID</th><th>时长</th><th>元 / 秒</th></tr></thead><tbody>
+<tr><td><code>sd-2-fast-480</code></td><td>4–15 秒</td><td>0.165</td></tr>
+<tr><td><code>sd-2-fast-720</code></td><td>4–15 秒</td><td>0.22</td></tr>
+<tr><td><code>sd-2-mini-480</code></td><td>5–15 秒</td><td>0.088</td></tr>
+<tr><td><code>sd-2-mini-720</code></td><td>4–15 秒</td><td>0.132</td></tr>
+<tr><td><code>sd-2-vip-480</code></td><td>4–15 秒</td><td>0.22</td></tr>
+<tr><td><code>sd-2-vip-720</code></td><td>5–15 秒</td><td>0.264</td></tr>
+<tr><td><code>sd-2.5-480P</code></td><td>4–30 秒</td><td>0.3278</td></tr>
+<tr><td><code>sd-2.5-720P</code></td><td>4–30 秒</td><td>0.4378</td></tr>
+<tr><td><code>sd-2.5-1080P</code></td><td>4–30 秒</td><td>0.968</td></tr>
+<tr><td><code>sd-2.5-flash-480P</code></td><td>4–30 秒</td><td>0.22</td></tr>
+<tr><td><code>sd-2.5-flash-720P</code></td><td>4–30 秒</td><td>0.33</td></tr>
+</tbody></table>
+<h3>请求参数</h3>
+<ul>
+<li><code>model</code> 与提示词必填。<code>prompt</code> 描述画面、动作与声音。也可以通过 <code>content</code> 数组传入 <code>text</code> 和 <code>image_url</code>、<code>video_url</code>、<code>audio_url</code> 项。</li>
+<li><code>duration</code>（或 <code>seconds</code>）指定整数秒。<code>aspect_ratio</code> 支持 <code>9:16</code>、<code>16:9</code>、<code>1:1</code>、<code>3:4</code>、<code>4:3</code>、<code>21:9</code>。</li>
+<li><code>references</code> 的每一项提供 <code>type</code> 和 <code>url</code>，类型支持 <code>image</code>、<code>video</code> 或 <code>audio</code>，普通素材的 <code>role</code> 为 <code>reference</code>。本地文件可先通过 <a href="/docs/temporary-upload">素材上传接口</a> 获取网址。</li>
+<li>SD 2 最多可传 9 张图片、3 段视频、3 段音频。两款 Fast 支持用 <code>first_frame</code> 指定首帧，再用 <code>last_frame</code> 指定可选尾帧。Fast 的音频参考需要搭配图片或视频。</li>
+<li>SD 2.5 标准版最多支持 30 张图片、10 段视频、10 段音频，Flash 最多支持 10 张图片、5 段视频、5 段音频。</li>
+</ul>
+</doc-main>
+<doc-examples>
+<h3>图生视频 · 竖屏 5 秒</h3>
+<pre><code>curl https://api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "sd-2.5-720P",
+    "duration": 5,
+    "aspect_ratio": "9:16",
+    "prompt": "正常速度拍摄 5 秒穿搭短片。远景走两步，近景转身展示剪裁，最后特写面料纹理，配欢快无歌词音乐。",
+    "references": [
+      {"type": "image", "role": "reference", "url": "https://cdn.example.com/outfit.jpg"}
+    ]
+  }'</code></pre>
+<p>把示例图片网址替换为你的服装照片。</p>
+<h3>文生视频</h3>
+<pre><code>curl https://api.o1key.com/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"sd-2-mini-480","duration":5,"prompt":"日光下展开一块棉布，镜头从布料全景切到缝线特写。"}'</code></pre>
+<h3>提交响应示例</h3>
+<pre data-sim="submit"><code>{"id":"task_example","object":"video","status":"queued","progress":0}</code></pre>
+</doc-examples>
+</doc-endpoint>
+<doc-endpoint id="sd-video-result" title="查询任务和下载视频" returns="任务状态或 MP4 文件">
+<doc-route method="GET" path="/v1/videos/{id}"></doc-route>
+<doc-route method="GET" path="/v1/videos/{id}/content"></doc-route>
+<doc-main><p>用任务 ID 查询状态。<code>queued</code> 表示排队，<code>in_progress</code> 表示生成中，<code>completed</code> 后可下载成片。<code>failed</code> 的任务可通过响应中的错误信息排查。</p></doc-main>
+<doc-examples>
+<h3>查询状态</h3>
+<pre><code>curl "https://api.o1key.com/v1/videos/$TASK_ID" \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+<h3>完成响应示例</h3>
+<pre data-sim="done"><code>{"id":"task_example","object":"video","status":"completed","progress":100}</code></pre>
+<h3>保存成片</h3>
+<pre><code>curl -fL "https://api.o1key.com/v1/videos/$TASK_ID/content" \
+  -H "Authorization: Bearer $API_KEY" -o outfit.mp4</code></pre>
+</doc-examples>
+</doc-endpoint>
+</doc-page>
