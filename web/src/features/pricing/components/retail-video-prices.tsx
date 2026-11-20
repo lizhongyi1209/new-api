@@ -24,6 +24,9 @@ export function RetailVideoPriceRange(
   )
   const groups = selected ? [selected] : props.prices.groups
   const timed = props.prices.basis === 'timed'
+  let unit = t('output second')
+  if (timed) unit = t('output second without video input (SDR)')
+  if (props.prices.basis === 'billable') unit = t('billable second')
   const prices = groups.flatMap((entry) =>
     (timed ? entry.rows.slice(0, 1) : entry.rows).flatMap((row) =>
       Object.values(row.prices)
@@ -35,10 +38,7 @@ export function RetailVideoPriceRange(
   const max = formatTaskUsageUnitPrice(Math.max(...prices), options)
   return (
     <span className='font-mono text-sm tabular-nums'>
-      {min === max ? min : `${min} – ${max}`} /{' '}
-      {timed
-        ? t('output second without video input (SDR)')
-        : t('output second')}
+      {min === max ? min : `${min} – ${max}`} / {unit}
     </span>
   )
 }
@@ -47,22 +47,21 @@ export function RetailVideoPriceTable(props: RetailVideoProps) {
   const { t } = useTranslation()
   useSystemConfigStore((state) => state.config.currency)
   if (!props.prices.groups.length) return <p>{t('Price unavailable')}</p>
+  let title = t('Price per output second')
+  if (props.prices.basis === 'timed') title = t('Video prices')
+  if (props.prices.basis === 'billable') title = t('Price per billable second')
   const options = { ...props, tokenUnit: 'M' as const, groupRatioMultiplier: 1 }
   return (
     <div className='space-y-4'>
       {props.prices.groups.map((group) => {
-        const resolutions = ['720P', '1080P', '4K'].filter((key) =>
+        const resolutions = ['480P', '720P', '1080P', '4K'].filter((key) =>
           group.rows.some((row) => key in row.prices)
         )
         return (
           <section key={group.group} className='space-y-2'>
             <div className='flex flex-wrap items-center gap-2'>
               <GroupBadge group={group.group} size='sm' />
-              <span className='text-sm'>
-                {props.prices.basis === 'timed'
-                  ? t('Video prices')
-                  : t('Price per output second')}
-              </span>
+              <span className='text-sm'>{title}</span>
             </div>
             <StaticDataTable
               data={group.rows}

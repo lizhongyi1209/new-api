@@ -18,7 +18,7 @@ func TestKlingRetailPricesFollowCustomerGroupAndHideSettlement(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			private := Pricing{ModelName: name, BillingMode: "tiered_expr", BillingExpr: testKlingCreditPrice, EnableGroup: []string{"official", "free"},
 				BillingPluginVariants: []PricingPluginVariant{{PluginKey: constant.KlingOfficialVideoPlugin, BillingExpr: testKlingCreditPrice}}}
-			result := CustomerKlingPricing(private, map[string]float64{"official": .9, "free": 0, "unavailable": 1})
+			result := CustomerVideoPricing(private, map[string]float64{"official": .9, "free": 0, "unavailable": 1})
 			require.Len(t, result.RetailVideoPrices.Groups, 2)
 			free, paid := result.RetailVideoPrices.Groups[0], result.RetailVideoPrices.Groups[1]
 			assert.Equal(t, "free", free.Group)
@@ -36,7 +36,7 @@ func TestKlingRetailPricesFollowCustomerGroupAndHideSettlement(t *testing.T) {
 			}
 			assert.Equal(t, testKlingCreditPrice, private.BillingPluginVariants[0].BillingExpr)
 			private.BillingPluginVariants[0].BillingExpr = `u("units_source") == "reported" ? tier("reported", 0.4 + u("units") * 1.25) : tier("estimated", 0.5)`
-			sales := CustomerKlingPricing(private, map[string]float64{"official": .6})
+			sales := CustomerVideoPricing(private, map[string]float64{"official": .6})
 			require.Len(t, sales.RetailVideoPrices.Groups, 1)
 			g := sales.RetailVideoPrices.Groups[0]
 			units := 5 * .8
@@ -44,14 +44,14 @@ func TestKlingRetailPricesFollowCustomerGroupAndHideSettlement(t *testing.T) {
 			require.NoError(t, err)
 			assert.InDelta(t, charge*.6, 5*g.Rows[0].Prices["1080P"]+g.PerRequest, 1e-10)
 			private.BillingPluginVariants[0].BillingExpr = `tier("internal", u("units") * u("units"))`
-			noQuote := CustomerKlingPricing(private, map[string]float64{"official": .9})
+			noQuote := CustomerVideoPricing(private, map[string]float64{"official": .9})
 			assert.Empty(t, noQuote.RetailVideoPrices.Groups)
 			assert.Empty(t, noQuote.BillingExpr)
 			assert.Empty(t, noQuote.BillingPluginVariants)
 		})
 	}
-	unrelated := Pricing{ModelName: "wan3.0-video", BillingExpr: "original"}
-	assert.Equal(t, unrelated, CustomerKlingPricing(unrelated, nil))
+	unrelated := Pricing{ModelName: "grok-imagine-video", BillingExpr: "original"}
+	assert.Equal(t, unrelated, CustomerVideoPricing(unrelated, nil))
 }
 
 func TestKlingCustomerLogHidesHistoricalAndPluginSettlement(t *testing.T) {
@@ -67,7 +67,7 @@ func TestKlingTimedCustomerPricingOnlyPublishesSalesAndSupportedSizes(t *testing
 	expr := `u("resolution") == "4k" && u("video_input") == "video" ? tier("4k video", u("billed_seconds") * 2.1 + u("hdr_seconds") * 0.5) : tier("standard", u("billed_seconds") * 1 + u("hdr_seconds") * 0.3)`
 	schema := map[string]jsplugin.UsageFieldSchema{"resolution": {Enum: []string{"720p", "1080p", "4k"}}, "hdr_seconds": {Type: "number"}}
 	item := Pricing{ModelName: "kling-4.0", EnableGroup: []string{"official"}, BillingExpr: expr, BillingPluginVariants: []PricingPluginVariant{{PluginKey: constant.KlingOfficialVideoPlugin, BillingExpr: expr, BillingUsageSchema: schema}}}
-	result := CustomerKlingPricing(item, map[string]float64{"official": 0.9, "hidden": 2})
+	result := CustomerVideoPricing(item, map[string]float64{"official": 0.9, "hidden": 2})
 	require.Len(t, result.RetailVideoPrices.Groups, 1)
 	rows := result.RetailVideoPrices.Groups[0].Rows
 	require.Len(t, rows, 4)
@@ -77,7 +77,7 @@ func TestKlingTimedCustomerPricingOnlyPublishesSalesAndSupportedSizes(t *testing
 	assert.Empty(t, result.BillingPluginVariants)
 	assert.Empty(t, result.BillingExpr)
 	item.BillingPluginVariants[0].BillingExpr = `tier("private",u("billed_seconds") * u("billed_seconds"))`
-	result = CustomerKlingPricing(item, map[string]float64{"official": 0.9})
+	result = CustomerVideoPricing(item, map[string]float64{"official": 0.9})
 	assert.Empty(t, result.RetailVideoPrices.Groups)
 	assert.Empty(t, result.BillingExpr)
 }

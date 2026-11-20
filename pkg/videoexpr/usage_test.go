@@ -458,3 +458,13 @@ func TestKling40HDRAndImageElementUseDeliveredSeconds(t *testing.T) {
 	assert.Equal(t, float64(11), actual["billed_seconds"])
 	assert.Equal(t, float64(5), actual["hdr_seconds"])
 }
+
+func TestWan30RejectsInvalidFinalReferenceTotals(t *testing.T) {
+	for _, body := range []string{
+		`{"usage":{"output_video_duration":5,"input_video_duration":15.01}}`,
+		`{"usage":{"output_video_duration":20,"input_video_duration":11}}`,
+	} {
+		_, err := Complete(Wan30, map[string]any{"input_video_seconds": float64(15)}, []byte(body), &relaycommon.TaskInfo{})
+		assert.Error(t, err)
+	}
+}

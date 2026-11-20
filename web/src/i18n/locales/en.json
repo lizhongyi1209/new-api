@@ -7385,5 +7385,8 @@
     "Ordinary OpenAI": "Ordinary OpenAI",
     "Plugin expressions are independent from ordinary OpenAI pricing.": "Plugin expressions are independent from ordinary OpenAI pricing.",
     "Set ordinary OpenAI prices without changing plugin prices. Changes take effect when you save.": "Set ordinary OpenAI prices without changing plugin prices. Changes take effect when you save."
-  }
+  },
+  "billable second": "billable second",
+  "Price per billable second": "Price per billable second",
+  "Video generation": "Video generation"
 }

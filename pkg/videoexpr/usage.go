@@ -445,13 +445,16 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 		inputSeconds := 0.0
 		if input := usage.Get("input_video_duration"); input.Exists() {
 			inputSeconds, err = numeric(input)
-			if err != nil || inputSeconds < 0 || inputSeconds > Wan30MaxBilledSeconds {
+			if err != nil || inputSeconds < 0 || inputSeconds > 15 {
 				return nil, fmt.Errorf("invalid wan3.0 input video duration")
 			}
 		} else if reserved, _ := submitted["input_video_seconds"].(float64); reserved > 0 {
 			// A request with reference video keeps its reservation until the
 			// upstream reports the billed input duration.
 			return nil, fmt.Errorf("wan3.0 input video duration is missing")
+		}
+		if inputSeconds+outputSeconds > Wan30MaxBilledSeconds {
+			return nil, fmt.Errorf("wan3.0 combined video duration exceeds limit")
 		}
 		facts = map[string]any{"seconds": outputSeconds, "input_video_seconds": inputSeconds, "billed_seconds": outputSeconds + inputSeconds}
 		if sr := usage.Get("SR"); sr.Exists() {

@@ -7384,5 +7384,8 @@
     "Ordinary OpenAI": "普通 OpenAI",
     "Plugin expressions are independent from ordinary OpenAI pricing.": "插件计费表达式独立于普通 OpenAI 定价。",
     "Set ordinary OpenAI prices without changing plugin prices. Changes take effect when you save.": "单独设置普通 OpenAI 价格，保留插件现有价格。保存后生效。"
-  }
+  },
+  "billable second": "计费秒",
+  "Price per billable second": "每计费秒售价",
+  "Video generation": "视频生成"
 }

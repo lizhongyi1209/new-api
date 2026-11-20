@@ -2,6 +2,7 @@ package ali
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -89,11 +90,11 @@ type AliVideoOutput struct {
 
 // AliUsage 使用统计
 type AliUsage struct {
-	Duration            dto.IntValue `json:"duration,omitempty"`
+	Duration            json.Number  `json:"duration,omitempty"`
 	VideoCount          dto.IntValue `json:"video_count,omitempty"`
 	SR                  dto.IntValue `json:"SR,omitempty"`
-	OutputVideoDuration dto.IntValue `json:"output_video_duration,omitempty"`
-	InputVideoDuration  dto.IntValue `json:"input_video_duration,omitempty"`
+	OutputVideoDuration json.Number  `json:"output_video_duration,omitempty"`
+	InputVideoDuration  json.Number  `json:"input_video_duration,omitempty"`
 }
 
 type AliMetadata struct {
@@ -750,8 +751,8 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 		}
 	}
 	if aliResp.Usage != nil {
-		if aliResp.Usage.OutputVideoDuration > 0 {
-			openAIResp.Seconds = strconv.Itoa(int(aliResp.Usage.OutputVideoDuration))
+		if seconds, err := aliResp.Usage.OutputVideoDuration.Float64(); err == nil && seconds > 0 {
+			openAIResp.Seconds = strconv.FormatFloat(seconds, 'f', -1, 64)
 		}
 		if aliResp.Usage.SR > 0 {
 			openAIResp.Size = fmt.Sprintf("%dP", aliResp.Usage.SR)

@@ -65,8 +65,8 @@ func klingRetailSpecs(modelName string) []klingVideoSpec {
 	return klingCreditSpecs[modelName]
 }
 
-func HasPrivateKlingPricing(modelName string) bool {
-	return modelName == "kling-4.0" || modelName == "kling-4.0-flash" || len(klingRetailSpecs(modelName)) != 0
+func HasPrivateVideoPricing(modelName string) bool {
+	return modelName == "wan3.0-video" || modelName == "wan3.0-video-prime" || modelName == "kling-4.0" || modelName == "kling-4.0-flash" || len(klingRetailSpecs(modelName)) != 0
 }
 
 // The visual credit editor writes a linear completed-task price. Recognize
@@ -122,14 +122,14 @@ func klingPriceLiteral(node ast.Node) (float64, bool) {
 	return 0, false
 }
 
-func klingTimedCondition(node ast.Node, resolution, input string) (bool, bool) {
+func videoRetailCondition(node ast.Node, resolution, input string) (bool, bool) {
 	expr, ok := node.(*ast.BinaryNode)
 	if !ok {
 		return false, false
 	}
 	if expr.Operator == "&&" {
-		a, okA := klingTimedCondition(expr.Left, resolution, input)
-		b, okB := klingTimedCondition(expr.Right, resolution, input)
+		a, okA := videoRetailCondition(expr.Left, resolution, input)
+		b, okB := videoRetailCondition(expr.Right, resolution, input)
 		return a && b, okA && okB
 	}
 	value, ok := expr.Right.(*ast.StringNode)
@@ -146,7 +146,7 @@ func klingTimedCondition(node ast.Node, resolution, input string) (bool, bool) {
 }
 
 // An arbitrary nonlinear expression cannot be displayed as a pair of unit prices.
-func klingTimedCoefficients(node ast.Node) (base, hdr float64, ok bool) {
+func videoRetailCoefficients(node ast.Node) (base, hdr float64, ok bool) {
 	if n, literal := klingPriceLiteral(node); literal {
 		return 0, 0, n == 0
 	}
@@ -155,8 +155,8 @@ func klingTimedCoefficients(node ast.Node) (base, hdr float64, ok bool) {
 		return 0, 0, false
 	}
 	if expr.Operator == "+" {
-		a, b, okA := klingTimedCoefficients(expr.Left)
-		c, d, okB := klingTimedCoefficients(expr.Right)
+		a, b, okA := videoRetailCoefficients(expr.Left)
+		c, d, okB := videoRetailCoefficients(expr.Right)
 		return a + c, b + d, okA && okB && !math.IsInf(a+c, 0) && !math.IsInf(b+d, 0)
 	}
 	n, ok := klingPriceLiteral(expr.Right)
@@ -202,7 +202,7 @@ func klingTimedRetailRows(modelName string, variant PricingPluginVariant) ([]Ret
 				if !branched {
 					break
 				}
-				match, valid := klingTimedCondition(cond.Cond, res, input)
+				match, valid := videoRetailCondition(cond.Cond, res, input)
 				if !valid {
 					return nil, false
 				}
@@ -216,7 +216,7 @@ func klingTimedRetailRows(modelName string, variant PricingPluginVariant) ([]Ret
 			if !ok || tier.Callee.String() != "tier" || len(tier.Arguments) != 2 {
 				return nil, false
 			}
-			rate, supplement, ok := klingTimedCoefficients(tier.Arguments[1])
+			rate, supplement, ok := videoRetailCoefficients(tier.Arguments[1])
 			if !ok {
 				return nil, false
 			}
@@ -237,18 +237,66 @@ func klingTimedRetailRows(modelName string, variant PricingPluginVariant) ([]Ret
 	return rows, true
 }
 
-// CustomerKlingPricing operates on a copy of the catalog entry, after the
+func wanRetailRows(variant PricingPluginVariant) ([]RetailVideoRow, bool) {
+	version, body := billingexpr.ParseExprVersion(variant.BillingExpr)
+	if version != billingexpr.DefaultExprVersion {
+		return nil, false
+	}
+	tree, err := parser.Parse(body)
+	if err != nil {
+		return nil, false
+	}
+	row := RetailVideoRow{Feature: "Video generation", Prices: map[string]float64{}}
+	for _, res := range variant.BillingUsageSchema["resolution"].Enum {
+		if res != "480P" && res != "720P" && res != "1080P" {
+			continue
+		}
+		node := tree.Node
+		for {
+			branch, ok := node.(*ast.ConditionalNode)
+			if !ok {
+				break
+			}
+			matches, valid := videoRetailCondition(branch.Cond, res, "")
+			if !valid {
+				return nil, false
+			}
+			if matches {
+				node = branch.Exp1
+			} else {
+				node = branch.Exp2
+			}
+		}
+		tier, ok := node.(*ast.CallNode)
+		if !ok || tier.Callee.String() != "tier" || len(tier.Arguments) != 2 {
+			return nil, false
+		}
+		rate, extra, ok := videoRetailCoefficients(tier.Arguments[1])
+		if !ok || extra != 0 {
+			return nil, false
+		}
+		row.Prices[res] = rate
+	}
+	return []RetailVideoRow{row}, len(row.Prices) > 0
+}
+
+// CustomerVideoPricing operates on a copy of the catalog entry, after the
 // controller resolves the caller's actual group prices. Never publish a
 // settlement expression, schema, provider variant or pre-discount price.
-func CustomerKlingPricing(item Pricing, groupRatios map[string]float64) Pricing {
+func CustomerVideoPricing(item Pricing, groupRatios map[string]float64) Pricing {
 	specs := klingRetailSpecs(item.ModelName)
-	if !HasPrivateKlingPricing(item.ModelName) {
+	if !HasPrivateVideoPricing(item.ModelName) {
 		return item
+	}
+	wan := item.ModelName == "wan3.0-video" || item.ModelName == "wan3.0-video-prime"
+	pluginKey := constant.KlingOfficialVideoPlugin
+	if wan {
+		pluginKey = constant.WanOfficialVideoPlugin
 	}
 	var selected PricingPluginVariant
 	if !item.HasOrdinaryChannel && len(item.BillingPluginVariants) == 1 {
 		variant := item.BillingPluginVariants[0]
-		if variant.PluginKey == constant.KlingOfficialVideoPlugin {
+		if variant.PluginKey == pluginKey {
 			selected = variant
 		}
 	}
@@ -258,7 +306,14 @@ func CustomerKlingPricing(item Pricing, groupRatios map[string]float64) Pricing 
 	item.RetailVideoPrices = &RetailVideoPrices{Groups: []RetailVideoGroup{}}
 	var rows []RetailVideoRow
 	var fixed float64
-	if len(specs) == 0 {
+	if wan {
+		item.RetailVideoPrices.Basis = "billable"
+		var ok bool
+		rows, ok = wanRetailRows(selected)
+		if !ok {
+			return item
+		}
+	} else if len(specs) == 0 {
 		item.RetailVideoPrices.Basis = "timed"
 		var ok bool
 		rows, ok = klingTimedRetailRows(item.ModelName, selected)

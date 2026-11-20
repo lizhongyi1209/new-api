@@ -171,3 +171,25 @@ func TestConvertToOpenAIVideoWan30(t *testing.T) {
 		})
 	}
 }
+
+func TestWan30FractionalUsageKeepsCustomerPollingWorking(t *testing.T) {
+	for _, usage := range []string{
+		`{"duration":7.75,"input_video_duration":2.75,"output_video_duration":5.0,"SR":720,"video_count":1}`,
+		`{"duration":"7.75","input_video_duration":"2.75","output_video_duration":"5.0","SR":"720","video_count":"1"}`,
+	} {
+		body := []byte(`{"output":{"task_status":"SUCCEEDED","video_url":"https://example.invalid/video.mp4"},"usage":` + usage + `}`)
+		adaptor := &TaskAdaptor{}
+		result, err := adaptor.ParseTaskResult(body)
+		require.NoError(t, err)
+		assert.EqualValues(t, model.TaskStatusSuccess, result.Status)
+		task := &model.Task{TaskID: "task_fractional_wan", Status: model.TaskStatusSuccess, Data: body, PrivateData: model.TaskPrivateData{ResultURL: "https://example.invalid/video.mp4"}}
+		response, err := adaptor.ConvertToOpenAIVideo(task)
+		require.NoError(t, err)
+		var video dto.OpenAIVideo
+		require.NoError(t, common.Unmarshal(response, &video))
+		assert.Equal(t, "completed", video.Status)
+		assert.Equal(t, "5", video.Seconds)
+		assert.Equal(t, "720P", video.Size)
+		assert.Equal(t, "https://example.invalid/video.mp4", video.ResultURL)
+	}
+}

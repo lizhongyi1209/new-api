@@ -27,7 +27,7 @@ func BuildTaskPluginView(task *model.Task) (dto.TaskView, error) {
 	}
 	if len(task.Data) > 0 {
 		data := task.Data
-		if model.HasPrivateKlingPricing(task.Properties.OriginModelName) {
+		if model.HasPrivateVideoPricing(task.Properties.OriginModelName) {
 			data, _ = RedactUpstreamCharges(data)
 		}
 		if err := common.Unmarshal(data, &view.Data); err != nil {

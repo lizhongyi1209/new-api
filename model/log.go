@@ -120,7 +120,7 @@ func formatUserLogs(logs []*Log, startIdx int) {
 		logs[i].Other = formatLogOtherJSON(logs[i].Other, logOtherVisibilityUser)
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
-		if HasPrivateKlingPricing(logs[i].ModelName) {
+		if HasPrivateVideoPricing(logs[i].ModelName) {
 			// Old and new task logs can contain the raw settlement expression in
 			// both free text and nested metadata. Preserve the customer's bill
 			// and request settings without returning settlement inputs.

@@ -3,7 +3,7 @@ export const meta = {
   apiVersion: 1,
   key: "wan-official-video",
   name: "通义万相官方协议视频",
-  version: "1.0.0",
+  version: "1.1.0",
   icon: "Alibaba.Color",
   author: { name: "O1Key" },
   fetchMode: "per_task",
@@ -36,7 +36,7 @@ function reserve(ctx) {
     media = (body.input || {}).media || [];
   const reference = media.some((x) => x.type === "reference_video");
   const seconds = p.duration === -1 ? 30 : Math.min(30, Number(p.duration || 5) + (reference ? 15 : 0));
-  return { reference: reference, seconds: seconds, resolution: String(p.resolution || "720P").toUpperCase() };
+  return { reference: reference, seconds: seconds, resolution: String(p.resolution || "1080P").toUpperCase() };
 }
 export function extractUsage(ctx) {
   if (ctx.usagePurpose === "billing_ratios") return null;
@@ -65,7 +65,12 @@ export function parseTaskResult(ctx, body) {
     UNKNOWN: "FAILURE",
   };
   if (!states[output.task_status]) throw new Error(body.message || "Unknown DashScope task status");
-  return { taskId: ctx.taskId, status: states[output.task_status], url: output.video_url || "", reason: body.message || output.message || "" };
+  const status = states[output.task_status];
+  // A completed asset does not authorize settlement until final usage is valid.
+  // Keep polling; the gateway's existing timeout releases an unfinished reservation.
+  if (status === "SUCCESS" && !extractUsageOnComplete(ctx, null, body))
+    return { taskId: ctx.taskId, status: "IN_PROGRESS", reason: "Awaiting final video usage" };
+  return { taskId: ctx.taskId, status, url: output.video_url || "", reason: body.message || output.message || "" };
 }
 function duration(value, max) {
   if (typeof value !== "number" && (typeof value !== "string" || !value.trim())) return null;

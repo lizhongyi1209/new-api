@@ -29,11 +29,11 @@ func GetRatioConfig(c *gin.Context) {
 		switch values := value.(type) {
 		case map[string]string:
 			filtered := maps.Clone(values)
-			maps.DeleteFunc(filtered, func(name string, _ string) bool { return model.HasPrivateKlingPricing(name) })
+			maps.DeleteFunc(filtered, func(name string, _ string) bool { return model.HasPrivateVideoPricing(name) })
 			data[field] = filtered
 		case map[string]float64:
 			filtered := maps.Clone(values)
-			maps.DeleteFunc(filtered, func(name string, _ float64) bool { return model.HasPrivateKlingPricing(name) })
+			maps.DeleteFunc(filtered, func(name string, _ float64) bool { return model.HasPrivateVideoPricing(name) })
 			data[field] = filtered
 		}
 	}

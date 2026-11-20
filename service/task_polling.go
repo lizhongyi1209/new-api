@@ -794,6 +794,29 @@ func ApplyVideoTaskPollingResult(ctx context.Context, adaptor TaskPollingAdaptor
 	}
 
 	pluginTask := task.PrivateData.Execution != nil && task.PrivateData.Execution.TaskPlugin != nil
+	// Do not finalize a Wan reservation as consumption while its receipt is incomplete.
+	// This also protects tasks pinned to plugin 1.0.0 and the native fallback path.
+	if parsedStatus == model.TaskStatusSuccess {
+		waiting := false
+		if task.Platform == constant.WanOfficialVideoPlugin {
+			_, complete := taskResult.UsageFacts["billed_seconds"]
+			waiting = !complete
+		} else if !pluginTask && task.PrivateData.BillingContext != nil {
+			var billingSnap billingexpr.BillingSnapshot
+			if err := common.Unmarshal(task.PrivateData.BillingContext.TieredSnapshot, &billingSnap); err == nil && billingSnap.NativeVideoMeter == videoexpr.Wan30 {
+				facts, err := videoexpr.Complete(videoexpr.Wan30, billingSnap.UsageFacts, responseBody, taskResult)
+				waiting = err != nil
+				if !waiting {
+					taskResult.UsageFacts = facts
+				}
+			}
+		}
+		if waiting {
+			parsedStatus = model.TaskStatusInProgress
+			taskResult.Status = string(parsedStatus)
+			taskResult.Progress, taskResult.Url = "", ""
+		}
+	}
 	if !pluginTask || constant.IsOfficialVideoPlugin(task.Platform) {
 		// Official query presenters read the provider response using their existing public contract.
 		task.Data = redactVideoResponseBody(responseBody)
