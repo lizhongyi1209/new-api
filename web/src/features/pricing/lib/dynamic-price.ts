@@ -152,14 +152,22 @@ export function isDynamicPricingModel(model: PricingModel): boolean {
 }
 
 export function hasTaskUsageSchema(model: PricingModel): boolean {
-  return Object.keys(model.billing_usage_schema ?? {}).length > 0
+  return (
+    Boolean(model.retail_video_prices) ||
+    Object.keys(model.billing_usage_schema ?? {}).length > 0
+  )
 }
 
 export function isTaskUsagePricingModel(model: PricingModel): boolean {
-  return model.billing_mode === 'tiered_expr' && hasTaskUsageSchema(model)
+  return (
+    Boolean(model.retail_video_prices) ||
+    (model.billing_mode === 'tiered_expr' && hasTaskUsageSchema(model))
+  )
 }
 
 export function isUnconfiguredTaskUsageModel(model: PricingModel): boolean {
+  if (model.retail_video_prices)
+    return model.retail_video_prices.groups.length === 0
   if (model.billing_plugin_variants?.length) {
     return model.billing_plugin_variants.every((variant) =>
       variant.billing_mode === 'ratio'

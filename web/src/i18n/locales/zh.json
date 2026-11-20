@@ -1,5 +1,17 @@
 {
   "translation": {
+    "Price unavailable": "价格暂不可用",
+    "output second": "输出秒",
+    "Price per output second": "每秒输出视频的售价",
+    "No reference video · Native audio off": "无参考视频 · 关闭原生音频",
+    "No reference video · Native audio on": "无参考视频 · 开启原生音频",
+    "Reference video · Native audio off": "有参考视频 · 关闭原生音频",
+    "Native audio off": "关闭原生音频",
+    "Native audio on": "开启原生音频",
+    "Motion control": "动作控制",
+    "Native audio on · No voice reference": "开启原生音频 · 无声音参考",
+    "Native audio on · With voice reference": "开启原生音频 · 有声音参考",
+    "Additional fee per request": "每次请求的附加费用",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

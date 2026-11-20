@@ -16,6 +16,7 @@ import (
 )
 
 type Pricing struct {
+	RetailVideoPrices      *RetailVideoPrices                   `json:"retail_video_prices,omitempty"`
 	ModelName              string                               `json:"model_name"`
 	Description            string                               `json:"description,omitempty"`
 	Icon                   string                               `json:"icon,omitempty"`

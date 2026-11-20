@@ -1,5 +1,17 @@
 {
   "translation": {
+    "Price unavailable": "Price unavailable",
+    "output second": "output second",
+    "Price per output second": "Price per output second",
+    "No reference video · Native audio off": "No reference video · Native audio off",
+    "No reference video · Native audio on": "No reference video · Native audio on",
+    "Reference video · Native audio off": "Reference video · Native audio off",
+    "Native audio off": "Native audio off",
+    "Native audio on": "Native audio on",
+    "Motion control": "Motion control",
+    "Native audio on · No voice reference": "Native audio on · No voice reference",
+    "Native audio on · With voice reference": "Native audio on · With voice reference",
+    "Additional fee per request": "Additional fee per request",
     "360": "360",
     "1000": "1000",
     "10000": "10000",

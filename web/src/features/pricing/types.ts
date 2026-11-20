@@ -55,7 +55,16 @@ export type BillingPluginVariant = {
   billing_usage_examples?: BillingUsageExample[]
 }
 
+export type RetailVideoPrices = {
+  groups: {
+    group: string
+    per_request?: number
+    rows: { feature: string; prices: Record<string, number> }[]
+  }[]
+}
+
 export type PricingModel = {
+  retail_video_prices?: RetailVideoPrices
   billing_plugin_variants?: BillingPluginVariant[]
   id: number
   model_name: string

@@ -135,6 +135,10 @@ function getSortPrice(
   model: PricingModel,
   kind: SortPriceKind
 ): number | undefined {
+  if (model.retail_video_prices) {
+    // Per-output-second prices are distinct from per-request and token prices.
+    return undefined
+  }
   if (kind === 'request') {
     const example = getCardExamplePrice(model, { tokenUnit: 'M' })
     if (example) return example.total

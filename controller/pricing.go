@@ -64,6 +64,11 @@ func GetPricing(c *gin.Context) {
 		}
 	}
 
+	for i := range pricing {
+		pricing[i] = model.CustomerKlingPricing(pricing[i], groupRatio)
+	}
+	// This response can contain prices specific to the signed-in customer.
+	c.Header("Cache-Control", "private, no-store")
 	c.JSON(200, gin.H{
 		"success":            true,
 		"data":               pricing,

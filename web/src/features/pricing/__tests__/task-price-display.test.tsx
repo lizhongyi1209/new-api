@@ -100,6 +100,73 @@ const model: PricingModel = {
 }
 const clients: QueryClient[] = []
 
+it('shows the customer video rates on cards, in lists and in details without applying the group discount twice', () => {
+  vi.spyOn(api, 'get').mockResolvedValue({ data: { data: { groups: [] } } })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  clients.push(client)
+  const retail: PricingModel = {
+    ...model,
+    model_name: 'kling-v3-omni',
+    billing_mode: 'retail_video',
+    billing_expr: undefined,
+    billing_usage_schema: undefined,
+    enable_groups: ['official'],
+    retail_video_prices: {
+      groups: [
+        {
+          group: 'official',
+          rows: [
+            {
+              feature: 'No reference video · Native audio off',
+              prices: { '720P': 0.54, '1080P': 0.72, '4K': 2.7 },
+            },
+            {
+              feature: 'No reference video · Native audio on',
+              prices: { '720P': 0.72, '1080P': 0.9, '4K': 2.7 },
+            },
+            {
+              feature: 'Reference video · Native audio off',
+              prices: { '720P': 0.81, '1080P': 1.08, '4K': 2.7 },
+            },
+          ],
+        },
+      ],
+    },
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <ModelCard model={retail} onClick={vi.fn()} />
+      <ModelPriceCell model={retail} />
+      <ModelDetailsContent
+        model={retail}
+        groupRatio={{ official: 0.9 }}
+        usableGroup={{ official: { desc: '', ratio: 0.9 } }}
+        endpointMap={{}}
+        autoGroups={[]}
+        priceRate={1}
+        usdExchangeRate={1}
+        tokenUnit='M'
+      />
+    </QueryClientProvider>
+  )
+  for (const row of retail.retail_video_prices!.groups[0].rows) {
+    const rendered = screen.getByText(row.feature).closest('tr')
+    expect(rendered).not.toBeNull()
+    expect(
+      within(rendered!)
+        .getAllByRole('cell')
+        .slice(1)
+        .map((cell) => cell.textContent)
+    ).toEqual(Object.values(row.prices).map((price) => `$${price}`))
+  }
+  expect(screen.getAllByText(/\$0\.54 – \$2\.7/)).toHaveLength(2)
+  expect(
+    screen.queryByText(/credit|reservation|units_source|reported|0\.9x/i)
+  ).not.toBeInTheDocument()
+})
+
 it('shows nested task conditions and prices in detail and group tables without ambiguous log matches', () => {
   vi.spyOn(api, 'get').mockResolvedValue({ data: { data: { groups: [] } } })
   const client = new QueryClient({

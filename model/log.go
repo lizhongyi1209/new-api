@@ -120,6 +120,27 @@ func formatUserLogs(logs []*Log, startIdx int) {
 		logs[i].Other = formatLogOtherJSON(logs[i].Other, logOtherVisibilityUser)
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
+		if HasPrivateKlingPricing(logs[i].ModelName) {
+			// Old and new task logs can contain the raw settlement expression in
+			// both free text and nested metadata. Preserve the customer's bill
+			// and request settings without returning settlement inputs.
+			switch logs[i].Type {
+			case LogTypeConsume:
+				logs[i].Content = "视频任务消费"
+			case LogTypeRefund:
+				logs[i].Content = "视频任务退款"
+			}
+			for key := range otherMap {
+				switch key {
+				case "task_id", "task_status", "task_sync", "is_task", "task_log_schema_version", "result_discarded", "request_path",
+					"prompt", "mode", "duration", "resolution", "effective_resolution", "resolution_defaulted", "size", "aspect_ratio", "video_audio",
+					"actual_quota", "charged_quota", "net_quota", "pre_consumed_quota", "refunded_quota", "refund_status",
+					"billing_source", "user_group", "using_group", "use_time_seconds", "finished_at":
+				default:
+					delete(otherMap, key)
+				}
+			}
+		}
 		if otherMap != nil {
 			// Remove admin-only debug fields.
 			delete(otherMap, "admin_info")
