@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	_ "github.com/QuantumNous/new-api/plugins"
 	"github.com/QuantumNous/new-api/relay/channel"
@@ -58,6 +59,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/xunfei"
 	"github.com/QuantumNous/new-api/relay/channel/zhipu"
 	"github.com/QuantumNous/new-api/relay/channel/zhipu_4v"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -236,18 +238,36 @@ func TaskPlatformUnavailableError(platform constant.TaskPlatform) (string, strin
 	return "invalid_api_platform", fmt.Sprintf("invalid api platform: %s", platform)
 }
 
+// GetPersistedOfficialVideoAdaptor resolves the producer used by an accepted
+// task, including while new plugin submissions are switched off.
+func GetPersistedOfficialVideoAdaptor(platform constant.TaskPlatform, version string) (channel.TaskAdaptor, error) {
+	if !constant.IsOfficialVideoPlugin(platform) || version == "" {
+		return nil, fmt.Errorf("invalid persisted video plugin")
+	}
+	key := string(platform)
+	if active, ok := pluginruntime.DefaultRegistry.Generation().Get(key); ok && active.Meta.Version == version {
+		return jspluginadaptor.New(active), nil
+	}
+	row, err := model.GetTaskPluginVersion(key, version)
+	if err != nil {
+		return nil, err
+	}
+	plugin, err := pluginruntime.CompilePlugin(row.Source, pluginruntime.Options{Key: key})
+	if err != nil {
+		return nil, err
+	}
+	if plugin.Meta.Key != key || plugin.Meta.Version != version {
+		return nil, fmt.Errorf("stored video plugin version mismatch")
+	}
+	return jspluginadaptor.New(plugin), nil
+}
+
 func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 	plugin, ok := ResolveTaskPluginForPlatform(pluginruntime.DefaultRegistry.Generation(), platform)
 	if ok {
 		return jspluginadaptor.New(plugin)
 	}
-	if _, migrated := taskPluginKeys[platform]; migrated {
-		// An operator who disables the plugin system expects every channel to
-		// fall back to its legacy implementation. Only a channel whose plugin is
-		// expected to be running keeps the strict nil result.
-		if !pluginruntime.DefaultRegistry.Enabled() {
-			return getLegacyTaskAdaptor(platform)
-		}
+	if key, mapped := taskPluginKeys[platform]; mapped && pluginruntime.DefaultRegistry.Enabled() && !setting.IsTaskPluginFactoryDisabled(key) {
 		return nil
 	}
 	return getLegacyTaskAdaptor(platform)
@@ -283,7 +303,7 @@ func getTaskAdaptorForRequest(c *gin.Context, platform constant.TaskPlatform) (c
 	generation := pluginruntime.DefaultRegistry.Generation()
 	plugin, ok := ResolveTaskPluginForPlatform(generation, platform)
 	if !ok {
-		if _, migrated := taskPluginKeys[platform]; migrated {
+		if key, migrated := taskPluginKeys[platform]; migrated && pluginruntime.DefaultRegistry.Enabled() && !setting.IsTaskPluginFactoryDisabled(key) {
 			return platform, nil
 		}
 		return platform, getLegacyTaskAdaptor(platform)

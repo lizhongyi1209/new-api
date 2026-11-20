@@ -46,7 +46,13 @@ func SetVideoRouter(router *gin.Engine) {
 		if !pluginruntime.DefaultRegistry.Enabled() {
 			// openai compatible API video routes
 			// docs: https://platform.openai.com/docs/api-reference/videos/create
-			videoV1Router.POST("/videos", controller.RelayTask)
+			// Keep this endpoint switchable after an off-at-boot start. Its
+			// unclaimed-model branch is the same legacy RelayTask handler.
+			createHandlers, err := taskPluginProtocolHandlers("openai_video", "create")
+			if err != nil {
+				panic(err)
+			}
+			router.POST("/v1/videos", createHandlers...)
 			videoV1Router.GET("/videos/:task_id", controller.RelayTaskFetch)
 		}
 	}

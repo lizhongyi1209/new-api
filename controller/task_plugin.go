@@ -525,7 +525,7 @@ func SetTaskPluginStatus(c *gin.Context) {
 		}
 		if cascade {
 			for _, channel := range channels {
-				if channel.Type == constant.ChannelTypeNewAPI {
+				if channel.Type == constant.ChannelTypeNewAPI || channel.Type == constant.ChannelTypeKling || channel.Type == constant.ChannelTypeAli {
 					stored, err := model.GetChannelById(channel.Id, true)
 					if err != nil {
 						common.ApiError(c, err)

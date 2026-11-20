@@ -147,7 +147,7 @@ func TestKling40CreateResponseUsesOfficialEnvelope(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Set("kling_external_task_id", "ext-1")
 	info := &relaycommon.RelayInfo{TaskRelayInfo: &relaycommon.TaskRelayInfo{PublicTaskID: "task_public"}}
-	body := kling40CreateResponse(c, info, []byte(`{"code":0,"message":"","request_id":"req-1","data":{"id":"upstream","status":"submitted","create_time":11,"update_time":12}}`))
+	body := Kling40CreateResponse(c, info, []byte(`{"code":0,"message":"","request_id":"req-1","data":{"id":"upstream","status":"submitted","create_time":11,"update_time":12}}`))
 	assert.Equal(t, 0, body["code"])
 	assert.Equal(t, "req-1", body["request_id"])
 	data := body["data"].(map[string]any)

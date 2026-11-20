@@ -76,6 +76,7 @@ type BatchTaskResult struct {
 // GetTaskAdaptorFunc 由 main 包注入，用于获取指定平台的任务适配器。
 // 打破 service -> relay -> relay/channel -> service 的循环依赖。
 var GetTaskAdaptorFunc func(platform constant.TaskPlatform) TaskPollingAdaptor
+var GetPersistedVideoAdaptorFunc func(constant.TaskPlatform, string) (TaskPollingAdaptor, error)
 
 // sweepTimedOutTasks 在主轮询之前独立清理超时任务。
 // 每次最多处理 100 条，剩余的下个周期继续处理。
@@ -259,22 +260,51 @@ func UpdateTaskPluginTasks(ctx context.Context, platform constant.TaskPlatform, 
 			logger.LogError(ctx, fmt.Sprintf("Task plugin channel #%d unavailable: %s", channelID, err))
 			continue
 		}
-		if ch.Type != constant.ChannelTypeTaskPlugin || ch.GetSetting().TaskPluginKey != string(platform) {
+		official := constant.IsOfficialVideoPlugin(platform) && (ch.Type == constant.ChannelTypeKling || ch.Type == constant.ChannelTypeAli)
+		if !official && (ch.Type != constant.ChannelTypeTaskPlugin || ch.GetSetting().TaskPluginKey != string(platform)) {
 			logger.LogError(ctx, fmt.Sprintf("Task plugin channel #%d identity changed; skipping pending tasks", channelID))
 			continue
 		}
-		adaptor := GetTaskAdaptorFunc(platform)
-		if adaptor == nil {
-			logger.LogError(ctx, fmt.Sprintf("Task plugin %s adaptor is unavailable", platform))
-			continue
+		adaptors := make(map[string]TaskPollingAdaptor)
+		baseURL := ch.GetBaseURL()
+		if baseURL == "" {
+			baseURL = constant.GetChannelBaseURL(ch.Type)
 		}
-		if _, ok := adaptor.(TaskContextPollingAdaptor); !ok {
-			logger.LogError(ctx, fmt.Sprintf("Task plugin %s adaptor cannot poll persisted tasks", platform))
-			continue
-		}
-		info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: ch.GetBaseURL(), ApiKey: ch.Key}}
-		adaptor.Init(info)
+		info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelType: ch.Type, ChannelBaseUrl: baseURL, ApiKey: ch.Key, ChannelSetting: ch.GetSetting(), HeadersOverride: ch.GetHeaderOverride()}}
 		for index, task := range byChannel[channelID] {
+			version := ""
+			if official {
+				execution := task.PrivateData.Execution
+				if execution == nil || execution.TaskPlugin == nil || execution.TaskPlugin.Key != string(platform) || GetPersistedVideoAdaptorFunc == nil {
+					continue
+				}
+				name := task.Properties.UpstreamModelName
+				if name == "" {
+					name = task.Properties.OriginModelName
+				}
+				if constant.OfficialVideoPluginForModel(ch.Type, name) != string(platform) {
+					continue
+				}
+				version = execution.TaskPlugin.Version
+			}
+			adaptor, resolved := adaptors[version]
+			if !resolved {
+				if official {
+					adaptor, err = GetPersistedVideoAdaptorFunc(platform, version)
+				} else {
+					adaptor = GetTaskAdaptorFunc(platform)
+				}
+				if _, ok := adaptor.(TaskContextPollingAdaptor); !ok || err != nil {
+					logger.LogError(ctx, fmt.Sprintf("Task plugin %s/%s polling adaptor unavailable: %v", platform, version, err))
+					adaptor = nil
+				} else {
+					adaptor.Init(info)
+				}
+				adaptors[version] = adaptor
+			}
+			if adaptor == nil {
+				continue
+			}
 			if err := ctx.Err(); err != nil {
 				return err
 			}
@@ -764,7 +794,8 @@ func ApplyVideoTaskPollingResult(ctx context.Context, adaptor TaskPollingAdaptor
 	}
 
 	pluginTask := task.PrivateData.Execution != nil && task.PrivateData.Execution.TaskPlugin != nil
-	if !pluginTask {
+	if !pluginTask || constant.IsOfficialVideoPlugin(task.Platform) {
+		// Official query presenters read the provider response using their existing public contract.
 		task.Data = redactVideoResponseBody(responseBody)
 	}
 	if len(taskResult.PluginState) > 0 {

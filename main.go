@@ -157,6 +157,10 @@ func main() {
 		return a
 	}
 
+	service.GetPersistedVideoAdaptorFunc = func(platform constant.TaskPlatform, version string) (service.TaskPollingAdaptor, error) {
+		return relay.GetPersistedOfficialVideoAdaptor(platform, version)
+	}
+
 	// Wire image adaptor factory (breaks service -> relay import cycle)
 	service.GetImageAdaptorFunc = func(apiType int) service.ImageAdaptor {
 		a := relay.GetAdaptor(apiType)

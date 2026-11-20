@@ -582,7 +582,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 
 	if isKling40Action(info.Action) {
-		c.JSON(http.StatusOK, kling40CreateResponse(c, info, responseBody))
+		c.JSON(http.StatusOK, Kling40CreateResponse(c, info, responseBody))
 		return resolvedTaskID, responseBody, nil
 	}
 

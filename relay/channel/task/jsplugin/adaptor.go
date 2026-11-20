@@ -83,16 +83,20 @@ const maxTaskArtifacts = 64
 const maxTaskPluginPersistedJSONBytes = 1 << 20
 
 type TaskAdaptor struct {
-	plugin         *pluginruntime.LoadedPlugin
-	info           *relaycommon.RelayInfo
-	submit         *requestDescriptor
-	routeRequest   *pluginruntime.RouteRequestContext
-	requestHeaders map[string]string
-	files          []map[string]any
+	officialRequest map[string]any
+	plugin          *pluginruntime.LoadedPlugin
+	info            *relaycommon.RelayInfo
+	submit          *requestDescriptor
+	routeRequest    *pluginruntime.RouteRequestContext
+	requestHeaders  map[string]string
+	files           []map[string]any
 }
 
 func New(plugin *pluginruntime.LoadedPlugin) *TaskAdaptor { return &TaskAdaptor{plugin: plugin} }
-func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo)   { a.info = info }
+func NewWithOfficialRequest(plugin *pluginruntime.LoadedPlugin, payload map[string]any) *TaskAdaptor {
+	return &TaskAdaptor{plugin: plugin, officialRequest: payload}
+}
+func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) { a.info = info }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
 	if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedEndpoint); exists {
@@ -126,7 +130,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	}
 	request, hasRequest := c.Get("task_request")
 	hasUsageProfiles := len(a.plugin.Meta.UsageProfiles) > 0
-	if hasRequest && !hasUsageProfiles {
+	if a.officialRequest == nil && hasRequest && !hasUsageProfiles {
 		if err := a.validateResolvedUsageRequest(request, ""); err != nil {
 			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest)
 		}
@@ -141,7 +145,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	}
 	// The descriptor may rewrite the model. Validate profiled requests against
 	// that final model before any quota calculation or upstream submission.
-	if hasRequest && hasUsageProfiles {
+	if a.officialRequest == nil && hasRequest && hasUsageProfiles {
 		usageModel := a.usageModel(info.OriginModelName, info.UpstreamModelName)
 		if err := a.validateResolvedUsageRequest(request, usageModel); err != nil {
 			return service.TaskErrorWrapperLocal(err, "plugin_usage_invalid", http.StatusBadRequest)
@@ -1474,6 +1478,9 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 	}
 	ctx := routeRequest.JSValue()
 	ctx["requestBody"] = jsonValue(routeRequest.RequestBody)
+	if a.officialRequest != nil {
+		ctx["officialRequest"] = jsonValue(a.officialRequest)
+	}
 	ctx["requestHeaders"] = requestHeaders
 	ctx["files"] = files
 	ctx["action"] = info.Action

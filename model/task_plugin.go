@@ -21,7 +21,14 @@ type TaskPluginChannelRef struct {
 
 func GetTaskPluginUsage(key string) ([]TaskPluginChannelRef, int64, error) {
 	var channels []Channel
-	if err := DB.Where("type IN ? AND status = ?", []int{constant.ChannelTypeTaskPlugin, constant.ChannelTypeNewAPI}, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
+	types := []int{constant.ChannelTypeTaskPlugin, constant.ChannelTypeNewAPI}
+	if key == constant.KlingOfficialVideoPlugin {
+		types = append(types, constant.ChannelTypeKling)
+	}
+	if key == constant.WanOfficialVideoPlugin {
+		types = append(types, constant.ChannelTypeAli)
+	}
+	if err := DB.Select("id", "name", "type", "setting").Where("type IN ? AND status = ?", types, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
 		return nil, 0, err
 	}
 	refs := make([]TaskPluginChannelRef, 0)

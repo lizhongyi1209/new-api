@@ -18,6 +18,7 @@ import (
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/relay/channel/task/kling"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -912,6 +913,17 @@ func presentTaskSubmission(c *gin.Context, outcome *taskSubmissionOutcome) {
 			c.JSON(http.StatusOK, outcome.Task.ToOpenAIVideo())
 			return
 		}
+	}
+	if constant.IsOfficialVideoPlugin(outcome.Task.Platform) {
+		switch outcome.Task.Action {
+		case constant.TaskActionKling40Text, constant.TaskActionKling40Image, constant.TaskActionKling40Omni:
+			c.JSON(http.StatusOK, kling.Kling40CreateResponse(c, outcome.RelayInfo, outcome.Task.Data))
+		default:
+			video := outcome.Task.ToOpenAIVideo()
+			video.TaskID = outcome.Task.TaskID
+			c.JSON(http.StatusOK, video)
+		}
+		return
 	}
 	createdAt := outcome.Task.CreatedAt
 	if createdAt == 0 {

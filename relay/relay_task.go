@@ -211,10 +211,43 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if platform == "" {
 		platform = GetTaskPlatform(c)
 	}
+	// Plugin validation builds and caches the outbound request. Map a model that
+	// was already selected by the distributor before that request is built.
+	mappedBeforeValidate := info.OriginModelName != ""
+	if mappedBeforeValidate {
+		info.UpstreamModelName = info.OriginModelName
+		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+		}
+	}
 	var adaptor channel.TaskAdaptor
 	var selectedPlugin *pluginruntime.LoadedPlugin
-	pinnedValue, hasPinnedPlugin := c.Get(pluginruntime.ContextKeyPinnedPlugin)
-	pinnedPlugin, _ := pinnedValue.(pluginruntime.PinnedPlugin)
+	pinnedValue, _ := c.Get(pluginruntime.ContextKeyPinnedPlugin)
+	pinnedPlugin, hasPinnedPlugin := pinnedValue.(pluginruntime.PinnedPlugin)
+	officialKey := constant.OfficialVideoPluginForModel(info.ChannelType, info.UpstreamModelName)
+	boundOfficial := officialKey != "" && info.ChannelSetting.TaskPluginKey == officialKey && pluginruntime.DefaultRegistry.Enabled()
+	keepPin := false
+	if boundOfficial {
+		generation := pluginruntime.DefaultRegistry.Generation()
+		plugin, ok := generation.Get(officialKey)
+		if !ok || !slices.Contains(plugin.Meta.Models, info.UpstreamModelName) {
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("bound official video plugin %s is unavailable", officialKey), "task_plugin_unavailable", http.StatusServiceUnavailable)
+		}
+		if hasPinnedPlugin && pinnedPlugin.Plugin != plugin {
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("request selected a different video plugin"), "task_plugin_channel_mismatch", http.StatusBadRequest)
+		}
+		if _, priced := billing_setting.GetTaskPluginBillingExpr(officialKey, info.OriginModelName); !priced {
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("bound official video plugin %s requires a model price", officialKey), "task_plugin_price_missing", http.StatusServiceUnavailable)
+		}
+		pinnedPlugin = pluginruntime.PinnedPlugin{Generation: generation, Plugin: plugin}
+		c.Set(pluginruntime.ContextKeyPinnedPlugin, pinnedPlugin)
+		// Only successful attempts supply provenance to the persisted task.
+		defer func() {
+			if !keepPin {
+				c.Set(pluginruntime.ContextKeyPinnedPlugin, pinnedValue)
+			}
+		}()
+	}
 	if info.ChannelType == constant.ChannelTypeTaskPlugin {
 		pluginKey := info.ChannelSetting.TaskPluginKey
 		if pluginKey == "" || c.GetString("expected_task_plugin_key") != pluginKey {
@@ -241,7 +274,29 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	} else if pinnedPlugin.Plugin != nil {
 		selectedPlugin = pinnedPlugin.Plugin
 		platform = constant.TaskPlatform(selectedPlugin.Meta.Key)
-		adaptor = jspluginadaptor.New(selectedPlugin)
+		if boundOfficial {
+			// Keep the public input contract, including multipart, model mapping and
+			// official-only parameters. No native submit, query or billing is executed.
+			normalizer := getLegacyTaskAdaptor(constant.TaskPlatform(strconv.Itoa(info.ChannelType)))
+			normalizer.Init(info)
+			if err := normalizer.ValidateRequestAndSetAction(c, info); err != nil {
+				return nil, err
+			}
+			body, err := normalizer.BuildRequestBody(c, info)
+			if err != nil {
+				return nil, service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+			}
+			var payload map[string]any
+			if err := common.DecodeJson(body, &payload); err != nil {
+				return nil, service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+			}
+			if action := c.GetString("action"); action != "" {
+				info.Action = action
+			}
+			adaptor = jspluginadaptor.NewWithOfficialRequest(selectedPlugin, payload)
+		} else {
+			adaptor = jspluginadaptor.New(selectedPlugin)
+		}
 	} else {
 		adaptor = GetTaskAdaptor(platform)
 	}
@@ -255,15 +310,6 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		info.PublicTaskID = model.GenerateTaskID()
 	}
 	adaptor.Init(info)
-	// Plugin validation builds and caches the outbound request. Map a model that
-	// was already selected by the distributor before that request is built.
-	mappedBeforeValidate := info.OriginModelName != ""
-	if mappedBeforeValidate {
-		info.UpstreamModelName = info.OriginModelName
-		if err := helper.ModelMappedHelper(c, info, nil); err != nil {
-			return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
-		}
-	}
 	if taskErr := adaptor.ValidateRequestAndSetAction(c, info); taskErr != nil {
 		return nil, taskErr
 	}
@@ -510,6 +556,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		result.PluginState = parsedResponse.PluginState
 		result.PluginKey = string(platform)
 	}
+	keepPin = true
 	return result, nil
 }
 
@@ -656,6 +703,33 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	// Keep both video query routes on the same public OpenAI-style contract and
 	// never fall through to TaskDto, which exposes internal task, channel, and
 	// billing data plus the raw upstream response.
+	if originTask.Platform == constant.WanOfficialVideoPlugin {
+		converter := getLegacyTaskAdaptor(constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeAli))).(channel.OpenAIVideoConverter)
+		body, err := converter.ConvertToOpenAIVideo(originTask)
+		if err != nil {
+			return nil, service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)
+		}
+		return body, nil
+	}
+	if originTask.Platform == constant.KlingOfficialVideoPlugin && isOpenAIVideoAPI {
+		video := dto.NewOpenAIVideo()
+		video.ID, video.Model, video.Status = originTask.TaskID, originTask.Properties.OriginModelName, originTask.Status.ToVideoStatus()
+		video.CreatedAt, video.CompletedAt = originTask.CreatedAt, originTask.FinishTime
+		video.SetProgressStr(originTask.Progress)
+		video.TaskID = originTask.TaskID
+		if url := originTask.GetResultURL(); url != "" {
+			video.ResultURL = url
+			video.SetMetadata("url", url)
+		}
+		if originTask.Status == model.TaskStatusFailure {
+			video.Error = &dto.OpenAIVideoError{Message: originTask.FailReason}
+		}
+		body, err := common.Marshal(video)
+		if err != nil {
+			return nil, service.TaskErrorWrapper(err, "marshal_response_failed", http.StatusInternalServerError)
+		}
+		return body, nil
+	}
 	switch originTask.Platform {
 	case constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeServiceInferenceVideo)),
 		constant.TaskPlatform(strconv.Itoa(constant.ChannelTypeDoubaoVideo)),

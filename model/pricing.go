@@ -234,8 +234,19 @@ func updatePricing() {
 	modelGroupsMap := make(map[string]*types.Set[string])
 	hasOrdinaryChannels := make(map[string]bool)
 
+	pluginGeneration := jsplugin.DefaultRegistry.Generation()
+	officialProviders := make(map[string]string)
 	for _, ability := range enableAbilities {
-		if ability.ChannelType != constant.ChannelTypeTaskPlugin {
+		key := constant.OfficialVideoPluginForModel(ability.ChannelType, ability.Model)
+		var bound bool
+		if key != "" && ability.ChannelSetting != nil {
+			ch := Channel{Setting: ability.ChannelSetting}
+			if _, loaded := pluginGeneration.Get(key); loaded && ch.GetSetting().TaskPluginKey == key {
+				bound = true
+				officialProviders[ability.Model] = key
+			}
+		}
+		if !bound && ability.ChannelType != constant.ChannelTypeTaskPlugin {
 			hasOrdinaryChannels[ability.Model] = true
 		}
 		groups, ok := modelGroupsMap[ability.Model]
@@ -332,7 +343,6 @@ func updatePricing() {
 	}
 
 	pricingMap = make([]Pricing, 0)
-	pluginGeneration := jsplugin.DefaultRegistry.Generation()
 	nativeCatalog, _, nativeErr := nativeVideoPricingCatalog(DB)
 	if nativeErr != nil {
 		common.SysError(fmt.Sprintf("native video pricing metadata: %v", nativeErr))
@@ -459,6 +469,15 @@ func updatePricing() {
 			pricing.BillingExpr = cardVariant.BillingExpr
 			pricing.BillingUsageSchema = cardVariant.BillingUsageSchema
 			pricing.BillingUsageExamples = cardVariant.BillingUsageExamples
+		}
+		if key := officialProviders[model]; key != "" && !pricing.HasOrdinaryChannel {
+			for _, variant := range pricing.BillingPluginVariants {
+				if variant.PluginKey == key && variant.BillingExpr != "" {
+					pricing.BillingMode, pricing.BillingExpr = variant.BillingMode, variant.BillingExpr
+					pricing.BillingUsageSchema, pricing.BillingUsageExamples = variant.BillingUsageSchema, variant.BillingUsageExamples
+					break
+				}
+			}
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

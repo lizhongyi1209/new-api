@@ -41,7 +41,7 @@ func externalTaskIDFromMetadata(metadata map[string]any) string {
 	return strings.TrimSpace(ext)
 }
 
-func kling40CreateResponse(c *gin.Context, info *relaycommon.RelayInfo, responseBody []byte) map[string]any {
+func Kling40CreateResponse(c *gin.Context, info *relaycommon.RelayInfo, responseBody []byte) map[string]any {
 	var upstream struct {
 		Message   string `json:"message"`
 		RequestID string `json:"request_id"`
