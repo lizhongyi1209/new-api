@@ -1,5 +1,5 @@
 <doc-page slug="kling-3" nav="Kling 3.0" title="Kling VIDEO 3.0" kind="async">
-<doc-summary>可灵 3.0 Omni 视频生成（多图、多视频参考）和动作模仿。提交后返回 <code>task_id</code>，用对应查询接口取结果。</doc-summary>
+<doc-summary>可灵 3.0 Omni 视频生成（多图、多视频参考）和动作模仿。提交后返回 <code>task_id</code>，用对应查询接口取结果。客户端使用任务 ID 轮询状态，提交时请省略 <code>callback_url</code>。</doc-summary>
 <doc-flow>
 <step title="提交任务">POST <code>/kling/omni-video/kling-3.0-omni</code> 等，返回 <code>task_id</code></step>
 <step title="轮询状态">GET <code>…/{task_id}</code></step>
@@ -45,7 +45,6 @@
           <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code>、<code>4k</code>，默认 <code>720p</code>。</td></tr>
           <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>条件</td><td><code>16:9</code>、<code>9:16</code>、<code>1:1</code>。没有首帧或参考视频时必填。</td></tr>
           <tr><td><code>settings.duration</code></td><td>integer</td><td>否</td><td>3-15 秒的整数，默认 5 秒。</td></tr>
-          <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>任务状态变化时接收通知的回调地址。</td></tr>
           <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>调用方自定义且账号内唯一的任务 ID。</td></tr>
           <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
         </table>
@@ -315,7 +314,6 @@
           <tr><td><code>settings.character_orientation</code></td><td>string</td><td>是</td><td><code>video</code>：朝向跟随动作视频；<code>image</code>：朝向跟随参考图。</td></tr>
           <tr><td><code>settings.audio</code></td><td>string</td><td>否</td><td><code>original</code> 保留动作视频原声；<code>off</code> 无音频。默认 <code>original</code>。</td></tr>
           <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>720p</code>、<code>1080p</code>，默认 <code>720p</code>。</td></tr>
-          <tr><td><code>options.callback_url</code></td><td>string</td><td>否</td><td>任务状态变化时接收通知的回调地址。</td></tr>
           <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>调用方自定义且账号内唯一的任务 ID。</td></tr>
           <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
         </table>
@@ -355,7 +353,6 @@
       "audio": "original"
     },
     "options": {
-      "callback_url": "https://example.com/callback",
       "external_task_id": "motion-order-001",
       "watermark_info": {"enabled": false}
     }

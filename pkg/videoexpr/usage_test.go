@@ -168,14 +168,15 @@ func TestKling40VideoInputRequiresAuthoritativeDuration(t *testing.T) {
 		{Duration: 31},
 		{Metadata: map[string]any{"settings": map[string]any{"duration": 31}}},
 		{Metadata: map[string]any{"settings": map[string]any{"duration": 2}}},
-		{Resolution: "4k"},
+		{Resolution: "8k"},
 	} {
 		_, err := Estimate(meta, request, constant.TaskActionKling40Omni)
 		assert.Error(t, err, request)
 	}
 	estimate, err := Estimate(meta, relaycommon.TaskSubmitReq{Duration: 3, Metadata: map[string]any{"contents": []any{map[string]any{"type": "element"}}}}, constant.TaskActionKling40Omni)
 	require.NoError(t, err)
-	assert.Equal(t, float64(30), estimate["input_video_seconds"])
+	assert.Equal(t, float64(0), estimate["input_video_seconds"])
+	assert.Equal(t, float64(33), estimate["billed_seconds"])
 	_, err = Complete(meta.Meter, estimate, []byte(`{"data":[{"outputs":[{"type":"video","duration":"3"}]}]}`), &relaycommon.TaskInfo{})
 	assert.Error(t, err)
 	actual, err := Complete(meta.Meter, estimate, []byte(`{"data":[{"outputs":[{"type":"video","duration":"3"}],"usage":{"input_duration":"0.00"}}]}`), &relaycommon.TaskInfo{})
@@ -438,4 +439,22 @@ func TestWan30RejectsOutOfRangeRequestsAndUsage(t *testing.T) {
 			assert.Error(t, err)
 		})
 	}
+}
+
+func TestKling40HDRAndImageElementUseDeliveredSeconds(t *testing.T) {
+	meta := ForModel(constant.ChannelTypeKling, "kling-4.0")
+	request := relaycommon.TaskSubmitReq{Metadata: map[string]any{"contents": []any{map[string]any{"type": "element"}}, "settings": map[string]any{"resolution": "4k", "duration": 5, "dynamic_range": "hdr"}}}
+	reserve, err := Estimate(meta, request, constant.TaskActionKling40Omni)
+	require.NoError(t, err)
+	assert.Equal(t, float64(5), reserve["hdr_seconds"])
+	assert.Equal(t, float64(35), reserve["billed_seconds"])
+	actual, err := Complete(meta.Meter, reserve, []byte(`{"data":[{"usage":{"output_duration":"5"},"outputs":[{"type":"video","duration":"5.041"}]}]}`), &relaycommon.TaskInfo{})
+	require.NoError(t, err)
+	assert.Equal(t, "none", actual["video_input"])
+	assert.Equal(t, float64(5), actual["billed_seconds"])
+	assert.Equal(t, float64(5), actual["hdr_seconds"])
+	actual, err = Complete(meta.Meter, reserve, []byte(`{"data":[{"usage":{"input_duration":"6"},"outputs":[{"type":"video","duration":"5.041"}]}]}`), &relaycommon.TaskInfo{})
+	require.NoError(t, err)
+	assert.Equal(t, float64(11), actual["billed_seconds"])
+	assert.Equal(t, float64(5), actual["hdr_seconds"])
 }

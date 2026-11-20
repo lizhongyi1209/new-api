@@ -23,8 +23,11 @@ export function RetailVideoPriceRange(
     (entry) => entry.group === props.selectedGroup
   )
   const groups = selected ? [selected] : props.prices.groups
+  const timed = props.prices.basis === 'timed'
   const prices = groups.flatMap((entry) =>
-    entry.rows.flatMap((row) => Object.values(row.prices))
+    (timed ? entry.rows.slice(0, 1) : entry.rows).flatMap((row) =>
+      Object.values(row.prices)
+    )
   )
   if (!prices.length) return <span>{t('Price unavailable')}</span>
   const options = { ...props, tokenUnit: 'M' as const, groupRatioMultiplier: 1 }
@@ -32,7 +35,10 @@ export function RetailVideoPriceRange(
   const max = formatTaskUsageUnitPrice(Math.max(...prices), options)
   return (
     <span className='font-mono text-sm tabular-nums'>
-      {min === max ? min : `${min} – ${max}`} / {t('output second')}
+      {min === max ? min : `${min} – ${max}`} /{' '}
+      {timed
+        ? t('output second without video input (SDR)')
+        : t('output second')}
     </span>
   )
 }
@@ -52,7 +58,11 @@ export function RetailVideoPriceTable(props: RetailVideoProps) {
           <section key={group.group} className='space-y-2'>
             <div className='flex flex-wrap items-center gap-2'>
               <GroupBadge group={group.group} size='sm' />
-              <span className='text-sm'>{t('Price per output second')}</span>
+              <span className='text-sm'>
+                {props.prices.basis === 'timed'
+                  ? t('Video prices')
+                  : t('Price per output second')}
+              </span>
             </div>
             <StaticDataTable
               data={group.rows}
@@ -79,10 +89,10 @@ export function RetailVideoPriceTable(props: RetailVideoProps) {
                 })),
               ]}
             />
-            {Boolean(group.per_request) && (
+            {typeof group.per_request === 'number' && group.per_request > 0 && (
               <p className='text-sm'>
                 {t('Additional fee per request')} ·{' '}
-                {formatTaskUsageUnitPrice(group.per_request!, options)}
+                {formatTaskUsageUnitPrice(group.per_request, options)}
               </p>
             )}
           </section>

@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,4 +61,23 @@ func TestKlingCustomerLogHidesHistoricalAndPluginSettlement(t *testing.T) {
 	assert.NotContains(t, log.Content, "units")
 	assert.JSONEq(t, `{"actual_quota":1620000,"resolution":"720P"}`, log.Other)
 	assert.Equal(t, 1620000, log.Quota)
+}
+
+func TestKlingTimedCustomerPricingOnlyPublishesSalesAndSupportedSizes(t *testing.T) {
+	expr := `u("resolution") == "4k" && u("video_input") == "video" ? tier("4k video", u("billed_seconds") * 2.1 + u("hdr_seconds") * 0.5) : tier("standard", u("billed_seconds") * 1 + u("hdr_seconds") * 0.3)`
+	schema := map[string]jsplugin.UsageFieldSchema{"resolution": {Enum: []string{"720p", "1080p", "4k"}}, "hdr_seconds": {Type: "number"}}
+	item := Pricing{ModelName: "kling-4.0", EnableGroup: []string{"official"}, BillingExpr: expr, BillingPluginVariants: []PricingPluginVariant{{PluginKey: constant.KlingOfficialVideoPlugin, BillingExpr: expr, BillingUsageSchema: schema}}}
+	result := CustomerKlingPricing(item, map[string]float64{"official": 0.9, "hidden": 2})
+	require.Len(t, result.RetailVideoPrices.Groups, 1)
+	rows := result.RetailVideoPrices.Groups[0].Rows
+	require.Len(t, rows, 4)
+	assert.Equal(t, 1.89, rows[2].Prices["4K"])
+	assert.Equal(t, 0.45, rows[3].Prices["4K"])
+	assert.NotContains(t, rows[1].Prices, "720P")
+	assert.Empty(t, result.BillingPluginVariants)
+	assert.Empty(t, result.BillingExpr)
+	item.BillingPluginVariants[0].BillingExpr = `tier("private",u("billed_seconds") * u("billed_seconds"))`
+	result = CustomerKlingPricing(item, map[string]float64{"official": 0.9})
+	assert.Empty(t, result.RetailVideoPrices.Groups)
+	assert.Empty(t, result.BillingExpr)
 }

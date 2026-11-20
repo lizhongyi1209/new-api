@@ -2,25 +2,38 @@ package controller
 
 import (
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
 
 // ProxyKlingGeneralAPI forwards voice and other official /v1/general calls.
-// The public path keeps the /kling prefix; the body, query, and response stay official.
+// It keeps the /kling prefix, disables callbacks, and removes merchant billing data.
 func ProxyKlingGeneralAPI(c *gin.Context) {
-	channelID, _ := strconv.Atoi(c.Query("channel_id"))
-	channel, key, _, err := resolveKlingChannel(channelID)
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	body, err := io.ReadAll(c.Request.Body)
+	if c.Request.Method == http.MethodPost && len(body) > 0 {
+		var fields map[string]any
+		if err := common.Unmarshal(body, &fields); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "invalid_request", "message": "expected a JSON request body"})
+			return
+		}
+		if kling.HasCallback(fields) {
+			c.JSON(http.StatusBadRequest, gin.H{"code": "kling_callback_disabled", "message": kling.CallbackDisabledMessage})
+			return
+		}
+	}
+	channelID, _ := strconv.Atoi(c.Query("channel_id"))
+	channel, key, _, err := resolveKlingChannel(channelID)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -46,5 +59,6 @@ func ProxyKlingGeneralAPI(c *gin.Context) {
 	if contentType == "" {
 		contentType = "application/json"
 	}
+	respBody, _ = service.RedactUpstreamCharges(respBody)
 	c.Data(resp.StatusCode, contentType, respBody)
 }

@@ -13,10 +13,10 @@ const videoInput = {
 function timedProfile(model, resolutions) {
   return {
     models: [model],
-    schema: { billed_seconds: seconds, resolution: { enum: resolutions }, video_input: videoInput },
+    schema: { billed_seconds: seconds, ...(model === standard ? { hdr_seconds: { type: "number", unit: "second", description: { zh: "HDR 输出秒数", en: "HDR output seconds" } } } : {}), resolution: { enum: resolutions }, video_input: videoInput },
     examples: [
-      { label: "5 秒无参考视频", facts: { billed_seconds: 5, resolution: "720p", video_input: "none" } },
-      { label: "3 秒输入 + 5 秒输出", facts: { billed_seconds: 10, resolution: "720p", video_input: "video" } },
+      { label: "5 秒无参考视频", facts: { ...(model === standard ? { hdr_seconds: 0 } : {}), billed_seconds: 5, resolution: "720p", video_input: "none" } },
+      { label: "3 秒输入 + 5 秒输出", facts: { ...(model === standard ? { hdr_seconds: 0 } : {}), billed_seconds: 10, resolution: "720p", video_input: "video" } },
     ],
   };
 }
@@ -24,7 +24,7 @@ export const meta = {
   apiVersion: 1,
   key: "kling-official-video",
   name: "可灵官方视频",
-  version: "1.0.0",
+  version: "1.1.0",
   icon: "Kling.Color",
   author: { name: "O1Key" },
   fetchMode: "per_task",
@@ -39,7 +39,7 @@ export const meta = {
         { label: "官方扣减 3.6 单位", facts: { units: 3.6, units_source: "reported" } },
       ],
     },
-    timedProfile(standard, ["720p", "1080p"]),
+    timedProfile(standard, ["720p", "1080p", "4k"]),
     timedProfile(flash, ["720p"]),
   ],
 };
@@ -85,6 +85,9 @@ function modelOf(ctx) {
 }
 export function buildSubmitRequest(ctx) {
   if (!ctx.officialRequest) throw new Error("This plugin requires the configured official Kling video channel");
+  const request = ctx.officialRequest;
+  if (request.callback_url || (request.options || {}).callback_url)
+    throw new Error("Kling callbacks are disabled. Omit callback_url and poll using the task ID.");
   return {
     method: "POST",
     url: base(ctx) + path(ctx.action, modelOf(ctx)),
@@ -98,6 +101,68 @@ function readNumber(value) {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
+
+function creditRate(ctx) {
+  const body = ctx.officialRequest || {};
+  const settings = body.settings || {};
+  const model = modelOf(ctx);
+  const res = settings.resolution || ({ std: "720p", pro: "1080p", "4k": "4k" })[body.mode || "std"];
+  const column = ["720p", "1080p", "4k"].indexOf(res);
+  const motion = ctx.action === "motionControl" || ctx.action === "motionControl30" || model === "kling-3.0";
+  const native = settings.audio === "native" || body.sound === "on";
+  let rates;
+  if (model === "kling-v2-6") {
+    const voice = (body.voice_list || []).length > 0;
+    rates = motion ? [0.5, 0.8] : native ? [null, voice ? 1.2 : 1] : [0.3, 0.5];
+  } else if (model === "kling-v3" || model === "kling-3.0") {
+    rates = motion ? [0.9, 1.2] : native ? [0.9, 1.2, 3] : [0.6, 0.8, 3];
+  } else {
+    const reference = (body.video_list || []).length > 0 || (body.contents || []).some((v) => v.type === "base_video" || v.type === "feature_video");
+    rates = reference ? [0.9, 1.2, 3] : native ? [0.8, 1, 3] : [0.6, 0.8, 3];
+  }
+  return readNumber(rates[column]);
+}
+function retailUnits(ctx, item) {
+  const state = ctx.state || {};
+  const mediaSeconds = readNumber(video(item).duration);
+  const seconds = readNumber((item.usage || {}).output_duration) || (mediaSeconds && Math.round(mediaSeconds)) || state.requestedSeconds;
+  const rate = readNumber(state.creditRate);
+  return rate !== null && seconds > 0 ? Number((rate * seconds).toFixed(6)) : null;
+}
+function completedCredits(ctx, item) {
+  const fallback = () => retailUnits(ctx, item);
+  if (Array.isArray(item.billing)) {
+    let total = 0;
+    if (!item.billing.length) return fallback();
+    for (const line of item.billing) {
+      if (!line) return fallback();
+      const amount = readNumber(line.amount);
+      if (line.charge_type === "unit" && amount !== null) {
+        total += amount;
+      } else if (line.charge_type === "cash") {
+        const list = readNumber(line.list_price);
+        if (amount === 0 && (list === 0 || line.list_price == null)) continue;
+        if (String(line.currency || "").toUpperCase() !== "CNY" || list === null) return fallback();
+        total += list;
+      } else if (amount !== 0 || line.charge_type) {
+        return fallback();
+      }
+    }
+    return Number(total.toFixed(6));
+  }
+  const units = readNumber(item.final_unit_deduction);
+  const balance = item.final_balance_deduction;
+  if (balance && (readNumber(balance.quota) > 0 || readNumber(balance.list_price) > 0)) {
+    // Legacy balances have no reliable currency tag. Quote the delivered SKU
+    // once for mixed or cash payments, independently of the merchant wallet.
+    const list = readNumber(balance.list_price);
+    const domestic = (ctx.state || {}).domesticCash === true || String(balance.currency || "").toUpperCase() === "CNY";
+    if (domestic && list !== null && list > 0) return Number(((units || 0) + list).toFixed(6));
+    return fallback();
+  }
+  return units !== null ? units : fallback();
+}
+
 function limit(model) {
   return model === flash ? 20 : 30;
 }
@@ -116,6 +181,7 @@ function estimate(ctx) {
     resolution: (settings.resolution || (model === flash ? "720p" : "1080p")).toLowerCase(),
     video_input: hasVideo ? "video" : "none",
     billed_seconds: measured(Number(output), hasVideo ? max : 0),
+    ...(model === standard ? { hdr_seconds: settings.dynamic_range === "hdr" ? Number(output) : 0 } : {}),
   };
 }
 export function extractUsage(ctx) {
@@ -129,7 +195,17 @@ export function parseSubmitResponse(ctx, resp) {
     throw new Error(body.message || (tencent.Error || {}).Message || "Kling submission failed");
   const id = data.task_id || data.id || tencent.TaskId || body.task_id || body.id;
   if (typeof id !== "string" || !id.trim()) throw new Error("Missing Kling task ID");
-  return { taskId: id, taskData: body, state: estimate(ctx) };
+  const request = ctx.officialRequest || {};
+  const state = estimate(ctx);
+  const model = modelOf(ctx);
+  if (credits.indexOf(model) >= 0) {
+    state.creditRate = creditRate(ctx);
+    state.domesticCash = /^https:\/\/api-beijing\.klingai\.com(?:[/:]|$)/i.test(ctx.baseUrl || "");
+  } else {
+    state.knownVideo = (request.contents || []).some((v) => v.type === "base_video" || v.type === "feature_video");
+  }
+  state.requestedSeconds = readNumber((request.settings || {}).duration || request.duration);
+  return { taskId: id, taskData: body, state };
 }
 export function buildQueryRequest(ctx) {
   const route = path(ctx.action, modelOf(ctx)),
@@ -171,6 +247,10 @@ export function parseTaskResult(ctx, body) {
   };
   const status = states[String(item.task_status || item.status || "").toLowerCase()];
   if (!status) throw new Error("Unknown Kling task status");
+  // A successful asset with no verifiable final usage must not turn its
+  // submission reservation into a final charge. The normal poller retries.
+  if (status === "SUCCESS" && !extractUsageOnComplete(ctx, null, body))
+    return { taskId: ctx.taskId, status: "IN_PROGRESS", reason: "Awaiting final video usage" };
   return {
     taskId: ctx.taskId,
     status: status,
@@ -181,27 +261,24 @@ export function parseTaskResult(ctx, body) {
 export function extractUsageOnComplete(ctx, _result, body) {
   const item = row(ctx, body),
     model = modelOf(ctx);
+  const submitted = ctx.state || {};
   if (credits.indexOf(model) >= 0) {
-    let units = readNumber(item.final_unit_deduction);
-    if (units === null && Array.isArray(item.billing)) {
-      const items = item.billing.filter((i) => i && (i.charge_type === "cash" || i.charge_type === "unit"));
-      if (items.length && items.every((i) => readNumber(i.amount) !== null)) units = items.reduce((sum, i) => sum + Number(i.amount), 0);
-    }
-    return units === null ? null : { units: units, units_source: "reported" };
+    const units = completedCredits(ctx, item);
+    return units === null ? null : { units, units_source: "reported" };
   }
-  const usage = item.usage || {},
-    submitted = ctx.state || {};
-  const output = readNumber(usage.output_duration != null ? usage.output_duration : video(item).duration);
+  const usage = item.usage || {};
+  const rawFile = readNumber(video(item).duration);
+  const output = usage.output_duration != null
+    ? readNumber(usage.output_duration)
+    : readNumber(submitted.requestedSeconds) || (rawFile !== null ? Math.round(rawFile) : null);
   const input = readNumber(usage.input_duration);
-  if (
-    output === null ||
-    output < 3 ||
-    output > limit(model) ||
-    (input !== null && input > limit(model)) ||
-    (input === null && (usage.input_duration != null || submitted.video_input === "video"))
-  )
-    return null;
-  return { billed_seconds: measured(output, input || 0), video_input: input > 0 ? "video" : "none" };
+  if (output === null || !Number.isInteger(output) || output < 3 || output > limit(model) ||
+      (usage.input_duration != null && (input === null || input > limit(model)))) return null;
+  if (input === null && submitted.video_input === "video" &&
+      (submitted.knownVideo !== false || usage.output_duration == null)) return null;
+  const actual = { billed_seconds: measured(output, input || 0), video_input: input > 0 ? "video" : "none" };
+  if (model === standard) actual.hdr_seconds = submitted.hdr_seconds > 0 ? output : 0;
+  return actual;
 }
 function artifact(ctx) {
   const body = ctx.data || {};

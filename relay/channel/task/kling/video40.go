@@ -15,10 +15,11 @@ type video40Content struct {
 }
 
 type video40Settings struct {
-	Audio       *string `json:"audio,omitempty"`
-	Resolution  *string `json:"resolution,omitempty"`
-	AspectRatio *string `json:"aspect_ratio,omitempty"`
-	Duration    *int    `json:"duration,omitempty"`
+	DynamicRange *string `json:"dynamic_range,omitempty"`
+	Audio        *string `json:"audio,omitempty"`
+	Resolution   *string `json:"resolution,omitempty"`
+	AspectRatio  *string `json:"aspect_ratio,omitempty"`
+	Duration     *int    `json:"duration,omitempty"`
 }
 
 type video40Profile struct {
@@ -30,7 +31,7 @@ func video40ProfileForModel(model string) video40Profile {
 	if model == "kling-4.0-flash" {
 		return video40Profile{maxDuration: 20, resolutions: map[string]struct{}{"720p": {}}}
 	}
-	return video40Profile{maxDuration: 30, resolutions: map[string]struct{}{"720p": {}, "1080p": {}}}
+	return video40Profile{maxDuration: 30, resolutions: map[string]struct{}{"720p": {}, "1080p": {}, "4k": {}}}
 }
 
 func kling40ModelFromPath(path string) (string, bool) {
@@ -80,6 +81,9 @@ func validateVideo40Fields(fields map[string]any, scope string, allowed ...strin
 }
 
 func validateVideo40Shape(metadata map[string]any, action string) error {
+	if HasCallback(metadata) {
+		return fmt.Errorf("%s", CallbackDisabledMessage)
+	}
 	var err error
 	if action == "text" {
 		err = validateVideo40Fields(metadata, "request", "prompt", "settings", "options")
@@ -90,7 +94,7 @@ func validateVideo40Shape(metadata map[string]any, action string) error {
 		return err
 	}
 	if settings, ok := metadata["settings"].(map[string]any); ok {
-		allowed := []string{"resolution", "duration"}
+		allowed := []string{"resolution", "duration", "dynamic_range"}
 		if action != "image" {
 			allowed = append(allowed, "aspect_ratio")
 		}
@@ -153,7 +157,18 @@ func validateVideo40Settings(settings *video40Settings, action string, profile v
 			if profile.maxDuration == 20 {
 				return fmt.Errorf("settings.resolution must be 720p")
 			}
-			return fmt.Errorf("settings.resolution must be 720p or 1080p")
+			return fmt.Errorf("settings.resolution must be 720p, 1080p, or 4k")
+		}
+	}
+	if settings.DynamicRange != nil {
+		if _, standard := profile.resolutions["4k"]; !standard {
+			return fmt.Errorf("settings.dynamic_range is not supported by Kling 4.0 Flash")
+		}
+		if *settings.DynamicRange != "sdr" && *settings.DynamicRange != "hdr" {
+			return fmt.Errorf("settings.dynamic_range must be sdr or hdr")
+		}
+		if *settings.DynamicRange == "hdr" && settings.Resolution != nil && *settings.Resolution == "720p" {
+			return fmt.Errorf("HDR requires 1080p or 4k resolution")
 		}
 	}
 	if action != "omni" && settings.Audio != nil {

@@ -299,8 +299,45 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	// - Legacy format: "access_key|secret_key" (generates JWT token)
 }
 
-// ValidateRequestAndSetAction parses body, validates fields and sets default action.
-func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
+// CallbackDisabledMessage directs clients to task polling instead of provider callbacks.
+const CallbackDisabledMessage = "Kling callbacks are disabled. Omit callback_url and poll using the task ID."
+
+// HasCallback checks the root and options fields used by official and compatibility
+// endpoints, matching the case-insensitive field binding used by Go.
+func HasCallback(fields map[string]any) bool {
+	for key, value := range fields {
+		if strings.EqualFold(key, "callback_url") && value != nil && value != "" {
+			return true
+		}
+		if strings.EqualFold(key, "options") {
+			if options, ok := value.(map[string]any); ok {
+				for k, v := range options {
+					if strings.EqualFold(k, "callback_url") && v != nil && v != "" {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// ValidateRequestAndSetAction validates video requests before submission or charging.
+func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
+	if err := a.validateVideoRequest(c, info); err != nil {
+		return err
+	}
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+	}
+	if req.CallbackUrl != "" || HasCallback(req.Metadata) {
+		return service.TaskErrorWrapperLocal(errors.New(CallbackDisabledMessage), "kling_callback_disabled", http.StatusBadRequest)
+	}
+	return nil
+}
+
+func (a *TaskAdaptor) validateVideoRequest(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
 	if modelName, ok := kling40ModelFromPath(c.Request.URL.Path); ok {
 		profile := video40ProfileForModel(modelName)
 		var action string

@@ -2,6 +2,12 @@
   "translation": {
     "Price unavailable": "价格暂不可用",
     "output second": "输出秒",
+    "Video prices": "视频售价",
+    "output second without video input (SDR)": "输出秒（无视频输入，SDR）",
+    "No input video · per output second": "无视频输入 · 每输出秒",
+    "With input video · per billable second": "有视频输入 · 每计费秒",
+    "HDR add-on without input video · per output second": "无视频输入时 HDR 加价 · 每输出秒",
+    "HDR add-on with input video · per output second": "有视频输入时 HDR 加价 · 每输出秒",
     "Price per output second": "每秒输出视频的售价",
     "No reference video · Native audio off": "无参考视频 · 关闭原生音频",
     "No reference video · Native audio on": "无参考视频 · 开启原生音频",

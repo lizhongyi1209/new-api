@@ -403,6 +403,29 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest, common.UpstreamAddresses(c)...)
 		}
 	}
+	// Do not submit a newly supported specification at an older fallback price
+	// during the separate gateway, plugin and price configuration updates.
+	if info.ChannelType == constant.ChannelTypeKling && info.UpstreamModelName == "kling-4.0" {
+		req, reqErr := relaycommon.GetTaskRequest(c)
+		if reqErr == nil {
+			settings, _ := req.Metadata["settings"].(map[string]any)
+			wants4K, wantsHDR := settings["resolution"] == "4k", settings["dynamic_range"] == "hdr"
+			if wants4K || wantsHDR {
+				snap := info.TieredBillingSnapshot
+				ready := snap != nil
+				if ready && wants4K {
+					ready = slices.Contains(snap.UsageSchema["resolution"].Enum, "4k") && snap.UsageFacts["resolution"] == "4k" && strings.Contains(snap.ExprString, `"4k"`)
+				}
+				if ready && wantsHDR {
+					seconds, _ := snap.UsageFacts["hdr_seconds"].(float64)
+					ready = seconds > 0 && billingexpr.UsedUsageKeys(snap.ExprString)["hdr_seconds"]
+				}
+				if !ready {
+					return nil, service.TaskErrorWrapperLocal(errors.New("pricing is unavailable for this video specification"), "model_price_error", http.StatusServiceUnavailable)
+				}
+			}
+		}
+	}
 	info.PriceData = priceData
 
 	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）

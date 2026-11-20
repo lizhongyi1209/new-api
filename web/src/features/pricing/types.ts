@@ -56,6 +56,7 @@ export type BillingPluginVariant = {
 }
 
 export type RetailVideoPrices = {
+  basis?: 'timed'
   groups: {
     group: string
     per_request?: number

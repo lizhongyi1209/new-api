@@ -2,6 +2,12 @@
   "translation": {
     "Price unavailable": "Price unavailable",
     "output second": "output second",
+    "Video prices": "Video prices",
+    "output second without video input (SDR)": "output second without video input (SDR)",
+    "No input video · per output second": "No input video · per output second",
+    "With input video · per billable second": "With input video · per billable second",
+    "HDR add-on without input video · per output second": "HDR add-on without input video · per output second",
+    "HDR add-on with input video · per output second": "HDR add-on with input video · per output second",
     "Price per output second": "Price per output second",
     "No reference video · Native audio off": "No reference video · Native audio off",
     "No reference video · Native audio on": "No reference video · Native audio on",

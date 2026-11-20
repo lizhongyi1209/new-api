@@ -184,19 +184,29 @@ func Estimate(meta Metadata, req relaycommon.TaskSubmitReq, action string) (map[
 			res = defaultResolution
 		}
 		input := "none"
-		inputSeconds := 0.0
-		if hasVideo {
-			input, inputSeconds = "video", maxDuration
-		}
+		knownVideo := hasVideo
 		for _, content := range body.Get("contents").Array() {
 			switch content.Get("type").String() {
-			case "feature_video", "base_video", "element":
-				// Element type and URL video duration are not known locally. The
-				// upstream caps their combined duration at the model maximum.
-				input, inputSeconds = "video", maxDuration
+			case "feature_video", "base_video":
+				knownVideo = true
+			case "element":
+				input = "video"
 			}
 		}
-		facts = map[string]any{"seconds": seconds, "input_video_seconds": inputSeconds, "billed_seconds": kling40BilledSeconds(input, inputSeconds, seconds), "video_input": input, "resolution": normalizeEnum(res, meta.Schema["resolution"].Enum)}
+		reserveInput, knownInput := 0.0, 0.0
+		if knownVideo {
+			input, knownInput = "video", maxDuration
+		}
+		if input == "video" {
+			reserveInput = maxDuration
+		}
+		facts = map[string]any{"seconds": seconds, "input_video_seconds": knownInput, "billed_seconds": kling40BilledSeconds(input, reserveInput, seconds), "video_input": input, "resolution": normalizeEnum(res, meta.Schema["resolution"].Enum)}
+		if meta.Meter == Kling40 {
+			facts["hdr_seconds"] = 0.0
+			if body.Get("settings.dynamic_range").String() == "hdr" {
+				facts["hdr_seconds"] = seconds
+			}
+		}
 	case H3, H3Max, H3MaxTurbo:
 		if seconds == 0 {
 			seconds = 5
@@ -363,6 +373,7 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 					return nil, fmt.Errorf("Kling output duration is missing")
 				}
 				n, err := numeric(duration)
+				n = math.Round(n) // Container timestamps can extend one frame beyond the generated duration.
 				if err != nil || n < 3 || n > maxDuration {
 					return nil, fmt.Errorf("invalid Kling output duration")
 				}
@@ -384,13 +395,15 @@ func Complete(meter string, submitted map[string]any, body []byte, result *relay
 			if n > 0 {
 				input = "video"
 			}
-			facts["input_video_seconds"] = n
-			facts["video_input"] = input
-		} else if submitted["video_input"] == "video" {
-			// Video-character Elements may be indistinguishable from image
-			// Elements at submission. Keep the reservation until the upstream
-			// reports the total video input duration.
+		} else if submitted["video_input"] == "video" && (submitted["input_video_seconds"] != float64(0) || !root.Get("data.0.usage.output_duration").Exists()) {
 			return nil, fmt.Errorf("Kling 4.0 input video duration is missing")
+		}
+		if inputSeconds > 0 || submitted["video_input"] == "video" || root.Get("data.0.usage.input_duration").Exists() {
+			facts["input_video_seconds"] = inputSeconds
+			facts["video_input"] = input
+		}
+		if hdr, ok := submitted["hdr_seconds"].(float64); ok && hdr > 0 && meter == Kling40 {
+			facts["hdr_seconds"] = outputSeconds
 		}
 		facts["billed_seconds"] = kling40BilledSeconds(input, inputSeconds, outputSeconds)
 	case H3, H3Max, H3MaxTurbo:

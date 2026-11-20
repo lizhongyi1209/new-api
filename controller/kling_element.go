@@ -80,6 +80,10 @@ func CreateKlingOfficialElement(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if req.CallbackUrl != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "kling_callback_disabled", "message": kling.CallbackDisabledMessage})
+		return
+	}
 	req.ElementName = strings.TrimSpace(req.ElementName)
 	req.ElementDescription = strings.TrimSpace(req.ElementDescription)
 	if req.ElementName == "" || req.ElementDescription == "" {
