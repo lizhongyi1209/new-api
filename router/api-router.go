@@ -72,6 +72,12 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), middleware.UserCriticalRateLimit("security-verification"), middleware.DisableCache(), controller.UniversalVerify)
 
 		userRoute := apiRouter.Group("/user")
+		resellerRoute := apiRouter.Group("/reseller", middleware.DisableCache(), middleware.UserAuth())
+		resellerRoute.GET("/access", middleware.RootAuth(), controller.ListResellerAccess)
+		resellerRoute.PUT("/access", middleware.RootAuth(), middleware.CriticalRateLimit(), controller.SetResellerAccess)
+		resellerRoute.GET("/bootstrap", controller.ResellerAccessRequired, controller.GetResellerBootstrap)
+		resellerRoute.GET("/period", controller.ResellerAccessRequired, controller.GetResellerPeriod)
+		resellerRoute.GET("/logs", controller.ResellerAccessRequired, controller.GetResellerLogs)
 		{
 			userRoute.POST("/auth/refresh", middleware.SessionCookieOriginGuard(), middleware.CriticalRateLimit(), middleware.DisableCache(), controller.RefreshAuth)
 			userRoute.POST("/auth/logout", middleware.SessionCookieOriginGuard(), middleware.CriticalRateLimit(), middleware.DisableCache(), controller.AuthLogout)

@@ -9,6 +9,14 @@ This file is the first-stop navigation index for existing features. It records s
 3. Use `rg` only when the feature is absent, ambiguous, or the mapped paths are stale.
 4. When a stable feature entry point is added or moved, update this map in the same change. Keep entries concise and point to source files instead of duplicating implementation details.
 
+## Reseller ledger
+
+Aliases: 经销商中心, 分销管理, 直推客户, 白色账本, `/reseller`.
+
+- Independent portal and login: `web/src/routes/reseller/`, `web/src/features/reseller/`; reuses the existing encrypted login, MFA, session refresh, usage log details and table components.
+- Authenticated, permission-gated, direct-referral-only read APIs: `router/api-router.go`, `controller/reseller.go`, `model/reseller.go`. Root manages reseller access; ordinary reseller grants do not grant site administration. Authorization is rechecked for each request. Historical balances and markup profit remain explicitly estimated.
+- Permission persistence/migration: `model.ResellerAccess`, `model/main.go`; regression coverage: `controller/reseller_test.go` and `web/src/features/reseller/__tests__/`.
+
 ## Architecture shortcuts
 
 | Layer | Primary location |

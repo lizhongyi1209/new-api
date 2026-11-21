@@ -63,8 +63,9 @@ import { cn } from '@/lib/utils'
 export function UserAuthForm({
   className,
   redirectTo,
+  appearance,
   ...props
-}: AuthFormProps) {
+}: AuthFormProps & { appearance?: 'ledger' }) {
   const { t } = useTranslation()
   const [isLoading, setIsLoading] = useState(false)
   const [wechatCode, setWeChatCode] = useState('')
@@ -401,7 +402,8 @@ export function UserAuthForm({
               className='mt-2 w-full justify-center gap-2'
               disabled={isLoading || (requiresLegalConsent && !agreedToLegal)}
             >
-              {isLoading ? <Loader2 className='animate-spin' /> : <LogIn />}
+              {isLoading && <Loader2 className='animate-spin' />}
+              {!isLoading && appearance !== 'ledger' && <LogIn />}
               {t('Sign in')}
             </Button>
 
