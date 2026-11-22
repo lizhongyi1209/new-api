@@ -7460,6 +7460,23 @@
     "More filters": "更多筛选",
     "Start date": "开始日期",
     "Start time": "开始时间",
-    "Yesterday": "昨天"
+    "Yesterday": "昨天",
+    "Pricing table": "价格表",
+    "Groups": "分组",
+    "Official price": "官方价",
+    "Your cost": "成本价",
+    "Official discount": "官方折扣",
+    "Your user group": "我的用户组",
+    "Selected group": "当前分组",
+    "Official {{official}}× · Cost {{cost}}×": "官方 {{official}}× · 成本 {{cost}}×",
+    "Estimated from current group multipliers": "按当前分组倍率估算",
+    "Official price uses the selected group standard multiplier. Your cost uses the reseller user-group multiplier.": "官方价按当前分组标准倍率；成本价按经销商用户组倍率。",
+    "Input / output · 1M tokens": "输入 / 输出 · 1M tokens",
+    "Per request": "按次",
+    "Usage based": "按用量",
+    "Search models": "搜索模型",
+    "Pricing group": "价格分组",
+    "No models": "暂无模型",
+    "Unable to load pricing": "价格表读取失败"
   }
 }

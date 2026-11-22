@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ErrorState } from '@/components/error-state'
@@ -21,6 +21,7 @@ import {
   resellerGet,
   type Bootstrap,
   type Period,
+  type ResellerPricingCatalog,
 } from './api'
 import { CustomerTable } from './customers'
 import { ResellerLogs } from './logs'
@@ -32,6 +33,7 @@ import {
   rangeBounds,
   type Markup,
 } from './period'
+import { ResellerPricing } from './pricing'
 import { ProfitDialog } from './profit'
 import { RangeControl } from './range-control'
 
@@ -44,7 +46,9 @@ export function ResellerDesk() {
   const currency = useSystemConfigStore((state) => state.config.currency)
   const client = useQueryClient()
   const navigate = useNavigate()
-  const [view, setView] = useState<'customers' | 'logs' | 'access'>('customers')
+  const [view, setView] = useState<'customers' | 'logs' | 'pricing' | 'access'>(
+    'customers'
+  )
   const [today, setToday] = useState(beijingToday)
   const [followToday, setFollowToday] = useState(true)
   const [customRange, setCustomRange] = useState(() => dayRange(beijingToday()))
@@ -70,14 +74,25 @@ export function ResellerDesk() {
     retry: false,
     meta: { errorToast: false },
   })
+  const pricing = useQuery({
+    queryKey: ['reseller', 'pricing', user?.id],
+    queryFn: ({ signal }) =>
+      resellerGet<ResellerPricingCatalog>('pricing', undefined, signal),
+    enabled: bootstrap.isSuccess,
+    refetchInterval: 60000,
+    retry: false,
+    meta: { errorToast: false },
+  })
   const period = stats.isError ? undefined : stats.data
   const isToday = range.from === today && range.to === today && !range.precise
   const titles = {
     customers: t('Direct customers'),
     logs: t('Usage logs'),
+    pricing: t('Pricing table'),
     access: t('Reseller access'),
   }
   const title = titles[view]
+  const isLedgerView = view === 'customers' || view === 'logs'
   useEffect(() => {
     document.title = `${title} · O1Key`
   }, [title])
@@ -117,6 +132,19 @@ export function ResellerDesk() {
     }
   }
 
+  function pricingView(): ReactNode {
+    if (pricing.isPending) return <LoadingState />
+    if (pricing.isError || !pricing.data) {
+      return (
+        <ErrorState
+          title={t('Unable to load pricing')}
+          onRetry={() => void pricing.refetch()}
+        />
+      )
+    }
+    return <ResellerPricing catalog={pricing.data} />
+  }
+
   return (
     <div className='reseller-ledger'>
       <header className='ledger-masthead'>
@@ -147,6 +175,13 @@ export function ResellerDesk() {
         >
           {t('Usage logs')}
         </Button>
+        <Button
+          variant='ghost'
+          aria-pressed={view === 'pricing'}
+          onClick={() => setView('pricing')}
+        >
+          {t('Pricing table')}
+        </Button>
         {(user?.role ?? 0) >= 100 && (
           <Button
             variant='ghost'
@@ -163,7 +198,7 @@ export function ResellerDesk() {
             <p className='ledger-eyebrow'>{t('Reseller center')}</p>
             <h1 className='ledger-title'>{title}</h1>
           </div>
-          {view !== 'access' && (
+          {isLedgerView && (
             <div className='ledger-period-controls'>
               <RangeControl
                 value={range}
@@ -190,7 +225,7 @@ export function ResellerDesk() {
             onRetry={() => void bootstrap.refetch()}
           />
         )}
-        {bootstrap.isSuccess && view !== 'access' && (
+        {bootstrap.isSuccess && isLedgerView && (
           <>
             <dl className='ledger-stats' aria-label={t('All direct customers')}>
               <div>
@@ -279,6 +314,7 @@ export function ResellerDesk() {
             )}
           </>
         )}
+        {bootstrap.isSuccess && view === 'pricing' && pricingView()}
         {bootstrap.isSuccess && view === 'access' && <ResellerAccess />}
       </main>
       {profitOpen && period && (

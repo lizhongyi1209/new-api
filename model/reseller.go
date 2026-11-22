@@ -3,6 +3,8 @@ package model
 import (
 	"context"
 	"errors"
+	"math"
+	"sort"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -45,6 +47,124 @@ type ResellerPeriod struct {
 	EstimatedBalance bool                   `json:"estimated_balance"`
 	AsOf             int64                  `json:"as_of"`
 	PricingGroups    []ResellerPricingGroup `json:"pricing_groups"`
+}
+
+// ResellerPriceGroup contains the two multipliers used to quote a model to
+// a reseller. OfficialRatio is the site's normal group multiplier; CostRatio
+// is the reseller user's group override when one exists.
+type ResellerPriceGroup struct {
+	Name            string  `json:"name"`
+	Description     string  `json:"description"`
+	OfficialRatio   float64 `json:"official_ratio"`
+	CostRatio       float64 `json:"cost_ratio"`
+	DiscountPercent *float64 `json:"discount_percent,omitempty"`
+	Special         bool    `json:"special"`
+}
+
+// ResellerModelPricing is a safe projection of the public pricing catalog.
+// Billing expressions, provider names, channel settings and internal model
+// metadata are intentionally omitted.
+type ResellerModelPricing struct {
+	ModelName             string   `json:"model_name"`
+	BillingMode           string   `json:"billing_mode,omitempty"`
+	QuotaType             int      `json:"quota_type"`
+	ModelRatio            float64  `json:"model_ratio"`
+	ModelPrice            float64  `json:"model_price"`
+	CompletionRatio       float64  `json:"completion_ratio"`
+	CacheRatio            *float64 `json:"cache_ratio,omitempty"`
+	CreateCacheRatio      *float64 `json:"create_cache_ratio,omitempty"`
+	ImageRatio            *float64 `json:"image_ratio,omitempty"`
+	AudioRatio            *float64 `json:"audio_ratio,omitempty"`
+	AudioCompletionRatio  *float64 `json:"audio_completion_ratio,omitempty"`
+	VideoCompletionRatio  *float64 `json:"video_completion_ratio,omitempty"`
+	EnableGroups          []string `json:"enable_groups"`
+}
+
+type ResellerPricingCatalog struct {
+	UserGroup            string                 `json:"user_group"`
+	UserGroupDescription  string                 `json:"user_group_description"`
+	Groups               []ResellerPriceGroup  `json:"groups"`
+	Models               []ResellerModelPricing `json:"models"`
+	AsOf                 int64                  `json:"as_of"`
+}
+
+// BuildResellerPricingCatalog converts the existing public pricing cache into
+// a reseller-safe comparison matrix. Keeping this calculation pure makes it
+// easy to verify without touching application settings or a live database.
+func BuildResellerPricingCatalog(
+	pricing []Pricing,
+	userGroup string,
+	userGroupDescription string,
+	usableGroups map[string]string,
+	officialRatios map[string]float64,
+	costRatios map[string]float64,
+	specialGroups map[string]bool,
+) *ResellerPricingCatalog {
+	catalog := &ResellerPricingCatalog{
+		UserGroup:           userGroup,
+		UserGroupDescription: userGroupDescription,
+		Groups:              make([]ResellerPriceGroup, 0, len(usableGroups)),
+		Models:              make([]ResellerModelPricing, 0, len(pricing)),
+	}
+
+	groupNames := make([]string, 0, len(usableGroups))
+	for name := range usableGroups {
+		groupNames = append(groupNames, name)
+	}
+	sort.Strings(groupNames)
+	for _, name := range groupNames {
+		official := officialRatios[name]
+		if !isFiniteNonNegative(official) {
+			official = 1
+		}
+		cost, ok := costRatios[name]
+		if !ok || !isFiniteNonNegative(cost) {
+			cost = official
+		}
+		group := ResellerPriceGroup{
+			Name:          name,
+			Description:   usableGroups[name],
+			OfficialRatio: official,
+			CostRatio:     cost,
+			Special:       specialGroups[name],
+		}
+		if official > 0 {
+			discount := (official - cost) / official * 100
+			if !math.IsNaN(discount) && !math.IsInf(discount, 0) {
+				group.DiscountPercent = &discount
+			}
+		}
+		catalog.Groups = append(catalog.Groups, group)
+	}
+
+	orderedPricing := append([]Pricing(nil), pricing...)
+	sort.SliceStable(orderedPricing, func(i, j int) bool {
+		return orderedPricing[i].ModelName < orderedPricing[j].ModelName
+	})
+	for _, item := range orderedPricing {
+		groups := append([]string(nil), item.EnableGroup...)
+		sort.Strings(groups)
+		catalog.Models = append(catalog.Models, ResellerModelPricing{
+			ModelName:            item.ModelName,
+			BillingMode:          item.BillingMode,
+			QuotaType:            item.QuotaType,
+			ModelRatio:           item.ModelRatio,
+			ModelPrice:           item.ModelPrice,
+			CompletionRatio:      item.CompletionRatio,
+			CacheRatio:           item.CacheRatio,
+			CreateCacheRatio:     item.CreateCacheRatio,
+			ImageRatio:           item.ImageRatio,
+			AudioRatio:           item.AudioRatio,
+			AudioCompletionRatio: item.AudioCompletionRatio,
+			VideoCompletionRatio: item.VideoCompletionRatio,
+			EnableGroups:         groups,
+		})
+	}
+	return catalog
+}
+
+func isFiniteNonNegative(value float64) bool {
+	return value >= 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func CheckResellerAccess(ctx context.Context, userID int) (bool, error) {

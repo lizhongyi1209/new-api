@@ -8,6 +8,8 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -38,6 +40,47 @@ func GetResellerBootstrap(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"customers": customers, "models": models, "groups": groups, "as_of": time.Now().Unix()})
+}
+
+func GetResellerPricing(c *gin.Context) {
+	user, err := model.GetUserById(c.GetInt("id"), false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	usableGroups := service.GetUserUsableGroups(user.Group)
+	officialRatios := ratio_setting.GetGroupRatioCopy()
+	costRatios := make(map[string]float64, len(officialRatios))
+	specialGroups := make(map[string]bool)
+	for group, official := range officialRatios {
+		costRatios[group] = official
+		if special, ok := ratio_setting.GetGroupGroupRatio(user.Group, group); ok {
+			costRatios[group] = special
+			specialGroups[group] = true
+		}
+	}
+	for group := range usableGroups {
+		if _, ok := officialRatios[group]; !ok {
+			officialRatios[group] = 1
+			costRatios[group] = 1
+		}
+		if special, ok := ratio_setting.GetGroupGroupRatio(user.Group, group); ok {
+			costRatios[group] = special
+			specialGroups[group] = true
+		}
+	}
+	catalog := model.BuildResellerPricingCatalog(
+		model.GetPricing(),
+		user.Group,
+		usableGroups[user.Group],
+		usableGroups,
+		officialRatios,
+		costRatios,
+		specialGroups,
+	)
+	catalog.AsOf = time.Now().Unix()
+	c.Header("Cache-Control", "private, no-store")
+	common.ApiSuccess(c, catalog)
 }
 
 func resellerPeriodBounds(c *gin.Context) (int64, int64, bool) {

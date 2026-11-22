@@ -7460,6 +7460,23 @@
     "More filters": "More filters",
     "Start date": "Start date",
     "Start time": "Start time",
-    "Yesterday": "Yesterday"
+    "Yesterday": "Yesterday",
+    "Pricing table": "Pricing table",
+    "Groups": "Groups",
+    "Official price": "Official price",
+    "Your cost": "Your cost",
+    "Official discount": "Official discount",
+    "Your user group": "Your user group",
+    "Selected group": "Selected group",
+    "Official {{official}}× · Cost {{cost}}×": "Official {{official}}× · Cost {{cost}}×",
+    "Estimated from current group multipliers": "Estimated from current group multipliers",
+    "Official price uses the selected group standard multiplier. Your cost uses the reseller user-group multiplier.": "Official price uses the selected group standard multiplier. Your cost uses the reseller user-group multiplier.",
+    "Input / output · 1M tokens": "Input / output · 1M tokens",
+    "Per request": "Per request",
+    "Usage based": "Usage based",
+    "Search models": "Search models",
+    "Pricing group": "Pricing group",
+    "No models": "No models",
+    "Unable to load pricing": "Unable to load pricing"
   }
 }

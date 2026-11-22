@@ -36,6 +36,39 @@ export interface Period {
   pricing_groups: PricingGroup[]
 }
 
+export interface ResellerPricingGroup {
+  name: string
+  description: string
+  official_ratio: number
+  cost_ratio: number
+  discount_percent?: number
+  special: boolean
+}
+
+export interface ResellerPricingModel {
+  model_name: string
+  billing_mode?: string
+  quota_type: number
+  model_ratio: number
+  model_price: number
+  completion_ratio: number
+  cache_ratio?: number | null
+  create_cache_ratio?: number | null
+  image_ratio?: number | null
+  audio_ratio?: number | null
+  audio_completion_ratio?: number | null
+  video_completion_ratio?: number | null
+  enable_groups: string[]
+}
+
+export interface ResellerPricingCatalog {
+  user_group: string
+  user_group_description: string
+  groups: ResellerPricingGroup[]
+  models: ResellerPricingModel[]
+  as_of: number
+}
+
 export interface LogPage {
   rows: UsageLog[]
   total: number

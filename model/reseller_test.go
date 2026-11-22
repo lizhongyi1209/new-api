@@ -15,6 +15,52 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestBuildResellerPricingCatalogUsesUserGroupCostOverrides(t *testing.T) {
+	cacheRatio := 0.5
+	pricing := []Pricing{
+		{
+			ModelName:       "z-request-model",
+			QuotaType:       1,
+			ModelPrice:      4,
+			EnableGroup:     []string{"vip", "default"},
+			BillingMode:     "ratio",
+		},
+		{
+			ModelName:       "a-token-model",
+			ModelRatio:      1,
+			CompletionRatio: 3,
+			CacheRatio:      &cacheRatio,
+			EnableGroup:     []string{"all"},
+		},
+		{
+			ModelName:   "dynamic-model",
+			BillingMode: "tiered_expr",
+			EnableGroup: []string{"default"},
+		},
+	}
+	catalog := BuildResellerPricingCatalog(
+		pricing,
+		"dealer-vip",
+		"经销商专属",
+		map[string]string{"default": "默认", "vip": "VIP"},
+		map[string]float64{"default": 1, "vip": 1.5},
+		map[string]float64{"default": 0.8, "vip": 1.2},
+		map[string]bool{"default": true, "vip": true},
+	)
+	require.Equal(t, []string{"default", "vip"}, []string{catalog.Groups[0].Name, catalog.Groups[1].Name})
+	assert.Equal(t, "dealer-vip", catalog.UserGroup)
+	assert.Equal(t, "经销商专属", catalog.UserGroupDescription)
+	require.NotNil(t, catalog.Groups[0].DiscountPercent)
+	assert.InDelta(t, 20, *catalog.Groups[0].DiscountPercent, 0.0001)
+	assert.InDelta(t, 20, *catalog.Groups[1].DiscountPercent, 0.0001)
+	require.Len(t, catalog.Models, 3)
+	assert.Equal(t, "a-token-model", catalog.Models[0].ModelName)
+	assert.Equal(t, "dynamic-model", catalog.Models[1].ModelName)
+	assert.Equal(t, "tiered_expr", catalog.Models[1].BillingMode)
+	assert.Equal(t, "z-request-model", catalog.Models[2].ModelName)
+	assert.Equal(t, []string{"default", "vip"}, catalog.Models[2].EnableGroups)
+}
+
 func TestResellerLedgerIsolationAndAccounting(t *testing.T) {
 	cases := []struct {
 		name   string

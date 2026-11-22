@@ -15,6 +15,7 @@ Aliases: 经销商中心, 分销管理, 直推客户, 白色账本, `/reseller`.
 
 - Independent portal and login: `web/src/routes/reseller/`, `web/src/features/reseller/`; reuses the existing encrypted login, MFA, session refresh, usage log details and table components.
 - Authenticated, permission-gated, direct-referral-only read APIs: `router/api-router.go`, `controller/reseller.go`, `model/reseller.go`. Root manages reseller access; ordinary reseller grants do not grant site administration. Authorization is rechecked for each request. Historical balances and markup profit remain explicitly estimated.
+- Reseller pricing matrix: `GET /api/reseller/pricing` projects every enabled model and usable group into official versus reseller cost prices; the cost multiplier comes from the authenticated reseller user's group override, and the displayed discount is an estimate from the two current multipliers.
 - Permission persistence/migration: `model.ResellerAccess`, `model/main.go`; regression coverage: `controller/reseller_test.go` and `web/src/features/reseller/__tests__/`.
 
 ## Architecture shortcuts

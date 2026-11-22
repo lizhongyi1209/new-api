@@ -76,6 +76,7 @@ func SetApiRouter(router *gin.Engine) {
 		resellerRoute.GET("/access", middleware.RootAuth(), controller.ListResellerAccess)
 		resellerRoute.PUT("/access", middleware.RootAuth(), middleware.CriticalRateLimit(), controller.SetResellerAccess)
 		resellerRoute.GET("/bootstrap", controller.ResellerAccessRequired, controller.GetResellerBootstrap)
+		resellerRoute.GET("/pricing", controller.ResellerAccessRequired, controller.GetResellerPricing)
 		resellerRoute.GET("/period", controller.ResellerAccessRequired, controller.GetResellerPeriod)
 		resellerRoute.GET("/logs", controller.ResellerAccessRequired, controller.GetResellerLogs)
 		{

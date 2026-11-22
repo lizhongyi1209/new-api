@@ -315,6 +315,73 @@
   font-family: Consolas, monospace;
   font-size: 19px;
 }
+.ledger-price-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid #dedfe1;
+  margin-bottom: 28px;
+}
+.ledger-price-summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 19px 22px;
+  border-right: 1px solid #e5e6e7;
+}
+.ledger-price-summary > div:last-child {
+  border-right: 0;
+}
+.ledger-price-summary span,
+.ledger-price-summary small {
+  color: #777b80;
+  font-size: 12px;
+}
+.ledger-price-summary strong {
+  font-family: Consolas, 'SFMono-Regular', monospace;
+  font-size: 22px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.ledger-price-summary small {
+  overflow-wrap: anywhere;
+}
+.ledger-price-groups {
+  color: #777b80;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.ledger-price-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: Consolas, 'SFMono-Regular', monospace;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ledger-price-stack small {
+  color: #8a8d91;
+  font-family: Arial, 'Microsoft YaHei', sans-serif;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.ledger-price-cost > span {
+  font-weight: 600;
+}
+.ledger-discount {
+  color: #37795a;
+  font-family: Consolas, 'SFMono-Regular', monospace;
+  font-variant-numeric: tabular-nums;
+}
+.ledger-pricing-note {
+  margin: -8px 0 18px;
+}
+.ledger-pricing-table {
+  min-width: 980px;
+}
+.ledger-pricing-toolbar > input {
+  width: 260px;
+}
 .ledger-login-main {
   min-height: calc(100dvh - 62px);
   display: flex;
@@ -446,6 +513,26 @@
   .ledger-stats dt {
     font-size: 12px;
     margin-bottom: 11px;
+  }
+  .ledger-price-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ledger-price-summary > div {
+    padding: 16px 14px;
+    border-right: 0;
+    border-bottom: 1px solid #e5e6e7;
+  }
+  .ledger-price-summary > div:nth-child(odd) {
+    border-right: 1px solid #e5e6e7;
+  }
+  .ledger-price-summary > div:last-child {
+    border-bottom: 0;
+  }
+  .ledger-price-summary strong {
+    font-size: 19px;
+  }
+  .ledger-pricing-toolbar > input {
+    width: 100%;
   }
   .ledger-profit {
     gap: 9px;
