@@ -543,6 +543,10 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if err != nil {
 		return nil, err
 	}
+	// Keep the direct referral relationship on the user row. The post-create
+	// reward path receives inviterId separately, but reseller/referral queries
+	// depend on this persisted relationship.
+	user.InviterId = inviterId
 
 	// Use transaction to ensure user creation and OAuth binding are atomic
 	if genericProvider, ok := provider.(*oauth.GenericOAuthProvider); ok {

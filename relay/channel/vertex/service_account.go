@@ -9,12 +9,15 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 
 	"github.com/bytedance/gopkg/cache/asynccache"
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 
 	"fmt"
 	"time"
@@ -37,30 +40,68 @@ var Cache = asynccache.NewAsyncCache(asynccache.Options{
 	},
 })
 
+const accessTokenRefreshMargin = 5 * time.Minute
+
+type cachedAccessToken struct {
+	token     string
+	identity  string
+	expiresAt time.Time
+}
+
+var (
+	// accessTokens holds one entry per channel key slot. The legacy Cache is
+	// retained for source compatibility, but token exchange uses this cache so
+	// expiry and replaced service-account keys are handled correctly.
+	accessTokens       sync.Map
+	accessTokenFlights singleflight.Group
+	fetchAccessToken   = requestAccessToken
+)
+
 func getAccessToken(a *Adaptor, info *relaycommon.RelayInfo) (string, error) {
 	var cacheKey string
 	if info.ChannelIsMultiKey {
-		cacheKey = fmt.Sprintf("access-token-%d-%d", info.ChannelId, info.ChannelMultiKeyIndex)
+		cacheKey = fmt.Sprintf("%d-%d", info.ChannelId, info.ChannelMultiKeyIndex)
 	} else {
-		cacheKey = fmt.Sprintf("access-token-%d", info.ChannelId)
+		cacheKey = fmt.Sprintf("%d", info.ChannelId)
 	}
-	val, err := Cache.Get(cacheKey)
-	if err == nil {
-		return val.(string), nil
+	creds := a.AccountCredentials
+	identity := creds.ClientEmail + "\x00" + creds.PrivateKeyID
+	if token, ok := loadAccessToken(cacheKey, identity); ok {
+		return token, nil
 	}
+	value, err, _ := accessTokenFlights.Do(cacheKey+"\x00"+identity, func() (any, error) {
+		if token, ok := loadAccessToken(cacheKey, identity); ok {
+			return token, nil
+		}
+		token, lifetime, err := fetchAccessToken(creds, info.ChannelSetting)
+		if err != nil {
+			return "", err
+		}
+		if lifetime > accessTokenRefreshMargin {
+			accessTokens.Store(cacheKey, cachedAccessToken{
+				token:     token,
+				identity:  identity,
+				expiresAt: time.Now().Add(lifetime - accessTokenRefreshMargin),
+			})
+		}
+		return token, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return value.(string), nil
+}
 
-	signedJWT, err := createSignedJWT(a.AccountCredentials.ClientEmail, a.AccountCredentials.PrivateKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to create signed JWT: %w", err)
+func loadAccessToken(cacheKey, identity string) (string, bool) {
+	value, ok := accessTokens.Load(cacheKey)
+	if !ok {
+		return "", false
 	}
-	newToken, err := exchangeJwtForAccessToken(signedJWT, info)
-	if err != nil {
-		return "", fmt.Errorf("failed to exchange JWT for access token: %w", err)
+	entry := value.(cachedAccessToken)
+	if entry.identity != identity || !time.Now().Before(entry.expiresAt) {
+		return "", false
 	}
-	if err := Cache.SetDefault(cacheKey, newToken); err {
-		return newToken, nil
-	}
-	return newToken, nil
+	return entry.token, true
 }
 
 func createSignedJWT(email, privateKeyPEM string) (string, error) {
@@ -104,45 +145,62 @@ func createSignedJWT(email, privateKeyPEM string) (string, error) {
 	return signedToken, nil
 }
 
-func exchangeJwtForAccessToken(signedJWT string, info *relaycommon.RelayInfo) (string, error) {
+func requestAccessToken(creds Credentials, settings dto.ChannelSettings) (string, time.Duration, error) {
+	signedJWT, err := createSignedJWT(creds.ClientEmail, creds.PrivateKey)
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to create signed JWT: %w", err)
+	}
+	return exchangeJwtForAccessToken(signedJWT, settings)
+}
+
+func exchangeJwtForAccessToken(signedJWT string, settings dto.ChannelSettings) (string, time.Duration, error) {
 
 	authURL := "https://www.googleapis.com/oauth2/v4/token"
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
 	data.Set("assertion", signedJWT)
 
-	client, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
+	client, err := service.GetHttpClientWithProxySettings(settings.Proxy, settings)
 	if err != nil {
-		return "", fmt.Errorf("new proxy http client failed: %w", err)
+		return "", 0, fmt.Errorf("new proxy http client failed: %w", err)
 	}
 
 	resp, err := client.PostForm(authURL, data)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	if accessToken, ok := result["access_token"].(string); ok {
-		return accessToken, nil
+	accessToken, ok := result["access_token"].(string)
+	if !ok {
+		return "", 0, fmt.Errorf("failed to get access token: %v", result)
 	}
-
-	return "", fmt.Errorf("failed to get access token: %v", result)
+	lifetime := time.Hour
+	if seconds, ok := result["expires_in"].(float64); ok && seconds > 0 {
+		lifetime = time.Duration(seconds) * time.Second
+	}
+	return accessToken, lifetime, nil
 }
 
 func AcquireAccessToken(creds Credentials, proxy string) (string, error) {
+	token, _, err := requestAccessTokenWithProxy(creds, proxy)
+	return token, err
+}
+
+func requestAccessTokenWithProxy(creds Credentials, proxy string) (string, time.Duration, error) {
 	signedJWT, err := createSignedJWT(creds.ClientEmail, creds.PrivateKey)
 	if err != nil {
-		return "", fmt.Errorf("failed to create signed JWT: %w", err)
+		return "", 0, fmt.Errorf("failed to create signed JWT: %w", err)
 	}
 	return exchangeJwtForAccessTokenWithProxy(signedJWT, proxy)
 }
 
-func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string) (string, error) {
+func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string) (string, time.Duration, error) {
 	authURL := "https://www.googleapis.com/oauth2/v4/token"
 	data := url.Values{}
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
@@ -153,7 +211,7 @@ func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string) (string,
 	if proxy != "" {
 		client, err = service.GetHttpClientWithProxy(proxy)
 		if err != nil {
-			return "", fmt.Errorf("new proxy http client failed: %w", err)
+			return "", 0, fmt.Errorf("new proxy http client failed: %w", err)
 		}
 	} else {
 		client = service.GetHttpClient()
@@ -161,17 +219,22 @@ func exchangeJwtForAccessTokenWithProxy(signedJWT string, proxy string) (string,
 
 	resp, err := client.PostForm(authURL, data)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	defer resp.Body.Close()
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return "", 0, err
 	}
 
-	if accessToken, ok := result["access_token"].(string); ok {
-		return accessToken, nil
+	accessToken, ok := result["access_token"].(string)
+	if !ok {
+		return "", 0, fmt.Errorf("failed to get access token: %v", result)
 	}
-	return "", fmt.Errorf("failed to get access token: %v", result)
+	lifetime := time.Hour
+	if seconds, ok := result["expires_in"].(float64); ok && seconds > 0 {
+		lifetime = time.Duration(seconds) * time.Second
+	}
+	return accessToken, lifetime, nil
 }

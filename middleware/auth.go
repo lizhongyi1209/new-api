@@ -348,6 +348,15 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 		}
 
 		userCache, err := model.GetUserCache(token.UserId)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// A soft-deleted user may still have API keys; treat them as invalid.
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"success": false,
+				"message": common.TranslateMessage(c, i18n.MsgTokenInvalid),
+			})
+			c.Abort()
+			return
+		}
 		if err != nil {
 			common.SysLog(fmt.Sprintf("TokenAuthReadOnly GetUserCache error for user %d: %v", token.UserId, err))
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -453,6 +462,12 @@ func TokenAuth() func(c *gin.Context) {
 		}
 
 		userCache, err := model.GetUserCache(token.UserId)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// A soft-deleted user may still have API keys; treat them as invalid.
+			abortWithOpenAiMessage(c, http.StatusUnauthorized,
+				common.TranslateMessage(c, i18n.MsgTokenInvalid))
+			return
+		}
 		if err != nil {
 			common.SysLog(fmt.Sprintf("TokenAuth GetUserCache error for user %d: %v", token.UserId, err))
 			abortWithOpenAiMessage(c, http.StatusInternalServerError,
