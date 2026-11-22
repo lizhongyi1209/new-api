@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -94,6 +95,36 @@ func (s *RequestPolicyState) BeginAttempt(channel *model.Channel, group string) 
 	s.AddEvent(PolicyEvent{ChannelID: channel.Id, Decision: PolicyDecision{Action: "attempt", Reason: "channel_selected", Source: "routing"}})
 }
 
+// RelayErrorSource identifies which side produced an error. Local validation
+// and conversion failures must never disable an upstream channel merely
+// because their message contains an automatic-disable keyword.
+func RelayErrorSource(err *types.NewAPIError) string {
+	switch {
+	case types.IsChannelError(err):
+		return "channel"
+	case err != nil && err.GetErrorCode() == types.ErrorCodeDoRequestFailed:
+		return "transport"
+	case err != nil && err.GetErrorType() != types.ErrorTypeNewAPIError:
+		return "upstream"
+	}
+	if err != nil {
+		switch err.GetErrorCode() {
+		case types.ErrorCodeReadResponseBodyFailed,
+			types.ErrorCodeBadResponseStatusCode,
+			types.ErrorCodeBadResponse,
+			types.ErrorCodeBadResponseBody,
+			types.ErrorCodeEmptyResponse,
+			types.ErrorCodeAwsInvokeError:
+			return "upstream"
+		}
+		var inner *types.NewAPIError
+		if errors.As(err.Unwrap(), &inner) && inner != err {
+			return RelayErrorSource(inner)
+		}
+	}
+	return "local"
+}
+
 // RecordPolicyFailure appends the failed attempt and the retry decision made
 // for it. The health entry mirrors the check in ProcessChannelError, which
 // performs the actual disable.
@@ -101,15 +132,7 @@ func RecordPolicyFailure(c *gin.Context, channelID int, err *types.NewAPIError, 
 	if c == nil || err == nil {
 		return
 	}
-	source := "upstream"
-	switch {
-	case types.IsChannelError(err):
-		source = "channel"
-	case err.GetErrorCode() == types.ErrorCodeDoRequestFailed:
-		source = "transport"
-	case err.GetErrorType() == types.ErrorTypeNewAPIError:
-		source = "local"
-	}
+	source := RelayErrorSource(err)
 	state := RequestPolicy(c)
 	event := PolicyEvent{ChannelID: channelID, Status: err.StatusCode, ErrorCode: string(err.GetErrorCode()), ErrorSource: source, Decision: PolicyDecision{Action: "failure", Reason: "upstream_failure", Source: source}}
 	if source == "local" {
@@ -117,7 +140,7 @@ func RecordPolicyFailure(c *gin.Context, channelID int, err *types.NewAPIError, 
 	}
 	state.AddEvent(event)
 	event.Decision, event.Health = decision, "unchanged"
-	if source != "local" && c.GetBool("auto_ban") && ShouldDisableChannel(err) {
+	if c.GetBool("auto_ban") && ShouldDisableChannel(err) {
 		event.Health = "channel_disable_requested"
 		if common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey) {
 			event.Health = "key_disable_requested"

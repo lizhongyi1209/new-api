@@ -24,11 +24,13 @@ var ErrUserAuthCachePending = errors.New("user authentication state update is pe
 var ErrUserAuthVersionConflict = errors.New("user authentication version update conflicted")
 
 func getUserAuthFenceKey(userId int) string {
-	return fmt.Sprintf("auth:user:fence:%d", userId)
+	// Fence and cache keys must share a Redis Cluster hash slot because the
+	// auth cache scripts read and write them together.
+	return fmt.Sprintf("auth:user:fence:{%s}", getUserCacheKey(userId))
 }
 
 func getUserAuthVersionKey(userId int) string {
-	return fmt.Sprintf("auth:user:version:%d", userId)
+	return fmt.Sprintf("auth:user:version:{%s}", getUserCacheKey(userId))
 }
 
 // A pending fence only covers the interval between publishing the next

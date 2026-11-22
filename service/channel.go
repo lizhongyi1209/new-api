@@ -64,8 +64,13 @@ func ShouldDisableChannel(err *types.NewAPIError) bool {
 	if err == nil {
 		return false
 	}
-	if types.IsChannelError(err) {
+	// Channel key/config errors can disable a channel. Errors raised by this
+	// gateway itself must not do so, even when their text contains a keyword.
+	switch RelayErrorSource(err) {
+	case "channel":
 		return true
+	case "local":
+		return false
 	}
 	if types.IsSkipRetryError(err) {
 		return false

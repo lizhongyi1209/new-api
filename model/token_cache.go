@@ -14,7 +14,9 @@ func getTokenCacheKey(key string) string {
 }
 
 func getTokenCacheFenceKey(key string) string {
-	return fmt.Sprintf("token:fence:%s", common.GenerateHMAC(key))
+	// Keep the fence in the same Redis Cluster slot as the token hash. The
+	// cache fill script reads both keys atomically.
+	return fmt.Sprintf("token:fence:{%s}", getTokenCacheKey(key))
 }
 
 func tokenCacheTTLSeconds() int {

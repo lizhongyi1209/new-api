@@ -122,7 +122,10 @@ func disableMultiKeyChannelIfUnavailable(channel *model.Channel) bool {
 }
 
 func restoreMultiKeyChannelIfAvailable(channel *model.Channel) {
-	if channel.Status != common.ChannelStatusManuallyDisabled || !hasEnabledMultiKey(channel) {
+	// A channel exhausted by request-driven key failures is auto-disabled and
+	// should recover when a key is enabled. A real manual disable remains.
+	disabled := channel.Status == common.ChannelStatusManuallyDisabled || channel.Status == common.ChannelStatusAutoDisabled
+	if !disabled || !hasEnabledMultiKey(channel) {
 		return
 	}
 	info := channel.GetOtherInfo()

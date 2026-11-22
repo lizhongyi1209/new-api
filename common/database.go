@@ -1,5 +1,7 @@
 package common
 
+import "strings"
+
 type DatabaseType string
 
 const (
@@ -45,4 +47,15 @@ func UsingLogDatabase(databaseType DatabaseType) bool {
 // a working 30-second busy timeout. The pure-Go driver ignores `_busy_timeout`;
 // busy_timeout must be supplied as a pragma. Immediate transactions prevent a
 // read-then-write transaction from failing with SQLITE_BUSY_SNAPSHOT.
-var SQLitePath = "one-api.db?_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_txlock=immediate"
+const sqliteConcurrencyParams = "_pragma=busy_timeout(30000)&_pragma=journal_mode(WAL)&_txlock=immediate"
+
+var SQLitePath = "one-api.db?" + sqliteConcurrencyParams
+
+// sqliteDSN preserves the concurrency-safe defaults when SQLITE_PATH is a
+// plain file path. Explicit query parameters remain fully caller-controlled.
+func sqliteDSN(path string) string {
+	if strings.Contains(path, "?") {
+		return path
+	}
+	return path + "?" + sqliteConcurrencyParams
+}

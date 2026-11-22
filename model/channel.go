@@ -752,6 +752,11 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 		if channelCache == nil {
 			return false
 		}
+		// An automatic request failure must not replace an administrator's
+		// manual disable, otherwise automatic recovery could re-enable it.
+		if status == common.ChannelStatusAutoDisabled && channelCache.Status == common.ChannelStatusManuallyDisabled {
+			return false
+		}
 		if channelCache.ChannelInfo.IsMultiKey {
 			beforeStatus := channelCache.Status
 			// 如果是多Key模式，更新缓存中的状态
@@ -783,6 +788,10 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 	if err != nil {
 		return false
 	} else {
+		// The local cache may be stale; protect the persisted manual state too.
+		if status == common.ChannelStatusAutoDisabled && channel.Status == common.ChannelStatusManuallyDisabled {
+			return false
+		}
 		// A manual channel operation must replace the exhaustion reason even
 		// when the status value is already manually disabled.
 		overridesKeyExhaustion := channel.ChannelInfo.IsMultiKey && usingKey == "" &&
