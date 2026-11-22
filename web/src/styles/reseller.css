@@ -348,8 +348,9 @@
 }
 .ledger-price-groups {
   color: #777b80;
-  white-space: normal;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ledger-price-stack {
   display: inline-flex;

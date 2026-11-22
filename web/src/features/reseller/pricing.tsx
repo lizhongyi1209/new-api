@@ -33,7 +33,6 @@ function available(model: ResellerPricingModel, group: string): boolean {
 }
 
 function quote(model: ResellerPricingModel, ratio: number): string {
-  if (isDynamic(model)) return 'dynamic'
   if (model.quota_type === 1) return amount(model.model_price * ratio)
   const input = model.model_ratio * 2 * ratio
   const output = input * model.completion_ratio
@@ -81,12 +80,8 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
       id: 'groups',
       header: t('Groups'),
       size: 190,
-      cell: ({ row }) => (
-        <span className='ledger-price-groups'>
-          {(row.original.enable_groups ?? []).includes('all')
-            ? t('All groups')
-            : (row.original.enable_groups ?? []).join(' · ')}
-        </span>
+      cell: () => (
+        <span className='ledger-price-groups'>{selected?.name || '—'}</span>
       ),
     },
     {
@@ -100,13 +95,12 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
         const value = quote(row.original, selected.official_ratio)
         return (
           <span className='ledger-price-stack'>
-            <span>{value === 'dynamic' ? t('Usage based') : value}</span>
-            {value !== 'dynamic' && row.original.quota_type === 0 && (
+            <span>{value}</span>
+            {row.original.quota_type === 0 && (
               <small>{t('Input / output · 1M tokens')}</small>
             )}
-            {value !== 'dynamic' && row.original.quota_type === 1 && (
-              <small>{t('Per request')}</small>
-            )}
+            {row.original.quota_type === 1 && <small>{t('Per request')}</small>}
+            {isDynamic(row.original) && <small>{t('Usage based')}</small>}
           </span>
         )
       },
@@ -122,13 +116,12 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
         const value = quote(row.original, selected.cost_ratio)
         return (
           <span className='ledger-price-stack ledger-price-cost'>
-            <span>{value === 'dynamic' ? t('Usage based') : value}</span>
-            {value !== 'dynamic' && row.original.quota_type === 0 && (
+            <span>{value}</span>
+            {row.original.quota_type === 0 && (
               <small>{t('Input / output · 1M tokens')}</small>
             )}
-            {value !== 'dynamic' && row.original.quota_type === 1 && (
-              <small>{t('Per request')}</small>
-            )}
+            {row.original.quota_type === 1 && <small>{t('Per request')}</small>}
+            {isDynamic(row.original) && <small>{t('Usage based')}</small>}
           </span>
         )
       },
@@ -204,14 +197,14 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
         >
           {props.catalog.groups.map((item) => (
             <option key={item.name} value={item.name}>
-              {item.name} · {item.description}
+              {item.name}
             </option>
           ))}
         </NativeSelect>
       </div>
       <p className='ledger-muted ledger-pricing-note'>
         {t(
-          'Official price uses the selected group standard multiplier. Your cost uses the reseller user-group multiplier.'
+          "Official price uses each model's configured price and the selected group multiplier. Your cost uses the reseller user-group multiplier."
         )}
       </p>
       <div className='ledger-desktop'>

@@ -7470,7 +7470,7 @@
     "Selected group": "当前分组",
     "Official {{official}}× · Cost {{cost}}×": "官方 {{official}}× · 成本 {{cost}}×",
     "Estimated from current group multipliers": "按当前分组倍率估算",
-    "Official price uses the selected group standard multiplier. Your cost uses the reseller user-group multiplier.": "官方价按当前分组标准倍率；成本价按经销商用户组倍率。",
+    "Official price uses each model's configured price and the selected group multiplier. Your cost uses the reseller user-group multiplier.": "官方价按模型配置价格乘当前分组标准倍率；成本价按经销商用户组倍率计算。",
     "Input / output · 1M tokens": "输入 / 输出 · 1M tokens",
     "Per request": "按次",
     "Usage based": "按用量",

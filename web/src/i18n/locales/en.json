@@ -7470,7 +7470,7 @@
     "Selected group": "Selected group",
     "Official {{official}}× · Cost {{cost}}×": "Official {{official}}× · Cost {{cost}}×",
     "Estimated from current group multipliers": "Estimated from current group multipliers",
-    "Official price uses the selected group standard multiplier. Your cost uses the reseller user-group multiplier.": "Official price uses the selected group standard multiplier. Your cost uses the reseller user-group multiplier.",
+    "Official price uses each model's configured price and the selected group multiplier. Your cost uses the reseller user-group multiplier.": "Official price uses each model's configured price and the selected group multiplier. Your cost uses the reseller user-group multiplier.",
     "Input / output · 1M tokens": "Input / output · 1M tokens",
     "Per request": "Per request",
     "Usage based": "Usage based",
