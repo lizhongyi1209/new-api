@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -56,12 +56,18 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
   const selected =
     props.catalog.groups.find((item) => item.name === group) ??
     props.catalog.groups[0]
+  useEffect(() => {
+    setPagination((current) =>
+      current.pageIndex === 0 ? current : { ...current, pageIndex: 0 }
+    )
+  }, [group, search])
   const rows = useMemo(() => {
     const term = search.trim().toLocaleLowerCase()
-    return props.catalog.models.filter((model) =>
-      model.model_name.toLocaleLowerCase().includes(term)
-    )
-  }, [props.catalog.models, search])
+    return props.catalog.models.filter((model) => {
+      if (selected && !available(model, selected.name)) return false
+      return model.model_name.toLocaleLowerCase().includes(term)
+    })
+  }, [props.catalog.models, search, selected])
   const columns: ColumnDef<ResellerPricingModel>[] = [
     {
       accessorKey: 'model_name',
