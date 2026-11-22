@@ -28,9 +28,8 @@ function isDynamic(model: ResellerPricingModel): boolean {
 }
 
 function available(model: ResellerPricingModel, group: string): boolean {
-  return (
-    model.enable_groups.includes('all') || model.enable_groups.includes(group)
-  )
+  const groups = model.enable_groups ?? []
+  return groups.includes('all') || groups.includes(group)
 }
 
 function quote(model: ResellerPricingModel, ratio: number): string {
@@ -78,9 +77,9 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
       size: 190,
       cell: ({ row }) => (
         <span className='ledger-price-groups'>
-          {row.original.enable_groups.includes('all')
+          {(row.original.enable_groups ?? []).includes('all')
             ? t('All groups')
-            : row.original.enable_groups.join(' · ')}
+            : (row.original.enable_groups ?? []).join(' · ')}
         </span>
       ),
     },

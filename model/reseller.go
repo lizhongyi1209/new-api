@@ -53,37 +53,37 @@ type ResellerPeriod struct {
 // a reseller. OfficialRatio is the site's normal group multiplier; CostRatio
 // is the reseller user's group override when one exists.
 type ResellerPriceGroup struct {
-	Name            string  `json:"name"`
-	Description     string  `json:"description"`
-	OfficialRatio   float64 `json:"official_ratio"`
-	CostRatio       float64 `json:"cost_ratio"`
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	OfficialRatio   float64  `json:"official_ratio"`
+	CostRatio       float64  `json:"cost_ratio"`
 	DiscountPercent *float64 `json:"discount_percent,omitempty"`
-	Special         bool    `json:"special"`
+	Special         bool     `json:"special"`
 }
 
 // ResellerModelPricing is a safe projection of the public pricing catalog.
 // Billing expressions, provider names, channel settings and internal model
 // metadata are intentionally omitted.
 type ResellerModelPricing struct {
-	ModelName             string   `json:"model_name"`
-	BillingMode           string   `json:"billing_mode,omitempty"`
-	QuotaType             int      `json:"quota_type"`
-	ModelRatio            float64  `json:"model_ratio"`
-	ModelPrice            float64  `json:"model_price"`
-	CompletionRatio       float64  `json:"completion_ratio"`
-	CacheRatio            *float64 `json:"cache_ratio,omitempty"`
-	CreateCacheRatio      *float64 `json:"create_cache_ratio,omitempty"`
-	ImageRatio            *float64 `json:"image_ratio,omitempty"`
-	AudioRatio            *float64 `json:"audio_ratio,omitempty"`
-	AudioCompletionRatio  *float64 `json:"audio_completion_ratio,omitempty"`
-	VideoCompletionRatio  *float64 `json:"video_completion_ratio,omitempty"`
-	EnableGroups          []string `json:"enable_groups"`
+	ModelName            string   `json:"model_name"`
+	BillingMode          string   `json:"billing_mode,omitempty"`
+	QuotaType            int      `json:"quota_type"`
+	ModelRatio           float64  `json:"model_ratio"`
+	ModelPrice           float64  `json:"model_price"`
+	CompletionRatio      float64  `json:"completion_ratio"`
+	CacheRatio           *float64 `json:"cache_ratio,omitempty"`
+	CreateCacheRatio     *float64 `json:"create_cache_ratio,omitempty"`
+	ImageRatio           *float64 `json:"image_ratio,omitempty"`
+	AudioRatio           *float64 `json:"audio_ratio,omitempty"`
+	AudioCompletionRatio *float64 `json:"audio_completion_ratio,omitempty"`
+	VideoCompletionRatio *float64 `json:"video_completion_ratio,omitempty"`
+	EnableGroups         []string `json:"enable_groups"`
 }
 
 type ResellerPricingCatalog struct {
 	UserGroup            string                 `json:"user_group"`
-	UserGroupDescription  string                 `json:"user_group_description"`
-	Groups               []ResellerPriceGroup  `json:"groups"`
+	UserGroupDescription string                 `json:"user_group_description"`
+	Groups               []ResellerPriceGroup   `json:"groups"`
 	Models               []ResellerModelPricing `json:"models"`
 	AsOf                 int64                  `json:"as_of"`
 }
@@ -101,10 +101,10 @@ func BuildResellerPricingCatalog(
 	specialGroups map[string]bool,
 ) *ResellerPricingCatalog {
 	catalog := &ResellerPricingCatalog{
-		UserGroup:           userGroup,
+		UserGroup:            userGroup,
 		UserGroupDescription: userGroupDescription,
-		Groups:              make([]ResellerPriceGroup, 0, len(usableGroups)),
-		Models:              make([]ResellerModelPricing, 0, len(pricing)),
+		Groups:               make([]ResellerPriceGroup, 0, len(usableGroups)),
+		Models:               make([]ResellerModelPricing, 0, len(pricing)),
 	}
 
 	groupNames := make([]string, 0, len(usableGroups))
@@ -142,7 +142,7 @@ func BuildResellerPricingCatalog(
 		return orderedPricing[i].ModelName < orderedPricing[j].ModelName
 	})
 	for _, item := range orderedPricing {
-		groups := append([]string(nil), item.EnableGroup...)
+		groups := append([]string{}, item.EnableGroup...)
 		sort.Strings(groups)
 		catalog.Models = append(catalog.Models, ResellerModelPricing{
 			ModelName:            item.ModelName,

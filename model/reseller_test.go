@@ -19,11 +19,11 @@ func TestBuildResellerPricingCatalogUsesUserGroupCostOverrides(t *testing.T) {
 	cacheRatio := 0.5
 	pricing := []Pricing{
 		{
-			ModelName:       "z-request-model",
-			QuotaType:       1,
-			ModelPrice:      4,
-			EnableGroup:     []string{"vip", "default"},
-			BillingMode:     "ratio",
+			ModelName:   "z-request-model",
+			QuotaType:   1,
+			ModelPrice:  4,
+			EnableGroup: []string{"vip", "default"},
+			BillingMode: "ratio",
 		},
 		{
 			ModelName:       "a-token-model",
