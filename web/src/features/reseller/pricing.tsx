@@ -128,7 +128,7 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
     },
     {
       id: 'discount',
-      header: t('Official discount'),
+      header: t('Estimated discount'),
       size: 130,
       cell: ({ row }) => {
         if (!selected || !available(row.original, selected.name)) {
@@ -169,17 +169,17 @@ export function ResellerPricing(props: { catalog: ResellerPricingCatalog }) {
           <strong>{selected?.name || '—'}</strong>
           <small>
             {selected
-              ? t('Official {{official}}× · Cost {{cost}}×', {
-                  official: selected.official_ratio,
-                  cost: selected.cost_ratio,
-                })
+              ? `${t('Original multiplier')} ${selected.official_ratio}×`
               : ''}
+          </small>
+          <small>
+            {selected ? `${t('Your multiplier')} ${selected.cost_ratio}×` : ''}
           </small>
         </div>
         <div>
-          <span>{t('Official discount')}</span>
+          <span>{t('Estimated discount')}</span>
           <strong>{discountLabel(selected?.discount_percent)}</strong>
-          <small>{t('Estimated from current group multipliers')}</small>
+          <small>{t('Estimated from original and user multipliers')}</small>
         </div>
       </div>
       <div className='ledger-toolbar ledger-pricing-toolbar'>
