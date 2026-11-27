@@ -117,3 +117,9 @@ test("long images reserve one image priced by skill and length", () => {
   const webpage = task("kling-image-4.0", "klingLongImage40", { contents: [{ type: "prompt", text: "p" }], settings: { skill: "webpage" } });
   expect(webpage.state).toEqual({ images: 1, reference_images: 0, kind: "webpage", resolution: "1k" });
 });
+
+test("the earlier /kling 3.0 Omni route reaches the unified path", () => {
+  const ctx = task("kling-3.0-omni", "omniVideo30", { contents: [{ type: "prompt", text: "p" }], settings: { resolution: "1080p", audio: "native" } });
+  expect(buildSubmitRequest(ctx).url).toBe("https://model.service-inference.ai/omni-video/kling-3.0-omni");
+  expect(ctx.state.creditRate).toBe(1);
+});

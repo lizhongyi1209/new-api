@@ -31,7 +31,7 @@ export const meta = {
   apiVersion: 1,
   key: "kling-official-plugin",
   name: "可灵官方格式上游",
-  version: "1.1.0",
+  version: "1.2.0",
   icon: "Kling.Color",
   author: { name: "O1Key" },
   fetchMode: "per_task",
@@ -88,6 +88,10 @@ function path(action, model) {
       return "/image-to-video/" + model;
     case "kling40Omni":
       return "/omni-video/" + model;
+    // The earlier /kling/omni-video/kling-3.0-omni route sends the same
+    // official body; upstreams serve it on the unified path.
+    case "omniVideo30":
+      return "/omni-video/kling-3.0-omni";
     case "klingImage40":
       return "/image-generation/kling-4.0";
     case "klingLongImage40":
