@@ -2,9 +2,9 @@ package constant
 
 const (
 	KlingOfficialVideoPlugin = "kling-official-video"
-	// KlingNativeVideoPlugin serves upstreams that expose only Kling's unified
+	// KlingVideoPlugin serves upstreams that expose only Kling's unified
 	// task API (/{task}/{model} and /tasks) with a Bearer API key.
-	KlingNativeVideoPlugin = "kling-native"
+	KlingVideoPlugin = "kling-video-plugin"
 	WanOfficialVideoPlugin = "wan-official-video"
 )
 
@@ -19,7 +19,7 @@ func OfficialVideoPluginAllowed(channelType int, name, key string) bool {
 			case "kling-v2-6", "kling-v3", "kling-v3-omni", "kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash":
 				return true
 			}
-		case KlingNativeVideoPlugin:
+		case KlingVideoPlugin:
 			switch name {
 			case "kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash":
 				return true
@@ -32,7 +32,7 @@ func OfficialVideoPluginAllowed(channelType int, name, key string) bool {
 }
 
 func IsKlingOfficialVideoPlugin(platform TaskPlatform) bool {
-	return platform == KlingOfficialVideoPlugin || platform == KlingNativeVideoPlugin
+	return platform == KlingOfficialVideoPlugin || platform == KlingVideoPlugin
 }
 
 func IsOfficialVideoPlugin(platform TaskPlatform) bool {

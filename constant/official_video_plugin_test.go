@@ -10,12 +10,12 @@ func TestOfficialVideoPluginAllowed(t *testing.T) {
 	}{
 		{ChannelTypeKling, "kling-4.0", KlingOfficialVideoPlugin, true},
 		{ChannelTypeKling, "kling-v3", KlingOfficialVideoPlugin, true},
-		{ChannelTypeKling, "kling-4.0-flash", KlingNativeVideoPlugin, true},
-		{ChannelTypeKling, "kling-3.0", KlingNativeVideoPlugin, true},
-		{ChannelTypeKling, "kling-v3", KlingNativeVideoPlugin, false},
+		{ChannelTypeKling, "kling-4.0-flash", KlingVideoPlugin, true},
+		{ChannelTypeKling, "kling-3.0", KlingVideoPlugin, true},
+		{ChannelTypeKling, "kling-v3", KlingVideoPlugin, false},
 		{ChannelTypeKling, "kling-4.0", WanOfficialVideoPlugin, false},
 		{ChannelTypeKling, "kling-4.0", "", false},
-		{ChannelTypeAli, "kling-4.0", KlingNativeVideoPlugin, false},
+		{ChannelTypeAli, "kling-4.0", KlingVideoPlugin, false},
 		{ChannelTypeAli, "wan3.0-video", WanOfficialVideoPlugin, true},
 	}
 	for _, test := range tests {
@@ -23,7 +23,7 @@ func TestOfficialVideoPluginAllowed(t *testing.T) {
 			t.Errorf("OfficialVideoPluginAllowed(%d, %q, %q) = %v, want %v", test.channelType, test.model, test.key, got, test.want)
 		}
 	}
-	if !IsOfficialVideoPlugin(KlingNativeVideoPlugin) || !IsKlingOfficialVideoPlugin(KlingNativeVideoPlugin) || IsKlingOfficialVideoPlugin(WanOfficialVideoPlugin) {
-		t.Fatal("kling-native must be an official Kling video plugin")
+	if !IsOfficialVideoPlugin(KlingVideoPlugin) || !IsKlingOfficialVideoPlugin(KlingVideoPlugin) || IsKlingOfficialVideoPlugin(WanOfficialVideoPlugin) {
+		t.Fatal("kling-video-plugin must be an official Kling video plugin")
 	}
 }
