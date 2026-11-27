@@ -2,8 +2,9 @@
 //
 // Upstream base: https://model.service-inference.ai
 // Auth: Authorization: Bearer <platform API key>
-// Paths sit at the root (no /kling prefix and no product prefix) and model
-// names keep the -cn suffix. Downstream and upstream use the same paths.
+// Paths sit at the root (no /kling prefix and no product prefix). Downstream
+// may use international names such as kling-4.0. The upstream path appends
+// -cn once when the chosen name does not already end with it.
 // These do not overlap the built-in /kling adaptor or the legacy kling plugin.
 // /v1/videos/* is not registered: it intersects the OpenAI video routes.
 //
@@ -17,7 +18,7 @@
 // Task Plugin channels are type 62. The route pins this key; Distribute then
 // accepts only a type 62 or New API channel bound to tokenmart-kling.
 
-const VIDEO_MODELS = [
+const VIDEO_CN_MODELS = [
   "kling-4.0-cn",
   "kling-4.0-flash-cn",
   "kling-3.0-omni-cn",
@@ -27,7 +28,18 @@ const VIDEO_MODELS = [
   "kling-2.6-cn",
   "kling-2.5-turbo-cn",
 ];
+const VIDEO_MODELS = VIDEO_CN_MODELS.concat([
+  "kling-4.0",
+  "kling-4.0-flash",
+  "kling-3.0-omni",
+  "kling-3.0",
+  "kling-3.0-turbo",
+  "kling-o1",
+  "kling-2.6",
+  "kling-2.5-turbo",
+]);
 const IMAGE_MODEL = "kling-image-4.0-cn";
+const IMAGE_MODEL_INTL = "kling-image-4.0";
 const ELEMENT_MODEL = "kling-element-cn";
 const RESOURCE_MODEL = "kling-resource-cn";
 
@@ -259,14 +271,14 @@ export const meta = {
   website: "https://console.service-inference.ai/docs/kling-cn-native",
   baseUrl: "https://model.service-inference.ai",
   requiredCapabilities: ["json-clone@1"],
-  models: VIDEO_MODELS.concat([IMAGE_MODEL, ELEMENT_MODEL, RESOURCE_MODEL]),
+  models: VIDEO_MODELS.concat([IMAGE_MODEL, IMAGE_MODEL_INTL, ELEMENT_MODEL, RESOURCE_MODEL]),
   fetchMode: "per_task",
   upstreams: ["vendor", "new_api"],
   usageSchema: VIDEO_SCHEMA,
   usageExamples: VIDEO_EXAMPLES,
   usageProfiles: [
     {
-      models: [IMAGE_MODEL],
+      models: [IMAGE_MODEL, IMAGE_MODEL_INTL],
       schema: IMAGE_SCHEMA,
       examples: [
         {
@@ -297,7 +309,7 @@ export const meta = {
   protocols: [
     { name: "openai_responses", supports: ["stream", "sync", "background"] },
     { name: "openai_video", models: VIDEO_MODELS },
-    { name: "openai_image", models: [IMAGE_MODEL] },
+    { name: "openai_image", models: [IMAGE_MODEL, IMAGE_MODEL_INTL] },
   ],
   routes: buildRoutes(),
 };
@@ -336,20 +348,40 @@ function actionFromPath(path) {
   return "";
 }
 
+function withCn(name) {
+  const value = trimmed(name);
+  if (!value) return "";
+  if (value.length >= 3 && value.slice(-3) === "-cn") return value;
+  return value + "-cn";
+}
+
+function isKnownVideo(name) {
+  const cn = withCn(name);
+  for (let i = 0; i < VIDEO_CN_MODELS.length; i++) {
+    if (VIDEO_CN_MODELS[i] === cn) return true;
+  }
+  return false;
+}
+
 function billingModelFor(action, pathModel) {
-  if (action === "image_generation" || action === "long_image") return IMAGE_MODEL;
+  const name = trimmed(pathModel);
+  if (action === "image_generation" || action === "long_image") {
+    if (name === IMAGE_MODEL_INTL || name === "kling-4.0") return IMAGE_MODEL_INTL;
+    return IMAGE_MODEL;
+  }
   if (action === "element") return ELEMENT_MODEL;
   if (action === "resource") return RESOURCE_MODEL;
-  if (VIDEO_MODELS.indexOf(pathModel) >= 0) return pathModel;
+  if (isKnownVideo(name)) return name;
   return "kling-4.0-cn";
 }
 
 function isOmniOnly(model) {
-  return model === "kling-3.0-omni-cn" || model === "kling-o1-cn";
+  const cn = withCn(model);
+  return cn === "kling-3.0-omni-cn" || cn === "kling-o1-cn";
 }
 
 function isImageModel(model) {
-  return model === IMAGE_MODEL;
+  return withCn(model) === IMAGE_MODEL;
 }
 
 function requireJSONObject(ctx) {
@@ -442,8 +474,12 @@ function authHeaders(ctx, json) {
 
 function outboundModel(ctx) {
   const req = (ctx && ctx.requestBody) || {};
-  if (trimmed(req.pathModel)) return trimmed(req.pathModel);
-  return trimmed((ctx && (ctx.upstreamModel || ctx.model)) || "");
+  const pathModel = trimmed(req.pathModel);
+  const mapped = trimmed(ctx && ctx.upstreamModel);
+  const requested = trimmed(ctx && ctx.model);
+  let chosen = pathModel || requested || mapped;
+  if (mapped && requested && mapped !== requested) chosen = mapped;
+  return withCn(chosen);
 }
 
 function upstreamPath(ctx) {
@@ -552,22 +588,24 @@ function firstMediaURL(record) {
 function outputSeconds(model, settings) {
   const duration = finiteNumber(settings && settings.duration);
   if (duration != null && duration > 0) return duration;
-  if (model === "kling-4.0-cn" || model === "kling-4.0-flash-cn") return 10;
+  const cn = withCn(model);
+  if (cn === "kling-4.0-cn" || cn === "kling-4.0-flash-cn") return 10;
   return 5;
 }
 
 function videoResolution(model, settings) {
   const raw = trimmed(settings && settings.resolution).toLowerCase();
   if (raw === "720p" || raw === "1080p" || raw === "4k") return raw;
-  if (model === "kling-4.0-cn") return "1080p";
+  if (withCn(model) === "kling-4.0-cn") return "1080p";
   return "720p";
 }
 
 function audioFact(model, settings) {
   const raw = trimmed(settings && settings.audio).toLowerCase();
   if (raw === "native" || raw === "off" || raw === "original" || raw === "always") return raw;
-  if (model === "kling-4.0-cn" || model === "kling-4.0-flash-cn" || model === "kling-3.0-turbo-cn") return "always";
-  if (model === "kling-o1-cn" || model === "kling-2.5-turbo-cn") return "off";
+  const cn = withCn(model);
+  if (cn === "kling-4.0-cn" || cn === "kling-4.0-flash-cn" || cn === "kling-3.0-turbo-cn") return "always";
+  if (cn === "kling-o1-cn" || cn === "kling-2.5-turbo-cn") return "off";
   return "off";
 }
 
@@ -685,7 +723,7 @@ function billedSeconds(model, record) {
   const usage = asObject(record && record.usage) || {};
   const output = finiteNumber(usage.output_duration);
   const input = finiteNumber(usage.input_duration);
-  const four = model === "kling-4.0-cn" || model === "kling-4.0-flash-cn";
+  const four = withCn(model) === "kling-4.0-cn" || withCn(model) === "kling-4.0-flash-cn";
   if (output != null && output >= 0) {
     if (four && input != null && input > 0) return Math.max(input + output, output * 2);
     if (four) return output;
@@ -1069,7 +1107,7 @@ export function extractUsage(ctx) {
   const body = asObject(req.body) || {};
   if (action === "resource" || model === RESOURCE_MODEL) return { requests: 1 };
   if (action === "element" || model === ELEMENT_MODEL) return { requests: 1 };
-  if (action === "image_generation" || action === "long_image" || model === IMAGE_MODEL) return imageFacts(action, body);
+  if (action === "image_generation" || action === "long_image" || isImageModel(model)) return imageFacts(action, body);
   return videoFacts(model, action, body);
 }
 
@@ -1078,7 +1116,7 @@ export function extractUsageOnComplete(task, _result, body) {
   const action = trimmed(task && task.action);
   const record = taskRecord(body, task && task.taskId);
   if (!record) return null;
-  if (action === "image_generation" || action === "long_image" || model === IMAGE_MODEL) {
+  if (action === "image_generation" || action === "long_image" || isImageModel(model)) {
     const count = countImages(record);
     if (count > 0) return { image_count: count };
     return null;
