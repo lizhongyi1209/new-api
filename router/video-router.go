@@ -159,6 +159,9 @@ func SetVideoRouter(router *gin.Engine) {
 	for _, prefix := range []string{"/kling", ""} {
 		kling40Router := router.Group(prefix)
 		kling40Router.Use(middleware.RouteTag("relay"))
+		if prefix == "" {
+			kling40Router.Use(middleware.KlingOfficialErrors())
+		}
 		kling40Router.Use(middleware.KlingVideo40Convert(), middleware.TokenAuth(), middleware.Distribute())
 		for task, models := range unifiedKlingRoutes {
 			for _, name := range models {
@@ -173,6 +176,9 @@ func SetVideoRouter(router *gin.Engine) {
 		// Official batch and cursor task queries: Kling's GET/POST /tasks.
 		klingTaskQueryRouter := router.Group(prefix + "/tasks")
 		klingTaskQueryRouter.Use(middleware.RouteTag("relay"))
+		if prefix == "" {
+			klingTaskQueryRouter.Use(middleware.KlingOfficialErrors())
+		}
 		klingTaskQueryRouter.Use(middleware.TokenAuth())
 		klingTaskQueryRouter.GET("", controller.RelayKling40TasksQuery)
 		klingTaskQueryRouter.POST("", controller.RelayKling40TasksQuery)

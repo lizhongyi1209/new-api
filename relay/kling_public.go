@@ -14,7 +14,7 @@ import (
 func KlingOfficialTaskList(requestID string, tasks []*model.Task) map[string]any {
 	return map[string]any{
 		"code":       0,
-		"message":    "",
+		"message":    "SUCCEED",
 		"request_id": requestID,
 		"data":       klingOfficialTaskItems(tasks),
 	}
@@ -28,7 +28,7 @@ func KlingOfficialTaskCursor(requestID string, tasks []*model.Task, hasMore bool
 	}
 	return map[string]any{
 		"code":       0,
-		"message":    "",
+		"message":    "SUCCEED",
 		"request_id": requestID,
 		"data": map[string]any{
 			"result":      klingOfficialTaskItems(tasks),
