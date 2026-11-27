@@ -26,13 +26,17 @@ const (
 	TaskActionKling40Text       = "kling40Text"
 	TaskActionKling40Image      = "kling40Image"
 	TaskActionKling40Omni       = "kling40Omni"
-	TaskActionVideoEdit         = "videoEdit"
-	TaskActionVideoExtend       = "videoExtend"
-	TaskActionImageToVideo      = "image_to_video"
-	TaskActionTextToVideo       = "text_to_video"
-	TaskActionFirstTailToVideo  = "first_tail_to_video"
-	TaskActionReferenceToVideo  = "reference_to_video"
-	TaskActionRemixCanonical    = "remix"
+	// Kling Image 4.0 on the unified task API: /image-generation/kling-4.0 and
+	// /long-image-generation/kling-4.0, queried through /tasks like video.
+	TaskActionKlingImage40     = "klingImage40"
+	TaskActionKlingLongImage40 = "klingLongImage40"
+	TaskActionVideoEdit        = "videoEdit"
+	TaskActionVideoExtend      = "videoExtend"
+	TaskActionImageToVideo     = "image_to_video"
+	TaskActionTextToVideo      = "text_to_video"
+	TaskActionFirstTailToVideo = "first_tail_to_video"
+	TaskActionReferenceToVideo = "reference_to_video"
+	TaskActionRemixCanonical   = "remix"
 	// NOTE: When adding a new video task action here, you MUST also register it
 	// in the frontend "is this a video task?" allowlists, or the Task Logs page
 	// will silently show "-" instead of a "preview video" link even when the

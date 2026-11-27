@@ -313,6 +313,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if taskErr := adaptor.ValidateRequestAndSetAction(c, info); taskErr != nil {
 		return nil, taskErr
 	}
+	// The native Kling adaptor reads video results only; Image 4.0 runs through
+	// the bound kling-video-plugin, which lists every output image.
+	if (info.Action == constant.TaskActionKlingImage40 || info.Action == constant.TaskActionKlingLongImage40) && !boundOfficial {
+		return nil, service.TaskErrorWrapperLocal(fmt.Errorf("%s requires a Kling channel bound to %s", constant.KlingImage40Model, constant.KlingVideoPlugin), "task_plugin_unavailable", http.StatusServiceUnavailable)
+	}
 	relaycommon.CaptureClientRequestSnapshot(c)
 
 	// 2. 确定模型名称

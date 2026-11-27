@@ -916,7 +916,8 @@ func presentTaskSubmission(c *gin.Context, outcome *taskSubmissionOutcome) {
 	}
 	if constant.IsOfficialVideoPlugin(outcome.Task.Platform) {
 		switch outcome.Task.Action {
-		case constant.TaskActionKling40Text, constant.TaskActionKling40Image, constant.TaskActionKling40Omni:
+		case constant.TaskActionKling40Text, constant.TaskActionKling40Image, constant.TaskActionKling40Omni,
+			constant.TaskActionKlingImage40, constant.TaskActionKlingLongImage40:
 			c.JSON(http.StatusOK, kling.Kling40CreateResponse(c, outcome.RelayInfo, outcome.Task.Data))
 		default:
 			video := outcome.Task.ToOpenAIVideo()

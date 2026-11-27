@@ -366,3 +366,40 @@ func prepareKling30TaskFetch(c *gin.Context, model string) {
 	c.Set(common.KeyRequestBody, jsonData)
 	c.Next()
 }
+
+// KlingImage40Convert serves Kling Image 4.0 (/image-generation/kling-4.0 and
+// /long-image-generation/kling-4.0). Kling names the model kling-4.0 in these
+// paths; the gateway routes and prices it as kling-image-4.0.
+func KlingImage40Convert() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		if c.Request.Method == http.MethodGet {
+			prepareKling30TaskFetch(c, constant.KlingImage40Model)
+			return
+		}
+		var metadata map[string]any
+		if err := common.UnmarshalBodyReusable(c, &metadata); err != nil {
+			c.Next()
+			return
+		}
+		prompt := ""
+		if contents, ok := metadata["contents"].([]any); ok {
+			for _, value := range contents {
+				if item, ok := value.(map[string]any); ok && item["type"] == "prompt" {
+					prompt, _ = item["text"].(string)
+					break
+				}
+			}
+		}
+		jsonData, err := common.Marshal(map[string]any{"model": constant.KlingImage40Model, "prompt": prompt, "metadata": metadata})
+		if err != nil {
+			c.Next()
+			return
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(jsonData))
+		if storage, err := common.CreateBodyStorage(jsonData); err == nil {
+			c.Set(common.KeyBodyStorage, storage)
+		}
+		c.Set(common.KeyRequestBody, jsonData)
+		c.Next()
+	}
+}

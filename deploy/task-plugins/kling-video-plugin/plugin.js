@@ -4,6 +4,10 @@
 const credits = ["kling-3.0", "kling-3.0-omni"];
 const standard = "kling-4.0";
 const flash = "kling-4.0-flash";
+// Kling Image 4.0 (/image-generation and /long-image-generation). Kling's image
+// credits are not its video credits, so prices are written in yuan per image.
+const image = "kling-image-4.0";
+const imageKinds = ["image", "webpage", "ecommerce_short", "ecommerce_medium", "ecommerce_long"];
 const seconds = { type: "number", unit: "second", description: { zh: "计费秒数", en: "Billable seconds" } };
 const source = {
   enum: ["estimated", "reported"],
@@ -27,12 +31,12 @@ export const meta = {
   apiVersion: 1,
   key: "kling-video-plugin",
   name: "可灵官方格式上游",
-  version: "1.0.0",
+  version: "1.1.0",
   icon: "Kling.Color",
   author: { name: "O1Key" },
   fetchMode: "per_task",
   auth: "api_key",
-  models: credits.concat([standard, flash]),
+  models: credits.concat([standard, flash, image]),
   usageProfiles: [
     {
       models: credits,
@@ -44,6 +48,28 @@ export const meta = {
     },
     timedProfile(standard, ["720p", "1080p", "4k"]),
     timedProfile(flash, ["720p"]),
+    {
+      models: [image],
+      schema: {
+        images: { type: "number", unit: "count", description: { zh: "输出张数", en: "Output images" } },
+        reference_images: { type: "number", unit: "count", description: { zh: "参考图和参考主体数", en: "Reference images and elements" } },
+        kind: {
+          enum: imageKinds,
+          enumLabels: {
+            image: { zh: "单图 / 组图", en: "Single / series" },
+            webpage: { zh: "长图·网页设计", en: "Long image · webpage" },
+            ecommerce_short: { zh: "长图·电商详情页·短", en: "Long image · ecommerce · short" },
+            ecommerce_medium: { zh: "长图·电商详情页·中", en: "Long image · ecommerce · medium" },
+            ecommerce_long: { zh: "长图·电商详情页·长", en: "Long image · ecommerce · long" },
+          },
+        },
+        resolution: { enum: ["1k", "2k", "4k", "8k"] },
+      },
+      examples: [
+        { label: "4 张 2K 组图 + 3 张参考", facts: { images: 4, reference_images: 3, kind: "image", resolution: "2k" } },
+        { label: "电商详情页·中 2K + 2 张参考", facts: { images: 1, reference_images: 2, kind: "ecommerce_medium", resolution: "2k" } },
+      ],
+    },
   ],
 };
 function auth(ctx) {
@@ -62,8 +88,12 @@ function path(action, model) {
       return "/image-to-video/" + model;
     case "kling40Omni":
       return "/omni-video/" + model;
+    case "klingImage40":
+      return "/image-generation/kling-4.0";
+    case "klingLongImage40":
+      return "/long-image-generation/kling-4.0";
     default:
-      throw new Error("This upstream serves only Kling's unified text-to-video, image-to-video and omni-video API");
+      throw new Error("This upstream serves only Kling's unified video and Image 4.0 API");
   }
 }
 function modelOf(ctx) {
@@ -140,8 +170,22 @@ function limit(model) {
 function measured(output, input) {
   return input > 0 ? Math.max(input + output, 2 * output) : output;
 }
+function imageEstimate(ctx) {
+  const body = ctx.officialRequest || {},
+    settings = body.settings || {};
+  const references = (body.contents || []).filter((c) => c && c.type !== "prompt").length;
+  if (ctx.action === "klingLongImage40") {
+    const kind = settings.skill === "webpage" ? "webpage" : "ecommerce_" + (settings.length || "medium");
+    return { images: 1, reference_images: references, kind, resolution: settings.resolution || "1k" };
+  }
+  // A series of "auto" length yields 2 to 10 images; reserve the maximum.
+  const series = settings.result_type === "series";
+  const amount = settings.series_amount === "auto" ? 10 : Number(settings.series_amount || 4);
+  return { images: series ? amount : Number(settings.n || 1), reference_images: references, kind: "image", resolution: settings.resolution || "2k" };
+}
 function estimate(ctx) {
   const model = modelOf(ctx);
+  if (model === image) return imageEstimate(ctx);
   if (credits.indexOf(model) >= 0) return { units: 0, units_source: "estimated" };
   const body = ctx.officialRequest,
     settings = body.settings || {},
@@ -169,6 +213,7 @@ export function parseSubmitResponse(ctx, resp) {
   const request = ctx.officialRequest || {};
   const state = estimate(ctx);
   const model = modelOf(ctx);
+  if (model === image) return { taskId: id, taskData: body, state };
   if (credits.indexOf(model) >= 0) {
     state.creditRate = creditRate(ctx);
   } else {
@@ -184,6 +229,9 @@ function row(ctx, body) {
   if (body.status) return body;
   if (!Array.isArray(body.data)) return body.data || {};
   return body.data.find((item) => item && String(item.id || item.task_id) === ctx.taskId) || {};
+}
+function images(row) {
+  return (row.outputs || []).filter((v) => v && v.type === "image" && v.url);
 }
 function video(row) {
   return (
@@ -221,7 +269,7 @@ export function parseTaskResult(ctx, body) {
   return {
     taskId: ctx.taskId,
     status: status,
-    url: status === "SUCCESS" ? video(item).url || "" : "",
+    url: status !== "SUCCESS" ? "" : modelOf(ctx) === image ? (images(item)[0] || {}).url || "" : video(item).url || "",
     reason: item.task_status_msg || item.message || (item.error || {}).message || "",
   };
 }
@@ -229,6 +277,11 @@ export function extractUsageOnComplete(ctx, _result, body) {
   const item = row(ctx, body),
     model = modelOf(ctx);
   const submitted = ctx.state || {};
+  if (model === image) {
+    // Bill the images actually delivered; references were sent with the request.
+    const count = images(item).length;
+    return count > 0 ? { images: count, reference_images: submitted.reference_images || 0, kind: submitted.kind || "image", resolution: submitted.resolution || "2k" } : null;
+  }
   if (credits.indexOf(model) >= 0) {
     const units = completedCredits(ctx, item);
     return units === null ? null : { units, units_source: "reported" };
@@ -247,18 +300,29 @@ export function extractUsageOnComplete(ctx, _result, body) {
   if (model === standard) actual.hdr_seconds = submitted.hdr_seconds > 0 ? output : 0;
   return actual;
 }
-function artifact(ctx) {
+function artifactRow(ctx) {
   const body = ctx.data || {};
-  const item = Array.isArray(body.data)
+  return Array.isArray(body.data)
     ? body.data.find((v) => v && (v.id === ctx.taskId || v.task_id === ctx.taskId)) || body.data[0] || {}
     : body.data || body;
-  return video(item).url || "";
+}
+function isImageTask(task) {
+  return task.action === "klingImage40" || task.action === "klingLongImage40";
 }
 export function listArtifacts(task) {
-  return task.status === "SUCCESS" && artifact(task) ? [{ key: "video", type: "video" }] : [];
+  if (task.status !== "SUCCESS") return [];
+  const item = artifactRow(task);
+  if (isImageTask(task)) return images(item).map((_, index) => ({ key: "image-" + (index + 1), type: "image" }));
+  return video(item).url ? [{ key: "video", type: "video" }] : [];
 }
 export function buildContentRequest(ctx) {
-  const url = artifact(ctx);
-  if (ctx.artifactKey !== "video" || !url) throw new Error("artifact_not_found");
+  const item = artifactRow(ctx);
+  let url = "";
+  if (ctx.artifactKey === "video") {
+    url = video(item).url || "";
+  } else if (/^image-[1-9][0-9]*$/.test(String(ctx.artifactKey || ""))) {
+    url = (images(item)[Number(ctx.artifactKey.slice(6)) - 1] || {}).url || "";
+  }
+  if (!url) throw new Error("artifact_not_found");
   return { url: url, method: ctx.clientRequest.method, credentialless: true };
 }

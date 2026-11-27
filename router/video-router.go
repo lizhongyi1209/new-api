@@ -1,6 +1,7 @@
 package router
 
 import (
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -170,6 +171,20 @@ func SetVideoRouter(router *gin.Engine) {
 				}
 				kling40Router.POST("/"+task+"/"+name, controller.RelayTask)
 				kling40Router.GET("/"+task+"/"+name+"/:task_id", controller.RelayKling40TaskFetch)
+			}
+		}
+
+		// Kling Image 4.0: single, series and long images, queried through /tasks.
+		klingImageRouter := router.Group(prefix)
+		klingImageRouter.Use(middleware.RouteTag("relay"))
+		if prefix == "" {
+			klingImageRouter.Use(middleware.KlingOfficialErrors())
+		}
+		klingImageRouter.Use(middleware.KlingImage40Convert(), middleware.TokenAuth(), middleware.Distribute())
+		for _, task := range []string{"image-generation", "long-image-generation"} {
+			for _, name := range []string{"kling-4.0", constant.KlingImage40Model} {
+				klingImageRouter.POST("/"+task+"/"+name, controller.RelayTask)
+				klingImageRouter.GET("/"+task+"/"+name+"/:task_id", controller.RelayKling40TaskFetch)
 			}
 		}
 

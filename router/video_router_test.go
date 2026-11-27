@@ -59,6 +59,10 @@ func TestUnifiedKlingRoutesMatchOfficialPaths(t *testing.T) {
 			require.True(t, routes["POST /kling"+path], path)
 		}
 	}
+	for _, path := range []string{"/image-generation/kling-4.0", "/long-image-generation/kling-4.0", "/image-generation/kling-image-4.0", "/kling/image-generation/kling-4.0"} {
+		require.True(t, routes["POST "+path], path)
+		require.True(t, routes["GET "+path+"/:task_id"], path)
+	}
 	require.True(t, routes["GET /tasks"])
 	require.True(t, routes["POST /tasks"])
 	require.True(t, routes["GET /kling/tasks"])

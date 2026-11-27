@@ -8,6 +8,8 @@ func Kling40TaskActions() []string {
 		constant.TaskActionKling40Text,
 		constant.TaskActionKling40Image,
 		constant.TaskActionKling40Omni,
+		constant.TaskActionKlingImage40,
+		constant.TaskActionKlingLongImage40,
 	}
 }
 

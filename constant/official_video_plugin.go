@@ -4,7 +4,7 @@ const (
 	KlingOfficialVideoPlugin = "kling-official-video"
 	// KlingVideoPlugin serves upstreams that expose only Kling's unified
 	// task API (/{task}/{model} and /tasks) with a Bearer API key.
-	KlingVideoPlugin = "kling-video-plugin"
+	KlingVideoPlugin       = "kling-video-plugin"
 	WanOfficialVideoPlugin = "wan-official-video"
 )
 
@@ -21,7 +21,7 @@ func OfficialVideoPluginAllowed(channelType int, name, key string) bool {
 			}
 		case KlingVideoPlugin:
 			switch name {
-			case "kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash":
+			case "kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash", KlingImage40Model:
 				return true
 			}
 		}
@@ -30,6 +30,10 @@ func OfficialVideoPluginAllowed(channelType int, name, key string) bool {
 	}
 	return false
 }
+
+// KlingImage40Model is Kling Image 4.0. Kling names it kling-4.0 inside its
+// image paths; the gateway keeps it apart from the kling-4.0 video model.
+const KlingImage40Model = "kling-image-4.0"
 
 func IsKlingOfficialVideoPlugin(platform TaskPlatform) bool {
 	return platform == KlingOfficialVideoPlugin || platform == KlingVideoPlugin

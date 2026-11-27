@@ -21,7 +21,7 @@ func TestKlingVideoPluginExposesPrices(t *testing.T) {
 	require.NoError(t, err)
 	plugin, err := jsplugin.CompilePlugin(string(source), jsplugin.Options{Key: "kling-video-plugin"})
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash"}, plugin.Meta.Models)
+	require.ElementsMatch(t, []string{"kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash", "kling-image-4.0"}, plugin.Meta.Models)
 	require.Len(t, prices, len(plugin.Meta.Models))
 	for model, price := range prices {
 		require.Equal(t, "kling-video-plugin", price.Key)

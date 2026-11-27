@@ -337,7 +337,41 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 	return nil
 }
 
+// claimKlingExternalTaskID records options.external_task_id for the task and
+// rejects one this user already used on the unified task API.
+func claimKlingExternalTaskID(c *gin.Context, info *relaycommon.RelayInfo, metadata map[string]any) *dto.TaskError {
+	ext := externalTaskIDFromMetadata(metadata)
+	if ext == "" {
+		return nil
+	}
+	c.Set("kling_external_task_id", ext)
+	if info == nil || info.UserId <= 0 {
+		return nil
+	}
+	exists, err := model.KlingExternalTaskExists(info.UserId, ext)
+	if err != nil {
+		return service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
+	}
+	if exists {
+		return service.TaskErrorWrapperLocal(fmt.Errorf("options.external_task_id must be unique"), "invalid_request", http.StatusBadRequest)
+	}
+	return nil
+}
+
 func (a *TaskAdaptor) validateVideoRequest(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
+	if action, ok := klingImage40Route(c.Request.URL.Path); ok {
+		if taskErr := relaycommon.ValidateTaskRequestWithOptionalPrompt(c, info, action); taskErr != nil {
+			return taskErr
+		}
+		req, err := relaycommon.GetTaskRequest(c)
+		if err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		if err := validateImage40(req.Metadata, action == constant.TaskActionKlingLongImage40); err != nil {
+			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
+		}
+		return claimKlingExternalTaskID(c, info, req.Metadata)
+	}
 	if task, modelName, ok := unifiedKlingRoute(c.Request.URL.Path); ok {
 		profile := video40ProfileForModel(modelName)
 		var action string
@@ -398,19 +432,7 @@ func (a *TaskAdaptor) validateVideoRequest(c *gin.Context, info *relaycommon.Rel
 		if err != nil {
 			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
 		}
-		if ext := externalTaskIDFromMetadata(req.Metadata); ext != "" {
-			c.Set("kling_external_task_id", ext)
-			if info != nil && info.UserId > 0 {
-				exists, lookupErr := model.KlingExternalTaskExists(info.UserId, ext)
-				if lookupErr != nil {
-					return service.TaskErrorWrapper(lookupErr, "get_task_failed", http.StatusInternalServerError)
-				}
-				if exists {
-					return service.TaskErrorWrapperLocal(fmt.Errorf("options.external_task_id must be unique"), "invalid_request", http.StatusBadRequest)
-				}
-			}
-		}
-		return nil
+		return claimKlingExternalTaskID(c, info, req.Metadata)
 	}
 	if strings.Contains(c.Request.URL.Path, "kling-3.0-omni") {
 		if taskErr := relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionOmniVideo30); taskErr != nil {
@@ -462,6 +484,10 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 		path = "/image-to-video/" + kling40UpstreamSlug(info)
 	case constant.TaskActionKling40Omni:
 		path = "/omni-video/" + kling40UpstreamSlug(info)
+	case constant.TaskActionKlingImage40:
+		path = "/image-generation/kling-4.0"
+	case constant.TaskActionKlingLongImage40:
+		path = "/long-image-generation/kling-4.0"
 	case constant.TaskActionOmniVideo30:
 		path = "/omni-video/kling-3.0-omni"
 	case constant.TaskActionMotionControl30:
@@ -504,6 +530,11 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, fmt.Errorf("request not found in context")
 	}
 	req := v.(relaycommon.TaskSubmitReq)
+	if isKlingImage40Action(info.Action) {
+		// validateImage40 accepted only official fields, so forward them as sent.
+		data, err := common.Marshal(req.Metadata)
+		return bytes.NewReader(data), err
+	}
 	if isKling40Action(info.Action) {
 		switch kling40UpstreamSlug(info) {
 		case "kling-3.0":
@@ -600,7 +631,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 
 	resolvedTaskID := kResp.Data.TaskId
-	if resolvedTaskID == "" && (info.Action == constant.TaskActionOmniVideo30 || info.Action == constant.TaskActionMotionControl30 || info.Action == constant.TaskActionKling40Text || info.Action == constant.TaskActionKling40Image || info.Action == constant.TaskActionKling40Omni) {
+	if resolvedTaskID == "" && (info.Action == constant.TaskActionOmniVideo30 || info.Action == constant.TaskActionMotionControl30 || info.Action == constant.TaskActionKling40Text || info.Action == constant.TaskActionKling40Image || info.Action == constant.TaskActionKling40Omni || isKlingImage40Action(info.Action)) {
 		var omniResp omniVideo30SubmitResponse
 		if err := common.Unmarshal(responseBody, &omniResp); err == nil {
 			if omniResp.Code != 0 {
@@ -667,7 +698,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	}
 	var path string
 	switch action {
-	case constant.TaskActionOmniVideo30, constant.TaskActionMotionControl30, constant.TaskActionKling40Text, constant.TaskActionKling40Image, constant.TaskActionKling40Omni:
+	case constant.TaskActionOmniVideo30, constant.TaskActionMotionControl30, constant.TaskActionKling40Text, constant.TaskActionKling40Image, constant.TaskActionKling40Omni, constant.TaskActionKlingImage40, constant.TaskActionKlingLongImage40:
 		path = "/tasks"
 	case constant.TaskActionMotionControl:
 		path = "/v1/videos/motion-control"
@@ -679,7 +710,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		path = "/v1/videos/text2video"
 	}
 	requestURL := fmt.Sprintf("%s%s/%s", baseUrl, path, taskID)
-	if action == constant.TaskActionOmniVideo30 || action == constant.TaskActionMotionControl30 || action == constant.TaskActionKling40Text || action == constant.TaskActionKling40Image || action == constant.TaskActionKling40Omni {
+	if action == constant.TaskActionOmniVideo30 || action == constant.TaskActionMotionControl30 || action == constant.TaskActionKling40Text || action == constant.TaskActionKling40Image || action == constant.TaskActionKling40Omni || isKlingImage40Action(action) {
 		requestURL = fmt.Sprintf("%s%s?task_ids=%s", baseUrl, path, url.QueryEscape(taskID))
 	}
 	if isNewAPIRelay(key) {
