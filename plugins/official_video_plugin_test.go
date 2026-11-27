@@ -9,22 +9,22 @@ import (
 	"testing"
 )
 
-func TestKlingVideoPluginExposesPrices(t *testing.T) {
+func TestKlingOfficialPluginExposesPrices(t *testing.T) {
 	var prices map[string]struct {
 		Key        string `json:"plugin_key"`
 		Expression string `json:"billing_expr"`
 	}
-	raw, err := os.ReadFile("../deploy/task-plugins/kling-video-plugin/prices.json")
+	raw, err := os.ReadFile("../deploy/task-plugins/kling-official-plugin/prices.json")
 	require.NoError(t, err)
 	require.NoError(t, json.Unmarshal(raw, &prices))
-	source, err := os.ReadFile("../deploy/task-plugins/kling-video-plugin/plugin.js")
+	source, err := os.ReadFile("../deploy/task-plugins/kling-official-plugin/plugin.js")
 	require.NoError(t, err)
-	plugin, err := jsplugin.CompilePlugin(string(source), jsplugin.Options{Key: "kling-video-plugin"})
+	plugin, err := jsplugin.CompilePlugin(string(source), jsplugin.Options{Key: "kling-official-plugin"})
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash", "kling-image-4.0"}, plugin.Meta.Models)
 	require.Len(t, prices, len(plugin.Meta.Models))
 	for model, price := range prices {
-		require.Equal(t, "kling-video-plugin", price.Key)
+		require.Equal(t, "kling-official-plugin", price.Key)
 		require.Contains(t, plugin.Meta.Models, model)
 		schema, _ := plugin.Meta.UsageForModel(model)
 		require.NoError(t, billing_setting.SmokeTestTaskExpr(price.Expression, schema), model)

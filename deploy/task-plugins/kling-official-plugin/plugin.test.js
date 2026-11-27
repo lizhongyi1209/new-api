@@ -32,7 +32,7 @@ function done(ctx, extra) {
 }
 
 test("serves the four unified-API models", () => {
-  expect(meta.key).toBe("kling-video-plugin");
+  expect(meta.key).toBe("kling-official-plugin");
   expect(meta.models.sort()).toEqual(["kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash", "kling-image-4.0"]);
 });
 
@@ -50,7 +50,7 @@ test("submits to the unified path with the Bearer key and queries /tasks", () =>
 test("rejects operations and credentials the upstream does not serve", () => {
   expect(() => buildSubmitRequest({ ...task("kling-3.0", "motionControl30", {}) })).toThrow("unified");
   expect(() => buildSubmitRequest({ ...task("kling-4.0", "kling40Text", {}), apiKey: "ak|sk" })).toThrow("Bearer");
-  expect(() => buildSubmitRequest({ ...task("kling-4.0", "kling40Text", {}), officialRequest: null })).toThrow("kling-video-plugin");
+  expect(() => buildSubmitRequest({ ...task("kling-4.0", "kling40Text", {}), officialRequest: null })).toThrow("kling-official-plugin");
 });
 
 test("Kling 3.0 settles credits from the rate card without billing lines", () => {

@@ -1,22 +1,22 @@
 {
   "kling-3.0": {
-    "plugin_key": "kling-video-plugin",
+    "plugin_key": "kling-official-plugin",
     "billing_expr": "u(\"units_source\") == \"estimated\" ? tier(\"estimated\", 0.5 + u(\"units\") * 0) : tier(\"reported\", u(\"units\") * 1)"
   },
   "kling-3.0-omni": {
-    "plugin_key": "kling-video-plugin",
+    "plugin_key": "kling-official-plugin",
     "billing_expr": "u(\"units_source\") == \"estimated\" ? tier(\"estimated\", 0.5 + u(\"units\") * 0) : tier(\"reported\", u(\"units\") * 1)"
   },
   "kling-4.0": {
-    "plugin_key": "kling-video-plugin",
+    "plugin_key": "kling-official-plugin",
     "billing_expr": "u(\"resolution\") == \"720p\" && u(\"video_input\") == \"none\" ? tier(\"720p·none\", u(\"billed_seconds\") * 1 + u(\"hdr_seconds\") * 0) : u(\"resolution\") == \"720p\" && u(\"video_input\") == \"video\" ? tier(\"720p·video\", u(\"billed_seconds\") * 0.6 + u(\"hdr_seconds\") * 0) : u(\"resolution\") == \"1080p\" && u(\"video_input\") == \"none\" ? tier(\"1080p·none\", u(\"billed_seconds\") * 1.5 + u(\"hdr_seconds\") * 0.3) : u(\"resolution\") == \"1080p\" && u(\"video_input\") == \"video\" ? tier(\"1080p·video\", u(\"billed_seconds\") * 0.9 + u(\"hdr_seconds\") * 0.3) : u(\"resolution\") == \"4k\" && u(\"video_input\") == \"none\" ? tier(\"4k·none\", u(\"billed_seconds\") * 3.5 + u(\"hdr_seconds\") * 0.5) : tier(\"4k·video\", u(\"billed_seconds\") * 2.1 + u(\"hdr_seconds\") * 0.5)"
   },
   "kling-4.0-flash": {
-    "plugin_key": "kling-video-plugin",
+    "plugin_key": "kling-official-plugin",
     "billing_expr": "u(\"resolution\") == \"720p\" && u(\"video_input\") == \"none\" ? tier(\"720p·none\", u(\"billed_seconds\") * 0.6) : tier(\"720p·video\", u(\"billed_seconds\") * 0.4)"
   },
   "kling-image-4.0": {
-    "plugin_key": "kling-video-plugin",
+    "plugin_key": "kling-official-plugin",
     "billing_expr": "u(\"kind\") == \"image\" && u(\"resolution\") == \"2k\" ? tier(\"image·2k\", u(\"images\") * 0.4 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"image\" && u(\"resolution\") == \"4k\" ? tier(\"image·4k\", u(\"images\") * 0.6 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"image\" && u(\"resolution\") == \"8k\" ? tier(\"image·8k\", u(\"images\") * 1 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"webpage\" && u(\"resolution\") == \"1k\" ? tier(\"webpage·1k\", u(\"images\") * 3.5 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"webpage\" && u(\"resolution\") == \"2k\" ? tier(\"webpage·2k\", u(\"images\") * 3.8 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"ecommerce_short\" && u(\"resolution\") == \"1k\" ? tier(\"ecommerce_short·1k\", u(\"images\") * 1.5 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"ecommerce_short\" && u(\"resolution\") == \"2k\" ? tier(\"ecommerce_short·2k\", u(\"images\") * 1.8 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"ecommerce_medium\" && u(\"resolution\") == \"1k\" ? tier(\"ecommerce_medium·1k\", u(\"images\") * 3 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"ecommerce_medium\" && u(\"resolution\") == \"2k\" ? tier(\"ecommerce_medium·2k\", u(\"images\") * 3.5 + u(\"reference_images\") * 0.02) : u(\"kind\") == \"ecommerce_long\" && u(\"resolution\") == \"1k\" ? tier(\"ecommerce_long·1k\", u(\"images\") * 5 + u(\"reference_images\") * 0.02) : tier(\"ecommerce_long·2k\", u(\"images\") * 5.5 + u(\"reference_images\") * 0.02)"
   }
 }

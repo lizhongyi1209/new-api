@@ -29,7 +29,7 @@ function timedProfile(model, resolutions) {
 }
 export const meta = {
   apiVersion: 1,
-  key: "kling-video-plugin",
+  key: "kling-official-plugin",
   name: "可灵官方格式上游",
   version: "1.1.0",
   icon: "Kling.Color",
@@ -100,7 +100,7 @@ function modelOf(ctx) {
   return ctx.upstreamModel || ctx.model;
 }
 export function buildSubmitRequest(ctx) {
-  if (!ctx.officialRequest) throw new Error("This plugin requires a Kling channel bound to kling-video-plugin");
+  if (!ctx.officialRequest) throw new Error("This plugin requires a Kling channel bound to kling-official-plugin");
   const request = ctx.officialRequest;
   if (request.callback_url || (request.options || {}).callback_url)
     throw new Error("Kling callbacks are disabled. Omit callback_url and poll using the task ID.");

@@ -60,10 +60,10 @@ Aliases: 原生视频表达式计费, Seedance 定价, 视频价格矩阵, nativ
 
 ## Kling 4.0 video generation
 
-Aliases: Kling 4.0, 可灵 4.0, Kling 4.0 Flash, kling-video-plugin, TokenMart 可灵, 可灵根路径, Kling 4.0 文生视频, Kling 4.0 图生视频, Kling 4.0 Omni, `/kling/omni-video/kling-4.0`, `/kling/tasks`.
+Aliases: Kling 4.0, 可灵 4.0, Kling 4.0 Flash, kling-official-plugin, TokenMart 可灵, 可灵根路径, Kling 4.0 文生视频, Kling 4.0 图生视频, Kling 4.0 Omni, `/kling/omni-video/kling-4.0`, `/kling/tasks`.
 
 - Public submission and task lookup routes: `router/video-router.go`; official-body conversion: `middleware/kling_adapter.go`; model routing, validation, upstream submission and `/tasks` polling: `relay/channel/task/kling/adaptor.go`, `video40.go`.
-- Unified task API routes (`/{text-to-video|image-to-video|omni-video}/{model}`, `GET/POST /tasks`) are registered at the root and under `/kling` in `router/video-router.go`; route parsing `unifiedKlingRoute` in `relay/channel/task/kling/video40.go`, Kling 3.0 text/image validation in `video30.go`. A Kling channel may bind `kling-official-video` (direct Kling) or `kling-video-plugin` (unified-API-only upstreams such as TokenMart, `deploy/task-plugins/kling-video-plugin/` with `prices.json`); the allowed pairs are `constant.OfficialVideoPluginAllowed`.
+- Unified task API routes (`/{text-to-video|image-to-video|omni-video}/{model}`, `GET/POST /tasks`) are registered at the root and under `/kling` in `router/video-router.go`; route parsing `unifiedKlingRoute` in `relay/channel/task/kling/video40.go`, Kling 3.0 text/image validation in `video30.go`. A Kling channel may bind `kling-official-video` (direct Kling) or `kling-official-plugin` (unified-API-only upstreams such as TokenMart, `deploy/task-plugins/kling-official-plugin/` with `prices.json`); the allowed pairs are `constant.OfficialVideoPluginAllowed`.
 - Kling 4.0/Flash task plugin and operator prices: `deploy/task-plugins/kling-official-video/`. Native expression usage and the Kling 4.0 duration meter: `pkg/videoexpr/schema.go`, `usage.go`; task settlement: `service/task_polling.go`; model ratio: `setting/ratio_setting/model_ratio.go`; public task projection: `controller/relay.go`, `relay/relay_task.go`. Video artifact recognition: `controller/task.go` and both frontend task-log action lists.
 - Downstream contract and examples: `docs/kling-4-video.md`, public API page `docs/api-site/pages/kling-4.html`; focused coverage: `relay/channel/task/kling/video40_test.go`, `middleware/kling_adapter_test.go`, `pkg/videoexpr/usage_test.go`.
 
