@@ -34,15 +34,33 @@ func video40ProfileForModel(model string) video40Profile {
 	return video40Profile{maxDuration: 30, resolutions: map[string]struct{}{"720p": {}, "1080p": {}, "4k": {}}}
 }
 
-func kling40ModelFromPath(path string) (string, bool) {
-	switch {
-	case strings.Contains(path, "/kling-4.0-flash"):
-		return "kling-4.0-flash", true
-	case strings.Contains(path, "/kling-4.0"):
-		return "kling-4.0", true
-	default:
-		return "", false
+// unifiedKlingModel reports whether Kling's unified task API (/{task}/{model})
+// serves the model for the task.
+func unifiedKlingModel(task, model string) bool {
+	switch model {
+	case "kling-4.0", "kling-4.0-flash":
+		return task == "text-to-video" || task == "image-to-video" || task == "omni-video"
+	case "kling-3.0":
+		return task == "text-to-video" || task == "image-to-video"
+	case "kling-3.0-omni":
+		return task == "omni-video"
 	}
+	return false
+}
+
+// unifiedKlingRoute parses /{task}/{model}[/{task_id}], at the root or under
+// /kling. The prefixed 3.0 Omni route keeps its earlier OpenAI-shaped task
+// contract (TaskActionOmniVideo30), so only its root route is unified.
+func unifiedKlingRoute(path string) (task, model string, ok bool) {
+	prefixed := strings.HasPrefix(path, "/kling/")
+	parts := strings.Split(strings.Trim(strings.TrimPrefix(path, "/kling"), "/"), "/")
+	if len(parts) < 2 || len(parts) > 3 || !unifiedKlingModel(parts[0], parts[1]) {
+		return "", "", false
+	}
+	if prefixed && parts[1] == "kling-3.0-omni" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
 }
 
 type video40Watermark struct {

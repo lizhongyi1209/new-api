@@ -282,7 +282,7 @@ func UpdateTaskPluginTasks(ctx context.Context, platform constant.TaskPlatform, 
 				if name == "" {
 					name = task.Properties.OriginModelName
 				}
-				if constant.OfficialVideoPluginForModel(ch.Type, name) != string(platform) {
+				if !constant.OfficialVideoPluginAllowed(ch.Type, name, string(platform)) {
 					continue
 				}
 				version = execution.TaskPlugin.Version

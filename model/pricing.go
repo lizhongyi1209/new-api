@@ -238,13 +238,17 @@ func updatePricing() {
 	pluginGeneration := jsplugin.DefaultRegistry.Generation()
 	officialProviders := make(map[string]string)
 	for _, ability := range enableAbilities {
-		key := constant.OfficialVideoPluginForModel(ability.ChannelType, ability.Model)
 		var bound bool
-		if key != "" && ability.ChannelSetting != nil {
+		if ability.ChannelSetting != nil {
 			ch := Channel{Setting: ability.ChannelSetting}
-			if _, loaded := pluginGeneration.Get(key); loaded && ch.GetSetting().TaskPluginKey == key {
+			key := ch.GetSetting().TaskPluginKey
+			if _, loaded := pluginGeneration.Get(key); loaded && constant.OfficialVideoPluginAllowed(ability.ChannelType, ability.Model, key) {
 				bound = true
-				officialProviders[ability.Model] = key
+				// A model can be served by several official plugins. Keep the
+				// public card stable: the direct Kling plugin wins over others.
+				if officialProviders[ability.Model] == "" || key == constant.KlingOfficialVideoPlugin {
+					officialProviders[ability.Model] = key
+				}
 			}
 		}
 		if !bound && ability.ChannelType != constant.ChannelTypeTaskPlugin {

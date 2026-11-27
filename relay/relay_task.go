@@ -224,8 +224,8 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	var selectedPlugin *pluginruntime.LoadedPlugin
 	pinnedValue, _ := c.Get(pluginruntime.ContextKeyPinnedPlugin)
 	pinnedPlugin, hasPinnedPlugin := pinnedValue.(pluginruntime.PinnedPlugin)
-	officialKey := constant.OfficialVideoPluginForModel(info.ChannelType, info.UpstreamModelName)
-	boundOfficial := officialKey != "" && info.ChannelSetting.TaskPluginKey == officialKey && pluginruntime.DefaultRegistry.Enabled()
+	officialKey := info.ChannelSetting.TaskPluginKey
+	boundOfficial := constant.OfficialVideoPluginAllowed(info.ChannelType, info.UpstreamModelName, officialKey) && pluginruntime.DefaultRegistry.Enabled()
 	keepPin := false
 	if boundOfficial {
 		generation := pluginruntime.DefaultRegistry.Generation()
@@ -734,7 +734,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		}
 		return body, nil
 	}
-	if originTask.Platform == constant.KlingOfficialVideoPlugin && isOpenAIVideoAPI {
+	if constant.IsKlingOfficialVideoPlugin(originTask.Platform) && isOpenAIVideoAPI {
 		video := dto.NewOpenAIVideo()
 		video.ID, video.Model, video.Status = originTask.TaskID, originTask.Properties.OriginModelName, originTask.Status.ToVideoStatus()
 		video.CreatedAt, video.CompletedAt = originTask.CreatedAt, originTask.FinishTime

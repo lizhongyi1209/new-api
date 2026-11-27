@@ -289,14 +289,19 @@ func CustomerVideoPricing(item Pricing, groupRatios map[string]float64) Pricing 
 		return item
 	}
 	wan := item.ModelName == "wan3.0-video" || item.ModelName == "wan3.0-video-prime"
-	pluginKey := constant.KlingOfficialVideoPlugin
-	if wan {
-		pluginKey = constant.WanOfficialVideoPlugin
-	}
+	// Several Kling official plugins may serve one model. A single retail
+	// price is published only when every serving variant charges the same.
 	var selected PricingPluginVariant
-	if !item.HasOrdinaryChannel && len(item.BillingPluginVariants) == 1 {
-		variant := item.BillingPluginVariants[0]
-		if variant.PluginKey == pluginKey {
+	if !item.HasOrdinaryChannel && len(item.BillingPluginVariants) > 0 {
+		for i, variant := range item.BillingPluginVariants {
+			family := variant.PluginKey == constant.WanOfficialVideoPlugin
+			if !wan {
+				family = constant.IsKlingOfficialVideoPlugin(constant.TaskPlatform(variant.PluginKey))
+			}
+			if !family || (i > 0 && variant.BillingExpr != selected.BillingExpr) {
+				selected = PricingPluginVariant{}
+				break
+			}
 			selected = variant
 		}
 	}

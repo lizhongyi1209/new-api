@@ -22,7 +22,7 @@ type TaskPluginChannelRef struct {
 func GetTaskPluginUsage(key string) ([]TaskPluginChannelRef, int64, error) {
 	var channels []Channel
 	types := []int{constant.ChannelTypeTaskPlugin, constant.ChannelTypeNewAPI}
-	if key == constant.KlingOfficialVideoPlugin {
+	if constant.IsKlingOfficialVideoPlugin(constant.TaskPlatform(key)) {
 		types = append(types, constant.ChannelTypeKling)
 	}
 	if key == constant.WanOfficialVideoPlugin {

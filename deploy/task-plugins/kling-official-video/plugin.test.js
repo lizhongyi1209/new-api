@@ -93,3 +93,9 @@ test("domestic listed amounts and mixed payments settle once, preserving explici
     ]),
   ).toBe(5);
 });
+test("kling-3.0 on the unified routes is priced as video generation, not Motion Control", () => {
+  const unified = task("kling-3.0", "kling40Text", { prompt: "p", settings: { resolution: "720p", duration: 5 } });
+  expect(unified.state.creditRate).toBe(0.6);
+  const motion = task("kling-3.0", "motionControl30", { settings: { resolution: "720p" } });
+  expect(motion.state.creditRate).toBe(0.9);
+});

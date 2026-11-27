@@ -24,7 +24,7 @@ export const meta = {
   apiVersion: 1,
   key: "kling-official-video",
   name: "可灵官方视频",
-  version: "1.1.0",
+  version: "1.1.1",
   icon: "Kling.Color",
   author: { name: "O1Key" },
   fetchMode: "per_task",
@@ -108,7 +108,9 @@ function creditRate(ctx) {
   const model = modelOf(ctx);
   const res = settings.resolution || ({ std: "720p", pro: "1080p", "4k": "4k" })[body.mode || "std"];
   const column = ["720p", "1080p", "4k"].indexOf(res);
-  const motion = ctx.action === "motionControl" || ctx.action === "motionControl30" || model === "kling-3.0";
+  // Before the unified 3.0 routes, kling-3.0 reached this plugin only as Motion Control.
+  const unified = ["kling40Text", "kling40Image", "kling40Omni"].indexOf(ctx.action) >= 0;
+  const motion = ctx.action === "motionControl" || ctx.action === "motionControl30" || (model === "kling-3.0" && !unified);
   const native = settings.audio === "native" || body.sound === "on";
   let rates;
   if (model === "kling-v2-6") {

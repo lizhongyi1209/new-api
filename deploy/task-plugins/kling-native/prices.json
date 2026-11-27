@@ -1,0 +1,18 @@
+{
+  "kling-3.0": {
+    "plugin_key": "kling-native",
+    "billing_expr": "u(\"units_source\") == \"estimated\" ? tier(\"estimated\", 0.5 + u(\"units\") * 0) : tier(\"reported\", u(\"units\") * 1)"
+  },
+  "kling-3.0-omni": {
+    "plugin_key": "kling-native",
+    "billing_expr": "u(\"units_source\") == \"estimated\" ? tier(\"estimated\", 0.5 + u(\"units\") * 0) : tier(\"reported\", u(\"units\") * 1)"
+  },
+  "kling-4.0": {
+    "plugin_key": "kling-native",
+    "billing_expr": "u(\"resolution\") == \"720p\" && u(\"video_input\") == \"none\" ? tier(\"720p·none\", u(\"billed_seconds\") * 1 + u(\"hdr_seconds\") * 0) : u(\"resolution\") == \"720p\" && u(\"video_input\") == \"video\" ? tier(\"720p·video\", u(\"billed_seconds\") * 0.6 + u(\"hdr_seconds\") * 0) : u(\"resolution\") == \"1080p\" && u(\"video_input\") == \"none\" ? tier(\"1080p·none\", u(\"billed_seconds\") * 1.5 + u(\"hdr_seconds\") * 0.3) : u(\"resolution\") == \"1080p\" && u(\"video_input\") == \"video\" ? tier(\"1080p·video\", u(\"billed_seconds\") * 0.9 + u(\"hdr_seconds\") * 0.3) : u(\"resolution\") == \"4k\" && u(\"video_input\") == \"none\" ? tier(\"4k·none\", u(\"billed_seconds\") * 3.5 + u(\"hdr_seconds\") * 0.5) : tier(\"4k·video\", u(\"billed_seconds\") * 2.1 + u(\"hdr_seconds\") * 0.5)"
+  },
+  "kling-4.0-flash": {
+    "plugin_key": "kling-native",
+    "billing_expr": "u(\"resolution\") == \"720p\" && u(\"video_input\") == \"none\" ? tier(\"720p·none\", u(\"billed_seconds\") * 0.6) : tier(\"720p·video\", u(\"billed_seconds\") * 0.4)"
+  }
+}

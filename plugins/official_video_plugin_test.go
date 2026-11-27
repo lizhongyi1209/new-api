@@ -9,6 +9,28 @@ import (
 	"testing"
 )
 
+func TestKlingNativePluginExposesPrices(t *testing.T) {
+	var prices map[string]struct {
+		Key        string `json:"plugin_key"`
+		Expression string `json:"billing_expr"`
+	}
+	raw, err := os.ReadFile("../deploy/task-plugins/kling-native/prices.json")
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(raw, &prices))
+	source, err := os.ReadFile("../deploy/task-plugins/kling-native/plugin.js")
+	require.NoError(t, err)
+	plugin, err := jsplugin.CompilePlugin(string(source), jsplugin.Options{Key: "kling-native"})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"kling-3.0", "kling-3.0-omni", "kling-4.0", "kling-4.0-flash"}, plugin.Meta.Models)
+	require.Len(t, prices, len(plugin.Meta.Models))
+	for model, price := range prices {
+		require.Equal(t, "kling-native", price.Key)
+		require.Contains(t, plugin.Meta.Models, model)
+		schema, _ := plugin.Meta.UsageForModel(model)
+		require.NoError(t, billing_setting.SmokeTestTaskExpr(price.Expression, schema), model)
+	}
+}
+
 func TestOfficialVideoPluginsExposePricesAndNormalizeProviderUsage(t *testing.T) {
 	var prices map[string]struct {
 		Key        string `json:"plugin_key"`

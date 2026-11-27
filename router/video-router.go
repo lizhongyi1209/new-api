@@ -147,30 +147,33 @@ func SetVideoRouter(router *gin.Engine) {
 		klingOmniVideo30Router.GET("/omni-video/kling-3.0-omni/:task_id", controller.RelayKlingVideo30TaskFetch)
 	}
 
-	kling40Router := router.Group("/kling")
-	kling40Router.Use(middleware.RouteTag("relay"))
-	kling40Router.Use(middleware.KlingVideo40Convert(), middleware.TokenAuth(), middleware.Distribute())
-	{
-		kling40Router.POST("/text-to-video/kling-4.0", controller.RelayTask)
-		kling40Router.POST("/image-to-video/kling-4.0", controller.RelayTask)
-		kling40Router.POST("/omni-video/kling-4.0", controller.RelayTask)
-		kling40Router.POST("/text-to-video/kling-4.0-flash", controller.RelayTask)
-		kling40Router.POST("/image-to-video/kling-4.0-flash", controller.RelayTask)
-		kling40Router.POST("/omni-video/kling-4.0-flash", controller.RelayTask)
-		kling40Router.GET("/text-to-video/kling-4.0/:task_id", controller.RelayKling40TaskFetch)
-		kling40Router.GET("/image-to-video/kling-4.0/:task_id", controller.RelayKling40TaskFetch)
-		kling40Router.GET("/omni-video/kling-4.0/:task_id", controller.RelayKling40TaskFetch)
-		kling40Router.GET("/text-to-video/kling-4.0-flash/:task_id", controller.RelayKling40TaskFetch)
-		kling40Router.GET("/image-to-video/kling-4.0-flash/:task_id", controller.RelayKling40TaskFetch)
-		kling40Router.GET("/omni-video/kling-4.0-flash/:task_id", controller.RelayKling40TaskFetch)
+	// Kling's unified task API (/{task}/{model}). The root routes match the
+	// official paths exactly, so a client only changes its base URL and key;
+	// the /kling routes remain for existing clients. /kling/omni-video/kling-3.0-omni
+	// keeps its earlier contract above, so 3.0 Omni is unified at the root only.
+	unifiedKlingRoutes := map[string][]string{
+		"text-to-video":  {"kling-4.0", "kling-4.0-flash", "kling-3.0"},
+		"image-to-video": {"kling-4.0", "kling-4.0-flash", "kling-3.0"},
+		"omni-video":     {"kling-4.0", "kling-4.0-flash", "kling-3.0-omni"},
 	}
+	for _, prefix := range []string{"/kling", ""} {
+		kling40Router := router.Group(prefix)
+		kling40Router.Use(middleware.RouteTag("relay"))
+		kling40Router.Use(middleware.KlingVideo40Convert(), middleware.TokenAuth(), middleware.Distribute())
+		for task, models := range unifiedKlingRoutes {
+			for _, name := range models {
+				if prefix != "" && name == "kling-3.0-omni" {
+					continue
+				}
+				kling40Router.POST("/"+task+"/"+name, controller.RelayTask)
+				kling40Router.GET("/"+task+"/"+name+"/:task_id", controller.RelayKling40TaskFetch)
+			}
+		}
 
-	// Official batch and cursor task queries. The /kling prefix stays; the
-	// query shape matches Kling's GET/POST /tasks.
-	klingTaskQueryRouter := router.Group("/kling/tasks")
-	klingTaskQueryRouter.Use(middleware.RouteTag("relay"))
-	klingTaskQueryRouter.Use(middleware.TokenAuth())
-	{
+		// Official batch and cursor task queries: Kling's GET/POST /tasks.
+		klingTaskQueryRouter := router.Group(prefix + "/tasks")
+		klingTaskQueryRouter.Use(middleware.RouteTag("relay"))
+		klingTaskQueryRouter.Use(middleware.TokenAuth())
 		klingTaskQueryRouter.GET("", controller.RelayKling40TasksQuery)
 		klingTaskQueryRouter.POST("", controller.RelayKling40TasksQuery)
 	}

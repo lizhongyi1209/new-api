@@ -233,15 +233,21 @@ func KlingOmniVideo30Convert() func(c *gin.Context) {
 	}
 }
 
-// KlingVideo40Convert preserves the official request in metadata while exposing
-// the model and bounded request dimensions to the shared task pipeline.
+// KlingVideo40Convert serves Kling's unified task API (/{task}/{model}, at the
+// root or under /kling). It preserves the official request in metadata while
+// exposing the model and bounded request dimensions to the shared task pipeline.
 func KlingVideo40Convert() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		modelName := "kling-4.0"
+		if parts := strings.Split(strings.Trim(strings.TrimPrefix(c.Request.URL.Path, "/kling"), "/"), "/"); len(parts) >= 2 {
+			modelName = parts[1]
+		}
 		maxDuration := 30.0
-		if strings.Contains(c.Request.URL.Path, "kling-4.0-flash") {
-			modelName = "kling-4.0-flash"
+		switch modelName {
+		case "kling-4.0-flash":
 			maxDuration = 20
+		case "kling-3.0", "kling-3.0-omni":
+			maxDuration = 15
 		}
 		if c.Request.Method == http.MethodGet {
 			prepareKling30TaskFetch(c, modelName)

@@ -25,7 +25,8 @@ func kling40UpstreamSlug(info *relaycommon.RelayInfo) string {
 		return "kling-4.0"
 	}
 	for _, name := range []string{info.UpstreamModelName, info.OriginModelName} {
-		if _, ok := kling40ModelFromPath("/" + name); ok {
+		switch name {
+		case "kling-4.0", "kling-4.0-flash", "kling-3.0", "kling-3.0-omni":
 			return name
 		}
 	}

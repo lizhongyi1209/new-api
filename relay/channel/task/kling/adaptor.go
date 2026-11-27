@@ -338,18 +338,16 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 }
 
 func (a *TaskAdaptor) validateVideoRequest(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	if modelName, ok := kling40ModelFromPath(c.Request.URL.Path); ok {
+	if task, modelName, ok := unifiedKlingRoute(c.Request.URL.Path); ok {
 		profile := video40ProfileForModel(modelName)
 		var action string
-		switch {
-		case strings.Contains(c.Request.URL.Path, "/text-to-video/"):
+		switch task {
+		case "text-to-video":
 			action = constant.TaskActionKling40Text
-		case strings.Contains(c.Request.URL.Path, "/image-to-video/"):
+		case "image-to-video":
 			action = constant.TaskActionKling40Image
-		case strings.Contains(c.Request.URL.Path, "/omni-video/"):
-			action = constant.TaskActionKling40Omni
 		default:
-			return service.TaskErrorWrapperLocal(fmt.Errorf("unsupported Kling 4.0 route"), "invalid_request", http.StatusBadRequest)
+			action = constant.TaskActionKling40Omni
 		}
 		var validationErr *dto.TaskError
 		if action == constant.TaskActionKling40Text {
@@ -370,21 +368,31 @@ func (a *TaskAdaptor) validateVideoRequest(c *gin.Context, info *relaycommon.Rel
 		} else if action == constant.TaskActionKling40Image {
 			shapeAction = "image"
 		}
-		if err := validateVideo40Shape(req.Metadata, shapeAction); err != nil {
-			return service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest)
-		}
-		if action == constant.TaskActionKling40Text {
-			var body video40TextRequest
-			if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
-				err = validateVideo40Prompt(body.Prompt)
+		switch modelName {
+		case "kling-3.0":
+			err = validateVideo30(req.Metadata, shapeAction)
+		case "kling-3.0-omni":
+			var body omniVideo30Request
+			if HasCallback(req.Metadata) {
+				err = errors.New(CallbackDisabledMessage)
+			} else if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
+				err = validateOmniVideo30Request(body)
 			}
-			if err == nil {
-				err = validateVideo40Settings(body.Settings, "text", profile)
-			}
-		} else {
-			var body video40ContentsRequest
-			if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
-				err = validateVideo40Contents(body, action == constant.TaskActionKling40Image, profile)
+		case "kling-4.0", "kling-4.0-flash":
+			err = validateVideo40Shape(req.Metadata, shapeAction)
+			if err == nil && action == constant.TaskActionKling40Text {
+				var body video40TextRequest
+				if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
+					err = validateVideo40Prompt(body.Prompt)
+				}
+				if err == nil {
+					err = validateVideo40Settings(body.Settings, "text", profile)
+				}
+			} else if err == nil {
+				var body video40ContentsRequest
+				if err = taskcommon.UnmarshalMetadata(req.Metadata, &body); err == nil {
+					err = validateVideo40Contents(body, action == constant.TaskActionKling40Image, profile)
+				}
 			}
 		}
 		if err != nil {
@@ -496,6 +504,21 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		return nil, fmt.Errorf("request not found in context")
 	}
 	req := v.(relaycommon.TaskSubmitReq)
+	if isKling40Action(info.Action) {
+		switch kling40UpstreamSlug(info) {
+		case "kling-3.0":
+			// validateVideo30 accepted only official fields, so forward them as sent.
+			data, err := common.Marshal(req.Metadata)
+			return bytes.NewReader(data), err
+		case "kling-3.0-omni":
+			var body omniVideo30Request
+			if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
+				return nil, err
+			}
+			data, err := common.Marshal(body)
+			return bytes.NewReader(data), err
+		}
+	}
 	if info.Action == constant.TaskActionKling40Text {
 		var body video40TextRequest
 		if err := taskcommon.UnmarshalMetadata(req.Metadata, &body); err != nil {
