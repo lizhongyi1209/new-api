@@ -50,10 +50,11 @@ func TestTokenMartKlingIsIndependentOfLegacyKling(t *testing.T) {
 	assert.Equal(t, "https://model.service-inference.ai", plugin.Meta.BaseURL)
 	assert.Equal(t, []string{"vendor", "new_api"}, plugin.Meta.Upstreams)
 	assert.Contains(t, plugin.Meta.Models, "kling-4.0-cn")
-	assert.Contains(t, plugin.Meta.Models, "kling-4.0")
-	assert.Contains(t, plugin.Meta.Models, "kling-4.0-flash")
+	assert.Contains(t, plugin.Meta.Models, "kling-4.0-flash-cn")
 	assert.Contains(t, plugin.Meta.Models, "kling-image-4.0-cn")
-	assert.Contains(t, plugin.Meta.Models, "kling-image-4.0")
+	assert.NotContains(t, plugin.Meta.Models, "kling-4.0")
+	assert.NotContains(t, plugin.Meta.Models, "kling-4.0-flash")
+	assert.NotContains(t, plugin.Meta.Models, "kling-image-4.0")
 	assert.NotContains(t, plugin.Meta.Models, "kling-v1")
 
 	legacy, ok := generation.GetByChannelType(50)
@@ -219,7 +220,8 @@ func TestTokenMartKlingForwardsOfficialBodies(t *testing.T) {
 		"params": map[string]any{"model": "future-video-cn"},
 		"body":   map[string]any{"kind": "json", "value": map[string]any{"prompt": "keep going"}},
 	})
-	assert.Equal(t, "kling-4.0-cn", future["model"])
+	assert.Equal(t, "future-video-cn", future["model"])
+	assert.NotContains(t, plugin.Meta.Models, "future-video-cn")
 	futureSubmit := pluginObject(t, plugin, "", nil, map[string]any{
 		"action":      "text_to_video",
 		"baseUrl":     "https://upstream.example",
@@ -485,8 +487,28 @@ func TestTokenMartKlingTaskQueryAndOfficialPaths(t *testing.T) {
 	assert.Equal(t, true, content["credentialless"])
 }
 
-func TestTokenMartKlingAppendsCnSuffixOnce(t *testing.T) {
+func TestTokenMartKlingForwardsCnModelNamesUnchanged(t *testing.T) {
 	plugin := loadTokenMartPlugin(t)
+
+	official := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
+		"path":   "/text-to-video/:model",
+		"params": map[string]any{"model": "kling-4.0-cn"},
+		"body":   map[string]any{"kind": "json", "value": map[string]any{"prompt": "orbit"}},
+	})
+	assert.Equal(t, "kling-4.0-cn", official["model"])
+	assert.Contains(t, plugin.Meta.Models, "kling-4.0-cn")
+	channel := &model.Channel{Models: "kling-4.0-cn"}
+	assert.Contains(t, channel.GetModels(), official["model"])
+
+	kept := pluginObject(t, plugin, "", nil, map[string]any{
+		"action":        "text_to_video",
+		"model":         "kling-4.0-cn",
+		"upstreamModel": "kling-4.0-cn",
+		"baseUrl":       "https://upstream.example",
+		"apiKey":        "tm-key",
+		"requestBody":   official["requestBody"],
+	}, "buildSubmitRequest")
+	assert.Equal(t, "https://upstream.example/text-to-video/kling-4.0-cn", kept["url"])
 
 	international := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
 		"path":   "/text-to-video/:model",
@@ -494,72 +516,16 @@ func TestTokenMartKlingAppendsCnSuffixOnce(t *testing.T) {
 		"body":   map[string]any{"kind": "json", "value": map[string]any{"prompt": "orbit"}},
 	})
 	assert.Equal(t, "kling-4.0", international["model"])
-	assert.Contains(t, plugin.Meta.Models, "kling-4.0")
-	channel := &model.Channel{Models: "kling-4.0"}
-	assert.Contains(t, channel.GetModels(), international["model"])
-
+	assert.NotContains(t, plugin.Meta.Models, international["model"])
+	assert.NotContains(t, channel.GetModels(), international["model"])
 	plain := pluginObject(t, plugin, "", nil, map[string]any{
-		"action":        "text_to_video",
-		"model":         "kling-4.0",
-		"upstreamModel": "kling-4.0",
-		"baseUrl":       "https://upstream.example",
-		"apiKey":        "tm-key",
-		"requestBody":   international["requestBody"],
-	}, "buildSubmitRequest")
-	assert.Equal(t, "https://upstream.example/text-to-video/kling-4.0-cn", plain["url"])
-	assert.NotContains(t, plain["url"], "kling-4.0-cn-cn")
-
-	mapped := pluginObject(t, plugin, "", nil, map[string]any{
-		"action":        "text_to_video",
-		"model":         "kling-4.0",
-		"upstreamModel": "kling-4.0-cn",
-		"baseUrl":       "https://upstream.example",
-		"apiKey":        "tm-key",
-		"requestBody":   international["requestBody"],
-	}, "buildSubmitRequest")
-	assert.Equal(t, "https://upstream.example/text-to-video/kling-4.0-cn", mapped["url"])
-
-	already := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
-		"path":   "/text-to-video/:model",
-		"params": map[string]any{"model": "kling-4.0-cn"},
-		"body":   map[string]any{"kind": "json", "value": map[string]any{"prompt": "orbit"}},
-	})
-	assert.Equal(t, "kling-4.0-cn", already["model"])
-	kept := pluginObject(t, plugin, "", nil, map[string]any{
-		"action":        "text_to_video",
-		"model":         "kling-4.0-cn",
-		"upstreamModel": "kling-4.0-cn",
-		"baseUrl":       "https://upstream.example",
-		"apiKey":        "tm-key",
-		"requestBody":   already["requestBody"],
-	}, "buildSubmitRequest")
-	assert.Equal(t, "https://upstream.example/text-to-video/kling-4.0-cn", kept["url"])
-
-	flash := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
-		"path":   "/text-to-video/:model",
-		"params": map[string]any{"model": "kling-4.0-flash"},
-		"body":   map[string]any{"kind": "json", "value": map[string]any{"prompt": "fast"}},
-	})
-	assert.Equal(t, "kling-4.0-flash", flash["model"])
-	assert.Contains(t, plugin.Meta.Models, "kling-4.0-flash")
-	flashSubmit := pluginObject(t, plugin, "", nil, map[string]any{
-		"action":        "text_to_video",
-		"model":         "kling-4.0-flash",
-		"upstreamModel": "kling-4.0-flash",
-		"baseUrl":       "https://upstream.example",
-		"apiKey":        "tm-key",
-		"requestBody":   flash["requestBody"],
-	}, "buildSubmitRequest")
-	assert.Equal(t, "https://upstream.example/text-to-video/kling-4.0-flash-cn", flashSubmit["url"])
-
-	facts := pluginObject(t, plugin, "", nil, map[string]any{
 		"action":      "text_to_video",
 		"model":       "kling-4.0",
+		"baseUrl":     "https://upstream.example",
+		"apiKey":      "tm-key",
 		"requestBody": international["requestBody"],
-	}, "extractUsage")
-	assert.Equal(t, float64(10), facts["output_seconds"])
-	assert.Equal(t, "1080p", facts["resolution"])
-	assert.Equal(t, "always", facts["audio"])
+	}, "buildSubmitRequest")
+	assert.Equal(t, "https://upstream.example/text-to-video/kling-4.0", plain["url"])
 }
 
 func loadTokenMartPlugin(t *testing.T) *jsplugin.LoadedPlugin {

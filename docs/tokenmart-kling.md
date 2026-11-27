@@ -2,7 +2,7 @@
 
 插件 key 是 `tokenmart-kling`。它把可灵官方 API 2.0 请求原样转发到 TokenMart 国内站。不改 `plugins/tasks/kling`（key `kling`，渠道类型 50），也不改站点现有的 `/kling/...` 路由。
 
-下游路径和 TokenMart 根路径相同，没有 `/tokenmart-kling`，也没有 `/kling`。调用方可以写国际模型名，例如 `kling-4.0`。插件发往 TokenMart 时，如果这个名字还没有以 `-cn` 结尾，就补上一次，变成 `kling-4.0-cn`。已经带 `-cn` 的名字保持原样，不会变成 `kling-4.0-cn-cn`。鉴权是 `Authorization: Bearer` 加渠道 API Key，不做 AK/SK 签名。
+下游路径和 TokenMart 根路径相同，没有 `/tokenmart-kling`，也没有 `/kling`。模型名使用国内站官方 `-cn` 形式，路径里的名字原样转发。`kling-4.0` 这类不带 `-cn` 的国际名留在 `/kling` 路由，本插件不会把它改写成 `kling-4.0-cn`。鉴权是 `Authorization: Bearer` 加渠道 API Key，不做 AK/SK 签名。
 
 ## 只启用这一个插件
 
@@ -11,15 +11,13 @@
 1. 将 `TaskPluginEnabled` 设为 `true`。
 2. 将 `TaskPluginDisabledFactoryKeys` 设成除 `tokenmart-kling` 以外的全部内置插件 key（至少包含 `kling`、`sora`、`hailuo`、`vidu`、`google`、`vertex-ai`、`jimeng`、`doubao`、`alibaba`、`sunoapi`）。不要把 `tokenmart-kling` 放进这个列表。
 3. 新建渠道，类型选 **Task Plugin**（62）。61 是 xinhankr，60 是 TokenMartSeedance。插件选 `tokenmart-kling`。Base URL 留空时使用 `https://model.service-inference.ai`。
-4. 在渠道里勾选要用的模型。国际名和 `-cn` 名都能选：`kling-4.0` 或 `kling-4.0-cn`，以及 `kling-4.0-flash`、`kling-3.0-omni`、`kling-3.0`、`kling-3.0-turbo`、`kling-o1`、`kling-2.6`、`kling-2.5-turbo` 和它们的 `-cn` 形式。图片用 `kling-image-4.0` 或 `kling-image-4.0-cn`。主体创建用 `kling-element-cn`。音色、主体列表和 `POST /tasks` 游标查询用 `kling-resource-cn`。只勾选 `kling-4.0` 时，`POST /text-to-video/kling-4.0` 会选中这条渠道。
+4. 在渠道里勾选要用的模型。视频用 `kling-4.0-cn`、`kling-4.0-flash-cn`、`kling-3.0-omni-cn`、`kling-3.0-cn`、`kling-3.0-turbo-cn`、`kling-o1-cn`、`kling-2.6-cn`、`kling-2.5-turbo-cn`。图片和长图用 `kling-image-4.0-cn`。主体创建用 `kling-element-cn`。音色、主体列表和 `POST /tasks` 游标查询用 `kling-resource-cn`。只勾选 `kling-4.0-cn` 时，`POST /text-to-video/kling-4.0-cn` 会选中这条渠道。`POST /text-to-video/kling-4.0` 不会被当成 `kling-4.0-cn`。
 
 ## 模型名
 
-`POST /text-to-video/kling-4.0` 发往上游时是 `POST /text-to-video/kling-4.0-cn`。`kling-4.0-flash` 同样变成 `kling-4.0-flash-cn`。`POST /text-to-video/kling-4.0-cn` 保持 `kling-4.0-cn`。
+调用方直接写 `-cn` 名字。`POST /text-to-video/kling-4.0-cn` 发往上游仍是 `POST /text-to-video/kling-4.0-cn`。`kling-4.0` 不会被改成 `kling-4.0-cn`，也不在本插件的模型列表里。不在列表里的路径名按原样返回，不会改记成 `kling-4.0-cn`。
 
-渠道模型映射如果把 `kling-4.0` 映成 `kling-4.0-cn`，上游仍是 `kling-4.0-cn`，不会再补一次。计费和选渠道用调用方写下的名字，所以渠道列表里只有 `kling-4.0` 也能接到 `kling-4.0` 请求；直接写 `kling-4.0-cn` 同样可以。
-
-图片路径里的 `kling-4.0` 会计为 `kling-image-4.0`，上游路径是 `/image-generation/kling-4.0-cn`。路径已经是 `kling-4.0-cn` 时，计费名仍是 `kling-image-4.0-cn`，URL 段不变。
+图片路径可以写 `kling-4.0-cn` 或 `kling-image-4.0-cn`，计费名是 `kling-image-4.0-cn`，URL 段保持调用方写下的那段。
 
 命中本插件的路由会钉住 key `tokenmart-kling`。分发只接受绑定了这个 key 的 Task Plugin（62）或 New API 渠道。渠道类型 50 仍只走 `/kling/...`。
 
@@ -40,7 +38,7 @@
 | 主体列表、预设、删除 | `GET /v1/general/advanced-custom-elements`、`GET /v1/general/advanced-presets-elements`、`POST /v1/general/delete-advanced-elements` |
 | 音色 | `POST /v1/general/custom-voices`、`GET /v1/general/custom-voices`、`GET /v1/general/custom-voices/{id}`、`GET /v1/general/presets-voices`、`POST /v1/general/delete-voices` |
 
-发往 TokenMart 时，路径段里的模型名按上一节补 `-cn`。图片路径可以写 `kling-4.0` 或 `kling-4.0-cn`，也可以写 `kling-image-4.0`。
+发往 TokenMart 时路径段原样保留。`{model}` 使用带 `-cn` 的名字。图片路径可以写 `kling-4.0-cn`，计费名是 `kling-image-4.0-cn`。
 
 ## 不能占用的路径
 
