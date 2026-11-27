@@ -2,9 +2,10 @@
 //
 // Upstream base: https://model.service-inference.ai
 // Auth: Authorization: Bearer <platform API key>
-// Paths sit at the upstream root (no /kling prefix) and model names keep the
-// -cn suffix. Native routes on this gateway use /tokenmart-kling so they do
-// not collide with the legacy kling factory plugin or the built-in /kling adaptor.
+// Paths sit at the root (no /kling prefix and no product prefix) and model
+// names keep the -cn suffix. Downstream and upstream use the same paths.
+// These do not overlap the built-in /kling adaptor or the legacy kling plugin.
+// /v1/videos/* is not registered: it intersects the OpenAI video routes.
 //
 // TokenMart's own write-up says some official calls are missing or ignored
 // (POST /tasks, element library, callback_url, motion control, billing[]).
@@ -13,8 +14,8 @@
 // sent it. Media URLs must be downloadable from mainland China.
 //
 // Enable this plugin on its own key. Do not bind it to channel type 50.
-
-const PREFIX = "/tokenmart-kling";
+// Task Plugin channels are type 62. The route pins this key; Distribute then
+// accepts only a type 62 or New API channel bound to tokenmart-kling.
 
 const VIDEO_MODELS = [
   "kling-4.0-cn",
@@ -187,7 +188,7 @@ function buildRoutes() {
     const action = GENERATION_ROUTES[i][1];
     routes.push({
       method: "POST",
-      path: PREFIX + "/" + segment + "/:model",
+      path: "/" + segment + "/:model",
       type: "submit",
       action: action,
       decode: "decodeSubmit",
@@ -195,14 +196,14 @@ function buildRoutes() {
     });
     routes.push({
       method: "GET",
-      path: PREFIX + "/" + segment + "/:model/:task_id",
+      path: "/" + segment + "/:model/:task_id",
       type: "query",
       render: "taskStatus",
     });
   }
   routes.push({
     method: "POST",
-    path: PREFIX + "/v1/general/advanced-custom-elements",
+    path: "/v1/general/advanced-custom-elements",
     type: "submit",
     action: "element",
     decode: "decodeElement",
@@ -210,14 +211,14 @@ function buildRoutes() {
   });
   routes.push({
     method: "GET",
-    path: PREFIX + "/v1/general/advanced-custom-elements/:task_id",
+    path: "/v1/general/advanced-custom-elements/:task_id",
     type: "query",
     render: "taskStatus",
   });
   for (let i = 0; i < RESOURCE_PATHS.length; i++) {
     routes.push({
       method: RESOURCE_PATHS[i][0],
-      path: PREFIX + RESOURCE_PATHS[i][1],
+      path: RESOURCE_PATHS[i][1],
       type: "submit",
       action: "resource",
       decode: "decodeResource",
@@ -227,7 +228,7 @@ function buildRoutes() {
   }
   routes.push({
     method: "GET",
-    path: PREFIX + "/tasks",
+    path: "/tasks",
     type: "dynamic",
     decode: "decodeTaskQuery",
     render: "renderAuto",
@@ -235,7 +236,7 @@ function buildRoutes() {
   });
   routes.push({
     method: "POST",
-    path: PREFIX + "/tasks",
+    path: "/tasks",
     type: "dynamic",
     decode: "decodeTaskPage",
     render: "renderAuto",
@@ -381,7 +382,6 @@ function gatewayPath(ctx) {
   for (let i = 0; i < names.length; i++) {
     path = path.split(":" + names[i]).join(encodeURIComponent(String(params[names[i]])));
   }
-  if (path.indexOf(PREFIX) === 0) path = path.slice(PREFIX.length);
   if (!path || path.charAt(0) !== "/") throw new Error("resource path is invalid");
   return path;
 }
@@ -429,7 +429,6 @@ function passthrough(method, path, query, body) {
 function root(ctx) {
   const base = trimmed(ctx && ctx.baseUrl).replace(/\/+$/, "");
   if (!base) throw new Error("base_url is empty");
-  if (ctx && ctx.upstream && ctx.upstream.kind === "new_api") return base + PREFIX;
   return base;
 }
 

@@ -1,6 +1,7 @@
 package plugins_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -59,32 +60,45 @@ func TestTokenMartKlingIsIndependentOfLegacyKling(t *testing.T) {
 	require.True(t, found)
 	assert.Equal(t, "kling", owned.Plugin.Meta.Key)
 
-	route, found := generation.LookupDeclaredRoute("POST", "/tokenmart-kling/text-to-video/:model")
+	route, found := generation.LookupDeclaredRoute("POST", "/text-to-video/:model")
 	require.True(t, found)
 	assert.Equal(t, "tokenmart-kling", route.Plugin.Meta.Key)
 	assert.Equal(t, "text_to_video", route.Route.Action)
 
 	for _, path := range []string{
-		"/tokenmart-kling/image-to-video/:model",
-		"/tokenmart-kling/omni-video/:model",
-		"/tokenmart-kling/motion-control/:model",
-		"/tokenmart-kling/image-generation/:model",
-		"/tokenmart-kling/long-image-generation/:model",
+		"/image-to-video/:model",
+		"/omni-video/:model",
+		"/motion-control/:model",
+		"/image-generation/:model",
+		"/long-image-generation/:model",
 	} {
 		binding, ok := generation.LookupDeclaredRoute("POST", path)
 		require.True(t, ok, path)
 		assert.Equal(t, "tokenmart-kling", binding.Plugin.Meta.Key)
 	}
-	tasks, found := generation.LookupDeclaredRoute("GET", "/tokenmart-kling/tasks")
+	tasks, found := generation.LookupDeclaredRoute("GET", "/tasks")
 	require.True(t, found)
 	assert.Equal(t, jsplugin.RouteTypeDynamic, tasks.Route.Type)
-	page, found := generation.LookupDeclaredRoute("POST", "/tokenmart-kling/tasks")
+	page, found := generation.LookupDeclaredRoute("POST", "/tasks")
 	require.True(t, found)
 	assert.Equal(t, "tokenmart-kling", page.Plugin.Meta.Key)
 
 	clash, found := generation.LookupDeclaredRoute("POST", "/kling/text-to-video/:model")
 	if found {
 		assert.NotEqual(t, "tokenmart-kling", clash.Plugin.Meta.Key)
+	}
+
+	for _, binding := range plugin.Meta.Routes {
+		assert.NotContains(t, binding.Path, "tokenmart-kling")
+		assert.NotContains(t, binding.Path, "/kling/")
+		assert.False(t, strings.HasPrefix(binding.Path, "/v1/videos"))
+	}
+	element, found := generation.LookupDeclaredRoute("POST", "/v1/general/advanced-custom-elements")
+	require.True(t, found)
+	assert.Equal(t, "tokenmart-kling", element.Plugin.Meta.Key)
+	legacyVideos, found := generation.LookupDeclaredRoute("POST", "/v1/videos/text2video")
+	if found {
+		assert.NotEqual(t, "tokenmart-kling", legacyVideos.Plugin.Meta.Key)
 	}
 }
 
@@ -107,7 +121,7 @@ func TestTokenMartKlingForwardsOfficialBodies(t *testing.T) {
 
 	decoded := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
 		"method": "POST",
-		"path":   "/tokenmart-kling/omni-video/:model",
+		"path":   "/omni-video/:model",
 		"params": map[string]any{"model": "kling-4.0-cn"},
 		"body":   map[string]any{"kind": "json", "value": official},
 	})
@@ -142,7 +156,7 @@ func TestTokenMartKlingForwardsOfficialBodies(t *testing.T) {
 		"upstream":      map[string]any{"kind": "new_api"},
 		"requestBody":   requestBody,
 	}, "buildSubmitRequest")
-	assert.Equal(t, "https://gateway.example/tokenmart-kling/omni-video/kling-4.0-cn", gateway["url"])
+	assert.Equal(t, "https://gateway.example/omni-video/kling-4.0-cn", gateway["url"])
 	assert.Equal(t, "Bearer sk-gateway", gateway["headers"].(map[string]any)["Authorization"])
 
 	facts := pluginObject(t, plugin, "", nil, map[string]any{
@@ -162,7 +176,7 @@ func TestTokenMartKlingForwardsOfficialBodies(t *testing.T) {
 
 	image := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
 		"method": "POST",
-		"path":   "/tokenmart-kling/image-generation/:model",
+		"path":   "/image-generation/:model",
 		"params": map[string]any{"model": "kling-4.0-cn"},
 		"body": map[string]any{"kind": "json", "value": map[string]any{
 			"contents": []any{
@@ -197,7 +211,7 @@ func TestTokenMartKlingForwardsOfficialBodies(t *testing.T) {
 	assert.Equal(t, "series", imageFacts["result_type"])
 
 	future := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
-		"path":   "/tokenmart-kling/text-to-video/:model",
+		"path":   "/text-to-video/:model",
 		"params": map[string]any{"model": "future-video-cn"},
 		"body":   map[string]any{"kind": "json", "value": map[string]any{"prompt": "keep going"}},
 	})
@@ -245,7 +259,7 @@ func TestTokenMartKlingTaskQueryAndOfficialPaths(t *testing.T) {
 		"apiKey":   "sk-gateway",
 		"upstream": map[string]any{"kind": "new_api"},
 	}, "buildQueryRequest")
-	assert.Equal(t, "https://gateway.example/tokenmart-kling/tasks?task_ids=task_public", gatewayQuery["url"])
+	assert.Equal(t, "https://gateway.example/tasks?task_ids=task_public", gatewayQuery["url"])
 
 	parsed := pluginObject(t, plugin, "", nil, map[string]any{"taskId": "950079555921253320", "upstreamModel": "kling-4.0-cn"}, map[string]any{
 		"code": float64(0),
@@ -297,7 +311,7 @@ func TestTokenMartKlingTaskQueryAndOfficialPaths(t *testing.T) {
 	assert.Equal(t, map[string]any{"image_count": float64(2)}, images)
 
 	motion := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
-		"path":   "/tokenmart-kling/motion-control/:model",
+		"path":   "/motion-control/:model",
 		"params": map[string]any{"model": "kling-3.0-cn"},
 		"body": map[string]any{"kind": "json", "value": map[string]any{
 			"contents": []any{
@@ -326,7 +340,7 @@ func TestTokenMartKlingTaskQueryAndOfficialPaths(t *testing.T) {
 	assert.Equal(t, "1080p", motionFacts["resolution"])
 
 	longImage := pluginObject(t, plugin, "native", []string{"decodeSubmit"}, map[string]any{
-		"path":   "/tokenmart-kling/long-image-generation/:model",
+		"path":   "/long-image-generation/:model",
 		"params": map[string]any{"model": "kling-4.0-cn"},
 		"body": map[string]any{"kind": "json", "value": map[string]any{
 			"contents": []any{
@@ -396,7 +410,7 @@ func TestTokenMartKlingTaskQueryAndOfficialPaths(t *testing.T) {
 
 	voices := pluginObject(t, plugin, "native", []string{"decodeResource"}, map[string]any{
 		"method": "GET",
-		"path":   "/tokenmart-kling/v1/general/presets-voices",
+		"path":   "/v1/general/presets-voices",
 		"query":  map[string]any{"pageNum": []any{"1"}},
 	})
 	voiceSubmit := pluginObject(t, plugin, "", nil, map[string]any{
