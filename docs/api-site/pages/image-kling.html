@@ -1,0 +1,215 @@
+<doc-page slug="image-kling" nav="Kling Image 4.0" title="Kling IMAGE 4.0" kind="async">
+<doc-summary>可灵 Image 4.0 的单图、组图和长图（电商详情页、网页设计）。路径、请求体和响应都与可灵官方一致，只需把 Base URL 和 API Key 换成本站。客户端使用任务 ID 轮询结果，提交时请省略 <code>callback_url</code>。</doc-summary>
+<doc-flow>
+<step title="提交任务">POST <code>/image-generation/kling-4.0</code> 或 <code>/long-image-generation/kling-4.0</code>，返回 <code>data.id</code></step>
+<step title="轮询状态">GET <code>/tasks?task_ids=…</code></step>
+<step title="获取图片"><code>succeeded</code> 后读取 <code>outputs[].url</code>，每张图一条</step>
+</doc-flow>
+<doc-simple>
+<section class="what"><h3>这个接口做什么？</h3><p>用可灵 Image 4.0 生成图片：一次出 1–9 张独立图片，或出一组人物、风格连贯的组图；也可以生成一整张电商详情页或网页设计长图。用法和可灵官方完全一样，已经按官方文档写好代码的，只改 Base URL 和 API Key。</p></section>
+<section class="needs"><h3>你需要提供的信息</h3><dl class="fields">
+<div><dt>做什么</dt><dd>普通图片和组图用 <code>image-generation</code>；长图用 <code>long-image-generation</code>。路径末尾都是 <code>kling-4.0</code>。</dd></div>
+<div><dt>想要什么画面</dt><dd><code>contents</code> 里放一条 <code>{"type":"prompt","text":"…"}</code>，可再加参考图，提示词里用 <code>@id</code> 引用。</dd></div>
+<div><dt>出几张、多大（可选）</dt><dd><code>settings.n</code> 或 <code>settings.series_amount</code>；<code>settings.resolution</code>；<code>settings.aspect_ratio</code>。</dd></div>
+<div><dt>长图类型</dt><dd><code>settings.skill</code>：电商详情页 <code>ecommerce</code> 或网页设计 <code>webpage</code>。</dd></div>
+</dl></section>
+<section class="needs"><h3>怎么拿到结果</h3><dl class="fields">
+<div><dt>状态</dt><dd><code>submitted</code>、<code>processing</code> 继续等待；<code>succeeded</code> 成功；<code>failed</code> 失败。</dd></div>
+<div><dt>图片地址</dt><dd><code>data[].outputs[].url</code>，每张图一条，PNG 格式。链接有时效，请及时保存。</dd></div>
+</dl></section>
+</doc-simple>
+<doc-agent>
+<ol>
+<li>普通图片或组图 POST <code>/image-generation/kling-4.0</code>；长图 POST <code>/long-image-generation/kling-4.0</code>。请求体不传 <code>model</code>，记录 <code>data.id</code>。</li>
+<li><code>contents</code> 必须且只能有一条 <code>prompt</code>。分辨率用小写：图片 <code>2k</code>/<code>4k</code>/<code>8k</code>，长图 <code>1k</code>/<code>2k</code>。</li>
+<li>每 5–10 秒 GET <code>/tasks?task_ids={id}</code>，<code>submitted</code> 或 <code>processing</code> 时继续查询。</li>
+<li><code>succeeded</code>：把每条 <code>outputs[].url</code> 返回给用户，提醒链接有时效。</li>
+<li><code>failed</code>：把 <code>message</code> 告诉用户，不要自动重试。</li>
+</ol>
+</doc-agent>
+
+<doc-endpoint id="image-kling-overview" title="路径、参数与价格" returns="">
+<doc-main>
+        <h3 id="h-image-kling-paths" class="sub">路径</h3>
+        <table>
+          <tr><th>类型</th><th>提交</th><th>按任务 ID 查询</th></tr>
+          <tr><td>单图 / 组图</td><td><code>POST /image-generation/kling-4.0</code></td><td><code>GET /image-generation/kling-4.0/{task_id}</code></td></tr>
+          <tr><td>长图</td><td><code>POST /long-image-generation/kling-4.0</code></td><td><code>GET /long-image-generation/kling-4.0/{task_id}</code></td></tr>
+          <tr><td>批量查询</td><td colspan="2"><code>GET /tasks?task_ids=id1,id2</code> 或 <code>GET /tasks?external_task_ids=a,b</code>，与视频共用</td></tr>
+        </table>
+        <ul>
+          <li>请求头：<code>Authorization: Bearer &lt;API Key&gt;</code>，<code>Content-Type: application/json</code>。</li>
+          <li>路径末尾写 <code>kling-4.0</code>（可灵官方写法）或 <code>kling-image-4.0</code> 都可以，指的都是图片模型 <code>kling-image-4.0</code>，和视频的 <code>kling-4.0</code> 是两个产品。你的 API Key 所在分组需要开通 <code>kling-image-4.0</code>。</li>
+          <li>路径前也可以加 <code>/kling</code>，例如 <code>/kling/image-generation/kling-4.0</code>，效果相同。</li>
+          <li>响应与可灵官方一致：<code>{code, message, request_id, data}</code>，出错时 <code>code</code> 为可灵业务码（例如参数错误 <code>1201</code>、Key 无效 <code>1000</code>）。</li>
+        </ul>
+        <h3 id="h-image-kling-common" class="sub">通用字段</h3>
+        <table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents</code></td><td>array</td><td>是</td><td>素材列表。必须且只能有一条 <code>{"type":"prompt","text":"…"}</code>。图片素材写 <code>{"type":"…","url":"…","id":"…"}</code>，<code>url</code> 可以是图片链接或 Base64（JPG / PNG，≤ 30 MB，宽高 ≥ 300 px，宽高比 2:5 到 5:2），建议用链接。</td></tr>
+          <tr><td><code>options.external_task_id</code></td><td>string</td><td>否</td><td>自定义任务 ID，不覆盖 <code>data.id</code>，同一账号下必须唯一。用 <code>GET /tasks?external_task_ids=</code> 查询。</td></tr>
+          <tr><td><code>options.watermark_info.enabled</code></td><td>boolean</td><td>否</td><td>是否同时生成带水印结果，默认 <code>false</code>。</td></tr>
+        </table>
+        <div class="callout info">不支持 <code>options.callback_url</code>（传了会返回 400），请轮询查询接口。素材链接由可灵在中国大陆以外下载，需要公网可访问、无需登录。</div>
+        <h3 id="h-image-kling-price" class="sub">价格</h3>
+        <p>按生成的张数计费，另按输入的参考图（每张 <code>refer_image</code>、<code>style_refer_image</code>、<code>subject_refer_image</code>）计费。组图 <code>series_amount</code> 为 <code>auto</code> 时，提交时按 10 张预扣，完成后按实际张数结算。失败的任务不计费。当前售价见<a href="/pricing">模型定价</a>中的 <code>kling-image-4.0</code>。</p>
+        <table>
+          <tr><th>类型</th><th>规格</th><th>官方价（每张）</th></tr>
+          <tr><td>单图 / 组图</td><td>2K / 4K / 8K</td><td>¥0.4 / ¥0.6 / ¥1.0</td></tr>
+          <tr><td>长图 · 网页设计</td><td>1K / 2K</td><td>¥3.5 / ¥3.8</td></tr>
+          <tr><td>长图 · 电商详情页 · 短</td><td>1K / 2K</td><td>¥1.5 / ¥1.8</td></tr>
+          <tr><td>长图 · 电商详情页 · 中</td><td>1K / 2K</td><td>¥3.0 / ¥3.5</td></tr>
+          <tr><td>长图 · 电商详情页 · 长</td><td>1K / 2K</td><td>¥5.0 / ¥5.5</td></tr>
+          <tr><td>参考图</td><td>每张</td><td>¥0.02</td></tr>
+        </table>
+        <p class="compact-note">实际扣费以你所在分组的倍率为准。可灵说明：<a href="https://kling.ai/document-api/api/image/4-0/image-generation">图片生成</a>、<a href="https://kling.ai/document-api/api/image/4-0/long-image-generation">长图生成</a>。</p>
+</doc-main>
+<doc-examples>
+<h3>创建响应 · 200</h3>
+        <pre data-sim="submit"><code>{
+  "code": 0,
+  "message": "SUCCEED",
+  "request_id": "req_xxxxxxxxxx",
+  "data": {
+    "id": "task_xxxxxxxxxx",
+    "status": "submitted",
+    "create_time": 1795834453436,
+    "update_time": 1795834453436,
+    "external_id": "my-order-0001"
+  }
+}</code></pre>
+        <p class="compact-note">用 <code>data.id</code> 查询。时间戳单位为毫秒。</p>
+        <h3>错误响应 · 400</h3>
+        <pre><code>{
+  "code": 1201,
+  "message": "settings.resolution must be one of 2k, 4k, 8k",
+  "request_id": "req_xxxxxxxxxx"
+}</code></pre>
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/image-generation/kling-4.0" title="单图与组图" returns="任务 ID（异步）">
+<doc-route method="POST" path="/image-generation/kling-4.0"></doc-route>
+<doc-main>
+<table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>（一条，必填）；<code>refer_image</code> 参考图，最多 10 张。</td></tr>
+          <tr><td><code>settings.result_type</code></td><td>string</td><td>否</td><td><code>single</code>（默认）生成独立图片；<code>series</code> 生成人物、风格连贯的组图。</td></tr>
+          <tr><td><code>settings.n</code></td><td>integer</td><td>否</td><td><code>single</code> 时生成几张，1–9，默认 1。</td></tr>
+          <tr><td><code>settings.series_amount</code></td><td>integer / string</td><td>否</td><td><code>series</code> 时的张数，2–10 或 <code>"auto"</code>（由可灵决定 2–10 张），默认 4。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>2k</code>（默认）、<code>4k</code>、<code>8k</code>，必须小写。</td></tr>
+          <tr><td><code>settings.aspect_ratio</code></td><td>string</td><td>否</td><td><code>auto</code>（默认）、<code>16:9</code>、<code>9:16</code>、<code>1:1</code>、<code>4:3</code>、<code>3:4</code>、<code>3:2</code>、<code>2:3</code>、<code>21:9</code>。</td></tr>
+        </table>
+        <p>可灵官方的参考主体（<code>element</code>）本站暂不支持，请用 <code>refer_image</code> 传参考图。</p>
+</doc-main>
+<doc-examples>
+<h3>请求示例 · 参考一张图生成单图</h3>
+        <pre><code>curl https://api.o1key.com/image-generation/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "以 @dog 中的小狗为参考，生成一张三维动画风格的角色海报，暖色灯光，背景简洁。"},
+      {"type": "refer_image", "url": "https://cdn.example.com/dog.png", "id": "dog"}
+    ],
+    "settings": {"result_type": "single", "n": 1, "resolution": "2k", "aspect_ratio": "1:1"}
+  }'</code></pre>
+        <h3>请求示例 · 4 张 4K 组图</h3>
+        <pre><code>curl https://api.o1key.com/image-generation/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "以 @dog 为主角生成四张连贯的三维动画故事图：走进咖啡馆、在窗边落座、闻咖啡香、在门口告别。"},
+      {"type": "refer_image", "url": "https://cdn.example.com/dog.png", "id": "dog"}
+    ],
+    "settings": {"result_type": "series", "series_amount": 4, "resolution": "4k", "aspect_ratio": "3:4"},
+    "options": {"external_task_id": "my-order-0001"}
+  }'</code></pre>
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/long-image-generation/kling-4.0" title="长图（电商详情页 / 网页设计）" returns="任务 ID（异步）">
+<doc-route method="POST" path="/long-image-generation/kling-4.0"></doc-route>
+<doc-main>
+<p>每个任务生成<b>一张完整长图</b>，不支持指定张数。</p>
+<table>
+          <tr><th>字段</th><th>类型</th><th>必填</th><th>说明</th></tr>
+          <tr><td><code>settings.skill</code></td><td>string</td><td>是</td><td><code>ecommerce</code> 电商详情页；<code>webpage</code> 网页设计。</td></tr>
+          <tr><td><code>contents[].type</code></td><td>string</td><td>是</td><td><code>prompt</code>（一条，必填）。<code>ecommerce</code>：必须有 1–3 张 <code>refer_image</code>。<code>webpage</code>：可选一张 <code>style_refer_image</code>（参考视觉和排版风格）和一张 <code>subject_refer_image</code>（围绕这个主体设计），不能用 <code>refer_image</code>。不支持 <code>element</code>。</td></tr>
+          <tr><td><code>settings.length</code></td><td>string</td><td>否</td><td>仅 <code>ecommerce</code>：<code>short</code>（约 2–5 个模块）、<code>medium</code>（默认，6–10）、<code>long</code>（11–18）。</td></tr>
+          <tr><td><code>settings.resolution</code></td><td>string</td><td>否</td><td><code>1k</code>（默认）或 <code>2k</code>。</td></tr>
+        </table>
+        <p>提示词长度：纯英文最多 166,000 字符，纯非英文最多 71,000 字符；混合输入须满足 E/166000 + N/71000 ≤ 1。长图生成通常比普通图片慢。</p>
+</doc-main>
+<doc-examples>
+<h3>请求示例 · 电商详情页</h3>
+        <pre><code>curl https://api.o1key.com/long-image-generation/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "为 @product 中的咖啡机设计电商详情页长图，包含主视觉、核心卖点和使用场景；仅使用提供的商品事实。"},
+      {"type": "refer_image", "url": "https://cdn.example.com/coffee-machine.png", "id": "product"}
+    ],
+    "settings": {"skill": "ecommerce", "length": "medium", "resolution": "2k"}
+  }'</code></pre>
+        <h3>请求示例 · 网页设计</h3>
+        <pre><code>curl https://api.o1key.com/long-image-generation/kling-4.0 \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {"type": "prompt", "text": "为一家精品咖啡店设计官网首页，参考 @style 的排版，突出 @bean。"},
+      {"type": "style_refer_image", "url": "https://cdn.example.com/style.png", "id": "style"},
+      {"type": "subject_refer_image", "url": "https://cdn.example.com/bean.png", "id": "bean"}
+    ],
+    "settings": {"skill": "webpage", "resolution": "1k"}
+  }'</code></pre>
+</doc-examples>
+</doc-endpoint>
+
+<doc-endpoint id="/tasks-kling-image" title="查询图片任务" returns="任务状态与图片">
+<doc-route method="GET" path="/tasks?task_ids={task_id}"></doc-route>
+<doc-main>
+<table>
+          <tr><th>参数</th><th>说明</th></tr>
+          <tr><td><code>task_ids</code></td><td>任务 ID，逗号分隔，每次最多 50 个。</td></tr>
+          <tr><td><code>external_task_ids</code></td><td>自定义任务 ID，逗号分隔。不能与 <code>task_ids</code> 同时使用。</td></tr>
+        </table>
+        <table>
+          <tr><th>字段</th><th>说明</th></tr>
+          <tr><td><code>data</code></td><td>任务数组。不存在或不属于你的任务不会出现在数组里（200 + 空数组）。</td></tr>
+          <tr><td><code>status</code></td><td><code>submitted</code>、<code>processing</code>、<code>succeeded</code>、<code>failed</code>。</td></tr>
+          <tr><td><code>outputs[]</code></td><td>每张图一条，<code>type</code> 为 <code>image</code>，各有自己的 <code>url</code>，顺序与可灵一致。组图另有 <code>group_id</code>。没有 <code>duration</code> 和 <code>usage</code>。</td></tr>
+          <tr><td><code>message</code></td><td>失败原因，例如内容审核未通过。</td></tr>
+        </table>
+</doc-main>
+<doc-examples>
+<h3>请求示例</h3>
+        <pre><code>curl "https://api.o1key.com/tasks?task_ids=task_xxxxxxxxxx" \
+  -H "Authorization: Bearer $API_KEY"</code></pre>
+<h3>成功响应 · 200</h3>
+        <pre data-sim="done"><code>{
+  "code": 0,
+  "message": "SUCCEED",
+  "request_id": "req_xxxxxxxxxx",
+  "data": [
+    {
+      "id": "task_xxxxxxxxxx",
+      "status": "succeeded",
+      "message": "",
+      "create_time": 1795834453065,
+      "update_time": 1795834485555,
+      "external_id": "my-order-0001",
+      "outputs": [
+        {"type": "image", "url": "https://cdn.example.com/image-1.png"},
+        {"type": "image", "url": "https://cdn.example.com/image-2.png"}
+      ]
+    }
+  ]
+}</code></pre>
+        <p class="compact-note">ID、链接仅为示例。也可以用 <code>GET /image-generation/kling-4.0/{task_id}</code> 查询单个任务，返回同一结构。</p>
+</doc-examples>
+</doc-endpoint>
+</doc-page>
